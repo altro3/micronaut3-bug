@@ -1,0 +1,6 @@
+app:
+  entity:
+    prop: test property
+
+logger:
+  levels:

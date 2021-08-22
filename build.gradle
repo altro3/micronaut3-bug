@@ -1,0 +1,61 @@
+plugins {
+    id 'java'
+    id 'idea'
+    id 'io.micronaut.application' version '2.0.3'
+}
+
+mainClassName = "com.micronaut.bug.Application"
+micronaut {
+    version '3.0.0'
+    runtime "netty"
+    testRuntime "junit5"
+    enableNativeImage true
+    processing {
+        group project.group
+        incremental true
+        annotations "com.micronaut.bug.*"
+    }
+}
+
+wrapper.gradleVersion = '7.2'
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_11
+}
+
+dependencies {
+
+    annotationProcessor "org.projectlombok:lombok"
+    annotationProcessor "io.micronaut:micronaut-inject-java"
+
+    compileOnly "org.projectlombok:lombok"
+    compileOnly "io.micronaut:micronaut-inject-java"
+
+    runtimeOnly "ch.qos.logback:logback-classic"
+
+    implementation "io.micronaut:micronaut-runtime"
+
+}
+
+tasks.withType(JavaCompile).all {
+    options.encoding = 'UTF-8'
+    options.compilerArgs = [
+            '-parameters',
+            '-Xlint:unchecked',
+            '-Xlint:deprecation'
+    ]
+}
+
+idea {
+
+    if (parent == null) {
+        project {
+            vcs = 'Git'
+        }
+    }
+
+    module {
+        excludeDirs += file('.idea')
+        excludeDirs += file('out')
+    }
+}

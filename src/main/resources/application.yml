@@ -1,0 +1,10 @@
+
+micronaut:
+  application:
+    name: micronaut_bug
+  server:
+    port: 8080
+
+logger:
+  levels:
+    root: INFO
