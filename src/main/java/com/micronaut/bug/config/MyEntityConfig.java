@@ -1,4 +1,4 @@
-package com.micronaut.bug.service.entity.config;
+package com.micronaut.bug.config;
 
 import io.micronaut.context.annotation.Factory;
 import io.micronaut.core.util.StringUtils;
@@ -8,13 +8,12 @@ import javax.annotation.PostConstruct;
 
 @RequiredArgsConstructor
 @Factory
-public class EntityConfig {
+public class MyEntityConfig {
 
-    private final EntityProperties entityProperties;
+    private final MyEntityProperties entityProperties;
 
     @PostConstruct
     public void init() {
         System.setProperty("system.property", StringUtils.EMPTY_STRING);
-
     }
 }

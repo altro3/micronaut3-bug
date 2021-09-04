@@ -1,6 +1,6 @@
 package com.micronaut.bug.controller;
 
-import com.micronaut.bug.service.entity.service.EntityService;
+import com.micronaut.bug.service.MyEntityService;
 import io.micronaut.http.MediaType;
 import io.micronaut.http.annotation.Controller;
 import io.micronaut.http.annotation.Get;
@@ -10,9 +10,9 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 @RequiredArgsConstructor
 @Controller
-public class EntityController {
+public class MyEntityController {
 
-    private final EntityService entityService;
+    private final MyEntityService entityService;
 
     @Get(value = "/test", produces = MediaType.TEXT_HTML)
     public String test() {

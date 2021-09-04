@@ -35,6 +35,13 @@ dependencies {
 
     implementation "io.micronaut:micronaut-runtime"
 
+    // micronaut-data
+//    annotationProcessor "io.micronaut.data:micronaut-data-processor"
+//    runtimeOnly "io.micronaut.sql:micronaut-jdbc-hikari"
+//    runtimeOnly "org.postgresql:postgresql"
+//    implementation "io.micronaut.data:micronaut-data-jdbc"
+//    implementation "io.micronaut.flyway:micronaut-flyway"
+
 }
 
 tasks.withType(JavaCompile).all {

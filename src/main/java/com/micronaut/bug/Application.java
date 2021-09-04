@@ -9,6 +9,8 @@ public class Application {
         Micronaut.build(args)
                 .classes(Application.class)
                 .banner(false)
+                .eagerInitSingletons(true)
+                .defaultEnvironments("local")
                 .start();
     }
 

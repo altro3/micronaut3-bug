@@ -2,5 +2,13 @@ app:
   entity:
     prop: test property
 
+datasources:
+  default:
+    url: jdbc:postgresql://localhost:5432/micronaut3bug
+    username: micronaut3bug
+    password: 1
+    driver-class-name: org.postgresql.Driver
+    dialect: POSTGRES
+
 logger:
   levels:

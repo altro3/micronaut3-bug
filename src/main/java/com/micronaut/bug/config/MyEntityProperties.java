@@ -1,18 +1,16 @@
-package com.micronaut.bug.service.entity.config;
+package com.micronaut.bug.config;
 
 import io.micronaut.context.annotation.ConfigurationProperties;
+import jakarta.annotation.PostConstruct;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
-
-import javax.annotation.PostConstruct;
-import java.time.Duration;
 
 @Slf4j
 @Getter
 @Setter
 @ConfigurationProperties("app.entity")
-public class EntityProperties {
+public class MyEntityProperties {
 
     private String prop;
 
@@ -20,7 +18,7 @@ public class EntityProperties {
      * !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
      * That is PROBLEM block. If you comment this - all works fine
      */
-    @PostConstruct
+//    @PostConstruct
     public void init() {
         log.info("prop = {}", prop);
     }
