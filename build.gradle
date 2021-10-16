@@ -17,7 +17,7 @@ micronaut {
     }
 }
 
-wrapper.gradleVersion = '7.2'
+wrapper.gradleVersion = '7.3-rc-1'
 
 java {
     sourceCompatibility = JavaVersion.VERSION_17
