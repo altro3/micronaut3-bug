@@ -1,12 +1,12 @@
 plugins {
     id 'java'
     id 'idea'
-    id 'io.micronaut.application' version '2.0.3'
+    id 'io.micronaut.application' version '2.0.6'
 }
 
 mainClassName = "com.micronaut.bug.Application"
 micronaut {
-    version '3.0.0'
+    version '3.1.0'
     runtime "netty"
     testRuntime "junit5"
     enableNativeImage true
@@ -20,7 +20,7 @@ micronaut {
 wrapper.gradleVersion = '7.2'
 
 java {
-    sourceCompatibility = JavaVersion.VERSION_11
+    sourceCompatibility = JavaVersion.VERSION_17
 }
 
 dependencies {
@@ -40,7 +40,7 @@ dependencies {
 //    runtimeOnly "io.micronaut.sql:micronaut-jdbc-hikari"
 //    runtimeOnly "org.postgresql:postgresql"
 //    implementation "io.micronaut.data:micronaut-data-jdbc"
-//    implementation "io.micronaut.flyway:micronaut-flyway"
+//    runtimeOnly "io.micronaut.flyway:micronaut-flyway"
 
 }
 
@@ -54,12 +54,6 @@ tasks.withType(JavaCompile).all {
 }
 
 idea {
-
-    if (parent == null) {
-        project {
-            vcs = 'Git'
-        }
-    }
 
     module {
         excludeDirs += file('.idea')

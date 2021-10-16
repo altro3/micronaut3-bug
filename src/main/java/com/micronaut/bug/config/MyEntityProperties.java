@@ -14,11 +14,7 @@ public class MyEntityProperties {
 
     private String prop;
 
-    /**
-     * !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-     * That is PROBLEM block. If you comment this - all works fine
-     */
-//    @PostConstruct
+    @PostConstruct
     public void init() {
         log.info("prop = {}", prop);
     }
