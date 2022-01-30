@@ -14,9 +14,15 @@ public class MyEntityController {
 
     private final MyEntityService entityService;
 
-    @Get(value = "/test", produces = MediaType.TEXT_HTML)
+    @Get(value = "/load", produces = MediaType.TEXT_HTML)
     public String test() {
         entityService.loadFromDb();
+        return "OK!";
+    }
+
+    @Get(value = "/save", produces = MediaType.TEXT_HTML)
+    public String save() {
+        entityService.save();
         return "OK!";
     }
 }

@@ -1,12 +1,12 @@
 plugins {
     id 'java'
     id 'idea'
-    id 'io.micronaut.application' version '2.0.6'
+    id 'io.micronaut.application' version '3.2.0'
 }
 
 mainClassName = "com.micronaut.bug.Application"
 micronaut {
-    version '3.1.0'
+    version '3.3.0'
     runtime "netty"
     testRuntime "junit5"
     enableNativeImage true
@@ -17,7 +17,7 @@ micronaut {
     }
 }
 
-wrapper.gradleVersion = '7.3-rc-1'
+wrapper.gradleVersion = '7.3.3'
 
 java {
     sourceCompatibility = JavaVersion.VERSION_17
@@ -36,11 +36,11 @@ dependencies {
     implementation "io.micronaut:micronaut-runtime"
 
     // micronaut-data
-//    annotationProcessor "io.micronaut.data:micronaut-data-processor"
-//    runtimeOnly "io.micronaut.sql:micronaut-jdbc-hikari"
-//    runtimeOnly "org.postgresql:postgresql"
-//    implementation "io.micronaut.data:micronaut-data-jdbc"
-//    runtimeOnly "io.micronaut.flyway:micronaut-flyway"
+    annotationProcessor "io.micronaut.data:micronaut-data-processor"
+    runtimeOnly "io.micronaut.sql:micronaut-jdbc-hikari"
+    runtimeOnly "org.postgresql:postgresql"
+    implementation "io.micronaut.data:micronaut-data-jdbc"
+    runtimeOnly "io.micronaut.flyway:micronaut-flyway"
 
 }
 
