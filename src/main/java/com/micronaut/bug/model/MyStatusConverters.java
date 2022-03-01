@@ -6,16 +6,18 @@ import jakarta.inject.Singleton;
 
 import java.util.Optional;
 
-@Factory
+//@Factory
 public class MyStatusConverters {
 
+/*
     @Singleton
-    TypeConverter<MyStatus, Character> userStatusToCharConverter() {
+    TypeConverter<MyStatus, String> userStatusToCharConverter() {
         return (object, targetType, context) -> Optional.of(object == null ? MyStatus.BLOCKED.getCode() : object.getCode());
     }
 
     @Singleton
-    TypeConverter<Character, MyStatus> charToUserStatusConverter() {
+    TypeConverter<String, MyStatus> charToUserStatusConverter() {
         return (object, targetType, context) -> Optional.of(MyStatus.byCode(object));
     }
+*/
 }

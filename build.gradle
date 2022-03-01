@@ -1,12 +1,18 @@
 plugins {
     id 'java'
     id 'idea'
-    id 'io.micronaut.application' version '3.2.0'
+    id 'io.micronaut.application' version '3.2.2'
+    id 'io.micronaut.aot' version '3.2.2'
+}
+
+ext {
+    jreImage = 'bellsoft/liberica-openjre-alpine-musl:17.0.2'
+    jreImageNative = 'debian:stable-slim'
 }
 
 mainClassName = "com.micronaut.bug.Application"
 micronaut {
-    version '3.3.0'
+    version '3.3.4'
     runtime "netty"
     testRuntime "junit5"
     enableNativeImage true
@@ -15,12 +21,36 @@ micronaut {
         incremental true
         annotations "com.micronaut.bug.*"
     }
+    aot {
+        cacheEnvironment = true
+        optimizeServiceLoading = true
+        optimizeClassLoading = true
+        convertYamlToJava = true
+        precomputeOperations = true
+        deduceEnvironment = true
+    }
 }
 
-wrapper.gradleVersion = '7.3.3'
+wrapper.gradleVersion = '7.4'
 
 java {
     sourceCompatibility = JavaVersion.VERSION_17
+}
+
+dockerfile {
+    baseImage(jreImage)
+    args "-Dfile.encodig=UTF-8"
+}
+graalvmNative {
+    binaries {
+        toolchainDetection = false
+        main {
+            verbose = true
+        }
+    }
+}
+dockerfileNative {
+    baseImage(jreImageNative)
 }
 
 dependencies {
@@ -34,6 +64,7 @@ dependencies {
     runtimeOnly "ch.qos.logback:logback-classic"
 
     implementation "io.micronaut:micronaut-runtime"
+    implementation "org.yaml:snakeyaml"
 
     // micronaut-data
     annotationProcessor "io.micronaut.data:micronaut-data-processor"

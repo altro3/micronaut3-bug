@@ -7,6 +7,8 @@ import io.micronaut.http.annotation.Get;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import java.util.List;
+
 @Slf4j
 @RequiredArgsConstructor
 @Controller
@@ -24,5 +26,10 @@ public class MyEntityController {
     public String save() {
         entityService.save();
         return "OK!";
+    }
+
+    @Get(value = "/props", produces = MediaType.TEXT_HTML)
+    public List<String> getPropertiesBykey() {
+        return entityService.getPropertiesByKey("key1");
     }
 }
