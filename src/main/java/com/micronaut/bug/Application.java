@@ -11,17 +11,16 @@ public class Application implements ApplicationContextConfigurer {
     @Override
     public void configure(ApplicationContextBuilder builder) {
         System.out.println("Java configurer loaded");
-        builder.deduceEnvironment(false);
+        builder.deduceEnvironment(false)
+                .banner(false)
+                .eagerInitConfiguration(true)
+                .eagerInitSingletons(true)
+                .defaultEnvironments("local");
     }
 
     public static void main(String[] args) {
 
-        Micronaut.build(args)
-                .classes(Application.class)
-                .banner(false)
-                .eagerInitSingletons(true)
-                .defaultEnvironments("local")
-                .start();
+        Micronaut.run(Application.class, args);
     }
 
 }

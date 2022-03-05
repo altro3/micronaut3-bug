@@ -1,0 +1,14 @@
+{
+  "variant": 1,
+  "params": ["val1", "val2"],
+  "params2": [122.23, 2222.56],
+  "items": [
+    {
+      "prop1": true,
+      "prop2": 3434.34
+    },
+    {
+      "prop2": 3434.34
+    }
+  ]
+}

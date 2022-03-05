@@ -2,24 +2,35 @@ package com.micronaut.bug.service;
 
 import com.micronaut.bug.config.MyEntityProperties;
 import com.micronaut.bug.config.YamlFileProperties;
+import com.micronaut.bug.config.data.ConfigData;
+import com.micronaut.bug.config.data.VariantEnum;
 import com.micronaut.bug.dao.MyEntityDao;
 import com.micronaut.bug.model.MyEntity;
 import com.micronaut.bug.model.MyStatus;
 import jakarta.annotation.PostConstruct;
+import jakarta.inject.Named;
 import jakarta.inject.Singleton;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.List;
+import java.util.Map;
 
 @Slf4j
-@RequiredArgsConstructor
 @Singleton
 public class MyEntityService {
 
     private final MyEntityProperties entityProperties;
     private final MyEntityDao myEntityDao;
     private final YamlFileProperties yamlFileProperties;
+    private final Map<VariantEnum, ConfigData> myConfigs;
+
+    public MyEntityService(MyEntityProperties entityProperties, MyEntityDao myEntityDao, YamlFileProperties yamlFileProperties,
+                           @Named("myConfigs") Map<VariantEnum, ConfigData> myConfigs) {
+        this.entityProperties = entityProperties;
+        this.myEntityDao = myEntityDao;
+        this.yamlFileProperties = yamlFileProperties;
+        this.myConfigs = myConfigs;
+    }
 
     @PostConstruct
     public void init() {

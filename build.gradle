@@ -2,7 +2,7 @@ plugins {
     id 'java'
     id 'idea'
     id 'io.micronaut.application' version '3.2.2'
-    id 'io.micronaut.aot' version '3.2.2'
+//    id 'io.micronaut.aot' version '3.2.2'
 }
 
 ext {
@@ -21,14 +21,17 @@ micronaut {
         incremental true
         annotations "com.micronaut.bug.*"
     }
+/*
     aot {
+        version = "1.0.0-M7"
         cacheEnvironment = true
         optimizeServiceLoading = true
         optimizeClassLoading = true
         convertYamlToJava = true
         precomputeOperations = true
-        deduceEnvironment = true
+        deduceEnvironment = false
     }
+*/
 }
 
 wrapper.gradleVersion = '7.4'
@@ -64,14 +67,14 @@ dependencies {
     runtimeOnly "ch.qos.logback:logback-classic"
 
     implementation "io.micronaut:micronaut-runtime"
-    implementation "org.yaml:snakeyaml"
+    implementation "com.fasterxml.jackson.module:jackson-module-parameter-names"
 
     // micronaut-data
-    annotationProcessor "io.micronaut.data:micronaut-data-processor"
-    runtimeOnly "io.micronaut.sql:micronaut-jdbc-hikari"
-    runtimeOnly "org.postgresql:postgresql"
-    implementation "io.micronaut.data:micronaut-data-jdbc"
-    runtimeOnly "io.micronaut.flyway:micronaut-flyway"
+//    annotationProcessor "io.micronaut.data:micronaut-data-processor"
+//    runtimeOnly "io.micronaut.sql:micronaut-jdbc-hikari"
+//    runtimeOnly "org.postgresql:postgresql"
+//    implementation "io.micronaut.data:micronaut-data-jdbc"
+//    runtimeOnly "io.micronaut.flyway:micronaut-flyway"
 
 }
 
