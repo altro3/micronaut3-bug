@@ -67,7 +67,6 @@ dependencies {
     runtimeOnly "ch.qos.logback:logback-classic"
 
     implementation "io.micronaut:micronaut-runtime"
-    implementation "com.fasterxml.jackson.module:jackson-module-parameter-names"
 
     // micronaut-data
 //    annotationProcessor "io.micronaut.data:micronaut-data-processor"

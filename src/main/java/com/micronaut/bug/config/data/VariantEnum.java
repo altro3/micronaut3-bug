@@ -8,7 +8,6 @@ import lombok.Getter;
 import java.util.HashMap;
 import java.util.Map;
 
-@ReflectiveAccess
 @Getter
 public enum VariantEnum {
 
@@ -49,7 +48,8 @@ public enum VariantEnum {
         return value;
     }
 
-    @JsonCreator(mode = JsonCreator.Mode.DELEGATING)
+    @ReflectiveAccess
+    @JsonCreator
     public static VariantEnum byId(byte id) {
         var value = BY_ID.get(id);
         if (value == null) {

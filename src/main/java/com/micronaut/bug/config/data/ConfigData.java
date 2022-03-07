@@ -6,7 +6,6 @@ import lombok.Data;
 
 import java.util.List;
 
-/*
 @Introspected
 public record ConfigData(
         VariantEnum variant,
@@ -22,8 +21,8 @@ public record ConfigData(
     ) {
     }
 }
-*/
 
+/*
 @AllArgsConstructor
 @Data
 @Introspected
@@ -42,3 +41,4 @@ public class ConfigData {
         private double prop2;
     }
 }
+*/
