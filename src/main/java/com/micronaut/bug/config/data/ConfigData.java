@@ -1,13 +1,12 @@
 package com.micronaut.bug.config.data;
 
-import com.fasterxml.jackson.annotation.JsonCreator;
 import io.micronaut.core.annotation.Introspected;
 import lombok.AllArgsConstructor;
 import lombok.Data;
-import lombok.RequiredArgsConstructor;
 
 import java.util.List;
 
+/*
 @Introspected
 public record ConfigData(
         VariantEnum variant,
@@ -23,8 +22,8 @@ public record ConfigData(
     ) {
     }
 }
+*/
 
-/*
 @AllArgsConstructor
 @Data
 @Introspected
@@ -43,4 +42,3 @@ public class ConfigData {
         private double prop2;
     }
 }
-*/

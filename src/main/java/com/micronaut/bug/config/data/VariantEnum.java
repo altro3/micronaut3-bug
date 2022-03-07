@@ -2,11 +2,13 @@ package com.micronaut.bug.config.data;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonValue;
+import io.micronaut.core.annotation.ReflectiveAccess;
 import lombok.Getter;
 
 import java.util.HashMap;
 import java.util.Map;
 
+@ReflectiveAccess
 @Getter
 public enum VariantEnum {
 
