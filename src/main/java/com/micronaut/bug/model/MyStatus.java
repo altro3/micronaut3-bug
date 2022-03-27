@@ -6,20 +6,20 @@ import lombok.RequiredArgsConstructor;
 import java.util.HashMap;
 import java.util.Map;
 
-//@TypeDef(type = DataType.STRING)
+//@TypeDef(type = DataType.CHARACTER, converter = MyStatusConverter.class)
 @RequiredArgsConstructor
 @Getter
 public enum MyStatus {
 
-    ACTIVE("a"),
-    BLOCKED("b"),
+    ACTIVE('a'),
+    BLOCKED('b'),
     ;
 
-    public static final Map<String, MyStatus> BY_CODE;
+    public static final Map<Character, MyStatus> BY_CODE;
 
     static {
 
-        var byCode = new HashMap<String, MyStatus>();
+        var byCode = new HashMap<Character, MyStatus>();
         for (var value : values()) {
             byCode.put(value.code, value);
         }
@@ -27,9 +27,9 @@ public enum MyStatus {
         BY_CODE = Map.copyOf(byCode);
     }
 
-    private final String code;
+    private final char code;
 
-    public static MyStatus byCode(String code) {
+    public static MyStatus byCode(char code) {
         var value = BY_CODE.get(code);
         if (value == null) {
             throw new IllegalArgumentException("Unknown code: " + code);

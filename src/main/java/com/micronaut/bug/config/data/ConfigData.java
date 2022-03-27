@@ -1,12 +1,10 @@
 package com.micronaut.bug.config.data;
 
-import io.micronaut.core.annotation.Introspected;
-import lombok.AllArgsConstructor;
-import lombok.Data;
+import io.micronaut.serde.annotation.Serdeable;
 
 import java.util.List;
 
-@Introspected
+@Serdeable
 public record ConfigData(
         VariantEnum variant,
         List<String> params,
@@ -14,7 +12,7 @@ public record ConfigData(
         List<ConfigItem> items
 ) {
 
-    @Introspected
+    @Serdeable
     public record ConfigItem(
             boolean prop1,
             double prop2
@@ -25,7 +23,7 @@ public record ConfigData(
 /*
 @AllArgsConstructor
 @Data
-@Introspected
+@Serdeable
 public class ConfigData {
 
     private VariantEnum variant;
@@ -35,7 +33,7 @@ public class ConfigData {
 
     @AllArgsConstructor
     @Data
-    @Introspected
+    @Serdeable
     public static class ConfigItem {
         private boolean prop1;
         private double prop2;

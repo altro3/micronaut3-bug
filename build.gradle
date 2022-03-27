@@ -1,8 +1,8 @@
 plugins {
     id 'java'
     id 'idea'
-    id 'io.micronaut.application' version '3.2.2'
-//    id 'io.micronaut.aot' version '3.2.2'
+    id 'io.micronaut.application' version '3.3.1'
+    id 'io.micronaut.aot' version '3.3.1'
 }
 
 ext {
@@ -12,7 +12,7 @@ ext {
 
 mainClassName = "com.micronaut.bug.Application"
 micronaut {
-    version '3.3.4'
+    version '3.4.0'
     runtime "netty"
     testRuntime "junit5"
     enableNativeImage true
@@ -21,9 +21,7 @@ micronaut {
         incremental true
         annotations "com.micronaut.bug.*"
     }
-/*
     aot {
-        version = "1.0.0-M7"
         cacheEnvironment = true
         optimizeServiceLoading = true
         optimizeClassLoading = true
@@ -31,10 +29,9 @@ micronaut {
         precomputeOperations = true
         deduceEnvironment = false
     }
-*/
 }
 
-wrapper.gradleVersion = '7.4'
+wrapper.gradleVersion = '7.4.1'
 
 java {
     sourceCompatibility = JavaVersion.VERSION_17
@@ -68,6 +65,8 @@ dependencies {
 
     implementation "io.micronaut:micronaut-runtime"
 
+    implementation "io.micronaut.micrometer:micronaut-micrometer-registry-prometheus"
+
     // micronaut-data
 //    annotationProcessor "io.micronaut.data:micronaut-data-processor"
 //    runtimeOnly "io.micronaut.sql:micronaut-jdbc-hikari"
@@ -84,6 +83,15 @@ tasks.withType(JavaCompile).all {
             '-Xlint:unchecked',
             '-Xlint:deprecation'
     ]
+}
+
+configurations.all {
+    resolutionStrategy {
+        dependencySubstitution {
+            substitute(module("io.micronaut:micronaut-jackson-databind"))
+                    .using(module("io.micronaut.serde:micronaut-serde-jackson:1.0.0"))
+        }
+    }
 }
 
 idea {
