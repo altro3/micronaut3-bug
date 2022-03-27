@@ -1,5 +1,7 @@
 package com.micronaut.bug.config;
 
+//import com.fasterxml.jackson.databind.ObjectMapper;
+
 import com.micronaut.bug.config.data.ConfigData;
 import com.micronaut.bug.config.data.VariantEnum;
 import io.micronaut.context.annotation.Bean;
@@ -11,6 +13,7 @@ import lombok.extern.slf4j.Slf4j;
 
 import javax.annotation.PostConstruct;
 import java.util.EnumMap;
+import java.util.Locale;
 import java.util.Map;
 
 @Slf4j
@@ -25,7 +28,7 @@ public class MyEntityConfig {
 
         for (var variant : VariantEnum.values()) {
             try {
-                var fileUrl = ClassLoader.getSystemResourceAsStream("configs/" + variant.code + ".json");
+                var fileUrl = ClassLoader.getSystemResourceAsStream("configs/" + variant.name().toLowerCase(Locale.ENGLISH) + ".json");
                 if (fileUrl == null) {
                     continue;
                 }
@@ -39,7 +42,6 @@ public class MyEntityConfig {
 
         return myConfigs;
     }
-
 
     @PostConstruct
     public void init() {

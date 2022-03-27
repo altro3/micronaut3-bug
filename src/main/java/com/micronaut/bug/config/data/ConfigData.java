@@ -4,6 +4,7 @@ import io.micronaut.serde.annotation.Serdeable;
 
 import java.util.List;
 
+//@Introspected
 @Serdeable
 public record ConfigData(
         VariantEnum variant,
@@ -12,6 +13,7 @@ public record ConfigData(
         List<ConfigItem> items
 ) {
 
+    //    @Introspected
     @Serdeable
     public record ConfigItem(
             boolean prop1,
