@@ -1,8 +1,9 @@
 plugins {
     id 'java'
     id 'idea'
-    id 'io.micronaut.application' version '3.3.1'
-    id 'io.micronaut.aot' version '3.3.1'
+    id 'io.micronaut.application' version '3.3.2'
+    id 'io.micronaut.aot' version '3.3.2'
+    id 'com.github.johnrengelman.shadow' version '7.1.2'
 }
 
 ext {
@@ -12,7 +13,7 @@ ext {
 
 mainClassName = "com.micronaut.bug.Application"
 micronaut {
-    version '3.4.0'
+    version '3.4.1'
     runtime "netty"
     testRuntime "junit5"
     enableNativeImage true
@@ -31,7 +32,7 @@ micronaut {
     }
 }
 
-wrapper.gradleVersion = '7.4.1'
+wrapper.gradleVersion = '7.4.2'
 
 java {
     sourceCompatibility = JavaVersion.VERSION_17
