@@ -6,6 +6,7 @@ import com.micronaut.bug.config.data.ConfigData;
 import com.micronaut.bug.config.data.VariantEnum;
 import com.micronaut.bug.dao.MyEntityDao;
 import com.micronaut.bug.model.MyEntity;
+import com.micronaut.bug.model.MyEntity.JsonField;
 import com.micronaut.bug.model.MyStatus;
 import jakarta.annotation.PostConstruct;
 import jakarta.inject.Named;
@@ -47,6 +48,16 @@ public class MyEntityService {
     public MyEntity save() {
         var myEntity = myEntityDao.save(MyEntity.builder()
                 .field("field")
+                .jsonField(JsonField.builder()
+                        .id(12)
+                        .text(" this is text")
+                        .number(1233564565646L)
+                        .build())
+                .jsonFieldBin(JsonField.builder()
+                        .id(12)
+                        .text(" this is text")
+                        .number(1233564565646L)
+                        .build())
                 .status(MyStatus.ACTIVE).build());
 
         log.info("Entity {} created", myEntity);

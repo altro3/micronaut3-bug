@@ -1,13 +1,11 @@
 package com.micronaut.bug.config;
 
-//import com.fasterxml.jackson.databind.ObjectMapper;
-
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.micronaut.bug.config.data.ConfigData;
 import com.micronaut.bug.config.data.VariantEnum;
 import io.micronaut.context.annotation.Bean;
 import io.micronaut.context.annotation.Factory;
 import io.micronaut.core.util.StringUtils;
-import io.micronaut.serde.ObjectMapper;
 import jakarta.inject.Named;
 import lombok.extern.slf4j.Slf4j;
 

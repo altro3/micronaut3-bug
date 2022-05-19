@@ -6,7 +6,6 @@ import lombok.RequiredArgsConstructor;
 import java.util.HashMap;
 import java.util.Map;
 
-//@TypeDef(type = DataType.CHARACTER, converter = MyStatusConverter.class)
 @RequiredArgsConstructor
 @Getter
 public enum MyStatus {

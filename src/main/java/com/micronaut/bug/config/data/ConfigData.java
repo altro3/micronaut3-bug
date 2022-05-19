@@ -1,11 +1,12 @@
 package com.micronaut.bug.config.data;
 
-import io.micronaut.serde.annotation.Serdeable;
+import io.micronaut.core.annotation.Introspected;
+import io.micronaut.core.annotation.Nullable;
 
 import java.util.List;
 
-//@Introspected
-@Serdeable
+//@Serdeable
+@Introspected
 public record ConfigData(
         VariantEnum variant,
         List<String> params,
@@ -13,11 +14,11 @@ public record ConfigData(
         List<ConfigItem> items
 ) {
 
-    //    @Introspected
-    @Serdeable
+    //    @Serdeable
+    @Introspected
     public record ConfigItem(
-            boolean prop1,
-            double prop2
+            @Nullable Boolean prop1,
+            @Nullable Double prop2
     ) {
     }
 }

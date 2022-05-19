@@ -1,8 +1,11 @@
 package com.micronaut.bug.model;
 
-//@Singleton
-public class MyStatusConverter {
-}/* implements AttributeConverter<MyStatus, Character> {
+import io.micronaut.core.convert.ConversionContext;
+import io.micronaut.data.model.runtime.convert.AttributeConverter;
+import jakarta.inject.Singleton;
+
+@Singleton
+public class MyStatusConverter implements AttributeConverter<MyStatus, Character> {
 
     @Override
     public Character convertToPersistedValue(MyStatus entityValue, ConversionContext context) {
@@ -14,4 +17,3 @@ public class MyStatusConverter {
         return MyStatus.byCode(persistedValue);
     }
 }
-*/

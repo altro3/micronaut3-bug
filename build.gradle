@@ -1,19 +1,19 @@
 plugins {
     id 'java'
     id 'idea'
-    id 'io.micronaut.application' version '3.3.2'
-    id 'io.micronaut.aot' version '3.3.2'
+    id 'io.micronaut.application' version '3.4.0'
+    id 'io.micronaut.aot' version '3.4.0'
     id 'com.github.johnrengelman.shadow' version '7.1.2'
 }
 
 ext {
-    jreImage = 'bellsoft/liberica-openjre-alpine-musl:17.0.2'
+    jreImage = 'bellsoft/liberica-openjre-alpine-musl:17.0.3'
     jreImageNative = 'debian:stable-slim'
 }
 
 mainClassName = "com.micronaut.bug.Application"
 micronaut {
-    version '3.4.1'
+    version '3.4.4'
     runtime "netty"
     testRuntime "junit5"
     enableNativeImage true
@@ -69,11 +69,11 @@ dependencies {
     implementation "io.micronaut.micrometer:micronaut-micrometer-registry-prometheus"
 
     // micronaut-data
-//    annotationProcessor "io.micronaut.data:micronaut-data-processor"
-//    runtimeOnly "io.micronaut.sql:micronaut-jdbc-hikari"
-//    runtimeOnly "org.postgresql:postgresql"
-//    implementation "io.micronaut.data:micronaut-data-jdbc"
-//    runtimeOnly "io.micronaut.flyway:micronaut-flyway"
+    annotationProcessor "io.micronaut.data:micronaut-data-processor"
+    runtimeOnly "io.micronaut.sql:micronaut-jdbc-hikari"
+    runtimeOnly "org.postgresql:postgresql"
+    implementation "io.micronaut.data:micronaut-data-jdbc"
+    runtimeOnly "io.micronaut.flyway:micronaut-flyway"
 
 }
 
@@ -86,14 +86,16 @@ tasks.withType(JavaCompile).all {
     ]
 }
 
+/*
 configurations.all {
     resolutionStrategy {
         dependencySubstitution {
             substitute(module("io.micronaut:micronaut-jackson-databind"))
-                    .using(module("io.micronaut.serde:micronaut-serde-jackson:1.0.0"))
+                    .using(module("io.micronaut.serde:micronaut-serde-jackson:1.0.1"))
         }
     }
 }
+*/
 
 idea {
 
