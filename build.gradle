@@ -3,6 +3,7 @@ plugins {
     id 'idea'
     id 'io.micronaut.application' version '3.4.0'
     id 'io.micronaut.aot' version '3.4.0'
+    id 'io.swagger.core.v3.swagger-gradle-plugin' version '2.1.13'
     id 'com.github.johnrengelman.shadow' version '7.1.2'
 }
 
@@ -32,6 +33,17 @@ micronaut {
     }
 }
 
+resolve {
+    outputFileName = 'micronaut3-bug-1' // same as micronaut swagger file
+    outputFormat = 'YAML'
+    prettyPrint = 'TRUE'
+    encoding = 'UTF-8'
+    classpath = sourceSets.main.runtimeClasspath
+    resourcePackages = ['com.micronaut.bug']
+    readAllResources = 'FALSE'
+    outputDir = file('build/classes/java/main/META-INF/swagger/') // as micronaut swagger dir path
+}
+
 wrapper.gradleVersion = '7.4.2'
 
 java {
@@ -58,22 +70,27 @@ dependencies {
 
     annotationProcessor "org.projectlombok:lombok"
     annotationProcessor "io.micronaut:micronaut-inject-java"
+    annotationProcessor "io.micronaut.openapi:micronaut-openapi"
 
     compileOnly "org.projectlombok:lombok"
     compileOnly "io.micronaut:micronaut-inject-java"
+    compileOnly "io.swagger.core.v3:swagger-annotations"
+    compileOnly "javax.ws.rs:javax.ws.rs-api:2.1.1"
+
+    implementation "io.micronaut:micronaut-runtime"
+    implementation "io.micronaut.reactor:micronaut-reactor"
+    implementation "io.micronaut.micrometer:micronaut-micrometer-registry-prometheus"
 
     runtimeOnly "ch.qos.logback:logback-classic"
 
-    implementation "io.micronaut:micronaut-runtime"
-
-    implementation "io.micronaut.micrometer:micronaut-micrometer-registry-prometheus"
-
     // micronaut-data
+/*
     annotationProcessor "io.micronaut.data:micronaut-data-processor"
     runtimeOnly "io.micronaut.sql:micronaut-jdbc-hikari"
     runtimeOnly "org.postgresql:postgresql"
     implementation "io.micronaut.data:micronaut-data-jdbc"
     runtimeOnly "io.micronaut.flyway:micronaut-flyway"
+*/
 
 }
 
