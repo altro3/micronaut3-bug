@@ -1,15 +1,16 @@
 package com.micronaut.bug.config;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.micronaut.bug.config.data.ConfigData;
 import com.micronaut.bug.config.data.VariantEnum;
 import io.micronaut.context.annotation.Bean;
 import io.micronaut.context.annotation.Factory;
 import io.micronaut.core.util.StringUtils;
+import io.micronaut.serde.ObjectMapper;
+
 import jakarta.inject.Named;
 import lombok.extern.slf4j.Slf4j;
 
-import javax.annotation.PostConstruct;
+import jakarta.annotation.PostConstruct;
 import java.util.EnumMap;
 import java.util.Locale;
 import java.util.Map;
@@ -31,10 +32,10 @@ public class MyEntityConfig {
                     continue;
                 }
                 var configData = objectMapper.readValue(fileUrl, ConfigData.class);
-                log.info("Read {}", configData);
+//                log.info("Read {}", configData);
                 myConfigs.put(variant, configData);
             } catch (Throwable t) {
-                log.error("Can't read config for variant {}", variant, t);
+//                log.error("Can't read config for variant {}", variant, t);
             }
         }
 

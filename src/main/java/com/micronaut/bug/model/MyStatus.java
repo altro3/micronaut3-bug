@@ -1,13 +1,8 @@
 package com.micronaut.bug.model;
 
-import lombok.Getter;
-import lombok.RequiredArgsConstructor;
-
 import java.util.HashMap;
 import java.util.Map;
 
-@RequiredArgsConstructor
-@Getter
 public enum MyStatus {
 
     ACTIVE('a'),
@@ -27,6 +22,14 @@ public enum MyStatus {
     }
 
     private final char code;
+
+    MyStatus(char code) {
+        this.code = code;
+    }
+
+    public char getCode() {
+        return code;
+    }
 
     public static MyStatus byCode(char code) {
         var value = BY_CODE.get(code);

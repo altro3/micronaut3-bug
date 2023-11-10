@@ -3,12 +3,13 @@ package com.micronaut.bug.config;
 import jakarta.inject.Singleton;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import org.yaml.snakeyaml.LoaderOptions;
 import org.yaml.snakeyaml.Yaml;
 import org.yaml.snakeyaml.constructor.SafeConstructor;
 import org.yaml.snakeyaml.nodes.MappingNode;
 import org.yaml.snakeyaml.nodes.SequenceNode;
 
-import javax.annotation.PostConstruct;
+import jakarta.annotation.PostConstruct;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -24,7 +25,7 @@ public class YamlFileProperties {
     public void init() {
 
         // this logic works perfectly
-        var yaml = new Yaml(new CustomSafeConstructor());
+        var yaml = new Yaml(new CustomSafeConstructor(new LoaderOptions()));
 
         var finalMap = new HashMap<String, List<String>>();
 
@@ -49,6 +50,10 @@ public class YamlFileProperties {
     }
 
     private static class CustomSafeConstructor extends SafeConstructor {
+
+        private CustomSafeConstructor(LoaderOptions loaderOptions) {
+            super(loaderOptions);
+        }
 
         @Override
         protected Map<Object, Object> newMap(MappingNode node) {

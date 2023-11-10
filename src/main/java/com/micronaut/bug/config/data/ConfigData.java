@@ -5,7 +5,13 @@ import io.micronaut.core.annotation.Nullable;
 
 import java.util.List;
 
-//@Serdeable
+/**
+ *
+ * @param variant
+ * @param params
+ * @param params2
+ * @param items
+ */
 @Introspected
 public record ConfigData(
         VariantEnum variant,

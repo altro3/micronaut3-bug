@@ -16,6 +16,6 @@ public class MyEntityProperties {
 
     @PostConstruct
     public void init() {
-        log.info("prop = {}", prop);
+//        log.info("prop = {}", prop);
     }
 }
