@@ -36,7 +36,7 @@ public class MyEntityController {
     }
 
     @Get("/start")
-    public Animal start() {
+    public void start() {
 
         var bird = new Bird()
                 .numWings(2)
@@ -44,16 +44,7 @@ public class MyEntityController {
                 .featherDescription("Large blue and white feathers")
                 .color(ColorEnum.BLUE);
 
-//        var mammal = new Mammal(20.5f, "A typical Canadian beaver")
-//                .color(ColorEnum.BLUE);
-//
-//        var reptile = new Reptile(0, true)
-//                .fangDescription("A pair of venomous fangs")
-//                .color(ColorEnum.BLUE);
-
-
-        var resposne = httpClient.retrieve(HttpRequest.POST("/test", bird), Animal.class);
+        var resposne = httpClient.retrieve(HttpRequest.<Animal>POST("/test", bird), String.class);
         log.info("Response: {}", resposne);
-        return resposne;
     }
 }
