@@ -65,7 +65,7 @@ dependencies {
 
     annotationProcessor "org.projectlombok:lombok"
     annotationProcessor "io.micronaut:micronaut-inject-java"
-    annotationProcessor "io.micronaut.serde:micronaut-serde-processor:2.3.2"
+    annotationProcessor "io.micronaut.serde:micronaut-serde-processor:2.3.3!!"
     annotationProcessor "io.micronaut.validation:micronaut-validation"
     annotationProcessor "io.micronaut.openapi:micronaut-openapi:$ver.micronautOpenapi"
 
@@ -73,6 +73,7 @@ dependencies {
     compileOnly "io.micronaut:micronaut-inject-java"
     compileOnly "io.micronaut.openapi:micronaut-openapi-annotations:$ver.micronautOpenapi"
 
+    implementation "io.micronaut.serde:micronaut-serde-jackson:2.3.3!!"
     implementation "io.micronaut.serde:micronaut-serde-api"
     implementation "org.yaml:snakeyaml"
     implementation "io.micronaut:micronaut-management"
@@ -82,7 +83,6 @@ dependencies {
     implementation "io.micronaut:micronaut-http-client"
     implementation "io.micronaut:micronaut-runtime"
     implementation "io.micronaut.reactor:micronaut-reactor"
-    implementation "io.micronaut.serde:micronaut-serde-jackson:2.3.2"
 //    implementation "io.micronaut:micronaut-jackson-databind"
 
 //    implementation "io.micronaut:micronaut-inject-kotlin"
