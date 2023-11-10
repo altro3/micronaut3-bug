@@ -44,7 +44,7 @@ public class MyEntityController {
                 .featherDescription("Large blue and white feathers")
                 .color(ColorEnum.BLUE);
 
-        var resposne = httpClient.retrieve(HttpRequest.<Animal>POST("/test", bird), String.class);
+        var resposne = httpClient.retrieve(HttpRequest.<Animal>POST("/test", bird), Animal.class);
         log.info("Response: {}", resposne);
     }
 }
