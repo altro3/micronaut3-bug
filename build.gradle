@@ -1,50 +1,45 @@
 plugins {
-    id 'java'
-    id 'idea'
-    id 'io.micronaut.application' version '3.4.0'
-    id 'io.micronaut.aot' version '3.4.0'
-    id 'io.swagger.core.v3.swagger-gradle-plugin' version '2.1.13'
-    id 'com.github.johnrengelman.shadow' version '7.1.2'
+//    id("org.jetbrains.kotlin.jvm") version "1.9.10"
+//    id("org.jetbrains.kotlin.kapt") version "1.9.10"
+//    id("org.jetbrains.kotlin.plugin.allopen") version "1.9.10"
+    id 'io.micronaut.application' version '4.1.2'
+    id 'io.micronaut.aot' version '4.1.2'
 }
 
 ext {
-    jreImage = 'bellsoft/liberica-openjre-alpine-musl:17.0.3'
+
+    ver = [
+            micronaut       : '4.1.6',
+            micronautOpenapi: '6.0.0',
+    ]
+
+    jreImage = 'bellsoft/liberica-openjre-alpine:17.0.9'
     jreImageNative = 'debian:stable-slim'
 }
 
 mainClassName = "com.micronaut.bug.Application"
 micronaut {
-    version '3.4.4'
+    version ver.micronaut
     runtime "netty"
     testRuntime "junit5"
-    enableNativeImage true
+    enableNativeImage false
     processing {
         group project.group
         incremental true
         annotations "com.micronaut.bug.*"
     }
     aot {
-        cacheEnvironment = true
         optimizeServiceLoading = true
-        optimizeClassLoading = true
         convertYamlToJava = true
         precomputeOperations = true
-        deduceEnvironment = false
+        cacheEnvironment = true
+        optimizeClassLoading = true
+        deduceEnvironment = true
+        optimizeNetty = true
     }
 }
 
-resolve {
-    outputFileName = 'micronaut3-bug-1' // same as micronaut swagger file
-    outputFormat = 'YAML'
-    prettyPrint = 'TRUE'
-    encoding = 'UTF-8'
-    classpath = sourceSets.main.runtimeClasspath
-    resourcePackages = ['com.micronaut.bug']
-    readAllResources = 'FALSE'
-    outputDir = file('build/classes/java/main/META-INF/swagger/') // as micronaut swagger dir path
-}
-
-wrapper.gradleVersion = '7.4.2'
+wrapper.gradleVersion = '8.4'
 
 java {
     sourceCompatibility = JavaVersion.VERSION_17
@@ -52,7 +47,7 @@ java {
 
 dockerfile {
     baseImage(jreImage)
-    args "-Dfile.encodig=UTF-8"
+    args "-Dfile.encoding=UTF-8"
 }
 graalvmNative {
     binaries {
@@ -70,54 +65,98 @@ dependencies {
 
     annotationProcessor "org.projectlombok:lombok"
     annotationProcessor "io.micronaut:micronaut-inject-java"
-    annotationProcessor "io.micronaut.openapi:micronaut-openapi"
+    annotationProcessor "io.micronaut.serde:micronaut-serde-processor:2.3.2"
+    annotationProcessor "io.micronaut.validation:micronaut-validation"
+    annotationProcessor "io.micronaut.openapi:micronaut-openapi:$ver.micronautOpenapi"
 
     compileOnly "org.projectlombok:lombok"
     compileOnly "io.micronaut:micronaut-inject-java"
-    compileOnly "io.swagger.core.v3:swagger-annotations"
-    compileOnly "javax.ws.rs:javax.ws.rs-api:2.1.1"
+    compileOnly "io.micronaut.openapi:micronaut-openapi-annotations:$ver.micronautOpenapi"
 
+    implementation "io.micronaut.serde:micronaut-serde-api"
+    implementation "org.yaml:snakeyaml"
+    implementation "io.micronaut:micronaut-management"
+    implementation "io.micronaut.validation:micronaut-validation"
+    implementation "io.micronaut:micronaut-http-server-netty"
+    implementation "io.micronaut:micronaut-inject-java"
+    implementation "io.micronaut:micronaut-http-client"
     implementation "io.micronaut:micronaut-runtime"
     implementation "io.micronaut.reactor:micronaut-reactor"
-    implementation "io.micronaut.micrometer:micronaut-micrometer-registry-prometheus"
+    implementation "io.micronaut.serde:micronaut-serde-jackson:2.3.2"
+//    implementation "io.micronaut:micronaut-jackson-databind"
+
+//    implementation "io.micronaut:micronaut-inject-kotlin"
+//    implementation "org.jetbrains.kotlinx:kotlinx-coroutines-reactor"
+//    implementation "io.micronaut.security:micronaut-security-jwt"
+//    implementation "io.micronaut.security:micronaut-security-oauth2"
 
     runtimeOnly "ch.qos.logback:logback-classic"
 
+//    kapt("io.micronaut.data:micronaut-data-processor")
+//    kapt("io.micronaut.serde:micronaut-serde-processor")
+//    kapt("io.micronaut:micronaut-http-validation")
+//    kapt("io.micronaut.openapi:micronaut-openapi")
+//    kapt("io.micronaut.security:micronaut-security-annotations")
+//    kapt("io.micronaut:micronaut-inject-kotlin")
+//    kapt("io.micronaut:micronaut-inject-java")
+
     // micronaut-data
-/*
-    annotationProcessor "io.micronaut.data:micronaut-data-processor"
-    runtimeOnly "io.micronaut.sql:micronaut-jdbc-hikari"
-    runtimeOnly "org.postgresql:postgresql"
-    implementation "io.micronaut.data:micronaut-data-jdbc"
-    runtimeOnly "io.micronaut.flyway:micronaut-flyway"
-*/
+//    annotationProcessor "io.micronaut.data:micronaut-data-processor"
+
+//    implementation "io.micronaut.data:micronaut-data-jdbc"
+
+//    runtimeOnly "io.micronaut.sql:micronaut-jdbc-hikari"
+//    runtimeOnly "org.postgresql:postgresql"
+//    runtimeOnly "io.micronaut.flyway:micronaut-flyway"
 
 }
 
-tasks.withType(JavaCompile).all {
+/*
+kapt{
+    arguments {
+        arg("sample.argument", "sample value")
+        arg("micronaut.classloader.logging", "false")
+        arg("micronaut.openapi.adoc.templates.links", "links1.ftl")
+        arg("micronaut.openapi.expand.teststst", "this is test")
+
+    }
+}
+*/
+
+/*
+tasks {
+    compileKotlin {
+        kotlinOptions {
+            jvmTarget = "17"
+        }
+    }
+    compileTestKotlin {
+        kotlinOptions {
+            jvmTarget = "17"
+        }
+    }
+}
+*/
+
+tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
     options.compilerArgs = [
             '-parameters',
             '-Xlint:unchecked',
             '-Xlint:deprecation'
     ]
+    options.fork = true
+//    options.forkOptions.jvmArgs += "-Dmicronaut.openapi.views.spec=swagger-ui.enabled=true,swagger-ui.js.url=/openapi/res/"
 }
 
-/*
-configurations.all {
+configurations.configureEach {
     resolutionStrategy {
-        dependencySubstitution {
-            substitute(module("io.micronaut:micronaut-jackson-databind"))
-                    .using(module("io.micronaut.serde:micronaut-serde-jackson:1.0.1"))
-        }
-    }
-}
-*/
+//        dependencySubstitution {
+//            substitute(module("io.micronaut:micronaut-jackson-databind"))
+//                    .using(module("io.micronaut.serde:micronaut-serde-jackson:1.3.2"))
+//        }
 
-idea {
-
-    module {
-        excludeDirs += file('.idea')
-        excludeDirs += file('out')
+        cacheDynamicVersionsFor 0, 'minutes'
+        cacheChangingModulesFor 0, 'minutes'
     }
 }

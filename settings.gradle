@@ -1,6 +1,10 @@
 dependencyResolutionManagement {
     repositories {
+        mavenLocal()
         mavenCentral()
+        mavenCentral {
+            url "https://s01.oss.sonatype.org/content/repositories/snapshots/"
+        }
     }
 }
 
