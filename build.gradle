@@ -74,7 +74,7 @@ dependencies {
     compileOnly "io.micronaut.openapi:micronaut-openapi-annotations:$ver.micronautOpenapi"
 
     implementation "io.micronaut.serde:micronaut-serde-jackson:2.3.3!!"
-    implementation "io.micronaut.serde:micronaut-serde-api"
+    implementation "io.micronaut.serde:micronaut-serde-api:2.3.3!!"
     implementation "org.yaml:snakeyaml"
     implementation "io.micronaut:micronaut-management"
     implementation "io.micronaut.validation:micronaut-validation"
