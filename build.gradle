@@ -1,7 +1,7 @@
 plugins {
-//    id("org.jetbrains.kotlin.jvm") version "1.9.10"
-//    id("org.jetbrains.kotlin.kapt") version "1.9.10"
-//    id("org.jetbrains.kotlin.plugin.allopen") version "1.9.10"
+    id("org.jetbrains.kotlin.jvm") version "1.9.20"
+    id("org.jetbrains.kotlin.kapt") version "1.9.20"
+    id("org.jetbrains.kotlin.plugin.allopen") version "1.9.20"
     id 'io.micronaut.application' version '4.1.2'
     id 'io.micronaut.aot' version '4.1.2'
 }
@@ -9,8 +9,10 @@ plugins {
 ext {
 
     ver = [
-            micronaut       : '4.1.6',
-            micronautOpenapi: '6.0.0',
+            micronaut: '4.1.6',
+            core     : '4.2.0!!',
+            serde    : '2.4.0!!',
+            openapi  : '6.1.0!!',
     ]
 
     jreImage = 'bellsoft/liberica-openjre-alpine:17.0.9'
@@ -63,26 +65,34 @@ dockerfileNative {
 
 dependencies {
 
-    annotationProcessor "org.projectlombok:lombok"
-    annotationProcessor "io.micronaut:micronaut-inject-java"
-    annotationProcessor "io.micronaut.serde:micronaut-serde-processor:2.3.3!!"
-    annotationProcessor "io.micronaut.validation:micronaut-validation"
-    annotationProcessor "io.micronaut.openapi:micronaut-openapi:$ver.micronautOpenapi"
+//    annotationProcessor "org.projectlombok:lombok"
+//    annotationProcessor "io.micronaut:micronaut-inject-java"
+//    annotationProcessor "io.micronaut.serde:micronaut-serde-processor:2.3.3!!"
+//    annotationProcessor "io.micronaut.openapi:micronaut-openapi:$ver.openapi"
 
-    compileOnly "org.projectlombok:lombok"
-    compileOnly "io.micronaut:micronaut-inject-java"
-    compileOnly "io.micronaut.openapi:micronaut-openapi-annotations:$ver.micronautOpenapi"
+    kapt("io.micronaut.openapi:micronaut-openapi:$ver.openapi")
+    kapt("io.micronaut.security:micronaut-security-annotations")
+    kapt("io.micronaut:micronaut-inject-kotlin:$ver.core")
+    kapt("io.micronaut.serde:micronaut-serde-processor:$ver.serde")
+    kapt("io.micronaut.validation:micronaut-validation")
 
-    implementation "io.micronaut.serde:micronaut-serde-jackson:2.3.3!!"
-    implementation "io.micronaut.serde:micronaut-serde-api:2.3.3!!"
+//    compileOnly "org.projectlombok:lombok"
+    compileOnly "io.micronaut:micronaut-inject-kotlin:$ver.core"
+    compileOnly "io.micronaut.openapi:micronaut-openapi-annotations:$ver.openapi"
+    compileOnly "com.fasterxml.jackson.core:jackson-annotations"
+
+    implementation "io.micronaut.serde:micronaut-serde-api:$ver.serde"
     implementation "org.yaml:snakeyaml"
-    implementation "io.micronaut:micronaut-management"
+    implementation "io.micronaut:micronaut-management:$ver.core"
     implementation "io.micronaut.validation:micronaut-validation"
-    implementation "io.micronaut:micronaut-http-server-netty"
-    implementation "io.micronaut:micronaut-inject-java"
-    implementation "io.micronaut:micronaut-http-client"
-    implementation "io.micronaut:micronaut-runtime"
+    implementation "io.micronaut:micronaut-http-server-netty:$ver.core"
+    implementation "io.micronaut:micronaut-http-client:$ver.core"
+    implementation "io.micronaut:micronaut-runtime:$ver.core"
     implementation "io.micronaut.reactor:micronaut-reactor"
+
+    runtimeOnly("io.micronaut.serde:micronaut-serde-jackson:$ver.serde")
+    runtimeOnly("ch.qos.logback:logback-classic")
+
 //    implementation "io.micronaut:micronaut-jackson-databind"
 
 //    implementation "io.micronaut:micronaut-inject-kotlin"
@@ -90,17 +100,7 @@ dependencies {
 //    implementation "io.micronaut.security:micronaut-security-jwt"
 //    implementation "io.micronaut.security:micronaut-security-oauth2"
 
-    runtimeOnly "ch.qos.logback:logback-classic"
-
-//    kapt("io.micronaut.data:micronaut-data-processor")
-//    kapt("io.micronaut.serde:micronaut-serde-processor")
-//    kapt("io.micronaut:micronaut-http-validation")
-//    kapt("io.micronaut.openapi:micronaut-openapi")
-//    kapt("io.micronaut.security:micronaut-security-annotations")
-//    kapt("io.micronaut:micronaut-inject-kotlin")
-//    kapt("io.micronaut:micronaut-inject-java")
-
-    // micronaut-data
+// micronaut-data
 //    annotationProcessor "io.micronaut.data:micronaut-data-processor"
 
 //    implementation "io.micronaut.data:micronaut-data-jdbc"
