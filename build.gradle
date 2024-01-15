@@ -1,6 +1,6 @@
 plugins {
     id("org.jetbrains.kotlin.jvm") version "1.9.22"
-    id("org.jetbrains.kotlin.kapt") version "1.9.22"
+//    id("org.jetbrains.kotlin.kapt") version "1.9.22"
     id("org.jetbrains.kotlin.plugin.allopen") version "1.9.22"
     id("com.google.devtools.ksp") version "1.9.22-1.0.16"
     id 'io.micronaut.application' version '4.2.1'
@@ -73,14 +73,20 @@ dependencies {
     ksp("io.micronaut.openapi:micronaut-openapi:$ver.openapi")
     ksp("io.micronaut.security:micronaut-security-annotations")
     ksp("io.micronaut:micronaut-inject-kotlin:$ver.core")
-    ksp("io.micronaut.serde:micronaut-serde-processor:$ver.serde")
+    ksp("io.micronaut.serde:micronaut-serde-processor")
     ksp("io.micronaut.validation:micronaut-validation")
+
+//    kapt("io.micronaut.openapi:micronaut-openapi:$ver.openapi")
+//    kapt("io.micronaut.security:micronaut-security-annotations")
+//    kapt("io.micronaut:micronaut-inject-kotlin:$ver.core")
+//    kapt("io.micronaut.serde:micronaut-serde-processor")
+//    kapt("io.micronaut.validation:micronaut-validation")
 
     compileOnly "io.micronaut:micronaut-inject-kotlin:$ver.core"
     compileOnly "io.micronaut.openapi:micronaut-openapi-annotations:$ver.openapi"
     compileOnly "com.fasterxml.jackson.core:jackson-annotations"
 
-    implementation "io.micronaut.serde:micronaut-serde-api:$ver.serde"
+    implementation "io.micronaut.serde:micronaut-serde-api"
     implementation "org.yaml:snakeyaml"
     implementation "io.micronaut:micronaut-management:$ver.core"
     implementation "io.micronaut.validation:micronaut-validation"
@@ -89,7 +95,7 @@ dependencies {
     implementation "io.micronaut:micronaut-runtime:$ver.core"
     implementation "io.micronaut.reactor:micronaut-reactor"
 
-    runtimeOnly("io.micronaut.serde:micronaut-serde-jackson:$ver.serde")
+    runtimeOnly("io.micronaut.serde:micronaut-serde-jackson")
     runtimeOnly("ch.qos.logback:logback-classic")
 
 //    implementation "io.micronaut:micronaut-jackson-databind"
