@@ -1,19 +1,16 @@
 plugins {
-//    id("org.jetbrains.kotlin.jvm") version "1.9.10"
-//    id("org.jetbrains.kotlin.kapt") version "1.9.10"
-//    id("org.jetbrains.kotlin.plugin.allopen") version "1.9.10"
-    id 'io.micronaut.application' version '4.1.2'
-    id 'io.micronaut.aot' version '4.1.2'
+    id 'io.micronaut.application' version '4.2.1'
+    id 'io.micronaut.aot' version '4.2.1'
 }
 
 ext {
 
     ver = [
-            micronaut       : '4.1.6',
-            micronautOpenapi: '6.0.0',
+            micronaut       : '4.3.1',
+            micronautOpenapi: '6.5.0!!',
     ]
 
-    jreImage = 'bellsoft/liberica-openjre-alpine:17.0.9'
+    jreImage = 'bellsoft/liberica-openjre-alpine:17.0.10'
     jreImageNative = 'debian:stable-slim'
 }
 
@@ -39,7 +36,7 @@ micronaut {
     }
 }
 
-wrapper.gradleVersion = '8.4'
+wrapper.gradleVersion = '8.5'
 
 java {
     sourceCompatibility = JavaVersion.VERSION_17
@@ -73,8 +70,8 @@ dependencies {
     compileOnly "io.micronaut:micronaut-inject-java"
     compileOnly "io.micronaut.openapi:micronaut-openapi-annotations:$ver.micronautOpenapi"
 
-    implementation "io.micronaut.serde:micronaut-serde-jackson:2.3.3!!"
-    implementation "io.micronaut.serde:micronaut-serde-api:2.3.3!!"
+    implementation "io.micronaut.serde:micronaut-serde-api"
+    implementation "io.micronaut.serde:micronaut-serde-jackson"
     implementation "org.yaml:snakeyaml"
     implementation "io.micronaut:micronaut-management"
     implementation "io.micronaut.validation:micronaut-validation"
@@ -83,22 +80,14 @@ dependencies {
     implementation "io.micronaut:micronaut-http-client"
     implementation "io.micronaut:micronaut-runtime"
     implementation "io.micronaut.reactor:micronaut-reactor"
+
+    runtimeOnly "ch.qos.logback:logback-classic"
 //    implementation "io.micronaut:micronaut-jackson-databind"
 
 //    implementation "io.micronaut:micronaut-inject-kotlin"
 //    implementation "org.jetbrains.kotlinx:kotlinx-coroutines-reactor"
 //    implementation "io.micronaut.security:micronaut-security-jwt"
 //    implementation "io.micronaut.security:micronaut-security-oauth2"
-
-    runtimeOnly "ch.qos.logback:logback-classic"
-
-//    kapt("io.micronaut.data:micronaut-data-processor")
-//    kapt("io.micronaut.serde:micronaut-serde-processor")
-//    kapt("io.micronaut:micronaut-http-validation")
-//    kapt("io.micronaut.openapi:micronaut-openapi")
-//    kapt("io.micronaut.security:micronaut-security-annotations")
-//    kapt("io.micronaut:micronaut-inject-kotlin")
-//    kapt("io.micronaut:micronaut-inject-java")
 
     // micronaut-data
 //    annotationProcessor "io.micronaut.data:micronaut-data-processor"
