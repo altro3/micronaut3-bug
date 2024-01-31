@@ -4,15 +4,15 @@ plugins {
     id("org.jetbrains.kotlin.plugin.allopen") version "1.9.22"
     id("com.google.devtools.ksp") version "1.9.22-1.0.16"
     id 'io.micronaut.application' version '4.2.1'
-    id 'io.micronaut.aot' version '4.2.1'
+//    id 'io.micronaut.aot' version '4.2.1'
 }
 
 ext {
 
     ver = [
-            micronaut: '4.2.3',
-            core     : '4.2.3',
-            openapi  : '6.4.0!!',
+            micronaut: '4.2.4',
+            core     : '4.3.1',
+            openapi  : '6.5.0!!',
     ]
 
     jreImage = 'bellsoft/liberica-openjre-alpine:17.0.9'
@@ -30,15 +30,15 @@ micronaut {
         incremental true
         annotations "com.micronaut.bug.*"
     }
-    aot {
-        optimizeServiceLoading = true
-        convertYamlToJava = true
-        precomputeOperations = true
-        cacheEnvironment = true
-        optimizeClassLoading = true
-        deduceEnvironment = true
-        optimizeNetty = true
-    }
+//    aot {
+//        optimizeServiceLoading = true
+//        convertYamlToJava = true
+//        precomputeOperations = true
+//        cacheEnvironment = true
+//        optimizeClassLoading = true
+//        deduceEnvironment = true
+//        optimizeNetty = true
+//    }
 }
 
 wrapper.gradleVersion = '8.5'
