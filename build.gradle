@@ -1,13 +1,15 @@
 plugins {
-    id 'io.micronaut.application' version '4.2.1'
-    id 'io.micronaut.aot' version '4.2.1'
+    id 'io.micronaut.application' version '4.3.0'
+//    id 'io.micronaut.aot' version '4.3.0'
 }
 
 ext {
 
     ver = [
-            micronaut       : '4.3.1',
-            micronautOpenapi: '6.5.0!!',
+            micronaut: '4.2.4',
+            core     : '4.3.3',
+            openapi  : '6.5.1!!',
+            serde    : '2.8.1!!'
     ]
 
     jreImage = 'bellsoft/liberica-openjre-alpine:17.0.10'
@@ -25,15 +27,15 @@ micronaut {
         incremental true
         annotations "com.micronaut.bug.*"
     }
-    aot {
-        optimizeServiceLoading = true
-        convertYamlToJava = true
-        precomputeOperations = true
-        cacheEnvironment = true
-        optimizeClassLoading = true
-        deduceEnvironment = true
-        optimizeNetty = true
-    }
+//    aot {
+//        optimizeServiceLoading = true
+//        convertYamlToJava = true
+//        precomputeOperations = true
+//        cacheEnvironment = true
+//        optimizeClassLoading = true
+//        deduceEnvironment = true
+//        optimizeNetty = true
+//    }
 }
 
 wrapper.gradleVersion = '8.5'
@@ -61,25 +63,23 @@ dockerfileNative {
 dependencies {
 
     annotationProcessor "org.projectlombok:lombok"
-    annotationProcessor "io.micronaut:micronaut-inject-java"
-    annotationProcessor "io.micronaut.serde:micronaut-serde-processor:2.3.3!!"
+    annotationProcessor "io.micronaut:micronaut-inject-java:$ver.core"
+    annotationProcessor "io.micronaut.serde:micronaut-serde-processor:$ver.serde"
     annotationProcessor "io.micronaut.validation:micronaut-validation"
-    annotationProcessor "io.micronaut.openapi:micronaut-openapi:$ver.micronautOpenapi"
+//    annotationProcessor "io.micronaut.openapi:micronaut-openapi:$ver.openapi"
 
     compileOnly "org.projectlombok:lombok"
-    compileOnly "io.micronaut:micronaut-inject-java"
-    compileOnly "io.micronaut.openapi:micronaut-openapi-annotations:$ver.micronautOpenapi"
+    compileOnly "io.micronaut:micronaut-inject-java:$ver.core"
+//    compileOnly "io.micronaut.openapi:micronaut-openapi-annotations:$ver.openapi"
 
-    implementation "io.micronaut.serde:micronaut-serde-api"
-    implementation "io.micronaut.serde:micronaut-serde-jackson"
-    implementation "org.yaml:snakeyaml"
-    implementation "io.micronaut:micronaut-management"
+    implementation "io.micronaut.serde:micronaut-serde-jackson:$ver.serde"
+    implementation "io.micronaut:micronaut-management:$ver.core"
     implementation "io.micronaut.validation:micronaut-validation"
-    implementation "io.micronaut:micronaut-http-server-netty"
-    implementation "io.micronaut:micronaut-inject-java"
-    implementation "io.micronaut:micronaut-http-client"
-    implementation "io.micronaut:micronaut-runtime"
+    implementation "io.micronaut:micronaut-http-server-netty:$ver.core"
+    implementation "io.micronaut:micronaut-http-client:$ver.core"
+    implementation "io.micronaut:micronaut-runtime:$ver.core"
     implementation "io.micronaut.reactor:micronaut-reactor"
+    implementation "org.yaml:snakeyaml"
 
     runtimeOnly "ch.qos.logback:logback-classic"
 //    implementation "io.micronaut:micronaut-jackson-databind"

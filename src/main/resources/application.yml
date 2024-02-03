@@ -1,7 +1,5 @@
 
 micronaut:
-  application:
-    name: openapi-micronaut
   server:
     port: 8080
     context-path: "/"
@@ -20,11 +18,12 @@ micronaut:
       local:
         url: http://127.0.0.1:8080
   serde:
-    serialization:
-      inclusion: non_null
-
-security:
-  basic-auth:
-    test:
-      username: ssss
-      password: ssds
+    jackson:
+      parser-features:
+        ALLOW_COMMENTS: false
+      read-features:
+        ALLOW_JAVA_COMMENTS: false
+    date-format: yyyy-MM-dd'T'HH:mm:ss.SSS
+    locale: en_US
+    deserialization:
+      ignore-unknown: true

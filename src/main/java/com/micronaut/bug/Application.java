@@ -4,16 +4,14 @@ import io.micronaut.context.ApplicationContextBuilder;
 import io.micronaut.context.ApplicationContextConfigurer;
 import io.micronaut.context.annotation.ContextConfigurer;
 import io.micronaut.runtime.Micronaut;
-import io.swagger.v3.oas.annotations.OpenAPIDefinition;
-import io.swagger.v3.oas.annotations.info.Info;
 
-@OpenAPIDefinition(
-        info = @Info(
-                title = "broken-micronaut-openapi-expand",
-                version = "sdsd",
-                description = ""
-        )
-)
+//@OpenAPIDefinition(
+//        info = @Info(
+//                title = "broken-micronaut-openapi-expand",
+//                version = "sdsd",
+//                description = ""
+//        )
+//)
 @ContextConfigurer
 public class Application implements ApplicationContextConfigurer {
 

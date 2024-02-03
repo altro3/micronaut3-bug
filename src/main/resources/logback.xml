@@ -11,6 +11,10 @@
         </encoder>
     </appender>
 
+    <logger name="io.micronaut" level="INFO" />
+    <logger name="io.netty" level="INFO" />
+    <logger name="reactor" level="INFO" />
+
     <root level="DEBUG">
         <appender-ref ref="STDOUT" />
     </root>

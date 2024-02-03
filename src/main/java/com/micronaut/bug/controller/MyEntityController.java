@@ -16,6 +16,7 @@ import lombok.extern.slf4j.Slf4j;
 import com.micronaut.bug.api.Animal;
 import com.micronaut.bug.api.Bird;
 import com.micronaut.bug.api.ColorEnum;
+import com.micronaut.bug.api.SimpleDto;
 import com.micronaut.bug.service.MyEntityService;
 
 @Slf4j
@@ -31,7 +32,7 @@ public class MyEntityController {
     }
 
     @Post("/test")
-    public Animal test(@Body Animal animal) {
+    public SimpleDto test(@Body SimpleDto animal) {
         return animal;
     }
 
