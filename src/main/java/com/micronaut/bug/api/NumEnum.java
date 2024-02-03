@@ -22,9 +22,6 @@ import io.micronaut.serde.annotation.Serdeable;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonValue;
 
-/**
- * Gets or Sets ColorEnum
- */
 @Serdeable
 public enum NumEnum {
 
@@ -42,29 +39,16 @@ public enum NumEnum {
         this.value = value;
     }
 
-    /**
-     * @return The value represented by this enum
-     */
     @JsonValue
     public int getValue() {
         return value;
     }
 
-    /**
-     * Create this enum from a value.
-     *
-     * @return The enum
-     */
     @JsonCreator
     public static NumEnum fromValue(Integer value) {
         if (!VALUE_MAPPING.containsKey(value)) {
             throw new IllegalArgumentException("Unexpected value '" + value + "'");
         }
         return VALUE_MAPPING.get(value);
-    }
-
-    @Override
-    public String toString() {
-        return String.valueOf(value);
     }
 }
