@@ -14,7 +14,9 @@ package com.micronaut.bug.api;
 import java.util.Objects;
 
 import io.micronaut.serde.annotation.Serdeable;
+import io.swagger.v3.oas.annotations.media.Schema;
 
+import jakarta.annotation.Generated;
 import jakarta.validation.constraints.NotNull;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
@@ -25,24 +27,24 @@ import com.fasterxml.jackson.annotation.JsonPropertyOrder;
  */
 @Serdeable
 @JsonPropertyOrder({
-        Mammal.JSON_PROPERTY_WEIGHT,
-        Mammal.JSON_PROPERTY_DESCRIPTION
+    Mammal.JSON_PROPERTY_WEIGHT,
+    Mammal.JSON_PROPERTY_DESCRIPTION
 })
+@Generated("io.micronaut.openapi.generator.JavaMicronautServerCodegen")
 public class Mammal extends Animal {
 
     public static final String JSON_PROPERTY_WEIGHT = "weight";
     public static final String JSON_PROPERTY_DESCRIPTION = "description";
 
     @NotNull
+    @Schema(name = "weight", requiredMode = Schema.RequiredMode.REQUIRED)
     @JsonProperty(JSON_PROPERTY_WEIGHT)
     private Float weight;
 
     @NotNull
+    @Schema(name = "description", requiredMode = Schema.RequiredMode.REQUIRED)
     @JsonProperty(JSON_PROPERTY_DESCRIPTION)
     private String description;
-
-    private Mammal() {
-    }
 
     public Mammal(Float weight, String description) {
         this.weight = weight;
@@ -119,8 +121,8 @@ public class Mammal extends Animal {
         }
         Mammal mammal = (Mammal) o;
         return Objects.equals(weight, mammal.weight) &&
-                Objects.equals(description, mammal.description) &&
-                super.equals(o);
+            Objects.equals(description, mammal.description) &&
+            super.equals(o);
     }
 
     @Override
@@ -131,9 +133,11 @@ public class Mammal extends Animal {
     @Override
     public String toString() {
         return "Mammal("
-                + "propertyClass: " + getPropertyClass() + ", "
-                + "color: " + getColor()
-                + ")";
+            + "weight: " + getWeight() + ", "
+            + "description: " + getDescription() + ", "
+            + "propertyClass: " + getPropertyClass() + ", "
+            + "color: " + getColor()
+            + ")";
     }
 
 }

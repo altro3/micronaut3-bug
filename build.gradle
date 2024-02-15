@@ -1,13 +1,13 @@
 plugins {
-    id 'io.micronaut.application' version '4.3.0'
-//    id 'io.micronaut.aot' version '4.3.0'
+    id 'io.micronaut.application' version '4.3.2'
+//    id 'io.micronaut.aot' version '4.3.2'
 }
 
 ext {
 
     ver = [
-            micronaut: '4.2.4',
-            core     : '4.3.3',
+            micronaut: '4.3.1',
+            core     : '4.3.5',
             openapi  : '6.5.1!!',
             serde    : '2.8.1!!'
     ]
@@ -63,69 +63,29 @@ dockerfileNative {
 dependencies {
 
     annotationProcessor "org.projectlombok:lombok"
-    annotationProcessor "io.micronaut:micronaut-inject-java:$ver.core"
-    annotationProcessor "io.micronaut.serde:micronaut-serde-processor:$ver.serde"
     annotationProcessor "io.micronaut.validation:micronaut-validation"
-//    annotationProcessor "io.micronaut.openapi:micronaut-openapi:$ver.openapi"
+    annotationProcessor "io.micronaut.serde:micronaut-serde-processor"
+    annotationProcessor "io.micronaut:micronaut-inject-java"
+    annotationProcessor "io.micronaut.openapi:micronaut-openapi:$ver.openapi"
+    annotationProcessor "io.micronaut.security:micronaut-security-annotations"
 
     compileOnly "org.projectlombok:lombok"
     compileOnly "io.micronaut:micronaut-inject-java:$ver.core"
-//    compileOnly "io.micronaut.openapi:micronaut-openapi-annotations:$ver.openapi"
+    compileOnly "io.micronaut.openapi:micronaut-openapi-annotations:$ver.openapi"
+    compileOnly "com.fasterxml.jackson.core:jackson-annotations"
 
-    implementation "io.micronaut.serde:micronaut-serde-jackson:$ver.serde"
-    implementation "io.micronaut:micronaut-management:$ver.core"
     implementation "io.micronaut.validation:micronaut-validation"
     implementation "io.micronaut:micronaut-http-server-netty:$ver.core"
     implementation "io.micronaut:micronaut-http-client:$ver.core"
     implementation "io.micronaut:micronaut-runtime:$ver.core"
     implementation "io.micronaut.reactor:micronaut-reactor"
-    implementation "org.yaml:snakeyaml"
+    implementation "io.micronaut.serde:micronaut-serde-api"
 
     runtimeOnly "ch.qos.logback:logback-classic"
-//    implementation "io.micronaut:micronaut-jackson-databind"
-
-//    implementation "io.micronaut:micronaut-inject-kotlin"
-//    implementation "org.jetbrains.kotlinx:kotlinx-coroutines-reactor"
-//    implementation "io.micronaut.security:micronaut-security-jwt"
-//    implementation "io.micronaut.security:micronaut-security-oauth2"
-
-    // micronaut-data
-//    annotationProcessor "io.micronaut.data:micronaut-data-processor"
-
-//    implementation "io.micronaut.data:micronaut-data-jdbc"
-
-//    runtimeOnly "io.micronaut.sql:micronaut-jdbc-hikari"
-//    runtimeOnly "org.postgresql:postgresql"
-//    runtimeOnly "io.micronaut.flyway:micronaut-flyway"
-
+    runtimeOnly "org.yaml:snakeyaml"
+    runtimeOnly "io.micronaut.serde:micronaut-serde-jackson:$ver.serde"
+//    runtimeOnly "io.micronaut:micronaut-jackson-databind"
 }
-
-/*
-kapt{
-    arguments {
-        arg("sample.argument", "sample value")
-        arg("micronaut.classloader.logging", "false")
-        arg("micronaut.openapi.adoc.templates.links", "links1.ftl")
-        arg("micronaut.openapi.expand.teststst", "this is test")
-
-    }
-}
-*/
-
-/*
-tasks {
-    compileKotlin {
-        kotlinOptions {
-            jvmTarget = "17"
-        }
-    }
-    compileTestKotlin {
-        kotlinOptions {
-            jvmTarget = "17"
-        }
-    }
-}
-*/
 
 tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'

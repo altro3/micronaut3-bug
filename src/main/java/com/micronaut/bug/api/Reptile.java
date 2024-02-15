@@ -14,8 +14,11 @@ package com.micronaut.bug.api;
 import java.util.Objects;
 import java.util.Optional;
 
+import io.micronaut.core.annotation.Nullable;
 import io.micronaut.serde.annotation.Serdeable;
+import io.swagger.v3.oas.annotations.media.Schema;
 
+import jakarta.annotation.Generated;
 import jakarta.validation.constraints.NotNull;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
@@ -28,10 +31,11 @@ import com.fasterxml.jackson.annotation.JsonPropertyOrder;
  */
 @Serdeable
 @JsonPropertyOrder({
-        Reptile.JSON_PROPERTY_NUM_LEGS,
-        Reptile.JSON_PROPERTY_FANGS,
-        Reptile.JSON_PROPERTY_FANG_DESCRIPTION
+    Reptile.JSON_PROPERTY_NUM_LEGS,
+    Reptile.JSON_PROPERTY_FANGS,
+    Reptile.JSON_PROPERTY_FANG_DESCRIPTION
 })
+@Generated("io.micronaut.openapi.generator.JavaMicronautServerCodegen")
 public class Reptile extends Animal {
 
     public static final String JSON_PROPERTY_NUM_LEGS = "numLegs";
@@ -39,19 +43,20 @@ public class Reptile extends Animal {
     public static final String JSON_PROPERTY_FANG_DESCRIPTION = "fangDescription";
 
     @NotNull
+    @Schema(name = "numLegs", requiredMode = Schema.RequiredMode.REQUIRED)
     @JsonProperty(JSON_PROPERTY_NUM_LEGS)
     private Integer numLegs;
 
     @NotNull
+    @Schema(name = "fangs", requiredMode = Schema.RequiredMode.REQUIRED)
     @JsonProperty(JSON_PROPERTY_FANGS)
     private Boolean fangs;
 
+    @Nullable
+    @Schema(name = "fangDescription", requiredMode = Schema.RequiredMode.NOT_REQUIRED)
     @JsonProperty(JSON_PROPERTY_FANG_DESCRIPTION)
     @JsonInclude(JsonInclude.Include.USE_DEFAULTS)
     private String fangDescription;
-
-    private Reptile() {
-    }
 
     public Reptile(Integer numLegs, Boolean fangs) {
         this.numLegs = numLegs;
@@ -160,9 +165,9 @@ public class Reptile extends Animal {
         }
         Reptile reptile = (Reptile) o;
         return Objects.equals(numLegs, reptile.numLegs) &&
-                Objects.equals(fangs, reptile.fangs) &&
-                Objects.equals(fangDescription, reptile.fangDescription) &&
-                super.equals(o);
+            Objects.equals(fangs, reptile.fangs) &&
+            Objects.equals(fangDescription, reptile.fangDescription) &&
+            super.equals(o);
     }
 
     @Override
@@ -173,9 +178,12 @@ public class Reptile extends Animal {
     @Override
     public String toString() {
         return "Reptile("
-                + "propertyClass: " + getPropertyClass() + ", "
-                + "color: " + getColor()
-                + ")";
+            + "numLegs: " + getNumLegs() + ", "
+            + "fangs: " + getFangs() + ", "
+            + "fangDescription: " + getFangDescription() + ", "
+            + "propertyClass: " + getPropertyClass() + ", "
+            + "color: " + getColor()
+            + ")";
     }
 
 }

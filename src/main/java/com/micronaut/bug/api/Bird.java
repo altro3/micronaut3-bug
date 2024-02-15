@@ -15,7 +15,11 @@ import java.math.BigDecimal;
 import java.util.Objects;
 import java.util.Optional;
 
+import io.micronaut.core.annotation.Nullable;
 import io.micronaut.serde.annotation.Serdeable;
+import io.swagger.v3.oas.annotations.media.Schema;
+
+import jakarta.annotation.Generated;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonInclude;
@@ -27,24 +31,31 @@ import com.fasterxml.jackson.annotation.JsonPropertyOrder;
  */
 @Serdeable
 @JsonPropertyOrder({
-        Bird.JSON_PROPERTY_NUM_WINGS,
-        Bird.JSON_PROPERTY_BEAK_LENGTH,
-        Bird.JSON_PROPERTY_FEATHER_DESCRIPTION
+    Bird.JSON_PROPERTY_NUM_WINGS,
+    Bird.JSON_PROPERTY_BEAK_LENGTH,
+    Bird.JSON_PROPERTY_FEATHER_DESCRIPTION
 })
+@Generated("io.micronaut.openapi.generator.JavaMicronautServerCodegen")
 public class Bird extends Animal {
 
     public static final String JSON_PROPERTY_NUM_WINGS = "numWings";
     public static final String JSON_PROPERTY_BEAK_LENGTH = "beakLength";
     public static final String JSON_PROPERTY_FEATHER_DESCRIPTION = "featherDescription";
 
+    @Nullable
+    @Schema(name = "numWings", requiredMode = Schema.RequiredMode.NOT_REQUIRED)
     @JsonProperty(JSON_PROPERTY_NUM_WINGS)
     @JsonInclude(JsonInclude.Include.USE_DEFAULTS)
     private Integer numWings;
 
+    @Nullable
+    @Schema(name = "beakLength", requiredMode = Schema.RequiredMode.NOT_REQUIRED)
     @JsonProperty(JSON_PROPERTY_BEAK_LENGTH)
     @JsonInclude(JsonInclude.Include.USE_DEFAULTS)
     private BigDecimal beakLength;
 
+    @Nullable
+    @Schema(name = "featherDescription", requiredMode = Schema.RequiredMode.NOT_REQUIRED)
     @JsonProperty(JSON_PROPERTY_FEATHER_DESCRIPTION)
     @JsonInclude(JsonInclude.Include.USE_DEFAULTS)
     private String featherDescription;
@@ -167,9 +178,9 @@ public class Bird extends Animal {
         }
         Bird bird = (Bird) o;
         return Objects.equals(numWings, bird.numWings) &&
-                Objects.equals(beakLength, bird.beakLength) &&
-                Objects.equals(featherDescription, bird.featherDescription) &&
-                super.equals(o);
+            Objects.equals(beakLength, bird.beakLength) &&
+            Objects.equals(featherDescription, bird.featherDescription) &&
+            super.equals(o);
     }
 
     @Override
@@ -180,9 +191,12 @@ public class Bird extends Animal {
     @Override
     public String toString() {
         return "Bird("
-                + "propertyClass: " + getPropertyClass() + ", "
-                + "color: " + getColor()
-                + ")";
+            + "numWings: " + getNumWings() + ", "
+            + "beakLength: " + getBeakLength() + ", "
+            + "featherDescription: " + getFeatherDescription() + ", "
+            + "propertyClass: " + getPropertyClass() + ", "
+            + "color: " + getColor()
+            + ")";
     }
 
 }

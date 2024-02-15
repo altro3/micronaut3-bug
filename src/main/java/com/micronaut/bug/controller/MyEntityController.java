@@ -10,15 +10,19 @@ import io.micronaut.http.annotation.Post;
 import io.micronaut.http.client.BlockingHttpClient;
 import io.micronaut.http.client.HttpClient;
 import io.micronaut.http.client.annotation.Client;
+import io.micronaut.scheduling.TaskExecutors;
+import io.micronaut.scheduling.annotation.ExecuteOn;
 
+import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
+import reactor.core.publisher.Mono;
 
 import com.micronaut.bug.api.Animal;
 import com.micronaut.bug.api.Bird;
 import com.micronaut.bug.api.ColorEnum;
-import com.micronaut.bug.api.SimpleDto;
 import com.micronaut.bug.service.MyEntityService;
 
+@ExecuteOn(TaskExecutors.BLOCKING)
 @Slf4j
 @Controller
 public class MyEntityController {
@@ -32,8 +36,8 @@ public class MyEntityController {
     }
 
     @Post("/test")
-    public SimpleDto test(@Body SimpleDto animal) {
-        return animal;
+    public Mono<Animal> test(@Body @Valid Animal animal) {
+        return Mono.just(animal);
     }
 
     @Get("/start")

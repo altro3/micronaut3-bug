@@ -20,8 +20,6 @@ public class Application implements ApplicationContextConfigurer {
         System.out.println("Java configurer loaded");
         builder.deduceEnvironment(false)
                 .banner(false)
-                .eagerInitConfiguration(true)
-                .eagerInitSingletons(true)
                 .defaultEnvironments("local");
     }
 

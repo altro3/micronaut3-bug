@@ -2,7 +2,6 @@ package com.micronaut.bug.service;
 
 import java.io.IOException;
 import java.math.BigDecimal;
-import java.util.List;
 import java.util.Map;
 
 import io.micronaut.serde.ObjectMapper;
@@ -17,7 +16,6 @@ import com.micronaut.bug.api.ColorEnum;
 import com.micronaut.bug.api.Mammal;
 import com.micronaut.bug.api.Reptile;
 import com.micronaut.bug.config.MyEntityProperties;
-import com.micronaut.bug.config.YamlFileProperties;
 import com.micronaut.bug.config.data.ConfigData;
 import com.micronaut.bug.config.data.VariantEnum;
 import com.micronaut.bug.dao.MyEntityDao;
@@ -29,14 +27,12 @@ public class MyEntityService {
 
     private final MyEntityProperties entityProperties;
     private final MyEntityDao myEntityDao;
-    private final YamlFileProperties yamlFileProperties;
     private final Map<VariantEnum, ConfigData> myConfigs;
 
-    public MyEntityService(MyEntityProperties entityProperties, MyEntityDao myEntityDao, YamlFileProperties yamlFileProperties,
+    public MyEntityService(MyEntityProperties entityProperties, MyEntityDao myEntityDao,
                            @Named("myConfigs") Map<VariantEnum, ConfigData> myConfigs) {
         this.entityProperties = entityProperties;
         this.myEntityDao = myEntityDao;
-        this.yamlFileProperties = yamlFileProperties;
         this.myConfigs = myConfigs;
     }
 
@@ -49,7 +45,7 @@ public class MyEntityService {
     }
 
     public void process() {
-        
+
         var mapper = ObjectMapper.getDefault();
 
         var bird = new Bird()
@@ -70,7 +66,7 @@ public class MyEntityService {
         log.info("Reptile: {}", reptile);
 
         try {
-            
+
             var birdStr = "";
             var mammalStr = "";
             var reptileStr = "";
@@ -85,10 +81,6 @@ public class MyEntityService {
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
-    }
-
-    public List<String> getPropertiesByKey(String key) {
-        return yamlFileProperties.getPropsByKey(key);
     }
 
     public MyEntity save() {
