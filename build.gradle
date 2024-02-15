@@ -1,18 +1,17 @@
 plugins {
     id("org.jetbrains.kotlin.jvm") version "1.9.22"
 //    id("org.jetbrains.kotlin.kapt") version "1.9.22"
-    id("org.jetbrains.kotlin.plugin.allopen") version "1.9.22"
-    id("com.google.devtools.ksp") version "1.9.22-1.0.16"
-    id 'io.micronaut.application' version '4.2.1'
+    id("com.google.devtools.ksp") version "1.9.22-1.0.17"
+    id 'io.micronaut.application' version '4.3.2'
 //    id 'io.micronaut.aot' version '4.2.1'
 }
 
 ext {
 
     ver = [
-            micronaut: '4.2.4',
-            core     : '4.3.1',
-            openapi  : '6.5.0!!',
+            micronaut: '4.3.1',
+            core     : '4.3.5',
+            openapi  : '6.5.1!!',
     ]
 
     jreImage = 'bellsoft/liberica-openjre-alpine:17.0.9'
@@ -65,56 +64,41 @@ dockerfileNative {
 
 dependencies {
 
-//    annotationProcessor "org.projectlombok:lombok"
-//    annotationProcessor "io.micronaut:micronaut-inject-java"
-//    annotationProcessor "io.micronaut.serde:micronaut-serde-processor:2.3.3!!"
-//    annotationProcessor "io.micronaut.openapi:micronaut-openapi:$ver.openapi"
-
-    ksp("io.micronaut.openapi:micronaut-openapi:$ver.openapi")
-    ksp("io.micronaut.security:micronaut-security-annotations")
-    ksp("io.micronaut:micronaut-inject-kotlin:$ver.core")
+    ksp("io.micronaut.validation:micronaut-validation-processor")
     ksp("io.micronaut.serde:micronaut-serde-processor")
-    ksp("io.micronaut.validation:micronaut-validation")
+    ksp("io.micronaut:micronaut-inject-kotlin")
+    ksp("io.micronaut.openapi:micronaut-openapi")
+    ksp("io.micronaut.security:micronaut-security-annotations")
 
-//    kapt("io.micronaut.openapi:micronaut-openapi:$ver.openapi")
-//    kapt("io.micronaut.security:micronaut-security-annotations")
-//    kapt("io.micronaut:micronaut-inject-kotlin:$ver.core")
+//    kapt("io.micronaut.validation:micronaut-validation-processor")
 //    kapt("io.micronaut.serde:micronaut-serde-processor")
-//    kapt("io.micronaut.validation:micronaut-validation")
+//    kapt("io.micronaut:micronaut-inject-kotlin")
+//    kapt("io.micronaut.openapi:micronaut-openapi")
+//    kapt("io.micronaut.security:micronaut-security-annotations")
 
-    compileOnly "io.micronaut:micronaut-inject-kotlin:$ver.core"
-    compileOnly "io.micronaut.openapi:micronaut-openapi-annotations:$ver.openapi"
+    compileOnly "io.micronaut.openapi:micronaut-openapi-annotations"
     compileOnly "com.fasterxml.jackson.core:jackson-annotations"
 
+    implementation "io.micronaut:micronaut-http-server-netty"
+    implementation "io.micronaut:micronaut-http-client"
     implementation "io.micronaut.serde:micronaut-serde-api"
-    implementation "org.yaml:snakeyaml"
-    implementation "io.micronaut:micronaut-management:$ver.core"
+    implementation "io.micronaut:micronaut-inject-kotlin"
     implementation "io.micronaut.validation:micronaut-validation"
-    implementation "io.micronaut:micronaut-http-server-netty:$ver.core"
-    implementation "io.micronaut:micronaut-http-client:$ver.core"
-    implementation "io.micronaut:micronaut-runtime:$ver.core"
     implementation "io.micronaut.reactor:micronaut-reactor"
+    implementation "io.micronaut:micronaut-runtime"
+    implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk8"
+    implementation "org.jetbrains.kotlin:kotlin-reflect"
 
-    runtimeOnly("io.micronaut.serde:micronaut-serde-jackson")
-    runtimeOnly("ch.qos.logback:logback-classic")
-
-//    implementation "io.micronaut:micronaut-jackson-databind"
-
-//    implementation "io.micronaut:micronaut-inject-kotlin"
-//    implementation "org.jetbrains.kotlinx:kotlinx-coroutines-reactor"
-//    implementation "io.micronaut.security:micronaut-security-jwt"
-//    implementation "io.micronaut.security:micronaut-security-oauth2"
-
-// micronaut-data
-//    annotationProcessor "io.micronaut.data:micronaut-data-processor"
-
-//    implementation "io.micronaut.data:micronaut-data-jdbc"
-
-//    runtimeOnly "io.micronaut.sql:micronaut-jdbc-hikari"
-//    runtimeOnly "org.postgresql:postgresql"
-//    runtimeOnly "io.micronaut.flyway:micronaut-flyway"
-
+//    runtimeOnly "io.micronaut:micronaut-jackson-databind"
+    runtimeOnly "io.micronaut.serde:micronaut-serde-jackson"
+    runtimeOnly "ch.qos.logback:logback-classic"
+    runtimeOnly "org.yaml:snakeyaml"
 }
+
+kotlin {
+    jvmToolchain(17)
+}
+
 
 /*
 kapt{
@@ -142,17 +126,6 @@ tasks {
     }
 }
 */
-
-tasks.withType(JavaCompile).configureEach {
-    options.encoding = 'UTF-8'
-    options.compilerArgs = [
-            '-parameters',
-            '-Xlint:unchecked',
-            '-Xlint:deprecation'
-    ]
-    options.fork = true
-//    options.forkOptions.jvmArgs += "-Dmicronaut.openapi.views.spec=swagger-ui.enabled=true,swagger-ui.js.url=/openapi/res/"
-}
 
 configurations.configureEach {
     resolutionStrategy {
