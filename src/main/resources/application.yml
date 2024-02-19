@@ -23,7 +23,3 @@ micronaut:
         ALLOW_COMMENTS: false
       read-features:
         ALLOW_JAVA_COMMENTS: false
-    date-format: yyyy-MM-dd'T'HH:mm:ss.SSS
-    locale: en_US
-    deserialization:
-      ignore-unknown: true
