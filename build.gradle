@@ -1,20 +1,21 @@
 plugins {
-    id("org.jetbrains.kotlin.jvm") version "1.9.22"
-//    id("org.jetbrains.kotlin.kapt") version "1.9.22"
-    id("com.google.devtools.ksp") version "1.9.22-1.0.17"
-    id 'io.micronaut.application' version '4.3.2'
-//    id 'io.micronaut.aot' version '4.2.1'
+    id("org.jetbrains.kotlin.jvm") version "1.9.23"
+//    id("org.jetbrains.kotlin.kapt") version "1.9.23"
+    id("com.google.devtools.ksp") version "1.9.23-1.0.20"
+    id 'io.micronaut.application' version '4.3.8'
+//    id 'io.micronaut.aot' version '4.3.4'
 }
 
 ext {
 
     ver = [
-            micronaut: '4.3.1',
-            core     : '4.3.5',
-            openapi  : '6.5.1!!',
+            micronaut: '4.4.1',
+            core     : '4.4.6',
+            serde    : '2.9.0',
+            openapi  : '6.9.1!!',
     ]
 
-    jreImage = 'bellsoft/liberica-openjre-alpine:17.0.9'
+    jreImage = 'bellsoft/liberica-openjre-alpine:17.0.10'
     jreImageNative = 'debian:stable-slim'
 }
 
@@ -40,7 +41,7 @@ micronaut {
 //    }
 }
 
-wrapper.gradleVersion = '8.5'
+wrapper.gradleVersion = '8.7'
 
 java {
     sourceCompatibility = JavaVersion.VERSION_17
@@ -65,9 +66,9 @@ dockerfileNative {
 dependencies {
 
     ksp("io.micronaut.validation:micronaut-validation-processor")
-    ksp("io.micronaut.serde:micronaut-serde-processor")
+    ksp("io.micronaut.serde:micronaut-serde-processor:$ver.serde")
     ksp("io.micronaut:micronaut-inject-kotlin")
-    ksp("io.micronaut.openapi:micronaut-openapi")
+    ksp("io.micronaut.openapi:micronaut-openapi:$ver.openapi")
     ksp("io.micronaut.security:micronaut-security-annotations")
 
 //    kapt("io.micronaut.validation:micronaut-validation-processor")
@@ -76,12 +77,12 @@ dependencies {
 //    kapt("io.micronaut.openapi:micronaut-openapi")
 //    kapt("io.micronaut.security:micronaut-security-annotations")
 
-    compileOnly "io.micronaut.openapi:micronaut-openapi-annotations"
+    compileOnly "io.micronaut.openapi:micronaut-openapi-annotations:$ver.openapi"
     compileOnly "com.fasterxml.jackson.core:jackson-annotations"
 
     implementation "io.micronaut:micronaut-http-server-netty"
     implementation "io.micronaut:micronaut-http-client"
-    implementation "io.micronaut.serde:micronaut-serde-api"
+    implementation "io.micronaut.serde:micronaut-serde-api:$ver.serde"
     implementation "io.micronaut:micronaut-inject-kotlin"
     implementation "io.micronaut.validation:micronaut-validation"
     implementation "io.micronaut.reactor:micronaut-reactor"
@@ -90,7 +91,7 @@ dependencies {
     implementation "org.jetbrains.kotlin:kotlin-reflect"
 
 //    runtimeOnly "io.micronaut:micronaut-jackson-databind"
-    runtimeOnly "io.micronaut.serde:micronaut-serde-jackson"
+    runtimeOnly "io.micronaut.serde:micronaut-serde-jackson:$ver.serde"
     runtimeOnly "ch.qos.logback:logback-classic"
     runtimeOnly "org.yaml:snakeyaml"
 }
