@@ -1,20 +1,20 @@
 plugins {
-    id("org.jetbrains.kotlin.jvm") version "1.9.22"
-//    id("org.jetbrains.kotlin.kapt") version "1.9.22"
-    id("com.google.devtools.ksp") version "1.9.22-1.0.17"
-    id 'io.micronaut.application' version '4.3.2'
-//    id 'io.micronaut.aot' version '4.2.1'
+    id("org.jetbrains.kotlin.jvm") version "1.9.23"
+//    id("org.jetbrains.kotlin.kapt") version "1.9.23"
+    id("com.google.devtools.ksp") version "1.9.23-1.0.19"
+    id 'io.micronaut.application' version '4.3.5'
+//    id 'io.micronaut.aot' version '4.3.4'
 }
 
 ext {
 
     ver = [
-            micronaut: '4.3.1',
-            core     : '4.3.5',
-            openapi  : '6.5.1!!',
+            micronaut: '4.3.7',
+            core     : '4.3.12',
+            openapi  : '6.6.3!!',
     ]
 
-    jreImage = 'bellsoft/liberica-openjre-alpine:17.0.9'
+    jreImage = 'bellsoft/liberica-openjre-alpine:17.0.10'
     jreImageNative = 'debian:stable-slim'
 }
 
@@ -40,7 +40,7 @@ micronaut {
 //    }
 }
 
-wrapper.gradleVersion = '8.5'
+wrapper.gradleVersion = '8.7'
 
 java {
     sourceCompatibility = JavaVersion.VERSION_17
