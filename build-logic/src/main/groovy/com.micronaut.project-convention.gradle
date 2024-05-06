@@ -1,0 +1,59 @@
+plugins {
+    id("org.jetbrains.kotlin.jvm")
+    id("org.jetbrains.kotlin.kapt")
+    id("application")
+}
+
+repositories {
+    mavenLocal()
+    mavenCentral()
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_17
+}
+
+kotlin {
+    jvmToolchain(17)
+}
+
+kapt {
+    useBuildCache = false
+}
+
+tasks.named('compileKotlin', org.jetbrains.kotlin.gradle.tasks.KotlinCompilationTask.class) {
+    compilerOptions {
+        jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
+    }
+}
+
+tasks.withType(org.jetbrains.kotlin.gradle.tasks.KaptGenerateStubs).configureEach {
+    kotlinOptions {
+        jvmTarget = "17"
+    }
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+    options.compilerArgs = [
+            '-parameters',
+            '-Xlint:unchecked',
+            '-Xlint:deprecation'
+    ]
+    options.incremental = true
+    options.fork = true
+}
+
+configurations.configureEach {
+    resolutionStrategy {
+        cacheDynamicVersionsFor 0, 'minutes'
+        cacheChangingModulesFor 0, 'minutes'
+    }
+}
+
+tasks.withType(Test).configureEach {
+    testLogging {
+        showStandardStreams = true
+        exceptionFormat = 'full'
+    }
+}

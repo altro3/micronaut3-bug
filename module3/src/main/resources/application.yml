@@ -1,0 +1,30 @@
+
+micronaut:
+  application:
+    name: openapi-micronaut
+  server:
+    port: 8080
+    context-path: "/"
+  router:
+    static-resources:
+      swagger:
+        paths: classpath:META-INF/swagger
+        mapping: /swagger/**
+      swagger-ui:
+        paths: classpath:META-INF/swagger/views/swagger-ui
+        mapping: /openapi/**
+  http:
+    client:
+      read-timeout: 5000s
+    services:
+      local:
+        url: http://127.0.0.1:8080
+  serde:
+    serialization:
+      inclusion: non_null
+
+security:
+  basic-auth:
+    test:
+      username: ssss
+      password: ssds

@@ -1,0 +1,54 @@
+plugins {
+    id("com.micronaut.project-convention")
+    alias(libs.plugins.micronaut.gradle)
+}
+
+application {
+    mainClass = "com.micronaut.bug.Application"
+}
+
+micronaut {
+    version micronautVersion
+    runtime "netty"
+    testRuntime "junit5"
+    enableNativeImage false
+    processing {
+        group project.group
+        incremental true
+        annotations "com.micronaut.bug.*"
+    }
+}
+
+dependencies {
+
+    kapt(
+            mn.micronaut.validation.processor,
+            mn.micronaut.serde.processor,
+            mn.micronaut.inject.java,
+            mn.micronaut.openapi,
+            mn.micronaut.security.annotations,
+    )
+
+    compileOnly(
+            mn.micronaut.openapi.annotations,
+            mn.jackson.annotations,
+    )
+
+    implementation(
+            mn.micronaut.http.server.netty,
+            mn.micronaut.http.client,
+            mn.micronaut.serde.api,
+            mn.micronaut.inject.kotlin,
+            mn.micronaut.validation,
+            mn.micronaut.reactor,
+            mn.micronaut.runtime,
+            mn.kotlin.stdlib,
+            mn.kotlin.reflect,
+    )
+
+    runtimeOnly(
+            mn.micronaut.serde.jackson,
+            mn.logback.classic,
+            mn.snakeyaml,
+    )
+}

@@ -1,0 +1,41 @@
+plugins {
+    id("com.micronaut.project-convention-java")
+}
+
+application {
+    mainClass = "com.micronaut.bug.Application"
+}
+
+dependencies {
+
+    annotationProcessor(
+            mn.lombok,
+            mn.micronaut.validation.processor,
+            mn.micronaut.serde.processor,
+            mn.micronaut.inject.java,
+            mn.micronaut.openapi,
+            mn.micronaut.security.annotations,
+    )
+
+    compileOnly(
+            mn.lombok,
+            mn.micronaut.openapi.annotations,
+            mn.jackson.annotations,
+    )
+
+    implementation(
+            mn.micronaut.http.server.netty,
+            mn.micronaut.http.client,
+            mn.micronaut.serde.api,
+            mn.micronaut.inject.java,
+            mn.micronaut.validation,
+            mn.micronaut.reactor,
+            mn.micronaut.runtime,
+    )
+
+    runtimeOnly(
+            mn.micronaut.serde.jackson,
+            mn.logback.classic,
+            mn.snakeyaml,
+    )
+}
