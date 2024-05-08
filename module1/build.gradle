@@ -1,54 +1,37 @@
 plugins {
     id("com.micronaut.project-convention")
-    alias(libs.plugins.micronaut.gradle)
 }
 
 application {
     mainClass = "com.micronaut.bug.Application"
 }
 
-micronaut {
-    version micronautVersion
-    runtime "netty"
-    testRuntime "junit5"
-    enableNativeImage false
-    processing {
-        group project.group
-        incremental true
-        annotations "com.micronaut.bug.*"
-    }
-}
-
 dependencies {
 
     kapt(
-            mn.micronaut.validation.processor,
-            mn.micronaut.serde.processor,
+            spring.spring.springBootConfigurationProcessor,
+            mn.micronaut.spring.annotation,
+            mn.micronaut.spring.web.annotation,
+            mn.micronaut.spring.annotation,
             mn.micronaut.inject.java,
-            mn.micronaut.openapi,
-            mn.micronaut.security.annotations,
+            "io.micronaut.openapi:micronaut-openapi:6.9.1!!",
     )
 
     compileOnly(
-            mn.micronaut.openapi.annotations,
+            "io.micronaut.openapi:micronaut-openapi-annotations:6.9.1!!",
             mn.jackson.annotations,
+            mn.micronaut.inject.java,
+            mn.micronaut.serde.api,
     )
 
     implementation(
-            mn.micronaut.http.server.netty,
-            mn.micronaut.http.client,
-            mn.micronaut.serde.api,
-            mn.micronaut.inject.kotlin,
-            mn.micronaut.validation,
-            mn.micronaut.reactor,
-            mn.micronaut.runtime,
+            spring.spring.springBootStarterWeb,
+            spring.spring.springBootStarterValidation,
             mn.kotlin.stdlib,
             mn.kotlin.reflect,
     )
 
     runtimeOnly(
-            mn.micronaut.serde.jackson,
             mn.logback.classic,
-            mn.snakeyaml,
     )
 }

@@ -1,54 +1,36 @@
 package com.micronaut.bug.controller
 
-import com.micronaut.bug.api.Animal
-import com.micronaut.bug.api.Bird
-import com.micronaut.bug.api.ColorEnum
-import io.micronaut.http.HttpRequest
-import io.micronaut.http.annotation.Body
-import io.micronaut.http.annotation.Controller
-import io.micronaut.http.annotation.Get
-import io.micronaut.http.annotation.Post
-import io.micronaut.http.client.BlockingHttpClient
-import io.micronaut.http.client.HttpClient
-import io.micronaut.http.client.annotation.Client
-import io.micronaut.scheduling.TaskExecutors
-import io.micronaut.scheduling.annotation.ExecuteOn
-import jakarta.validation.Valid
-import jakarta.validation.constraints.NotNull
-import reactor.core.publisher.Mono
+import io.micronaut.core.annotation.Nullable
+import io.micronaut.serde.annotation.Serdeable
+import io.swagger.v3.oas.annotations.media.Schema
+import org.springframework.web.bind.annotation.GetMapping
+import org.springframework.web.bind.annotation.RequestParam
+import org.springframework.web.bind.annotation.RestController
 import java.math.BigDecimal
 
-@ExecuteOn(TaskExecutors.BLOCKING)
-@Controller
-open class MyEntityController(
-        @Client("local") httpClient: HttpClient
-) {
-    private val httpClient: BlockingHttpClient
+@RestController
+class MyEntityController {
 
-    init {
-        this.httpClient = httpClient.toBlocking()
-    }
-
-    @Post("/test")
-    open fun test(@Body @NotNull @Valid animal: Animal): Mono<Animal> {
-        return Mono.just(animal)
-    }
-
-    @Get("/start")
-    open fun start() {
-        val bird = Bird(
-                numWings = 2,
-                beakLength = BigDecimal.valueOf(12, 1),
-                featherDescription = "Large blue and white feathers"
+    @GetMapping("/test")
+    fun test(@RequestParam(required = false) param: String?): Bird {
+        return Bird(
+            numWings = 2,
+            beakLength = BigDecimal.valueOf(12, 1),
+            featherDescription = "Large blue and white feathers"
         )
-        bird.color = ColorEnum.BLUE
-
-//        val animal = Animal(
-//                color = ColorEnum.RED,
-//                propertyClass = "ave"
-//        )
-
-        val resposne = httpClient.retrieve(HttpRequest.POST<Animal>("/test", bird), String::class.java)
-        println("!!!!! Response: $resposne")
     }
+
+    @Serdeable
+    data class Bird(
+        @Nullable
+        @Schema(name = "numWings", requiredMode = Schema.RequiredMode.NOT_REQUIRED)
+        var numWings: Int? = null,
+        @Nullable
+        @Schema(name = "beakLength", requiredMode = Schema.RequiredMode.NOT_REQUIRED)
+        var beakLength: BigDecimal? = null,
+        @Nullable
+        @Schema(name = "featherDescription", requiredMode = Schema.RequiredMode.NOT_REQUIRED)
+        var featherDescription: String? = null,
+    )
+
 }

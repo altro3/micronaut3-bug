@@ -1,10 +1,11 @@
 package com.micronaut.bug
 
-import io.micronaut.runtime.Micronaut
+import org.springframework.boot.autoconfigure.SpringBootApplication
+import org.springframework.boot.runApplication
+
+@SpringBootApplication
+open class Application
 
 fun main(args: Array<String>) {
-    Micronaut.build(*args)
-        .defaultEnvironments("local")
-        .banner(false)
-        .start()
+    runApplication<Application>(*args)
 }

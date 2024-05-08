@@ -2,16 +2,15 @@ plugins {
     id 'groovy-gradle-plugin'
 }
 
-def pluginDependency = (Provider<PluginDependency> pluginProvider) -> pluginProvider.map { plugin ->
-    ["group": plugin.pluginId, "name": "${plugin.pluginId}.gradle.plugin", "version": plugin.version.requiredVersion]
-}
-
 repositories {
     gradlePluginPortal()
     mavenCentral()
 }
 
 dependencies {
-    implementation(pluginDependency(libs.plugins.kotlin.kapt))
-    implementation(pluginDependency(libs.plugins.kotlin.jvm))
+    implementation(
+            libs.kotlin.kapt,
+            libs.kotlin.jvm,
+            libs.kotlin.allopen,
+    )
 }
