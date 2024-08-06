@@ -1,15 +1,16 @@
 plugins {
-    id 'io.micronaut.application' version '4.3.5'
-//    id 'io.micronaut.aot' version '4.3.5'
+    id 'io.micronaut.application' version '4.4.2'
+//    id 'io.micronaut.aot' version '4.4.2'
+    id 'io.micronaut.openapi' version '4.4.2'
 }
 
 ext {
 
     ver = [
-            micronaut: '4.3.7',
-            core     : '4.3.12',
-            openapi  : '6.6.3!!',
-            serde    : '2.8.2!!'
+            micronaut: '4.5.1',
+            core     : '4.5.4',
+            openapi  : '6.11.0!!',
+            serde    : '2.10.2!!'
     ]
 
     jreImage = 'bellsoft/liberica-openjre-alpine:17.0.10'
@@ -36,12 +37,22 @@ micronaut {
 //        deduceEnvironment = true
 //        optimizeNetty = true
 //    }
+    openapi {
+        version = "6.11.0"
+        client(file("swagger.yml")) {
+            apiPackageName = "com.example.openapi.api"
+            modelPackageName = "com.example.openapi.model"
+            clientId = "test"
+            useOptional = true
+            useReactive = false
+        }
+    }
 }
 
-wrapper.gradleVersion = '8.7'
+wrapper.gradleVersion = '8.9'
 
 java {
-    sourceCompatibility = JavaVersion.VERSION_17
+    sourceCompatibility = JavaVersion.VERSION_21
 }
 
 dockerfile {

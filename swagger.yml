@@ -1,0 +1,41 @@
+openapi: 3.0.3
+info:
+  title: Test resource
+  version: 8.0-SNAPSHOT
+paths:
+  /:
+    head:
+      summary: Check if a file is already available
+      operationId: fileAvailable
+      parameters:
+        - name: X-TEST-crc32
+          in: header
+          description: Decimal CRC32B representation of the file
+          required: true
+          schema:
+            type: string
+            nullable: false
+        - name: X-TEST-sha512
+          in: header
+          description: Lowercase SHA512hex representation of the file
+          required: true
+          schema:
+            type: string
+            nullable: false
+        - name: X-TEST-size
+          in: header
+          description: Size of the file in bytes
+          required: true
+          schema:
+            format: int64
+            type: integer
+            nullable: false
+      responses:
+        "400":
+          description: If one of the headers is missing or null
+        "401":
+          description: User is not authorized to request this resource
+        "404":
+          description: If the file with the requested headers is not available
+        "200":
+          description: If the file is available
