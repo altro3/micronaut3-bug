@@ -1,18 +1,18 @@
 plugins {
-    id("org.jetbrains.kotlin.jvm") version "1.9.23"
-//    id("org.jetbrains.kotlin.kapt") version "1.9.23"
-    id("com.google.devtools.ksp") version "1.9.23-1.0.20"
-    id 'io.micronaut.application' version '4.3.8'
-//    id 'io.micronaut.aot' version '4.3.4'
+    id("org.jetbrains.kotlin.jvm") version "1.9.25"
+    id("org.jetbrains.kotlin.kapt") version "1.9.25"
+//    id("com.google.devtools.ksp") version "1.9.25-1.0.20 "
+    id 'io.micronaut.application' version '4.4.2'
+//    id 'io.micronaut.aot' version '4.4.2'
 }
 
 ext {
 
     ver = [
-            micronaut: '4.4.1',
-            core     : '4.4.6',
-            serde    : '2.9.0',
-            openapi  : '6.9.1!!',
+            micronaut: '4.5.1',
+            core     : '4.5.4',
+            openapi  : '6.11.1!!',
+            serde    : '2.10.2',
     ]
 
     jreImage = 'bellsoft/liberica-openjre-alpine:17.0.10'
@@ -39,12 +39,22 @@ micronaut {
 //        deduceEnvironment = true
 //        optimizeNetty = true
 //    }
+    openapi {
+        version = ver.openapi
+        client(file("swagger.yml")) {
+            apiPackageName = "com.example.openapi.api"
+            modelPackageName = "com.example.openapi.model"
+            clientId = "test"
+            useOptional = true
+            useReactive = false
+        }
+    }
 }
 
-wrapper.gradleVersion = '8.7'
+wrapper.gradleVersion = '8.9'
 
 java {
-    sourceCompatibility = JavaVersion.VERSION_17
+    sourceCompatibility = JavaVersion.VERSION_21
 }
 
 dockerfile {
@@ -97,7 +107,7 @@ dependencies {
 }
 
 kotlin {
-    jvmToolchain(17)
+    jvmToolchain(21)
 }
 
 
@@ -117,12 +127,12 @@ kapt{
 tasks {
     compileKotlin {
         kotlinOptions {
-            jvmTarget = "17"
+            jvmTarget = "21"
         }
     }
     compileTestKotlin {
         kotlinOptions {
-            jvmTarget = "17"
+            jvmTarget = "21"
         }
     }
 }
