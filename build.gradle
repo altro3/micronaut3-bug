@@ -3,6 +3,7 @@ plugins {
     id("org.jetbrains.kotlin.kapt") version "1.9.25"
 //    id("com.google.devtools.ksp") version "1.9.25-1.0.20 "
     id 'io.micronaut.application' version '4.4.2'
+    id 'io.micronaut.openapi' version '4.4.2'
 //    id 'io.micronaut.aot' version '4.4.2'
 }
 
@@ -11,7 +12,7 @@ ext {
     ver = [
             micronaut: '4.5.1',
             core     : '4.5.4',
-            openapi  : '6.11.1!!',
+            openapi  : '6.12.0-1!!',
             serde    : '2.10.2',
     ]
 
@@ -45,6 +46,7 @@ micronaut {
             apiPackageName = "com.example.openapi.api"
             modelPackageName = "com.example.openapi.model"
             clientId = "test"
+            lang = "kotlin"
             useOptional = true
             useReactive = false
         }
@@ -75,17 +77,17 @@ dockerfileNative {
 
 dependencies {
 
-    ksp("io.micronaut.validation:micronaut-validation-processor")
-    ksp("io.micronaut.serde:micronaut-serde-processor:$ver.serde")
-    ksp("io.micronaut:micronaut-inject-kotlin")
-    ksp("io.micronaut.openapi:micronaut-openapi:$ver.openapi")
-    ksp("io.micronaut.security:micronaut-security-annotations")
+//    ksp("io.micronaut.validation:micronaut-validation-processor")
+//    ksp("io.micronaut.serde:micronaut-serde-processor:$ver.serde")
+//    ksp("io.micronaut:micronaut-inject-kotlin")
+//    ksp("io.micronaut.openapi:micronaut-openapi:$ver.openapi")
+//    ksp("io.micronaut.security:micronaut-security-annotations")
 
-//    kapt("io.micronaut.validation:micronaut-validation-processor")
-//    kapt("io.micronaut.serde:micronaut-serde-processor")
-//    kapt("io.micronaut:micronaut-inject-kotlin")
-//    kapt("io.micronaut.openapi:micronaut-openapi")
-//    kapt("io.micronaut.security:micronaut-security-annotations")
+    kapt("io.micronaut.validation:micronaut-validation-processor")
+    kapt("io.micronaut.serde:micronaut-serde-processor:$ver.serde")
+    kapt("io.micronaut:micronaut-inject-kotlin")
+    kapt("io.micronaut.openapi:micronaut-openapi:$ver.openapi")
+    kapt("io.micronaut.security:micronaut-security-annotations")
 
     compileOnly "io.micronaut.openapi:micronaut-openapi-annotations:$ver.openapi"
     compileOnly "com.fasterxml.jackson.core:jackson-annotations"
