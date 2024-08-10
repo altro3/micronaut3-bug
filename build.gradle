@@ -5,6 +5,7 @@ plugins {
     id 'io.micronaut.application' version '4.4.2'
     id 'io.micronaut.openapi' version '4.4.2'
 //    id 'io.micronaut.aot' version '4.4.2'
+//    id 'org.openapi.generator' version '7.7.0'
 }
 
 ext {
@@ -12,7 +13,7 @@ ext {
     ver = [
             micronaut: '4.5.1',
             core     : '4.5.4',
-            openapi  : '6.12.0-1!!',
+            openapi  : '6.12.0-3!!',
             serde    : '2.10.2',
     ]
 
@@ -151,3 +152,30 @@ configurations.configureEach {
         cacheChangingModulesFor 0, 'minutes'
     }
 }
+
+/*
+tasks.register("generateApi", org.openapitools.generator.gradle.plugin.tasks.GenerateTask.class) {
+    generatorName.set("kotlin")
+    library.set("jvm-spring-restclient")
+    inputSpec.set("$rootDir/swagger.yml")
+    apiPackage.set("com.example.openapi.api")
+    modelPackage.set("com.example.openapi.api")
+    outputDir.set(layout.buildDirectory.dir("generated/openapi").get().toString())
+    enablePostProcessFile.set(true)
+    skipOverwrite.set(false)
+    generateModelTests.set(false)
+    generateModelDocumentation.set(false)
+    generateApiTests.set(false)
+    generateApiDocumentation.set(false)
+    configOptions.set([
+                    "useSpringBoot3": "true",
+                    "serializationLibrary" : "jackson",
+                    "openApiNullable" : "false",
+                    "generateOneOfAnyOfWrappers" : "true",
+                    "generateConstructorWithAllArgs" : "true",
+                    "useOneOfInterfaces" : "true",
+                    "useBeanValidation" : "true",
+                    "useJakartaEe" : "true",
+    ])
+    group = "openapi tools"
+}*/
