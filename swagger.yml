@@ -1,41 +1,65 @@
-openapi: 3.0.3
+openapi: 3.0.0
 info:
-  title: Test resource
-  version: 8.0-SNAPSHOT
+  title: 'Order API'
+  version: v6
+servers:
+  -
+    url: 'https://{environment}.com/api/{apiVersion}'
+    variables:
+      environment:
+        enum:
+          - api-dev.test.com
+        default: api.dev.test.com
+      apiVersion:
+        enum:
+          - v1
+          - v2
+          - v3
+          - v4
+          - v5
+          - v6
+          - v7
+        default: v6
 paths:
-  /:
-    head:
-      summary: Check if a file is already available
-      operationId: fileAvailable
+  '/orders/{id}':
+    get:
+      tags:
+        - Order
+      operationId: getOrderById
       parameters:
-        - name: X-TEST-crc32
-          in: header
-          description: Decimal CRC32B representation of the file
-          required: true
-          schema:
-            type: string
-            nullable: false
-        - name: X-TEST-sha512
-          in: header
-          description: Lowercase SHA512hex representation of the file
-          required: true
-          schema:
-            type: string
-            nullable: false
-        - name: X-TEST-size
-          in: header
-          description: Size of the file in bytes
-          required: true
-          schema:
-            format: int64
-            type: integer
-            nullable: false
+        -
+          $ref: '#/components/parameters/OrderId'
       responses:
-        "400":
-          description: If one of the headers is missing or null
-        "401":
-          description: User is not authorized to request this resource
-        "404":
-          description: If the file with the requested headers is not available
-        "200":
-          description: If the file is available
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderDTO'
+components:
+  parameters:
+    OrderId:
+      name: id
+      in: path
+      description: 'The ID'
+      required: true
+      schema:
+        type: string
+  schemas:
+    OrderDTO:
+      required:
+        - id
+      properties:
+        id:
+          type: string
+        shopping_notes:
+          nullable: true
+          oneOf:
+            - $ref: '#/components/schemas/ShoppingNotesDTO'
+    ShoppingNotesDTO:
+      properties:
+        message:
+          type: string
+        icon_url:
+          type: string
+      type: object
