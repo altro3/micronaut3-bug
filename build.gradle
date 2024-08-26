@@ -1,17 +1,17 @@
 plugins {
     id 'io.micronaut.application' version '4.4.2'
 //    id 'io.micronaut.aot' version '4.4.2'
-    id 'io.micronaut.openapi' version '4.4.2'
-    id 'org.openapi.generator' version '7.7.0'
+//    id 'io.micronaut.openapi' version '4.4.2'
+//    id 'org.openapi.generator' version '7.7.0'
 }
 
 ext {
 
     ver = [
-            micronaut: '4.5.1',
-            core     : '4.5.4',
-            openapi  : '6.11.1!!',
-            serde    : '2.10.2!!'
+            micronaut: '4.6.0',
+            core     : '4.6.3!!',
+            openapi  : '6.12.2!!',
+            serde    : '2.11.0!!'
     ]
 
     jreImage = 'bellsoft/liberica-openjre-alpine:17.0.10'
@@ -38,22 +38,23 @@ micronaut {
 //        deduceEnvironment = true
 //        optimizeNetty = true
 //    }
-    openapi {
-        version = ver.openapi
-        client(file("swagger.yml")) {
-            apiPackageName = "com.example.openapi.api"
-            modelPackageName = "com.example.openapi.model"
-            clientId = "test"
-            useOptional = true
-            useReactive = false
-        }
-    }
+//    openapi {
+//        version = ver.openapi
+//        server(file("swagger.yml")) {
+//            apiPackageName = "com.example.openapi.api"
+//            modelPackageName = "com.example.openapi.model"
+//            useReactive = false
+//            typeMapping = [
+//                    "file" : "StreamingFileUpload"
+//            ]
+//        }
+//    }
 }
 
-wrapper.gradleVersion = '8.9'
+wrapper.gradleVersion = '8.10'
 
 java {
-    sourceCompatibility = JavaVersion.VERSION_21
+    sourceCompatibility = JavaVersion.VERSION_17
 }
 
 dockerfile {
@@ -76,14 +77,14 @@ dependencies {
 
     annotationProcessor "org.projectlombok:lombok"
     annotationProcessor "io.micronaut.validation:micronaut-validation"
-    annotationProcessor "io.micronaut.serde:micronaut-serde-processor"
-    annotationProcessor "io.micronaut:micronaut-inject-java"
-    annotationProcessor "io.micronaut.openapi:micronaut-openapi:$ver.openapi"
+    annotationProcessor "io.micronaut.serde:micronaut-serde-processor:$ver.serde"
+    annotationProcessor "io.micronaut:micronaut-inject-java:$ver.core"
+//    annotationProcessor "io.micronaut.openapi:micronaut-openapi:$ver.openapi"
     annotationProcessor "io.micronaut.security:micronaut-security-annotations"
 
     compileOnly "org.projectlombok:lombok"
     compileOnly "io.micronaut:micronaut-inject-java:$ver.core"
-    compileOnly "io.micronaut.openapi:micronaut-openapi-annotations:$ver.openapi"
+//    compileOnly "io.micronaut.openapi:micronaut-openapi-annotations:$ver.openapi"
     compileOnly "com.fasterxml.jackson.core:jackson-annotations"
 
     implementation "io.micronaut.validation:micronaut-validation"
@@ -91,12 +92,22 @@ dependencies {
     implementation "io.micronaut:micronaut-http-client:$ver.core"
     implementation "io.micronaut:micronaut-runtime:$ver.core"
     implementation "io.micronaut.reactor:micronaut-reactor"
-    implementation "io.micronaut.serde:micronaut-serde-api"
+    implementation "io.micronaut.serde:micronaut-serde-api:$ver.serde"
 
     runtimeOnly "ch.qos.logback:logback-classic"
     runtimeOnly "org.yaml:snakeyaml"
     runtimeOnly "io.micronaut.serde:micronaut-serde-jackson:$ver.serde"
 //    runtimeOnly "io.micronaut:micronaut-jackson-databind"
+
+    testAnnotationProcessor "org.projectlombok:lombok"
+    testAnnotationProcessor "io.micronaut:micronaut-inject-java"
+
+    testCompileOnly "org.projectlombok:lombok"
+    testCompileOnly "io.micronaut:micronaut-inject-java"
+
+    testImplementation "io.micronaut.test:micronaut-test-junit5"
+
+    testRuntimeOnly "org.junit.jupiter:junit-jupiter-engine"
 }
 
 tasks.withType(JavaCompile).configureEach {
@@ -122,27 +133,31 @@ configurations.configureEach {
     }
 }
 
-tasks.register("generateApi", org.openapitools.generator.gradle.plugin.tasks.GenerateTask.class) {
-    generatorName.set("java")
-    library.set("restclient")
-    inputSpec.set("$rootDir/swagger.yml")
-    apiPackage.set("com.example.openapi.api")
-    modelPackage.set("com.example.openapi.api")
-    outputDir.set(layout.buildDirectory.dir("generated/openapi").get().toString())
-    enablePostProcessFile.set(true)
-    skipOverwrite.set(false)
-    generateModelTests.set(false)
-    generateModelDocumentation.set(false)
-    generateApiTests.set(false)
-    generateApiDocumentation.set(false)
-    configOptions.set([
-            "serializationLibrary" : "jackson",
-            "openApiNullable" : "false",
-            "generateOneOfAnyOfWrappers" : "true",
-            "generateConstructorWithAllArgs" : "true",
-//            "useOneOfInterfaces" : "true",
-            "useBeanValidation" : "true",
-            "useJakartaEe" : "true",
-    ])
-    group = "openapi tools"
-}
+//compileJava {
+//    dependsOn("generateClientOpenApiApis", "generateClientOpenApiModels")
+//}
+
+//tasks.register("generateApi", org.openapitools.generator.gradle.plugin.tasks.GenerateTask.class) {
+//    generatorName.set("java")
+//    library.set("restclient")
+//    inputSpec.set("$rootDir/swagger.yml")
+//    apiPackage.set("com.example.openapi.api")
+//    modelPackage.set("com.example.openapi.api")
+//    outputDir.set(layout.buildDirectory.dir("generated/openapi").get().toString())
+//    enablePostProcessFile.set(true)
+//    skipOverwrite.set(false)
+//    generateModelTests.set(false)
+//    generateModelDocumentation.set(false)
+//    generateApiTests.set(false)
+//    generateApiDocumentation.set(false)
+//    configOptions.set([
+//            "serializationLibrary" : "jackson",
+//            "openApiNullable" : "false",
+//            "generateOneOfAnyOfWrappers" : "true",
+//            "generateConstructorWithAllArgs" : "true",
+////            "useOneOfInterfaces" : "true",
+//            "useBeanValidation" : "true",
+//            "useJakartaEe" : "true",
+//    ])
+//    group = "openapi tools"
+//}
