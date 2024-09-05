@@ -1,65 +1,122 @@
-openapi: 3.0.0
+openapi: 3.0.3
 info:
-  title: 'Order API'
-  version: v6
+  title: Regon Rest API
+  description: Regon Rest API standalone service
+  version: 1.0.0
 servers:
-  -
-    url: 'https://{environment}.com/api/{apiVersion}'
-    variables:
-      environment:
-        enum:
-          - api-dev.test.com
-        default: api.dev.test.com
-      apiVersion:
-        enum:
-          - v1
-          - v2
-          - v3
-          - v4
-          - v5
-          - v6
-          - v7
-        default: v6
+  - url: 'http://localhost:8080'
+tags:
+  - name: Regon
 paths:
-  '/orders/{id}':
+  /api/search/{nip}:
     get:
       tags:
-        - Order
-      operationId: getOrderById
+        - Regon
+      operationId: searchByNip
+      summary: Search company in REGON database by VAT identifying number
+      description: Search company in REGON database by VAT identifying number
       parameters:
-        -
-          $ref: '#/components/parameters/OrderId'
+        - name: nip
+          in: path
+          required: true
+          description: Unique identifier of the customer to retrieve
+          schema:
+            type: string
+            maxLength: 10
+            pattern: '^\d{10}$'
+        - name: X-REGON-API-KEY
+          in: header
+          schema:
+            type: string
+            maxLength: 20
+            minLength: 20
       responses:
-        '200':
-          description: OK
+        200:
+          description: Customer data
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/OrderDTO'
+                $ref: '#/components/schemas/CustomerDTO'
+        400:
+          description: Invalid input data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDTO'
+        401:
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDTO'
+        404:
+          description: When given NIP is not available in Regon database
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDTO'
+        500:
+          description: Internal server error
+        503:
+          description: When Regon service returns error other than "No data found for the specified search criteria"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDTO'
 components:
-  parameters:
-    OrderId:
-      name: id
-      in: path
-      description: 'The ID'
-      required: true
-      schema:
-        type: string
   schemas:
-    OrderDTO:
-      required:
-        - id
+    CustomerDTO:
+      type: object
       properties:
-        id:
+        nip:
           type: string
-        shopping_notes:
-          nullable: true
-          oneOf:
-            - $ref: '#/components/schemas/ShoppingNotesDTO'
-    ShoppingNotesDTO:
+          maxLength: 10
+          pattern: '^\d{10}$'
+        regon:
+          type: string
+          maxLength: 14
+        nipStatus:
+          type: string
+        name:
+          type: string
+          maxLength: 2000
+        province:
+          type: string
+          maxLength: 200
+        district:
+          type: string
+          maxLength: 200
+        municipality:
+          type: string
+          maxLength: 200
+        city:
+          type: string
+          maxLength: 200
+        postCode:
+          type: string
+          maxLength: 12
+        street:
+          type: string
+          maxLength: 200
+        buildingNumber:
+          type: string
+          maxLength: 20
+        apartmentNumber:
+          type: string
+          maxLength: 10
+        type:
+          type: string
+          maxLength: 2
+        postOffice:
+          type: string
+          maxLength: 200
+        businessClosureDate:
+          type: string
+          format: date
+    ErrorDTO:
+      type: object
       properties:
         message:
           type: string
-        icon_url:
-          type: string
-      type: object
+        code:
+          type: integer
