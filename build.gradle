@@ -8,9 +8,9 @@ plugins {
 ext {
 
     ver = [
-            micronaut: '4.6.1',
+            micronaut: '4.6.2',
             core     : '4.6.4!!',
-            openapi  : '6.12.2!!',
+            openapi  : '6.12.3!!',
             serde    : '2.11.0!!'
     ]
 
@@ -38,16 +38,15 @@ micronaut {
 //        deduceEnvironment = true
 //        optimizeNetty = true
 //    }
-    openapi {
-        version = ver.openapi
-        server(file("swagger.yml")) {
-            apiPackageName = "com.example.openapi.api"
-            modelPackageName = "com.example.openapi.model"
-            useReactive = false
-            alwaysUseGenerateHttpResponse = true
-            generateHttpResponseWhereRequired = true
-        }
-    }
+//    openapi {
+//        version = ver.openapi
+//        server(file("swagger.yml")) {
+//            apiPackageName = "com.api.openapi.generated.api"
+//            modelPackageName = "com.api.openapi.generated.model"
+//            useReactive = false
+//            useAuth = true
+//        }
+//    }
 }
 
 wrapper.gradleVersion = '8.10'
@@ -76,36 +75,36 @@ dependencies {
 
     annotationProcessor "org.projectlombok:lombok"
     annotationProcessor "io.micronaut.validation:micronaut-validation"
-    annotationProcessor "io.micronaut:micronaut-core-processor:$ver.core"
-    annotationProcessor "io.micronaut.serde:micronaut-serde-processor:$ver.serde"
-    annotationProcessor "io.micronaut:micronaut-inject-java:$ver.core"
-//    annotationProcessor "io.micronaut.openapi:micronaut-openapi:$ver.openapi"
+    annotationProcessor "io.micronaut:micronaut-core-processor"
+    annotationProcessor "io.micronaut.serde:micronaut-serde-processor"
     annotationProcessor "io.micronaut.security:micronaut-security-annotations"
+    annotationProcessor "io.micronaut.openapi:micronaut-openapi:$ver.openapi"
 
     compileOnly "org.projectlombok:lombok"
-    compileOnly "io.micronaut:micronaut-inject-java:$ver.core"
+    compileOnly "io.micronaut:micronaut-inject-java"
     compileOnly "io.micronaut.openapi:micronaut-openapi-annotations:$ver.openapi"
     compileOnly "com.fasterxml.jackson.core:jackson-annotations"
 
     implementation "io.micronaut.validation:micronaut-validation"
-    implementation "io.micronaut:micronaut-http-server-netty:$ver.core"
-    implementation "io.micronaut:micronaut-http-client:$ver.core"
-    implementation "io.micronaut:micronaut-runtime:$ver.core"
-    implementation "io.micronaut:micronaut-jackson-core:$ver.core"
+    implementation "io.micronaut:micronaut-http-server-netty"
+    implementation "io.micronaut:micronaut-http-client"
+    implementation "io.micronaut:micronaut-runtime"
+    implementation "io.micronaut:micronaut-jackson-core"
     implementation "io.micronaut.reactor:micronaut-reactor"
-    implementation "io.micronaut.serde:micronaut-serde-api:$ver.serde"
+    implementation "io.micronaut.serde:micronaut-serde-api"
+    implementation "io.micronaut.security:micronaut-security-jwt"
 
     runtimeOnly "ch.qos.logback:logback-classic"
     runtimeOnly "org.yaml:snakeyaml"
-    runtimeOnly "io.micronaut.serde:micronaut-serde-jackson:$ver.serde"
+    runtimeOnly "io.micronaut.serde:micronaut-serde-jackson"
 //    runtimeOnly "io.micronaut:micronaut-jackson-databind"
 
     testAnnotationProcessor "org.projectlombok:lombok"
-    testAnnotationProcessor "io.micronaut:micronaut-core-processor:$ver.core"
-    testAnnotationProcessor "io.micronaut:micronaut-inject-java:$ver.core"
+    testAnnotationProcessor "io.micronaut:micronaut-core-processor"
+    testAnnotationProcessor "io.micronaut:micronaut-inject-java"
 
     testCompileOnly "org.projectlombok:lombok"
-    testCompileOnly "io.micronaut:micronaut-inject-java:$ver.core"
+    testCompileOnly "io.micronaut:micronaut-inject-java"
 
     testImplementation "io.micronaut.test:micronaut-test-junit5"
 
