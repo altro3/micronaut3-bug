@@ -1,122 +1,54 @@
-openapi: 3.0.3
+openapi: 3.1.0
 info:
-  title: Regon Rest API
-  description: Regon Rest API standalone service
+  title: Title
+  description: Description
   version: 1.0.0
 servers:
-  - url: 'http://localhost:8080'
-tags:
-  - name: Regon
+  - url: /
 paths:
-  /api/search/{nip}:
+  /v1/path:
     get:
-      tags:
-        - Regon
-      operationId: searchByNip
-      summary: Search company in REGON database by VAT identifying number
-      description: Search company in REGON database by VAT identifying number
-      parameters:
-        - name: nip
-          in: path
-          required: true
-          description: Unique identifier of the customer to retrieve
-          schema:
-            type: string
-            maxLength: 10
-            pattern: '^\d{10}$'
-        - name: X-REGON-API-KEY
-          in: header
-          schema:
-            type: string
-            maxLength: 20
-            minLength: 20
+      summary: A path
+      description: Stuff happens on this path
+      operationId: getStuffFromPath
       responses:
-        200:
-          description: Customer data
+        "200":
+          description: OK
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/CustomerDTO'
-        400:
-          description: Invalid input data
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorDTO'
-        401:
-          description: Unauthorized
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorDTO'
-        404:
-          description: When given NIP is not available in Regon database
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorDTO'
-        500:
-          description: Internal server error
-        503:
-          description: When Regon service returns error other than "No data found for the specified search criteria"
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorDTO'
-components:
-  schemas:
-    CustomerDTO:
-      type: object
-      properties:
-        nip:
-          type: string
-          maxLength: 10
-          pattern: '^\d{10}$'
-        regon:
-          type: string
-          maxLength: 14
-        nipStatus:
-          type: string
-        name:
-          type: string
-          maxLength: 2000
-        province:
-          type: string
-          maxLength: 200
-        district:
-          type: string
-          maxLength: 200
-        municipality:
-          type: string
-          maxLength: 200
-        city:
-          type: string
-          maxLength: 200
-        postCode:
-          type: string
-          maxLength: 12
-        street:
-          type: string
-          maxLength: 200
-        buildingNumber:
-          type: string
-          maxLength: 20
-        apartmentNumber:
-          type: string
-          maxLength: 10
-        type:
-          type: string
-          maxLength: 2
-        postOffice:
-          type: string
-          maxLength: 200
-        businessClosureDate:
-          type: string
-          format: date
-    ErrorDTO:
-      type: object
-      properties:
-        message:
-          type: string
-        code:
-          type: integer
+                title: Schema
+                type: object
+                properties:
+                  subSchema:
+                    title: SubSchema
+                    type: object
+                    properties:
+                      someData:
+                        type: object
+                        properties:
+                          aListOfThings:
+                            type: array
+                            items:
+                              type: object
+                              allOf:
+                                - if:
+                                    properties:
+                                      aBooleanCheck:
+                                        const: false
+                                  then:
+                                    required:
+                                      - condition
+                              properties:
+                                aBooleanCheck:
+                                  type: boolean
+                                condition:
+                                  type: string
+                                purpose:
+                                  type: array
+                                  items:
+                                    type: string
+                                    enum:
+                                      - FIRST
+                                      - SECOND
+                                      - THIRD
