@@ -9,9 +9,9 @@ ext {
 
     ver = [
             micronaut: '4.7.0',
-            core     : '4.7.5!!',
-            openapi  : '6.13.2-1.1!!',
-            serde    : '2.12.0!!'
+            core     : '4.7.6',
+            openapi  : '6.13.2',
+            serde    : '2.12.0'
     ]
 
     jreImage = 'bellsoft/liberica-openjre-alpine:17.0.10'
@@ -38,18 +38,18 @@ micronaut {
 //        deduceEnvironment = true
 //        optimizeNetty = true
 //    }
-//    openapi {
-//        version = ver.openapi
-//        server(file("swagger.yml")) {
-//            apiPackageName = "com.api.openapi.generated.api"
-//            modelPackageName = "com.api.openapi.generated.model"
-//            useReactive = false
-//            useAuth = false
-//        }
-//    }
+    openapi {
+        version = ver.openapi
+        server(file("swagger.yml")) {
+            apiPackageName = "com.api.openapi.generated.api"
+            modelPackageName = "com.api.openapi.generated.model"
+            useReactive = false
+            useAuth = false
+        }
+    }
 }
 
-wrapper.gradleVersion = '8.11'
+wrapper.gradleVersion = '8.11.1'
 
 java {
     sourceCompatibility = JavaVersion.VERSION_21
