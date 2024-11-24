@@ -1,20 +1,20 @@
 plugins {
     id("org.jetbrains.kotlin.jvm") version "1.9.25"
     id("org.jetbrains.kotlin.kapt") version "1.9.25"
-//    id("com.google.devtools.ksp") version "1.9.25-1.0.20 "
-    id 'io.micronaut.application' version '4.4.2'
-    id 'io.micronaut.openapi' version '4.4.2'
-//    id 'io.micronaut.aot' version '4.4.2'
-//    id 'org.openapi.generator' version '7.7.0'
+    id("com.google.devtools.ksp") version "1.9.25-1.0.20"
+    id 'io.micronaut.application' version '4.4.4'
+    id 'io.micronaut.openapi' version '4.4.4'
+//    id 'io.micronaut.aot' version '4.4.4'
+//    id 'org.openapi.generator' version '7.10.0'
 }
 
 ext {
 
     ver = [
-            micronaut: '4.6.1',
-            core     : '4.6.4',
-            openapi  : '6.12.2!!',
-            serde    : '2.11.0',
+            micronaut: '4.7.0',
+            core     : '4.7.6',
+            openapi  : '6.13.2',
+            serde    : '2.12.0',
     ]
 
     jreImage = 'bellsoft/liberica-openjre-alpine:17.0.10'
@@ -41,23 +41,23 @@ micronaut {
 //        deduceEnvironment = true
 //        optimizeNetty = true
 //    }
-    openapi {
-        version = ver.openapi
-        client(file("swagger.yml")) {
-            apiPackageName = "com.example.openapi.api"
-            modelPackageName = "com.example.openapi.model"
-            clientId = "test"
-            lang = "kotlin"
-            useOptional = true
-            useReactive = false
-        }
-    }
+//    openapi {
+//        version = ver.openapi
+//        client(file("swagger.yml")) {
+//            apiPackageName = "com.example.openapi.api"
+//            modelPackageName = "com.example.openapi.model"
+//            clientId = "test"
+//            lang = "kotlin"
+//            useOptional = true
+//            useReactive = false
+//        }
+//    }
 }
 
-wrapper.gradleVersion = '8.10'
+wrapper.gradleVersion = '8.11'
 
 java {
-    sourceCompatibility = JavaVersion.VERSION_17
+    sourceCompatibility = JavaVersion.VERSION_21
 }
 
 dockerfile {
@@ -78,17 +78,17 @@ dockerfileNative {
 
 dependencies {
 
-//    ksp("io.micronaut.validation:micronaut-validation-processor")
-//    ksp("io.micronaut.serde:micronaut-serde-processor:$ver.serde")
-//    ksp("io.micronaut:micronaut-inject-kotlin")
-//    ksp("io.micronaut.openapi:micronaut-openapi:$ver.openapi")
-//    ksp("io.micronaut.security:micronaut-security-annotations")
+    ksp("io.micronaut.validation:micronaut-validation-processor")
+    ksp("io.micronaut.serde:micronaut-serde-processor:$ver.serde")
+    ksp("io.micronaut:micronaut-inject-kotlin")
+    ksp("io.micronaut.openapi:micronaut-openapi:$ver.openapi")
+    ksp("io.micronaut.security:micronaut-security-annotations")
 
-    kapt("io.micronaut.validation:micronaut-validation-processor")
-    kapt("io.micronaut.serde:micronaut-serde-processor:$ver.serde")
-    kapt("io.micronaut:micronaut-inject-kotlin")
-    kapt("io.micronaut.openapi:micronaut-openapi:$ver.openapi")
-    kapt("io.micronaut.security:micronaut-security-annotations")
+//    kapt("io.micronaut.validation:micronaut-validation-processor")
+//    kapt("io.micronaut.serde:micronaut-serde-processor:$ver.serde")
+//    kapt("io.micronaut:micronaut-inject-kotlin")
+//    kapt("io.micronaut.openapi:micronaut-openapi:$ver.openapi")
+//    kapt("io.micronaut.security:micronaut-security-annotations")
 
     compileOnly "io.micronaut.openapi:micronaut-openapi-annotations:$ver.openapi"
     compileOnly "com.fasterxml.jackson.core:jackson-annotations"
@@ -110,7 +110,11 @@ dependencies {
 }
 
 kotlin {
-    jvmToolchain(17)
+    jvmToolchain(21)
+}
+
+tasks.withType(Jar).configureEach {
+    duplicatesStrategy = DuplicatesStrategy.INCLUDE
 }
 
 
