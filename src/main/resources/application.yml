@@ -1,7 +1,9 @@
-
 micronaut:
+  application:
+    name: openapi-micronaut
   server:
     port: 8080
+    context-path: "/"
   router:
     static-resources:
       swagger:
@@ -9,7 +11,7 @@ micronaut:
         mapping: /swagger/**
       swagger-ui:
         paths: classpath:META-INF/swagger/views/swagger-ui
-        mapping: /openapi/**
+        mapping: /swagger-ui/**
   http:
     client:
       read-timeout: 5000s

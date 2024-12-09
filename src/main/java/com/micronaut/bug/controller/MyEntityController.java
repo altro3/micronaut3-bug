@@ -1,23 +1,15 @@
 package com.micronaut.bug.controller;
 
-import com.micronaut.bug.api.Animal;
-import com.micronaut.bug.api.Bird;
-import com.micronaut.bug.api.ColorEnum;
 import com.micronaut.bug.service.MyEntityService;
-import io.micronaut.http.HttpRequest;
 import io.micronaut.http.annotation.Controller;
 import io.micronaut.http.annotation.Get;
 import io.micronaut.http.annotation.Head;
 import io.micronaut.http.annotation.Header;
-import io.micronaut.http.client.BlockingHttpClient;
-import io.micronaut.http.client.HttpClient;
-import io.micronaut.http.client.annotation.Client;
 import io.micronaut.scheduling.TaskExecutors;
 import io.micronaut.scheduling.annotation.ExecuteOn;
 import jakarta.validation.constraints.NotNull;
 import lombok.extern.slf4j.Slf4j;
 
-import java.math.BigDecimal;
 import java.util.Optional;
 import java.util.OptionalInt;
 
@@ -27,11 +19,9 @@ import java.util.OptionalInt;
 public class MyEntityController {
 
     private final MyEntityService entityService;
-    private final BlockingHttpClient httpClient;
 
-    public MyEntityController(MyEntityService entityService, @Client("local") HttpClient httpClient) {
+    public MyEntityController(MyEntityService entityService) {
         this.entityService = entityService;
-        this.httpClient = httpClient.toBlocking();
     }
 
     @Head("/")
@@ -51,18 +41,5 @@ public class MyEntityController {
     @Get("/test2")
     public OptionalInt test2() {
         return OptionalInt.of(100);
-    }
-
-    @Get("/start")
-    public void start() {
-
-        var bird = new Bird()
-            .numWings(2)
-            .beakLength(BigDecimal.valueOf(12, 1))
-            .featherDescription("Large blue and white feathers")
-            .color(ColorEnum.BLUE);
-
-        var resposne = httpClient.retrieve(HttpRequest.<Animal>POST("/test", bird), Animal.class);
-        log.info("Response: {}", resposne);
     }
 }
