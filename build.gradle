@@ -1,17 +1,17 @@
 plugins {
-    id 'io.micronaut.application' version '4.4.4'
-    id 'io.micronaut.aot' version '4.4.4'
+    id 'io.micronaut.application' version '4.4.5'
+    id 'io.micronaut.aot' version '4.4.5'
 //    id 'io.micronaut.openapi' version '4.4.4'
-//    id 'org.openapi.generator' version '7.10.0'
+//    id 'org.openapi.generator' version '7.12.0'
 }
 
 ext {
 
     ver = [
-            micronaut: '4.7.3',
-            core     : '4.7.10',
+            micronaut: '4.7.6',
+            core     : '4.8.5',
             openapi  : '6.13.2',
-            serde    : '2.13.0'
+            serde    : '2.14.0'
     ]
 
     jreImage = 'bellsoft/liberica-openjre-alpine:17.0.10'
@@ -29,17 +29,17 @@ micronaut {
         incremental true
         annotations "com.micronaut.bug.*"
     }
-    aot {
-        possibleEnvironments = ["local"]
-        targetEnvironments = ["local"]
-        optimizeServiceLoading = true
-        convertYamlToJava = true
-        precomputeOperations = true
-        cacheEnvironment = true
-        optimizeClassLoading = true
-        deduceEnvironment = true
-        optimizeNetty = true
-    }
+//    aot {
+//        possibleEnvironments = ["local"]
+//        targetEnvironments = ["local"]
+//        optimizeServiceLoading = true
+//        convertYamlToJava = true
+//        precomputeOperations = true
+//        cacheEnvironment = true
+//        optimizeClassLoading = true
+//        deduceEnvironment = true
+//        optimizeNetty = true
+//    }
 //    openapi {
 //        version = ver.openapi
 //        server(file("swagger.yml")) {
@@ -51,7 +51,7 @@ micronaut {
 //    }
 }
 
-wrapper.gradleVersion = '8.10.2'
+wrapper.gradleVersion = '8.13'
 
 java {
     sourceCompatibility = JavaVersion.VERSION_17
@@ -148,7 +148,7 @@ configurations.configureEach {
 //tasks.register("generateApi", org.openapitools.generator.gradle.plugin.tasks.GenerateTask.class) {
 //    generatorName.set("spring")
 //    library.set("spring-boot")
-//    inputSpec.set("$rootDir/swagger.yml")
+//    inputSpec.set("$rootDir/oneOf_additionalProperties.yml")
 //    apiPackage.set("com.example.openapi.api")
 //    modelPackage.set("com.example.openapi.api")
 //    outputDir.set(layout.buildDirectory.dir("generated/openapi").get().toString())
@@ -160,16 +160,18 @@ configurations.configureEach {
 //    generateApiDocumentation.set(false)
 ////    skipValidateSpec.set(true)
 //    configOptions.set([
-//            "interfaceOnly" : "true",
-//            "skipDefaultInterface" : "true",
-//            "serializationLibrary" : "jackson",
-//            "openApiNullable" : "false",
-//            "serializableModel" : "true",
-//            "useSpringBoot3" : "false",
-//            "generateOneOfAnyOfWrappers" : "true",
-////            "useOneOfInterfaces" : "true",
-//            "useBeanValidation" : "true",
-//            "performBeanValidation" : "true",
+//            "useSealed" : "true",
+//            "useOneOfInterfaces" : "true",
+////            "interfaceOnly" : "true",
+////            "skipDefaultInterface" : "true",
+////            "serializationLibrary" : "jackson",
+////            "openApiNullable" : "false",
+////            "serializableModel" : "true",
+////            "useSpringBoot3" : "false",
+////            "generateOneOfAnyOfWrappers" : "true",
+//////            "useOneOfInterfaces" : "true",
+////            "useBeanValidation" : "true",
+////            "performBeanValidation" : "true",
 //    ])
 //    group = "openapi tools"
 //}
