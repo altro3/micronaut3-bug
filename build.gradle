@@ -1,7 +1,7 @@
 plugins {
-    id 'io.micronaut.application' version '4.4.5'
-    id 'io.micronaut.aot' version '4.4.5'
-//    id 'io.micronaut.openapi' version '4.4.4'
+    id 'io.micronaut.application' version '4.5.0'
+//    id 'io.micronaut.aot' version '4.5.0'
+//    id 'io.micronaut.openapi' version '4.5.0'
 //    id 'org.openapi.generator' version '7.12.0'
 }
 
@@ -10,7 +10,7 @@ ext {
     ver = [
             micronaut: '4.7.6',
             core     : '4.8.5',
-            openapi  : '6.13.2',
+            openapi  : '6.15.0',
             serde    : '2.14.0'
     ]
 
@@ -92,6 +92,7 @@ dependencies {
     implementation "io.micronaut:micronaut-runtime"
     implementation "io.micronaut.reactor:micronaut-reactor"
     implementation "io.micronaut.serde:micronaut-serde-jackson"
+    implementation "org.yaml:snakeyaml"
 //    implementation "io.micronaut.security:micronaut-security-jwt"
 
     runtimeOnly "ch.qos.logback:logback-classic"
@@ -108,7 +109,7 @@ dependencies {
 
     testRuntimeOnly "org.junit.jupiter:junit-jupiter-engine"
 
-    aotPlugins "org.yaml:snakeyaml"
+//    aotPlugins "org.yaml:snakeyaml"
 }
 
 //project.gradle.startParameter.excludedTaskNames.add("generateServerOpenApiModels")
@@ -148,7 +149,7 @@ configurations.configureEach {
 //tasks.register("generateApi", org.openapitools.generator.gradle.plugin.tasks.GenerateTask.class) {
 //    generatorName.set("spring")
 //    library.set("spring-boot")
-//    inputSpec.set("$rootDir/oneOf_additionalProperties.yml")
+//    inputSpec.set("$rootDir/library-definition.yml")
 //    apiPackage.set("com.example.openapi.api")
 //    modelPackage.set("com.example.openapi.api")
 //    outputDir.set(layout.buildDirectory.dir("generated/openapi").get().toString())
@@ -158,16 +159,16 @@ configurations.configureEach {
 //    generateModelDocumentation.set(false)
 //    generateApiTests.set(false)
 //    generateApiDocumentation.set(false)
-////    skipValidateSpec.set(true)
+//    skipValidateSpec.set(true)
 //    configOptions.set([
-//            "useSealed" : "true",
-//            "useOneOfInterfaces" : "true",
+////            "useSealed" : "true",
+////            "useOneOfInterfaces" : "true",
 ////            "interfaceOnly" : "true",
 ////            "skipDefaultInterface" : "true",
 ////            "serializationLibrary" : "jackson",
 ////            "openApiNullable" : "false",
 ////            "serializableModel" : "true",
-////            "useSpringBoot3" : "false",
+//            "useSpringBoot3" : "true",
 ////            "generateOneOfAnyOfWrappers" : "true",
 //////            "useOneOfInterfaces" : "true",
 ////            "useBeanValidation" : "true",

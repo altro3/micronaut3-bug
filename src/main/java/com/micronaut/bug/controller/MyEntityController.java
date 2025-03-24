@@ -1,15 +1,19 @@
 package com.micronaut.bug.controller;
 
 import com.micronaut.bug.service.MyEntityService;
+import io.micronaut.http.MediaType;
 import io.micronaut.http.annotation.Controller;
 import io.micronaut.http.annotation.Get;
 import io.micronaut.http.annotation.Head;
 import io.micronaut.http.annotation.Header;
+import io.micronaut.http.annotation.Post;
+import io.micronaut.http.multipart.CompletedFileUpload;
 import io.micronaut.scheduling.TaskExecutors;
 import io.micronaut.scheduling.annotation.ExecuteOn;
 import jakarta.validation.constraints.NotNull;
 import lombok.extern.slf4j.Slf4j;
 
+import java.io.IOException;
 import java.util.Optional;
 import java.util.OptionalInt;
 
@@ -41,5 +45,10 @@ public class MyEntityController {
     @Get("/test2")
     public OptionalInt test2() {
         return OptionalInt.of(100);
+    }
+
+    @Post(value = "/testMultipart", consumes = MediaType.MULTIPART_FORM_DATA)
+    public void testMultipart(String fileName, CompletedFileUpload file) throws IOException {
+        log.info("fileName: {}", fileName.getBytes());
     }
 }
