@@ -1,28 +1,21 @@
-micronaut:
+server:
+  port: 8080
+  forward-headers-strategy: native
+  servlet:
+    context-path:
+    session:
+      timeout: 60s
+      cookie:
+        name: JSESSIONUPDATER
+
+spring:
   application:
-    name: openapi-micronaut
-  server:
-    port: 8080
-    context-path: "/"
-  router:
-    static-resources:
-      swagger:
-        paths: classpath:META-INF/swagger
-        mapping: /swagger/**
-      swagger-ui:
-        paths: classpath:META-INF/swagger/views/swagger-ui
-        mapping: /swagger-ui/**
-  http:
-    client:
-      read-timeout: 5000s
-    services:
-      local:
-        url: http://127.0.0.1:8080
-      test:
-        url: http://127.0.0.1:8080
-  serde:
-    jackson:
-      parser-features:
-        ALLOW_COMMENTS: false
-      read-features:
-        ALLOW_JAVA_COMMENTS: false
+    name: updater
+  mandatory-file-encoding: UTF-8
+  web:
+    locale: en_US
+    locale-resolver: fixed
+  mvc:
+    log-request-details: false
+  main:
+    banner-mode: off

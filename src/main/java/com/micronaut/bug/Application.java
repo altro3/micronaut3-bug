@@ -1,30 +1,12 @@
 package com.micronaut.bug;
 
-import io.micronaut.context.ApplicationContextBuilder;
-import io.micronaut.context.ApplicationContextConfigurer;
-import io.micronaut.context.annotation.ContextConfigurer;
-import io.micronaut.runtime.Micronaut;
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
 
-//@OpenAPIDefinition(
-//        info = @Info(
-//                title = "broken-micronaut-openapi-expand",
-//                version = "sdsd",
-//                description = ""
-//        )
-//)
-@ContextConfigurer
-public class Application implements ApplicationContextConfigurer {
-
-    @Override
-    public void configure(ApplicationContextBuilder builder) {
-        System.out.println("Java configurer loaded");
-        builder.deduceEnvironment(false)
-                .banner(false)
-                .defaultEnvironments("local");
-    }
+@SpringBootApplication
+public class Application {
 
     public static void main(String[] args) {
-        Micronaut.run(Application.class, args);
+        SpringApplication.run(Application.class, args);
     }
-
 }

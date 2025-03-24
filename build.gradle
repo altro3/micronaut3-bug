@@ -74,42 +74,23 @@ dockerfileNative {
 
 dependencies {
 
-    annotationProcessor "org.projectlombok:lombok"
-//    annotationProcessor "io.micronaut.validation:micronaut-validation"
-    annotationProcessor "io.micronaut:micronaut-core-processor"
-    annotationProcessor "io.micronaut.serde:micronaut-serde-processor"
-//    annotationProcessor "io.micronaut.security:micronaut-security-annotations"
-    annotationProcessor "io.micronaut.openapi:micronaut-openapi"
+    annotationProcessor(
+            platform("org.springframework.boot:spring-boot-dependencies:$ver.springBoot"),
+            "org.springframework.boot:spring-boot-configuration-processor",
+            "org.projectlombok:lombok",
+    )
 
-    compileOnly "org.projectlombok:lombok"
-    compileOnly "io.micronaut:micronaut-inject-java"
-    compileOnly "io.micronaut.openapi:micronaut-openapi-annotations"
-    compileOnly "com.fasterxml.jackson.core:jackson-annotations"
+    compileOnly(
+            "org.projectlombok:lombok",
+            "com.fasterxml.jackson.core:jackson-annotations",
+    )
 
-    implementation "io.micronaut.validation:micronaut-validation"
-    implementation "io.micronaut:micronaut-http-server-netty"
-    implementation "io.micronaut:micronaut-http-client"
-    implementation "io.micronaut:micronaut-runtime"
-    implementation "io.micronaut.reactor:micronaut-reactor"
-    implementation "io.micronaut.serde:micronaut-serde-jackson"
-    implementation "org.yaml:snakeyaml"
-//    implementation "io.micronaut.security:micronaut-security-jwt"
-
-    runtimeOnly "ch.qos.logback:logback-classic"
-//    runtimeOnly "io.micronaut:micronaut-jackson-databind"
-
-    testAnnotationProcessor "org.projectlombok:lombok"
-    testAnnotationProcessor "io.micronaut:micronaut-core-processor"
-    testAnnotationProcessor "io.micronaut:micronaut-inject-java"
-
-    testCompileOnly "org.projectlombok:lombok"
-    testCompileOnly "io.micronaut:micronaut-inject-java"
-
-    testImplementation "io.micronaut.test:micronaut-test-junit5"
-
-    testRuntimeOnly "org.junit.jupiter:junit-jupiter-engine"
-
-//    aotPlugins "org.yaml:snakeyaml"
+    implementation(
+            platform("org.springframework.boot:spring-boot-dependencies:$ver.springBoot"),
+            "org.springframework.boot:spring-boot-starter-web",
+            "org.springframework.boot:spring-boot-starter-logging",
+            "ch.qos.logback:logback-classic",
+    )
 }
 
 //project.gradle.startParameter.excludedTaskNames.add("generateServerOpenApiModels")
