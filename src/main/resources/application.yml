@@ -9,8 +9,6 @@ server:
         name: JSESSIONUPDATER
 
 spring:
-  application:
-    name: updater
   mandatory-file-encoding: UTF-8
   web:
     locale: en_US
