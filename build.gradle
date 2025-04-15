@@ -1,5 +1,5 @@
 plugins {
-    id 'io.micronaut.application' version '4.5.0'
+    id 'io.micronaut.application' version '4.5.1'
 //    id 'io.micronaut.aot' version '4.5.0'
 //    id 'io.micronaut.openapi' version '4.5.0'
 //    id 'org.openapi.generator' version '7.12.0'
@@ -8,8 +8,8 @@ plugins {
 ext {
 
     ver = [
-            micronaut: '4.7.6',
-            core     : '4.8.5',
+            micronaut: '4.8.0',
+            core     : '4.8.9',
             openapi  : '6.15.0',
             serde    : '2.14.0'
     ]

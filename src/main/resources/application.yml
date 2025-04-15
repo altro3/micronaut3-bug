@@ -10,8 +10,8 @@ micronaut:
         paths: classpath:META-INF/swagger
         mapping: /swagger/**
       swagger-ui:
-        paths: classpath:META-INF/swagger/views/swagger-ui
-        mapping: /swagger-ui/**
+        paths: classpath:META-INF/swagger/views/scalar
+        mapping: /scalar/**
   http:
     client:
       read-timeout: 5000s
