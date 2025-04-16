@@ -45,6 +45,7 @@ dependencies {
             "org.springframework.boot:spring-boot-starter-web",
             "org.springframework.boot:spring-boot-starter-logging",
             "org.springframework.boot:spring-boot-starter-json",
+            "org.springframework.boot:spring-boot-starter-validation",
             "ch.qos.logback:logback-classic",
     )
 }
