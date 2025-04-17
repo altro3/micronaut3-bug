@@ -1,8 +1,8 @@
 plugins {
-    id 'io.micronaut.application' version '4.5.1'
-//    id 'io.micronaut.aot' version '4.5.0'
-//    id 'io.micronaut.openapi' version '4.5.0'
-//    id 'org.openapi.generator' version '7.12.0'
+    id 'io.micronaut.application' version '4.5.3'
+//    id 'io.micronaut.aot' version '4.5.3'
+    id 'io.micronaut.openapi' version '4.5.3'
+    id 'org.openapi.generator' version '7.12.0'
 }
 
 ext {
@@ -40,15 +40,18 @@ micronaut {
 //        deduceEnvironment = true
 //        optimizeNetty = true
 //    }
-//    openapi {
-//        version = ver.openapi
-//        server(file("swagger.yml")) {
-//            apiPackageName = "com.api.openapi.generated.api"
-//            modelPackageName = "com.api.openapi.generated.model"
-//            useReactive = false
-//            useAuth = false
-//        }
-//    }
+    openapi {
+        version = ver.openapi
+        server(file("petstore.json")) {
+            apiPackageName = "com.api.openapi.generated.api"
+            modelPackageName = "com.api.openapi.generated.model"
+            openapiNormalizer = [
+                SET_TAGS_FOR_ALL_OPERATIONS : "Default"
+            ]
+            useReactive = false
+            useAuth = false
+        }
+    }
 }
 
 wrapper.gradleVersion = '8.13'
@@ -146,33 +149,36 @@ configurations.configureEach {
 //    dependsOn("generateClientOpenApiApis", "generateClientOpenApiModels")
 //}
 
-//tasks.register("generateApi", org.openapitools.generator.gradle.plugin.tasks.GenerateTask.class) {
-//    generatorName.set("spring")
-//    library.set("spring-boot")
-//    inputSpec.set("$rootDir/library-definition.yml")
-//    apiPackage.set("com.example.openapi.api")
-//    modelPackage.set("com.example.openapi.api")
-//    outputDir.set(layout.buildDirectory.dir("generated/openapi").get().toString())
-////    enablePostProcessFile.set(true)
-//    skipOverwrite.set(false)
-//    generateModelTests.set(false)
-//    generateModelDocumentation.set(false)
-//    generateApiTests.set(false)
-//    generateApiDocumentation.set(false)
-//    skipValidateSpec.set(true)
-//    configOptions.set([
-////            "useSealed" : "true",
+/*
+tasks.register("generateApi", org.openapitools.generator.gradle.plugin.tasks.GenerateTask.class) {
+    generatorName.set("kotlin-spring")
+    library.set("spring-boot")
+    inputSpec.set("$rootDir/petstore.json")
+    apiPackage.set("com.example.openapi.api")
+    modelPackage.set("com.example.openapi.api")
+    outputDir.set(layout.buildDirectory.dir("generated/openapi").get().toString())
+//    enablePostProcessFile.set(true)
+    skipOverwrite.set(false)
+    generateModelTests.set(false)
+    generateModelDocumentation.set(false)
+    generateApiTests.set(false)
+    generateApiDocumentation.set(false)
+    skipValidateSpec.set(true)
+    configOptions.set([
+            "useTags" : "true",
+//            "useSealed" : "true",
+//            "useOneOfInterfaces" : "true",
+//            "interfaceOnly" : "true",
+//            "skipDefaultInterface" : "true",
+//            "serializationLibrary" : "jackson",
+//            "openApiNullable" : "false",
+//            "serializableModel" : "true",
+            "useSpringBoot3" : "true",
+//            "generateOneOfAnyOfWrappers" : "true",
 ////            "useOneOfInterfaces" : "true",
-////            "interfaceOnly" : "true",
-////            "skipDefaultInterface" : "true",
-////            "serializationLibrary" : "jackson",
-////            "openApiNullable" : "false",
-////            "serializableModel" : "true",
-//            "useSpringBoot3" : "true",
-////            "generateOneOfAnyOfWrappers" : "true",
-//////            "useOneOfInterfaces" : "true",
-////            "useBeanValidation" : "true",
-////            "performBeanValidation" : "true",
-//    ])
-//    group = "openapi tools"
-//}
+//            "useBeanValidation" : "true",
+//            "performBeanValidation" : "true",
+    ])
+    group = "openapi tools"
+}
+*/

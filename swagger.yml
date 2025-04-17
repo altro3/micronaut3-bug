@@ -11,6 +11,54 @@ paths:
       summary: A path
       description: Stuff happens on this path
       operationId: getStuffFromPath
+      tags: api1
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                title: Schema
+                type: object
+                properties:
+                  subSchema:
+                    title: SubSchema
+                    type: object
+                    properties:
+                      someData:
+                        type: object
+                        properties:
+                          aListOfThings:
+                            type: array
+                            items:
+                              type: object
+                              allOf:
+                                - if:
+                                    properties:
+                                      aBooleanCheck:
+                                        const: false
+                                  then:
+                                    required:
+                                      - condition
+                              properties:
+                                aBooleanCheck:
+                                  type: boolean
+                                condition:
+                                  type: string
+                                purpose:
+                                  type: array
+                                  items:
+                                    type: string
+                                    enum:
+                                      - FIRST
+                                      - SECOND
+                                      - THIRD
+  /v2/path:
+    get:
+      summary: A path
+      description: Stuff happens on this path
+      operationId: getStuffFromPath
+      tags: api2
       responses:
         "200":
           description: OK
