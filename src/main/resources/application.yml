@@ -17,3 +17,9 @@ spring:
     log-request-details: false
   main:
     banner-mode: off
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include:
