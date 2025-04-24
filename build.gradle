@@ -1,6 +1,7 @@
 plugins {
     id 'java'
     id "org.springframework.boot" version "3.4.4"
+    id 'com.google.cloud.tools.jib' version '3.4.5'
 //    id 'io.micronaut.application' version '4.5.0'
 //    id 'io.micronaut.aot' version '4.5.0'
 //    id 'io.micronaut.openapi' version '4.5.0'
@@ -48,6 +49,12 @@ dependencies {
             "org.springframework.boot:spring-boot-starter-validation",
             "org.springframework.boot:spring-boot-starter-actuator",
             "ch.qos.logback:logback-classic",
+            "org.bytedeco:javacv:1.5.11",
+            "org.bytedeco:javacpp:1.5.11:linux-x86_64",
+    )
+    implementation(
+            "org.bytedeco:ffmpeg:7.1-1.5.11:windows-x86_64",
+            "org.bytedeco:javacpp:1.5.11:windows-x86_64",
     )
 }
 
@@ -71,5 +78,25 @@ configurations.configureEach {
     resolutionStrategy {
         cacheDynamicVersionsFor 0, 'minutes'
         cacheChangingModulesFor 0, 'minutes'
+    }
+}
+
+jib {
+    container {
+        creationTime = 'USE_CURRENT_TIMESTAMP'
+        jvmFlags = [
+                '-Dfile.encodig=UTF-8',
+        ]
+    }
+    from {
+        image = "localhost:5000/base-image:1.0.0"
+    }
+    to {
+        image = "localhost:5000/my-service:1.0.0"
+        tags = ['1.0.0']
+        auth {
+            username = 'admin'
+            password = 'changeit'
+        }
     }
 }
