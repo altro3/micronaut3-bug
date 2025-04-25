@@ -9,7 +9,10 @@ server:
         name: JSESSIONUPDATER
 
 spring:
-  mandatory-file-encoding: UTF-8
+  servlet:
+    multipart:
+      max-file-size: 100MB
+      max-request-size: 100MB
   web:
     locale: en_US
     locale-resolver: fixed

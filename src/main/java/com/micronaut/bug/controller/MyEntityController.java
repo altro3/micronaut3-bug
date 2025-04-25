@@ -17,24 +17,13 @@ public class MyEntityController {
 
     private final MyService myService;
 
-
     @PostMapping("/video")
-    public void uploadVideo(@Valid UploadVideoRq uploadVideoRq) throws Exception {
-        myService.uploadVideo(uploadVideoRq);
+    public void uploadVideo(@Valid MultipartFile file) throws Exception {
+        myService.uploadVideo(file);
     }
     @PostMapping(value = "/testMultipart/{pathVar}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public void testMultipart(@Valid WrappedRq rq) {
         log.info("fileName: {}", rq.fileName.getBytes());
-    }
-
-    public record UploadVideoRq(
-        Long creativeId,
-        MultipartFile file,
-        int height,
-        int width,
-        int x,
-        int y
-    ) {
     }
 
     public record WrappedRq(

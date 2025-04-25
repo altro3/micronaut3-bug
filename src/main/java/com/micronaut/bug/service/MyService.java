@@ -1,6 +1,5 @@
 package com.micronaut.bug.service;
 
-import com.micronaut.bug.controller.MyEntityController;
 import org.bytedeco.javacv.FFmpegFrameFilter;
 import org.bytedeco.javacv.FFmpegFrameGrabber;
 import org.bytedeco.javacv.FFmpegFrameRecorder;
@@ -13,21 +12,19 @@ import java.io.File;
 @Service
 public class MyService {
 
-    public void uploadVideo(MyEntityController.UploadVideoRq uploadVideoRq) throws Exception {
-        var creativeId = uploadVideoRq.creativeId();
-
-        var croppedVideoFile = getCroppedVideoFile(uploadVideoRq.file(), uploadVideoRq.width(), uploadVideoRq.height(), uploadVideoRq.x(), uploadVideoRq.y());
+    public void uploadVideo(MultipartFile file) throws Exception {
+        var croppedVideoFile = getCroppedVideoFile(file);
     }
 
-    private File getCroppedVideoFile(MultipartFile videoFile, int width, int height, int x, int y) throws Exception {
+    private File getCroppedVideoFile(MultipartFile videoFile) throws Exception {
         var frameGrabber = new FFmpegFrameGrabber(videoFile.getInputStream());
         frameGrabber.start();
-        var frameFilter = new FFmpegFrameFilter("crop=$width:$height:$x:$y", frameGrabber.getImageWidth(), frameGrabber.getImageHeight());
+        var frameFilter = new FFmpegFrameFilter("crop=100:200:0:0", frameGrabber.getImageWidth(), frameGrabber.getImageHeight());
         frameFilter.start();
 
         // Временный файл, в который кладётся обработанное видео. После загрузки в MyTarget удаляется
         var croppedVideoFile = new File("tmp/${UUID.randomUUID()}.mp4");
-        var frameRecorder = new FFmpegFrameRecorder(croppedVideoFile, width, height, frameGrabber.getAudioChannels());
+        var frameRecorder = new FFmpegFrameRecorder(croppedVideoFile, 100, 200, frameGrabber.getAudioChannels());
         frameRecorder.setAudioBitrate(frameGrabber.getAudioBitrate());
         frameRecorder.setAudioCodec(frameGrabber.getAudioCodec());
         frameRecorder.setAudioCodecName(frameGrabber.getAudioCodecName());

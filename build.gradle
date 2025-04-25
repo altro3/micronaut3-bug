@@ -49,13 +49,13 @@ dependencies {
             "org.springframework.boot:spring-boot-starter-validation",
             "org.springframework.boot:spring-boot-starter-actuator",
             "ch.qos.logback:logback-classic",
-            "org.bytedeco:javacv:1.5.11",
-            "org.bytedeco:javacpp:1.5.11:linux-x86_64",
+            "org.bytedeco:javacv:1.5.8",
+            "org.bytedeco:javacpp:1.5.8:linux-x86_64",
+            "org.bytedeco:ffmpeg:5.1.2-1.5.8:linux-x86_64",
     )
-    implementation(
-            "org.bytedeco:ffmpeg:7.1-1.5.11:windows-x86_64",
-            "org.bytedeco:javacpp:1.5.11:windows-x86_64",
-    )
+//    implementation(
+//            "org.bytedeco:javacpp:1.5.11:windows-x86_64",
+//    )
 }
 
 //project.gradle.startParameter.excludedTaskNames.add("generateServerOpenApiModels")
@@ -90,6 +90,10 @@ jib {
     }
     from {
         image = "localhost:5000/base-image:1.0.0"
+        auth {
+            username = 'admin'
+            password = 'changeit'
+        }
     }
     to {
         image = "localhost:5000/my-service:1.0.0"
