@@ -28,21 +28,23 @@ public class MyService {
 
         var tmpDir = System.getProperty("java.io.tmpdir");
         var rqFile = Path.of(tmpDir, UUID.randomUUID().toString() + System.nanoTime() + ".mp4");
-        Files.copy(videoFile.getInputStream(), rqFile);
+        Files.copy(videoFile.getInputStream(), rqFile, REPLACE_EXISTING);
         // Временный файл, в который кладётся обработанное видео. После загрузки в MyTarget удаляется
-        var croppedVideoFile = File.createTempFile(UUID.randomUUID().toString(), ".mp4");
+        var croppedVideoFile = Path.of(tmpDir, UUID.randomUUID().toString() + System.nanoTime() + ".mp4").toFile();
+//        var croppedVideoFile = File.createTempFile(UUID.randomUUID().toString(), ".mp4");
 //        croppedVideoFile.deleteOnExit();
 
 
-        var result = FFmpeg.atPath()
-            .addInput(ChannelInput.fromChannel(new FileInputStream(rqFile.toFile()).getChannel()))
-            .setFilter(StreamType.VIDEO, "crop=100:200:0:0")
-            .addOutput(
-                ChannelOutput.toChannel(UUID.randomUUID().toString() + System.nanoTime() + ".mp4", new FileOutputStream(croppedVideoFile).getChannel())
-                    .setFrameSize(100, 200)
-            )
-            .execute();
-
+        try (var out = new FileOutputStream(croppedVideoFile)) {
+            var result = FFmpeg.atPath()
+                .addInput(ChannelInput.fromChannel(new FileInputStream(rqFile.toFile()).getChannel()))
+                .setFilter(StreamType.VIDEO, "crop=200:400:0:0")
+                .addOutput(
+                    ChannelOutput.toChannel(UUID.randomUUID().toString() + System.nanoTime() + ".mp4", out.getChannel())
+                        .setFrameSize(200, 400)
+                )
+                .execute();
+        }
         return croppedVideoFile;
 
 /*
