@@ -1,11 +1,7 @@
-FROM ubuntu:24.10
-#FROM debian:bookworm-slim
+FROM alpine:20250108
 
-RUN apt update && apt upgrade -y
-
-RUN apt update && apt install -y --no-install-recommends openjdk-17-jre
-
-RUN apt update && apt install -y ffmpeg
+RUN apk update && apk upgrade --no-cache
+RUN apk update && apk add openjdk17-jre ffmpeg
 
 COPY build/libs/micronaut3-bug.jar app.jar
 
