@@ -1,4 +1,4 @@
-FROM alpine:20250108
+FROM frolvlad/alpine-glibc:alpine-3.21_glibc-2.41
 
 RUN apk update && apk upgrade --no-cache
 RUN apk update && apk add openjdk17-jre ffmpeg
