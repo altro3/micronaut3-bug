@@ -1,7 +1,7 @@
-FROM alpine:20250108
+FROM ubuntu:25.04
 
-RUN apk update && apk upgrade --no-cache
-RUN apk update && apk add openjdk17-jre ffmpeg
+RUN apt update && apt upgrade -y
+RUN apt update && apt install -y openjdk-17-jre ffmpeg
 
 COPY build/libs/micronaut3-bug.jar app.jar
 
