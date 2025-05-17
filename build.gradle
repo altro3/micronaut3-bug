@@ -46,19 +46,21 @@ micronaut {
     openapi {
         version = ver.openapi
         client("client", file("swagger.yml")) {
+            lang = "kotlin"
             apiPackageName = "com.generated.client1.api"
             modelPackageName = "com.generated.client1.model"
             invokerPackageName = "com.generated.auth"
             useReactive = false
             useAuth = true
             additionalProperties = [
-                    authFilter: false,
-                    useOauth: true,
-                    useBasicAuth: true,
+                    authFilter: true,
+                    useOauth: false,
+                    useBasicAuth: false,
                     useApiKeyAuth: false,
             ]
         }
         client("client2", file("swagger2.yml")) {
+            lang = "kotlin"
             apiPackageName = "com.generated.client2.api"
             modelPackageName = "com.generated.client2.model"
             invokerPackageName = "com.generated.auth"
