@@ -43,30 +43,32 @@ micronaut {
     openapi {
         version = ver.openapi
         client("client", file("swagger.yml")) {
-            clientId = "client"
             apiPackageName = "com.generated.client1.api"
             modelPackageName = "com.generated.client1.model"
-            invokerPackageName = "com.generated.client1.auth"
-            useReactive = false
+            invokerPackageName = "com.generated.auth"
+            clientId = "client1"
             useAuth = true
             additionalProperties = [
-                    authFilter: true,
                     useOauth: true,
                     useBasicAuth: true,
                     useApiKeyAuth: true,
+                    authFilter: true,
+                    authFilterClientIds: "client1;client2",
+                    authFilterExcludedClientIds: ["client3", "client4"],
+                    authorizationFilterPatternStyle: "regex",
+                    authorizationFilterPattern: "/test;/different/simple/path/**;/something/else"
             ]
         }
         client("client2", file("swagger2.yml")) {
-            clientId = "client2"
             authorizationFilterPattern = "/test;/different/simple/path/**;/something/else"
             apiPackageName = "com.generated.client2.api"
             modelPackageName = "com.generated.client2.model"
-            invokerPackageName = "com.generated.client2.auth"
-            useReactive = false
+            invokerPackageName = "com.generated.auth"
             useAuth = true
-//            additionalProperties = [
-//                    generateAuthClasses: false
-//            ]
+            clientId = "client2"
+            additionalProperties = [
+                    generateAuthClasses: false
+            ]
         }
     }
 }
