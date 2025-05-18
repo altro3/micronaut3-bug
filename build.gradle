@@ -13,7 +13,7 @@ ext {
     ver = [
             micronaut: '4.8.2',
             core     : '4.8.13',
-            openapi  : '6.16.0-8-SNAPSHOT',
+            openapi  : '6.16.0-1-SNAPSHOT',
             serde    : '2.14.0',
     ]
 
@@ -50,13 +50,18 @@ micronaut {
             apiPackageName = "com.generated.client1.api"
             modelPackageName = "com.generated.client1.model"
             invokerPackageName = "com.generated.auth"
-            useReactive = false
+//            clientId = "client1"
             useAuth = true
             additionalProperties = [
+                    useOauth: true,
+                    useBasicAuth: true,
+                    useApiKeyAuth: true,
                     authFilter: true,
-                    useOauth: false,
-                    useBasicAuth: false,
-                    useApiKeyAuth: false,
+//                    authConfigName: "test",
+//                    authFilterClientIds: "",
+//                    authFilterExcludedClientIds: ["client3", "client4"],
+//                    authorizationFilterPatternStyle: "regex",
+//                    authorizationFilterPattern: "/test;/different/simple/path/**;/something/else"
             ]
         }
         client("client2", file("swagger2.yml")) {
@@ -64,7 +69,7 @@ micronaut {
             apiPackageName = "com.generated.client2.api"
             modelPackageName = "com.generated.client2.model"
             invokerPackageName = "com.generated.auth"
-            useReactive = false
+            clientId = "client2"
             useAuth = true
             additionalProperties = [
                     generateAuthClasses: false
