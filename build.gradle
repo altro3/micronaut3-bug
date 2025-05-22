@@ -1,7 +1,7 @@
 plugins {
     id 'io.micronaut.application' version '4.5.3'
 //    id 'io.micronaut.aot' version '4.5.3'
-    id 'io.micronaut.openapi' version '4.5.3'
+//    id 'io.micronaut.openapi' version '4.5.3'
 //    id 'org.openapi.generator' version '7.12.0'
 }
 
@@ -10,7 +10,7 @@ ext {
     ver = [
             micronaut: '4.8.2',
             core     : '4.8.13',
-            openapi  : '6.16.0-1-SNAPSHOT',
+            openapi  : '6.15.0',
             serde    : '2.14.0'
     ]
 
@@ -40,6 +40,7 @@ micronaut {
 //        deduceEnvironment = true
 //        optimizeNetty = true
 //    }
+/*
     openapi {
         version = ver.openapi
         client("client", file("swagger.yml")) {
@@ -71,6 +72,7 @@ micronaut {
             ]
         }
     }
+*/
 }
 
 java {
@@ -114,8 +116,8 @@ dependencies {
     implementation "io.micronaut.reactor:micronaut-reactor"
     implementation "io.micronaut.serde:micronaut-serde-jackson"
     implementation "org.yaml:snakeyaml"
-    implementation "io.micronaut.security:micronaut-security-jwt"
-    implementation "io.micronaut.security:micronaut-security-oauth2"
+//    implementation "io.micronaut.security:micronaut-security-jwt"
+//    implementation "io.micronaut.security:micronaut-security-oauth2"
 
     runtimeOnly "ch.qos.logback:logback-classic"
 //    runtimeOnly "io.micronaut:micronaut-jackson-databind"
