@@ -10,7 +10,7 @@ ext {
     ver = [
             micronaut: '4.8.2',
             core     : '4.8.13',
-            openapi  : '6.15.0',
+            openapi  : '6.16.0',
             serde    : '2.14.0'
     ]
 
@@ -101,11 +101,11 @@ dependencies {
     annotationProcessor "io.micronaut:micronaut-core-processor"
     annotationProcessor "io.micronaut.serde:micronaut-serde-processor"
 //    annotationProcessor "io.micronaut.security:micronaut-security-annotations"
-    annotationProcessor "io.micronaut.openapi:micronaut-openapi"
+    annotationProcessor "io.micronaut.openapi:micronaut-openapi:${ver.openapi}"
 
     compileOnly "org.projectlombok:lombok"
     compileOnly "io.micronaut:micronaut-inject-java"
-    compileOnly "io.micronaut.openapi:micronaut-openapi-annotations"
+    compileOnly "io.micronaut.openapi:micronaut-openapi-annotations:${ver.openapi}"
     compileOnly "com.fasterxml.jackson.core:jackson-annotations"
 
     implementation "io.micronaut.validation:micronaut-validation"
@@ -122,16 +122,16 @@ dependencies {
     runtimeOnly "ch.qos.logback:logback-classic"
 //    runtimeOnly "io.micronaut:micronaut-jackson-databind"
 
-    testAnnotationProcessor "org.projectlombok:lombok"
-    testAnnotationProcessor "io.micronaut:micronaut-core-processor"
-    testAnnotationProcessor "io.micronaut:micronaut-inject-java"
-
-    testCompileOnly "org.projectlombok:lombok"
-    testCompileOnly "io.micronaut:micronaut-inject-java"
-
-    testImplementation "io.micronaut.test:micronaut-test-junit5"
-
-    testRuntimeOnly "org.junit.jupiter:junit-jupiter-engine"
+//    testAnnotationProcessor "org.projectlombok:lombok"
+//    testAnnotationProcessor "io.micronaut:micronaut-core-processor"
+//    testAnnotationProcessor "io.micronaut:micronaut-inject-java"
+//
+//    testCompileOnly "org.projectlombok:lombok"
+//    testCompileOnly "io.micronaut:micronaut-inject-java"
+//
+//    testImplementation "io.micronaut.test:micronaut-test-junit5"
+//
+//    testRuntimeOnly "org.junit.jupiter:junit-jupiter-engine"
 
 //    aotPlugins "org.yaml:snakeyaml"
 }

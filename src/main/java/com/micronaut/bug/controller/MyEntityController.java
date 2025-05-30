@@ -1,5 +1,6 @@
 package com.micronaut.bug.controller;
 
+import com.micronaut.bug.api.EnumParam;
 import com.micronaut.bug.service.MyEntityService;
 import io.micronaut.core.convert.format.Format;
 import io.micronaut.http.MediaType;
@@ -14,6 +15,7 @@ import io.micronaut.http.multipart.CompletedFileUpload;
 import io.micronaut.scheduling.TaskExecutors;
 import io.micronaut.scheduling.annotation.ExecuteOn;
 import jakarta.validation.constraints.NotNull;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.IOException;
@@ -25,14 +27,11 @@ import static io.micronaut.core.convert.converters.MultiValuesConverterFactory.F
 
 @ExecuteOn(TaskExecutors.BLOCKING)
 @Slf4j
+@RequiredArgsConstructor
 @Controller("/api")
 public class MyEntityController {
 
     private final MyEntityService entityService;
-
-    public MyEntityController(MyEntityService entityService) {
-        this.entityService = entityService;
-    }
 
     @Head("/")
     void fileAvailable(
@@ -43,14 +42,14 @@ public class MyEntityController {
         log.info("xtESTCrc32: {}", xtESTCrc32);
     }
 
-    @Get("/test/{param}/")
-    public void test(@PathVariable @Format(FORMAT_CSV) List<Integer> param) {
+    @Get("/test/{param}")
+    public void test(@PathVariable Integer param) {
         log.info("test");
     }
 
-    @Get("/test2")
-    public OptionalInt test2() {
-        return OptionalInt.of(100);
+    @Get("/test2/{param}")
+    public EnumParam test2(EnumParam param) {
+        return param;
     }
 
     @Post(value = "/testMultipart", consumes = MediaType.MULTIPART_FORM_DATA)
