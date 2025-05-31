@@ -33,23 +33,17 @@ open class MyEntityController(
         return null
     }
 
+    @Get("/test2/{param}")
+    open fun test2(param: EnumParam?, @QueryValue qparam: EnumParam?): EnumParam? {
+        return param
+    }
+
     @Post("/test")
     open fun test(
         @QueryValue @Nullable apiVersion: String = "myVersion",
         @Body body: BodyDto,
     ): String? {
         return null
-    }
-
-    @Post("/test2")
-    open fun tEST(
-        @QueryValue("reqParamWithDefault", defaultValue = "test-req") @NotNull reqParamWithDefault: String = "test-req",
-        @QueryValue("reqParam") @NotNull reqParam: String,
-        @QueryValue("optParamWithDefault", defaultValue = "test") optParamWithDefault: String = "test",
-        @QueryValue("optParam") @Nullable optParam: String? = null,
-        @Body @NotNull @Valid teSTRequest: TESTRequest,
-    ): List<Test> {
-        return emptyList()
     }
 
     @Serdeable
