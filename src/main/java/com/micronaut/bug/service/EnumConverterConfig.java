@@ -12,11 +12,36 @@ import java.util.Optional;
 @Factory
 public class EnumConverterConfig {
 
+    private final ObjectMapper objectMapper;
+
+    public EnumConverterConfig(ObjectMapper objectMapper) {
+        this.objectMapper = objectMapper;
+    }
+
     @Bean
-    public TypeConverter<String, EnumParam> enumConverter(ObjectMapper objectMapper) {
+    public TypeConverter<String, EnumParam> strToEnumConverter() {
+        return commonConverter(EnumParam.class, objectMapper);
+    }
+
+    @Bean
+    public TypeConverter<EnumParam, String> enumToStrConverter() {
+        return commonConverter(objectMapper);
+    }
+
+    public static <T> TypeConverter<T, String> commonConverter(ObjectMapper objectMapper) {
         return (value, targetType, context) -> {
             try {
-                return Optional.of(objectMapper.readValue(value, EnumParam.class));
+                return Optional.of(objectMapper.writeValueAsString(value));
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
+        };
+    }
+
+    public static <T> TypeConverter<String, T> commonConverter(Class<T> clazz, ObjectMapper objectMapper) {
+        return (value, targetType, context) -> {
+            try {
+                return Optional.of(objectMapper.readValue(value, clazz));
             } catch (IOException e) {
                 throw new RuntimeException(e);
             }
