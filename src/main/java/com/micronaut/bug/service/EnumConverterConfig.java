@@ -7,7 +7,6 @@ import io.micronaut.core.convert.TypeConverter;
 import io.micronaut.serde.ObjectMapper;
 
 import java.io.IOException;
-import java.util.Optional;
 
 @Factory
 public class EnumConverterConfig {
@@ -20,31 +19,31 @@ public class EnumConverterConfig {
 
     @Bean
     public TypeConverter<String, EnumParam> strToEnumConverter() {
-        return commonConverter(EnumParam.class, objectMapper);
+        return commonToEnumConverter(EnumParam.class, objectMapper);
     }
 
     @Bean
     public TypeConverter<EnumParam, String> enumToStrConverter() {
-        return commonConverter(objectMapper);
+        return commonToStrConverter(EnumParam.class, objectMapper);
     }
 
-    public static <T> TypeConverter<T, String> commonConverter(ObjectMapper objectMapper) {
-        return (value, targetType, context) -> {
+    public static <T> TypeConverter<T, String> commonToStrConverter(Class<T> clazz, ObjectMapper objectMapper) {
+        return TypeConverter.of(clazz, String.class, (value) -> {
             try {
-                return Optional.of(objectMapper.writeValueAsString(value));
+                return objectMapper.writeValueAsString(value);
             } catch (IOException e) {
                 throw new RuntimeException(e);
             }
-        };
+        });
     }
 
-    public static <T> TypeConverter<String, T> commonConverter(Class<T> clazz, ObjectMapper objectMapper) {
-        return (value, targetType, context) -> {
+    public static <T> TypeConverter<String, T> commonToEnumConverter(Class<T> clazz, ObjectMapper objectMapper) {
+        return TypeConverter.of(String.class, clazz, (value) -> {
             try {
-                return Optional.of(objectMapper.readValue(value, clazz));
+                return objectMapper.readValue(value, clazz);
             } catch (IOException e) {
                 throw new RuntimeException(e);
             }
-        };
+        });
     }
 }
