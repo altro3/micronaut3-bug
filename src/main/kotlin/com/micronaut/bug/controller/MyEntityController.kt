@@ -10,8 +10,6 @@ import io.micronaut.scheduling.annotation.ExecuteOn
 import io.micronaut.serde.annotation.Serdeable
 import io.swagger.v3.oas.annotations.media.Schema
 import jakarta.annotation.Nullable
-import jakarta.validation.Valid
-import jakarta.validation.constraints.NotNull
 
 @ExecuteOn(TaskExecutors.BLOCKING)
 @Controller
@@ -89,30 +87,14 @@ open class MyEntityController(
     }
 
     @Serdeable
-    @JsonPropertyOrder(
-        TESTRequest.JSON_PROPERTY_VALUE,
-        TESTRequest.JSON_PROPERTY_CURRENCY,
-    )
-    open class TESTRequest(
+    @JvmRecord
+    data class TESTRequest @JvmOverloads constructor(
 
         @field:Nullable
-        @field:Schema(name = "value", requiredMode = Schema.RequiredMode.NOT_REQUIRED)
-        @field:JsonProperty(JSON_PROPERTY_VALUE)
-        @field:JsonInclude(JsonInclude.Include.USE_DEFAULTS)
-        var `value`: String? = null,
-
-        @field:Schema(name = "currency", requiredMode = Schema.RequiredMode.NOT_REQUIRED)
-        @field:JsonProperty(JSON_PROPERTY_CURRENCY)
-        @field:JsonInclude(JsonInclude.Include.USE_DEFAULTS)
-        var currency: MyCur = MyCur.USD,
-    ) {
-
-        companion object {
-
-            const val JSON_PROPERTY_VALUE = "value"
-            const val JSON_PROPERTY_CURRENCY = "currency"
-        }
-    }
+        val `value`: String? = null,
+        val currency: MyCur = MyCur.USD,
+        val record: MyCur = MyCur.USD,
+    )
 
     @Serdeable
     enum class MyCur(
