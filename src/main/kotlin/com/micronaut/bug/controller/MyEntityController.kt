@@ -87,7 +87,6 @@ open class MyEntityController(
     }
 
     @Serdeable
-    @JvmRecord
     data class TESTRequest @JvmOverloads constructor(
 
         @field:Nullable

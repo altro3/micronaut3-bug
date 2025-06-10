@@ -1,7 +1,7 @@
 plugins {
     id("org.jetbrains.kotlin.jvm") version "1.9.25"
-//    id("org.jetbrains.kotlin.kapt") version "1.9.25"
-    id("com.google.devtools.ksp") version "1.9.25-1.0.20"
+    id("org.jetbrains.kotlin.kapt") version "1.9.25"
+//    id("com.google.devtools.ksp") version "1.9.25-1.0.20"
     id 'io.micronaut.application' version '4.5.3'
 //    id 'io.micronaut.openapi' version '4.5.3'
 //    id 'io.micronaut.aot' version '4.5.3'
@@ -12,8 +12,8 @@ ext {
 
     ver = [
             micronaut: '4.8.2',
-            core     : '4.8.13',
-            openapi  : '6.16.0',
+            core     : '4.9.0-1-SNAPSHOT',
+            openapi  : '6.16.3-1-SNAPSHOT',
             serde    : '2.14.0',
     ]
 
@@ -102,18 +102,19 @@ dockerfileNative {
 
 dependencies {
 
-    ksp("io.micronaut.validation:micronaut-validation-processor")
-    ksp("io.micronaut.serde:micronaut-serde-processor:$ver.serde")
-    ksp("io.micronaut:micronaut-inject-kotlin")
-    ksp("io.micronaut.openapi:micronaut-openapi:$ver.openapi")
-    ksp("io.micronaut.security:micronaut-security-annotations")
+//    ksp("io.micronaut.validation:micronaut-validation-processor")
+//    ksp("io.micronaut.serde:micronaut-serde-processor:$ver.serde")
+//    ksp("io.micronaut:micronaut-inject-kotlin:$ver.core")
+//    ksp("io.micronaut.openapi:micronaut-openapi:$ver.openapi")
+//    ksp("io.micronaut.security:micronaut-security-annotations")
 
-//    kapt("io.micronaut.validation:micronaut-validation-processor")
-//    kapt("io.micronaut.serde:micronaut-serde-processor:$ver.serde")
-//    kapt("io.micronaut:micronaut-inject-kotlin")
-//    kapt("io.micronaut.openapi:micronaut-openapi:$ver.openapi")
-//    kapt("io.micronaut.security:micronaut-security-annotations")
+    kapt("io.micronaut.validation:micronaut-validation-processor")
+    kapt("io.micronaut.serde:micronaut-serde-processor:$ver.serde")
+    kapt("io.micronaut:micronaut-inject-java:$ver.core")
+    kapt("io.micronaut.openapi:micronaut-openapi:$ver.openapi")
+    kapt("io.micronaut.security:micronaut-security-annotations")
 
+    compileOnly "io.micronaut:micronaut-inject-java"
     compileOnly "io.micronaut:micronaut-inject-kotlin"
     compileOnly "io.micronaut.openapi:micronaut-openapi-annotations"
     compileOnly "com.fasterxml.jackson.core:jackson-annotations"
