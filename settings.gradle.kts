@@ -3,9 +3,9 @@ dependencyResolutionManagement {
         mavenCentral()
         mavenLocal()
         mavenCentral {
-            url "https://s01.oss.sonatype.org/content/repositories/snapshots/"
+            url = uri("https://s01.oss.sonatype.org/content/repositories/snapshots/")
         }
     }
 }
 
-rootProject.name = 'micronaut3-bug'
+rootProject.name = "micronaut3-bug"
