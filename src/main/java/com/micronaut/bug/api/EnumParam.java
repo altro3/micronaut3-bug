@@ -1,6 +1,7 @@
 package com.micronaut.bug.api;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonValue;
 import io.micronaut.serde.annotation.Serdeable;
 import lombok.Getter;
@@ -16,7 +17,9 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public enum EnumParam {
 
+    @JsonProperty("10")
     VALUE_1(10),
+    @JsonProperty("20")
     VALUE_2(20),
     ;
 

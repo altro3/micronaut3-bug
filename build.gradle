@@ -10,7 +10,7 @@ ext {
     ver = [
             micronaut: '4.9.0',
             core     : '4.9.5',
-            openapi  : '6.17.1!!',
+            openapi  : '6.17.3',
             serde    : '2.14.0',
     ]
 
@@ -102,6 +102,7 @@ dependencies {
     annotationProcessor "io.micronaut.serde:micronaut-serde-processor"
 //    annotationProcessor "io.micronaut.security:micronaut-security-annotations"
     annotationProcessor "io.micronaut.openapi:micronaut-openapi:${ver.openapi}"
+    annotationProcessor name: "test"
 
     compileOnly "org.projectlombok:lombok"
     compileOnly "io.micronaut:micronaut-inject-java"
@@ -151,7 +152,7 @@ tasks.withType(JavaCompile).configureEach {
             '-Xlint:deprecation'
     ]
     options.fork = true
-//    options.forkOptions.jvmArgs += "-Dmicronaut.openapi.views.spec=swagger-ui.enabled=true,swagger-ui.js.url=/openapi/res/"
+    options.forkOptions.jvmArgs += "-Dmicronaut.openapi.environments=local"
 }
 
 tasks.named("inspectRuntimeClasspath") { enabled = false }
