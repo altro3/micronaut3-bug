@@ -12,7 +12,7 @@ import io.swagger.v3.oas.annotations.media.Schema
 import jakarta.annotation.Nullable
 
 @ExecuteOn(TaskExecutors.BLOCKING)
-@Controller
+//@Controller
 open class MyEntityController(
     @Client("local") httpClient: HttpClient
 ) {
