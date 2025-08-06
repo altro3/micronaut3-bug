@@ -10,18 +10,16 @@ plugins {
 ext {
 
     ver = [
-            springBoot: '3.4.4',
-            micronaut : '4.8.2',
-            core      : '4.8.11',
-            openapi   : '6.15.0',
-            serde     : '2.14.0'
+            springBoot: '3.5.4',
+            micronaut : '4.9.2',
+            core      : '4.9.9',
+            openapi   : '6.17.3',
+            serde     : '2.15.1'
     ]
 
     jreImage = 'bellsoft/liberica-openjre-alpine:17.0.10'
     jreImageNative = 'debian:stable-slim'
 }
-
-wrapper.gradleVersion = '8.13'
 
 java {
     sourceCompatibility = JavaVersion.VERSION_17
