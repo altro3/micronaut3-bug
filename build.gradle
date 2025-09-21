@@ -8,10 +8,10 @@ plugins {
 ext {
 
     ver = [
-            micronaut: '4.9.0',
-            core     : '4.9.5',
-            openapi  : '6.17.3',
-            serde    : '2.14.0',
+            micronaut: '4.9.3',
+            core     : '4.9.11',
+            openapi  : '6.18.1',
+            serde    : '2.15.1',
     ]
 
     jreImage = 'bellsoft/liberica-openjre-alpine:17.0.10'
@@ -99,10 +99,9 @@ dependencies {
     annotationProcessor "org.projectlombok:lombok"
 //    annotationProcessor "io.micronaut.validation:micronaut-validation"
     annotationProcessor "io.micronaut:micronaut-core-processor"
-    annotationProcessor "io.micronaut.serde:micronaut-serde-processor"
+    annotationProcessor "io.micronaut.serde:micronaut-serde-processor:${ver.serde}"
 //    annotationProcessor "io.micronaut.security:micronaut-security-annotations"
     annotationProcessor "io.micronaut.openapi:micronaut-openapi:${ver.openapi}"
-    annotationProcessor name: "test"
 
     compileOnly "org.projectlombok:lombok"
     compileOnly "io.micronaut:micronaut-inject-java"
@@ -115,7 +114,7 @@ dependencies {
     implementation "io.micronaut:micronaut-management"
     implementation "io.micronaut:micronaut-runtime"
     implementation "io.micronaut.reactor:micronaut-reactor"
-    implementation "io.micronaut.serde:micronaut-serde-jackson"
+    implementation "io.micronaut.serde:micronaut-serde-jackson:${ver.serde}"
     implementation "org.yaml:snakeyaml"
 //    implementation "io.micronaut.security:micronaut-security-jwt"
 //    implementation "io.micronaut.security:micronaut-security-oauth2"
