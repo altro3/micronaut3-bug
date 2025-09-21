@@ -17,9 +17,9 @@ spring:
     log-request-details: false
   main:
     banner-mode: off
-
-management:
-  endpoints:
-    web:
-      exposure:
-        include:
+logging:
+  level:
+    root: debug
+    sun: info
+    javax: info
+    org.apache: info

@@ -10,10 +10,10 @@ plugins {
 ext {
 
     ver = [
-            springBoot: '3.5.4',
-            micronaut : '4.9.2',
-            core      : '4.9.9',
-            openapi   : '6.17.3',
+            springBoot: '3.5.6',
+            micronaut : '4.9.3',
+            core      : '4.9.11',
+            openapi   : '6.18.1',
             serde     : '2.15.1'
     ]
 
