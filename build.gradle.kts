@@ -1,49 +1,49 @@
 plugins {
-    id("org.jetbrains.kotlin.jvm") version "2.2.0"
-//    id("org.jetbrains.kotlin.kapt") version "2.2.0"
-    id("com.google.devtools.ksp") version "2.2.0-2.0.2"
-//    id("org.jetbrains.kotlin.jvm") version "1.9.25"
-//    id("org.jetbrains.kotlin.kapt") version "1.9.25"
-//    id("com.google.devtools.ksp") version "1.9.25-1.0.20"
     id("io.micronaut.application") version "4.5.4"
     id("io.micronaut.openapi") version "4.5.4"
+//    id("org.jetbrains.kotlin.jvm") version "2.2.10"
+//    id("org.jetbrains.kotlin.kapt") version "2.2.10"
+//    id("com.google.devtools.ksp") version "2.2.10-2.0.2"
+    id("org.jetbrains.kotlin.jvm") version "1.9.25"
+    id("org.jetbrains.kotlin.kapt") version "1.9.25"
+    id("com.google.devtools.ksp") version "1.9.25-1.0.20"
 //    id "io.micronaut.aot" version "4.5.4"
 //    id "org.openapi.generator" version "7.14.0"
 }
 
 val ver = mapOf(
-    "micronaut" to "4.9.1",
-    "core" to "4.9.8",
-    "openapi" to "6.17.3",
+    "micronaut" to "4.9.3",
+    "core" to "4.9.11",
+    "openapi" to "6.18.1",
     "serde" to "2.15.0",
 )
 
 //mainClassName = "com.micronaut.bug.Application"
 micronaut {
-    version("4.9.1")
+    version(ver["micronaut"])
     runtime("netty")
     testRuntime("junit5")
     enableNativeImage(false)
     processing {
         group(project.group.toString())
-        incremental(true)
+        incremental(false)
         annotations("com.micronaut.bug.*")
     }
 }
 
 dependencies {
 
-    ksp("io.micronaut.validation:micronaut-validation-processor")
-    ksp("io.micronaut.serde:micronaut-serde-processor")
-    ksp("io.micronaut:micronaut-inject-kotlin")
-    ksp("io.micronaut.openapi:micronaut-openapi")
-    ksp("io.micronaut.security:micronaut-security-annotations")
+//    ksp("io.micronaut.validation:micronaut-validation-processor")
+////    ksp("io.micronaut.serde:micronaut-serde-processor")
+//    ksp("io.micronaut:micronaut-inject-kotlin")
+//    ksp("io.micronaut.openapi:micronaut-openapi")
+//    ksp("io.micronaut.security:micronaut-security-annotations")
 
-//    kapt("io.micronaut.validation:micronaut-validation-processor")
+    kapt("io.micronaut.validation:micronaut-validation-processor")
 //    kapt("io.micronaut.serde:micronaut-serde-processor")
-//    kapt("io.micronaut:micronaut-inject-java")
-//    kapt("io.micronaut.openapi:micronaut-openapi:${ver["openapi"]}")
-//    kapt("io.micronaut.security:micronaut-security-annotations")
+    kapt("io.micronaut:micronaut-inject-java")
+    kapt("io.micronaut.openapi:micronaut-openapi:${ver["openapi"]}")
+    kapt("io.micronaut.security:micronaut-security-annotations")
 
     compileOnly("io.micronaut:micronaut-inject-java")
     compileOnly("io.micronaut:micronaut-inject-kotlin")
@@ -57,14 +57,13 @@ dependencies {
     implementation("io.micronaut.data:micronaut-data-model")
     implementation("io.micronaut:micronaut-runtime")
     implementation("io.micronaut.reactor:micronaut-reactor")
-    implementation("io.micronaut.serde:micronaut-serde-jackson")
+    implementation("io.micronaut:micronaut-jackson-databind")
+//    implementation("io.micronaut.serde:micronaut-serde-jackson")
     implementation("org.jetbrains.kotlin:kotlin-stdlib")
     implementation("org.jetbrains.kotlin:kotlin-reflect")
     implementation("io.micronaut.security:micronaut-security-jwt")
     implementation("io.micronaut.security:micronaut-security-oauth2")
 
-//    runtimeOnly("io.micronaut:micronaut-jackson-databind")
-    runtimeOnly("io.micronaut.serde:micronaut-serde-jackson")
     runtimeOnly("ch.qos.logback:logback-classic")
     runtimeOnly("org.yaml:snakeyaml")
 }
@@ -77,8 +76,14 @@ kotlin {
     jvmToolchain(17)
 }
 
-ksp {
-    arg("micronaut.openapi.project.dir", projectDir.toString())
+//ksp {
+//    arg("micronaut.openapi.project.dir", projectDir.toString())
+//}
+
+kapt {
+    arguments {
+        arg("micronaut.openapi.project.dir", "$projectDir")
+    }
 }
 
 tasks.jar {
@@ -96,4 +101,19 @@ configurations.configureEach {
         cacheDynamicVersionsFor(0, "minutes")
         cacheChangingModulesFor(0, "minutes")
     }
+}
+
+tasks.register("removeMnFiles") {
+    doLast {
+        delete(layout.buildDirectory.dir("tmp/kapt3/classes/main/META-INF/micronaut"))
+        delete(
+            layout.buildDirectory.dir("tmp/kapt3/classes/main").get().asFileTree.matching {
+                include("**/*\$Definition*.class", "**/*\$Introspection.class")
+            }.files
+        )
+    }
+    dependsOn(tasks.named("kaptKotlin"))
+}
+tasks.compileKotlin {
+    dependsOn(tasks.named("removeMnFiles"))
 }
