@@ -4,41 +4,34 @@ import io.micronaut.context.ApplicationContextBuilder;
 import io.micronaut.context.ApplicationContextConfigurer;
 import io.micronaut.context.ExecutionHandleLocator;
 import io.micronaut.context.annotation.ContextConfigurer;
+import io.micronaut.http.HttpResponse;
+import io.micronaut.http.MediaType;
+import io.micronaut.http.annotation.Controller;
+import io.micronaut.http.annotation.Get;
 import io.micronaut.runtime.Micronaut;
 import io.micronaut.web.router.DefaultRouteBuilder;
-import io.micronaut.web.router.RouteBuilder;
-import io.swagger.v3.oas.annotations.OpenAPIDefinition;
-import io.swagger.v3.oas.annotations.info.Info;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 
-@OpenAPIDefinition(
-        info = @Info(
-                title = "${app.entity.prop}",
-                version = "sdsd",
-                description = ""
-        )
-)
+import static io.micronaut.http.HttpResponse.ok;
+
 @ContextConfigurer
 public class Application implements ApplicationContextConfigurer {
 
     @Override
     public void configure(ApplicationContextBuilder builder) {
-        System.out.println("Java configurer loaded");
         builder.deduceEnvironment(false)
-                .banner(false)
-                .defaultEnvironments("local");
+            .banner(false)
+            .defaultEnvironments("local");
 
     }
 
     public static void main(String[] args) {
-        var sss = Micronaut.run(Application.class, args);
-
-        sss.getBeansOfType(RouteBuilder.class).
+        Micronaut.run(Application.class, args);
     }
 
     @Singleton
-    public class MyRoutes extends DefaultRouteBuilder { // (1)
+    public static class MyRoutes extends DefaultRouteBuilder {
 
         public MyRoutes(ExecutionHandleLocator executionHandleLocator,
                         UriNamingStrategy uriNamingStrategy) {
@@ -46,8 +39,11 @@ public class Application implements ApplicationContextConfigurer {
         }
 
         @Inject
-        void issuesRoutes() { // (2)
-            GET("/issues/show/{number}", (a, b) -> {}); // (3)
+        void issuesRoutes() {
+            GET("/my-endpoint", IssuesController.class, "handleEndpoint");
+            GET("/second-endpoint", IssuesController.class, "handleEndpoint2")
+                .where(rq -> rq.accept().contains(MediaType.APPLICATION_JSON_TYPE))
+            ;
         }
     }
 }
