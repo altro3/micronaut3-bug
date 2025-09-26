@@ -14,7 +14,7 @@ plugins {
 val ver = mapOf(
     "micronaut" to "4.9.3",
     "core" to "4.9.11",
-    "openapi" to "6.18.1",
+    "openapi" to "6.18.2-1-SNAPSHOT",
     "serde" to "2.15.0",
 )
 
@@ -43,7 +43,7 @@ dependencies {
 //    kapt("io.micronaut.serde:micronaut-serde-processor")
     kapt("io.micronaut:micronaut-inject-java")
     kapt("io.micronaut.openapi:micronaut-openapi:${ver["openapi"]}")
-    kapt("io.micronaut.security:micronaut-security-annotations")
+//    kapt("io.micronaut.security:micronaut-security-annotations")
 
     compileOnly("io.micronaut:micronaut-inject-java")
     compileOnly("io.micronaut:micronaut-inject-kotlin")
@@ -61,8 +61,8 @@ dependencies {
 //    implementation("io.micronaut.serde:micronaut-serde-jackson")
     implementation("org.jetbrains.kotlin:kotlin-stdlib")
     implementation("org.jetbrains.kotlin:kotlin-reflect")
-    implementation("io.micronaut.security:micronaut-security-jwt")
-    implementation("io.micronaut.security:micronaut-security-oauth2")
+//    implementation("io.micronaut.security:micronaut-security-jwt")
+//    implementation("io.micronaut.security:micronaut-security-oauth2")
 
     runtimeOnly("ch.qos.logback:logback-classic")
     runtimeOnly("org.yaml:snakeyaml")

@@ -2,11 +2,12 @@ package com.micronaut.bug.controller
 
 import com.fasterxml.jackson.annotation.JsonCreator
 import com.fasterxml.jackson.annotation.JsonValue
-import io.micronaut.serde.annotation.Serdeable
+import io.micronaut.core.annotation.Introspected
 
-@Serdeable
+@Introspected
 enum class EnumParam(
-    @get:JsonValue val value: Int
+    @get:JsonValue
+    val value: Int
 ) {
 
     VALUE_1(10),
@@ -20,7 +21,7 @@ enum class EnumParam(
 
         @JsonCreator
         @JvmStatic
-        fun fromValue(value: Int): EnumParam {
+        fun fromValue(value: Int?): EnumParam {
             return VALUE_MAPPING[value]!!
         }
     }

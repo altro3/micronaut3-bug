@@ -7,12 +7,11 @@ import io.micronaut.http.client.HttpClient
 import io.micronaut.http.client.annotation.Client
 import io.micronaut.scheduling.TaskExecutors
 import io.micronaut.scheduling.annotation.ExecuteOn
-import io.micronaut.serde.annotation.Serdeable
 import io.swagger.v3.oas.annotations.media.Schema
 import jakarta.annotation.Nullable
 
 @ExecuteOn(TaskExecutors.BLOCKING)
-//@Controller
+@Controller
 open class MyEntityController(
     @Client("local") httpClient: HttpClient
 ) {
@@ -44,20 +43,17 @@ open class MyEntityController(
         return null
     }
 
-    @Serdeable
     open class BodyDto(
         val value: String,
         @field:Nullable
         var currency: TestCurrency = TestCurrency.USD,
     )
 
-    @Serdeable
     enum class TestCurrency {
         USD,
         RUB,
     }
 
-    @Serdeable
     @JsonPropertyOrder(
         Test.JSON_PROPERTY_ID,
         Test.JSON_PROPERTY_CURRENCY,
@@ -86,7 +82,6 @@ open class MyEntityController(
         }
     }
 
-    @Serdeable
     data class TESTRequest @JvmOverloads constructor(
 
         @field:Nullable
@@ -95,7 +90,6 @@ open class MyEntityController(
         val record: MyCur = MyCur.USD,
     )
 
-    @Serdeable
     enum class MyCur(
         @get:JsonValue val value: String,
     ) {

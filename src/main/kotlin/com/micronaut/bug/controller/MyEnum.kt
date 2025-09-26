@@ -3,7 +3,6 @@ package com.micronaut.bug.controller
 import com.fasterxml.jackson.annotation.JsonCreator
 import com.fasterxml.jackson.annotation.JsonProperty
 import com.fasterxml.jackson.annotation.JsonValue
-import io.micronaut.serde.annotation.Serdeable
 import jakarta.annotation.Generated
 
 /**
@@ -11,7 +10,6 @@ import jakarta.annotation.Generated
  *
  * @param value The value represented by this enum
  */
-@Serdeable
 @Generated("io.micronaut.openapi.generator.KotlinMicronautClientCodegen")
 enum class MyEnum(
     @get:JsonValue val value: String
