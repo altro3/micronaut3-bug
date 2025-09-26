@@ -2,7 +2,7 @@ package com.micronaut.bug.controller;
 
 import com.micronaut.bug.api.EnumParam;
 import com.micronaut.bug.service.MyEntityService;
-import io.micronaut.core.convert.format.Format;
+import io.micronaut.core.annotation.Nullable;
 import io.micronaut.http.MediaType;
 import io.micronaut.http.annotation.Controller;
 import io.micronaut.http.annotation.Get;
@@ -11,6 +11,7 @@ import io.micronaut.http.annotation.Header;
 import io.micronaut.http.annotation.Part;
 import io.micronaut.http.annotation.PathVariable;
 import io.micronaut.http.annotation.Post;
+import io.micronaut.http.annotation.QueryValue;
 import io.micronaut.http.multipart.CompletedFileUpload;
 import io.micronaut.scheduling.TaskExecutors;
 import io.micronaut.scheduling.annotation.ExecuteOn;
@@ -21,9 +22,6 @@ import lombok.extern.slf4j.Slf4j;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
-import java.util.OptionalInt;
-
-import static io.micronaut.core.convert.converters.MultiValuesConverterFactory.FORMAT_CSV;
 
 @ExecuteOn(TaskExecutors.BLOCKING)
 @Slf4j
@@ -48,7 +46,7 @@ public class MyEntityController {
     }
 
     @Get("/test2/{param}")
-    public EnumParam test2(EnumParam param) {
+    public EnumParam test2(EnumParam param, @QueryValue @Nullable EnumParam qParam) {
         return param;
     }
 

@@ -29,7 +29,7 @@ public enum EnumParam {
     private final int value;
 
     @JsonCreator
-    public static EnumParam fromValue(int value) {
+    public static EnumParam fromValue(Integer value) {
         return VALUE_MAPPING.get(value);
     }
 }
