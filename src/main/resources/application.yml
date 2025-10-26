@@ -1,22 +1,19 @@
 server:
   port: 8080
-  forward-headers-strategy: native
-  servlet:
-    context-path:
-    session:
-      timeout: 60s
-      cookie:
-        name: JSESSIONUPDATER
+  http2:
+    enabled: true
 
 spring:
   mandatory-file-encoding: UTF-8
   web:
     locale: en_US
     locale-resolver: fixed
-  mvc:
-    log-request-details: false
   main:
     banner-mode: off
+  http:
+    codecs:
+      max-in-memory-size: 10MB
+
 logging:
   level:
     root: debug

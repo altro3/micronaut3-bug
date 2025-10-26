@@ -1,6 +1,7 @@
 plugins {
     id 'java'
-    id "org.springframework.boot" version "3.4.4"
+    id "org.springframework.boot" version "3.5.6"
+    id 'org.jetbrains.kotlin.jvm'
 //    id 'io.micronaut.application' version '4.5.0'
 //    id 'io.micronaut.aot' version '4.5.0'
 //    id 'io.micronaut.openapi' version '4.5.0'
@@ -11,10 +12,9 @@ ext {
 
     ver = [
             springBoot: '3.5.6',
-            micronaut : '4.9.3',
-            core      : '4.9.11',
-            openapi   : '6.18.1',
-            serde     : '2.15.1'
+            micronaut : '4.10.0',
+            core      : '4.10.7',
+            openapi   : '6.19.1',
     ]
 
     jreImage = 'bellsoft/liberica-openjre-alpine:17.0.10'
@@ -22,7 +22,6 @@ ext {
 }
 
 java {
-    sourceCompatibility = JavaVersion.VERSION_17
 }
 
 dependencies {
@@ -35,18 +34,18 @@ dependencies {
 
     compileOnly(
             "org.projectlombok:lombok",
-            "com.fasterxml.jackson.core:jackson-annotations",
     )
 
     implementation(
             platform("org.springframework.boot:spring-boot-dependencies:$ver.springBoot"),
-            "org.springframework.boot:spring-boot-starter-web",
+            "org.springframework.boot:spring-boot-starter-webflux",
             "org.springframework.boot:spring-boot-starter-logging",
             "org.springframework.boot:spring-boot-starter-json",
             "org.springframework.boot:spring-boot-starter-validation",
             "org.springframework.boot:spring-boot-starter-actuator",
             "ch.qos.logback:logback-classic",
     )
+    implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk8"
 }
 
 //project.gradle.startParameter.excludedTaskNames.add("generateServerOpenApiModels")
@@ -70,4 +69,10 @@ configurations.configureEach {
         cacheDynamicVersionsFor 0, 'minutes'
         cacheChangingModulesFor 0, 'minutes'
     }
+}
+repositories {
+    mavenCentral()
+}
+kotlin {
+    jvmToolchain(17)
 }
