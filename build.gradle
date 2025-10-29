@@ -1,16 +1,16 @@
 plugins {
-    id 'io.micronaut.application' version '4.5.4'
+    id 'io.micronaut.application' version '4.6.0'
 //    id 'io.micronaut.aot' version '4.5.4'
-//    id 'io.micronaut.openapi' version '4.5.4'
+    id 'io.micronaut.openapi' version '4.6.0'
 //    id 'org.openapi.generator' version '7.14.0'
 }
 
 ext {
 
     ver = [
-            micronaut: '4.9.3',
-            core     : '4.9.11',
-            openapi  : '6.18.1',
+            micronaut: '4.10.0',
+            core     : '4.10.7',
+            openapi  : '6.19.1',
             serde    : '2.15.1',
     ]
 
@@ -40,7 +40,6 @@ micronaut {
 //        deduceEnvironment = true
 //        optimizeNetty = true
 //    }
-/*
     openapi {
         version = ver.openapi
         client("client", file("swagger.yml")) {
@@ -60,19 +59,7 @@ micronaut {
                     authorizationFilterPattern: "/test;/different/simple/path/**;/something/else"
             ]
         }
-        client("client2", file("swagger2.yml")) {
-            authorizationFilterPattern = "/test;/different/simple/path/**;/something/else"
-            apiPackageName = "com.generated.client2.api"
-            modelPackageName = "com.generated.client2.model"
-            invokerPackageName = "com.generated.auth"
-            useAuth = true
-            clientId = "client2"
-            additionalProperties = [
-                    generateAuthClasses: false
-            ]
-        }
     }
-*/
 }
 
 java {

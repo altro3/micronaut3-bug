@@ -1,129 +1,99 @@
-openapi: 3.0.3
+openapi: 3.1.0
 info:
-  title: Regon Rest API
-  description: Regon Rest API standalone service
-  version: 1.0.0
+  title: title
+  description: description
+  version: ''
 servers:
-  - url: 'http://localhost:8080'
-tags:
-  - name: Regon
-paths:
-  /api/search/{nip}:
-    get:
-      tags:
-        - Regon
-      security:
-        - apiAuth: []
-      operationId: searchByNip
-      summary: Search company in REGON database by VAT identifying number
-      description: Search company in REGON database by VAT identifying number
-      parameters:
-        - name: nip
-          in: path
-          required: true
-          description: Unique identifier of the customer to retrieve
-          schema:
-            type: string
-            maxLength: 10
-            pattern: '^\d{10}$'
-        - name: X-REGON-API-KEY
-          in: header
-          schema:
-            type: string
-            maxLength: 20
-            minLength: 20
-      responses:
-        200:
-          description: Customer data
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/CustomerDTO'
-        400:
-          description: Invalid input data
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorDTO'
-        401:
-          description: Unauthorized
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorDTO'
-        404:
-          description: When given NIP is not available in Regon database
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorDTO'
-        500:
-          description: Internal server error
-        503:
-          description: When Regon service returns error other than "No data found for the specified search criteria"
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorDTO'
+  - url: /
 components:
   schemas:
-    CustomerDTO:
+    AttributeClientObjectSort:
+      allOf:
+        - $ref: '#/components/schemas/ClientObjectSort'
+        - type: object
+          properties:
+            attribute:
+              $ref: '#/components/schemas/CFARef'
+              description: Name of the unit attribute to sort the response by
+    ClientObjectSort:
+      $ref: '#/components/schemas/ObjectSort'
+    ObjectSort:
       type: object
+      discriminator:
+        propertyName: _o
       properties:
-        nip:
+        _o:
           type: string
-          maxLength: 10
-          pattern: '^\d{10}$'
-        regon:
-          type: string
-          maxLength: 14
-        nipStatus:
-          type: string
-        name:
-          type: string
-          maxLength: 2000
-        province:
-          type: string
-          maxLength: 200
-        district:
-          type: string
-          maxLength: 200
-        municipality:
-          type: string
-          maxLength: 200
-        city:
-          type: string
-          maxLength: 200
-        postCode:
-          type: string
-          maxLength: 12
-        street:
-          type: string
-          maxLength: 200
-        buildingNumber:
-          type: string
-          maxLength: 20
-        apartmentNumber:
-          type: string
-          maxLength: 10
-        type:
-          type: string
-          maxLength: 2
-        postOffice:
-          type: string
-          maxLength: 200
-        businessClosureDate:
-          type: string
-          format: date
-    ErrorDTO:
+          description: Used as a discriminator value between implementations of this type
+        ascending:
+          type: boolean
+          description: >-
+            Specifies whether the sort order is ascending or descending. If not
+            specified, ascending sort is assumed.
+      required:
+        - _o
+    CFARef:
+      type: string
+      description: ref
+    BuiltInClientObjectSort:
+      allOf:
+        - $ref: '#/components/schemas/ClientObjectSort'
+        - type: object
+          properties:
+            field:
+              type: string
+              enum:
+                - unitId
+                - clientId
+                - clientClass
+                - unitClass
+    BuiltInUnitObjectSort:
+      allOf:
+        - $ref: '#/components/schemas/ClientObjectSort'
+        - type: object
+          properties:
+            field:
+              type: string
+              enum:
+                - unitId
+                - unitClass
+    CampaignUnitsRequest:
+      allOf:
+        - $ref: '#/components/schemas/PageRequest'
+        - type: object
+          properties:
+            compare:
+              type: boolean
+              description: m
+            id:
+              type: integer
+              format: int64
+              description: x
+            objectSort:
+              type: array
+              description: List of sort requirements.
+              items:
+                $ref: '#/components/schemas/ClientObjectSort'
+      description: r
+      required:
+        - id
+    PageRequest:
       type: object
+      description: Base type for requests that contain pagination instructions
       properties:
-        message:
-          type: string
-        code:
+        noCount:
+          type: boolean
+          default: false
+          description: b.
+        page:
           type: integer
-  securitySchemes:
-    apiAuth:
-      type: http
-      scheme: basic
-      description: Use `user` / `passwd` as the test credentials
+          format: int64
+          default: 0
+          description: a
+          minimum: 0
+        pageSize:
+          type: integer
+          format: int64
+          default: 10
+          description: x
+          minimum: 1
