@@ -34,11 +34,12 @@ paths:
             minLength: 20
       responses:
         200:
-          description: Customer data
+          description: Full file content
           content:
-            application/json:
+            application/octet-stream:
               schema:
-                $ref: '#/components/schemas/CustomerDTO'
+                type: string
+                format: binary
         400:
           description: Invalid input data
           content:

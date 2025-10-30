@@ -1,20 +1,20 @@
 plugins {
-    id("io.micronaut.application") version "4.6.0"
-//    id("io.micronaut.openapi") version "4.6.0"
+    id("io.micronaut.application") version "4.6.1"
+    id("io.micronaut.openapi") version "4.6.1"
+//    id "io.micronaut.aot" version "4.6.1"
 //    id("org.jetbrains.kotlin.jvm") version "2.2.10"
 //    id("org.jetbrains.kotlin.kapt") version "2.2.10"
 //    id("com.google.devtools.ksp") version "2.2.10-2.0.2"
     id("org.jetbrains.kotlin.jvm") version "1.9.25"
     id("org.jetbrains.kotlin.kapt") version "1.9.25"
     id("com.google.devtools.ksp") version "1.9.25-1.0.20"
-//    id "io.micronaut.aot" version "4.5.4"
 //    id "org.openapi.generator" version "7.14.0"
 }
 
 val ver = mapOf(
     "micronaut" to "4.10.0",
     "core" to "4.10.7",
-    "openapi" to "6.19.1",
+    "openapi" to "6.19.2",
     "serde" to "2.15.0",
 )
 
@@ -29,12 +29,12 @@ micronaut {
         incremental(false)
         annotations("com.micronaut.bug.*")
     }
-//    openapi {
-//        version = ver["openapi"]
-//        server(file("swagger.yml")) {
-//
-//        }
-//    }
+    openapi {
+        version = ver["openapi"]
+        server(file("swagger.yml")) {
+            lang = "kotlin"
+        }
+    }
 }
 
 dependencies {
