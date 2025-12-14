@@ -1,5 +1,6 @@
 package com.micronaut.bug.controller;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.micronaut.bug.api.EnumParam;
 import com.micronaut.bug.service.MyEntityService;
 import io.micronaut.core.annotation.Nullable;
@@ -15,13 +16,16 @@ import io.micronaut.http.annotation.QueryValue;
 import io.micronaut.http.multipart.CompletedFileUpload;
 import io.micronaut.scheduling.TaskExecutors;
 import io.micronaut.scheduling.annotation.ExecuteOn;
+import io.micronaut.serde.annotation.Serdeable;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.IOException;
-import java.util.List;
+import java.time.LocalDateTime;
 import java.util.Map;
+import java.util.UUID;
 
 @ExecuteOn(TaskExecutors.BLOCKING)
 @Slf4j
@@ -60,9 +64,52 @@ public class MyEntityController {
         log.info("endpoint2");
     }
 
-    @Post(value = "/file2", consumes = MediaType.MULTIPART_FORM_DATA)
-    public void endpoint3(List<CompletedFileUpload> files) {
-        log.info("endpoint3");
+    @Get("/record")
+    public CostCenter endpoint3() {
+        return new CostCenter(
+            UUID.randomUUID(),
+            "this is name",
+            "this is code",
+            "foreignKey",
+            UUID.randomUUID(),
+            LocalDateTime.now(),
+            UUID.randomUUID(),
+            LocalDateTime.now(),
+            10
+        );
     }
 
+    @Serdeable
+    public record CostCenter(
+        @Nullable
+        UUID id,
+        @NotNull
+        String name,
+        @NotNull
+        String code,
+        @Nullable
+        String frgnKey,
+        @NotNull
+        UUID userCreated,
+        @Nullable
+        LocalDateTime dateCreated,
+        @NotNull
+        UUID userUpdated,
+        @Nullable
+        LocalDateTime lastUpdated,
+        Integer version
+    ) {
+
+        @JsonProperty("label")
+        @Schema(name = "label")
+        public String label() {
+            return "this is label";
+        }
+
+        @JsonProperty("label")
+        @Schema(name = "label")
+        public String setLabel(String ll) {
+            return "this is label";
+        }
+    }
 }

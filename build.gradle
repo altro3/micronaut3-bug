@@ -1,17 +1,17 @@
 plugins {
-    id 'io.micronaut.application' version '4.6.0'
-//    id 'io.micronaut.aot' version '4.5.4'
-    id 'io.micronaut.openapi' version '4.6.0'
+    id 'io.micronaut.application' version '4.6.1'
+//    id 'io.micronaut.aot' version '4.6.1'
+    id 'io.micronaut.openapi' version '4.6.1'
 //    id 'org.openapi.generator' version '7.14.0'
 }
 
 ext {
 
     ver = [
-            micronaut: '4.10.0',
-            core     : '4.10.7',
-            openapi  : '6.19.1',
-            serde    : '2.15.1',
+            micronaut: '4.10.4',
+            core     : '4.10.10',
+            openapi  : '6.19.3',
+            serde    : '2.16.2',
     ]
 
     jreImage = 'bellsoft/liberica-openjre-alpine:17.0.10'
@@ -42,7 +42,7 @@ micronaut {
 //    }
     openapi {
         version = ver.openapi
-        client("client", file("swagger.yml")) {
+        client("client", file("test.yml")) {
             apiPackageName = "com.generated.client1.api"
             modelPackageName = "com.generated.client1.model"
             invokerPackageName = "com.generated.auth"
