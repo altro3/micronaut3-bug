@@ -1,7 +1,7 @@
 plugins {
     id 'io.micronaut.application' version '4.6.1'
 //    id 'io.micronaut.aot' version '4.6.1'
-    id 'io.micronaut.openapi' version '4.6.1'
+//    id 'io.micronaut.openapi' version '4.6.1'
 //    id 'org.openapi.generator' version '7.14.0'
 }
 
@@ -40,6 +40,7 @@ micronaut {
 //        deduceEnvironment = true
 //        optimizeNetty = true
 //    }
+/*
     openapi {
         version = ver.openapi
         client("client", file("test.yml")) {
@@ -60,6 +61,7 @@ micronaut {
             ]
         }
     }
+*/
 }
 
 java {

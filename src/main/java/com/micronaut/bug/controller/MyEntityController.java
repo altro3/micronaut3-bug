@@ -5,6 +5,7 @@ import com.micronaut.bug.api.EnumParam;
 import com.micronaut.bug.service.MyEntityService;
 import io.micronaut.core.annotation.Nullable;
 import io.micronaut.http.MediaType;
+import io.micronaut.http.annotation.Body;
 import io.micronaut.http.annotation.Controller;
 import io.micronaut.http.annotation.Get;
 import io.micronaut.http.annotation.Head;
@@ -12,6 +13,7 @@ import io.micronaut.http.annotation.Header;
 import io.micronaut.http.annotation.Part;
 import io.micronaut.http.annotation.PathVariable;
 import io.micronaut.http.annotation.Post;
+import io.micronaut.http.annotation.Produces;
 import io.micronaut.http.annotation.QueryValue;
 import io.micronaut.http.multipart.CompletedFileUpload;
 import io.micronaut.scheduling.TaskExecutors;
@@ -21,6 +23,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import reactor.core.publisher.Mono;
 
 import java.io.IOException;
 import java.time.LocalDateTime;
@@ -44,14 +47,13 @@ public class MyEntityController {
         log.info("xtESTCrc32: {}", xtESTCrc32);
     }
 
-    @Get("/test/{param}")
-    public void test(@PathVariable Integer param) {
-        log.info("test");
-    }
-
-    @Get("/test2/{param}")
-    public EnumParam test2(EnumParam param, @QueryValue @Nullable EnumParam qParam) {
-        return param;
+    @Post(value = "/auth/form-part", consumes = MediaType.APPLICATION_FORM_URLENCODED)
+    void indexPart(
+            @Body("grant_type") @NotNull String grantType,
+            @Body("client_id") @NotNull String clientId
+    ) {
+        log.info("grantType: {}", grantType);
+        log.info("clientId: {}", clientId);
     }
 
     @Post(value = "/testMultipart", consumes = MediaType.MULTIPART_FORM_DATA)
