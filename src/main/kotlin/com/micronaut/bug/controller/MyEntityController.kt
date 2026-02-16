@@ -1,6 +1,7 @@
 package com.micronaut.bug.controller
 
 import com.fasterxml.jackson.annotation.*
+import io.micronaut.http.HttpStatus
 import io.micronaut.http.annotation.*
 import io.micronaut.http.client.BlockingHttpClient
 import io.micronaut.http.client.HttpClient
@@ -19,6 +20,16 @@ open class MyEntityController(
 
     init {
         this.httpClient = httpClient.toBlocking()
+    }
+
+    @Status(HttpStatus.CREATED)
+    @Post("/test{/apiVersion}")
+    open fun test3(
+        @Header("X-Favor-Token") @Nullable xFavorToken: String? = null,
+        @PathVariable("apiVersion") @Nullable apiVersion: MyEnum? = MyEnum.V5,
+        @Header("Content-Type") @Nullable contentType: String? = "application/json"
+    ): String? {
+        return null
     }
 
     @Post("/test{/apiVersion}")

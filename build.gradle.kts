@@ -1,21 +1,21 @@
 plugins {
-    id("io.micronaut.application") version "4.6.1"
-    id("io.micronaut.openapi") version "4.6.1"
-//    id "io.micronaut.aot" version "4.6.1"
+    id("io.micronaut.application") version "4.6.2"
+    id("io.micronaut.openapi") version "4.6.2"
+//    id "io.micronaut.aot" version "4.6.2"
 //    id("org.jetbrains.kotlin.jvm") version "2.2.10"
 //    id("org.jetbrains.kotlin.kapt") version "2.2.10"
 //    id("com.google.devtools.ksp") version "2.2.10-2.0.2"
     id("org.jetbrains.kotlin.jvm") version "1.9.25"
     id("org.jetbrains.kotlin.kapt") version "1.9.25"
     id("com.google.devtools.ksp") version "1.9.25-1.0.20"
-//    id "org.openapi.generator" version "7.14.0"
+//    id "org.openapi.generator" version "7.19.0"
 }
 
 val ver = mapOf(
-    "micronaut" to "4.10.0",
-    "core" to "4.10.7",
-    "openapi" to "6.19.2",
-    "serde" to "2.15.0",
+    "micronaut" to "4.10.8",
+    "core" to "4.10.15",
+    "openapi" to "6.19.3",
+    "serde" to "2.16.2",
 )
 
 //mainClassName = "com.micronaut.bug.Application"
