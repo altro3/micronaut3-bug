@@ -224,7 +224,8 @@ public class LoggingFilter implements WebFilter {
                     ------------------ /Service request ------------------
                     """, method, uri, headers);
                 return chain.filter(exchange);
-            }))            // Защита от дублирования ответа
+            }))
+            // Защита от дублирования ответа
             .onErrorResume(t -> {
                 if (!exchange.getResponse().isCommitted()) {
                     return chain.filter(exchange);
