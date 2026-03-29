@@ -9,6 +9,7 @@ import org.springframework.core.io.buffer.DataBufferUtils;
 import org.springframework.http.codec.multipart.FilePart;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
@@ -27,24 +28,22 @@ public class MyEntityController {
     public Mono<MyData> testMultipart(
         @PathVariable String pathVar,
         @RequestParam String queryVar,
+        @RequestBody(required = false) MyData dataBody,
         @RequestPart(required = false) MyData data,
         @RequestPart(required = false) FilePart file,
         @CurrentUser User user
     ) {
-        return readFile(file) // Метод ниже возвращает Mono<String>
-            .flatMap(fileString -> {
-                log.info("body: {}", data != null ? data : "null");
-                log.info("file: {}", fileString != null ? fileString : "null");
-                log.info("pathVar: {}", pathVar);
-                log.info("queryVar: {}", queryVar);
+        log.info("body: {}", dataBody != null ? dataBody : "null");
+        log.info("file: {}", file != null ? file : "null");
+        log.info("pathVar: {}", pathVar);
+        log.info("queryVar: {}", queryVar);
 
-                var user2 = businessService.processOrder(user);
-                if (data != null) {
-                    data.user = user2;
-                }
+        var user2 = businessService.processOrder(user);
+        if (data != null) {
+            data.user = user2;
+        }
 
-                return Mono.justOrEmpty(data);
-            });
+        return Mono.justOrEmpty(data);
     }
 
     private Mono<String> readFile(FilePart file) {

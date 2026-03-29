@@ -20,4 +20,8 @@ logging:
     root: debug
     sun: info
     javax: info
+    io.netty: info
     org.apache: info
+    org.hibernate: info
+    org.springframework: info
+    reactor: info
