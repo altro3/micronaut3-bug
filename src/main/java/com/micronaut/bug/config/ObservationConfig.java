@@ -4,7 +4,7 @@ import io.micrometer.context.ContextRegistry;
 import jakarta.annotation.PostConstruct;
 import org.slf4j.MDC;
 import org.springframework.context.annotation.Configuration;
-import reactor.core.publisher.Hooks;
+//import reactor.core.publisher.Hooks;
 
 @Configuration
 public class ObservationConfig {
@@ -15,7 +15,7 @@ public class ObservationConfig {
     @PostConstruct
     public void init() {
         // 1. Включаем автоматический проброс в Reactor
-        Hooks.enableAutomaticContextPropagation();
+        //        Hooks.enableAutomaticContextPropagation();
 
         var registry = ContextRegistry.getInstance();
 

@@ -6,14 +6,13 @@ import org.aspectj.lang.annotation.Around;
 import org.aspectj.lang.annotation.Aspect;
 import org.aspectj.lang.reflect.MethodSignature;
 import org.springframework.stereotype.Component;
-import reactor.core.publisher.Mono;
 
 import java.lang.annotation.Annotation;
 
-@Aspect
-@Component
+//@Aspect
+//@Component
 public class SecurityContextAspect {
-
+/*
     @Around("execution(* com.micronaut.bug.controller..*(.., @CurrentUser (*), ..))")
     public Object injectUser(ProceedingJoinPoint joinPoint) {
         return Mono.deferContextual(ctx -> {
@@ -52,5 +51,5 @@ public class SecurityContextAspect {
                 return Mono.error(e);
             }
         });
-    }
+    }*/
 }

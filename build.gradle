@@ -38,7 +38,7 @@ dependencies {
     implementation(
             platform("org.springframework.boot:spring-boot-dependencies:$ver.springBoot"),
             "org.springframework.boot:spring-boot-starter-aop",
-            "org.springframework.boot:spring-boot-starter-webflux",
+            "org.springframework.boot:spring-boot-starter-web",
             "org.springframework.boot:spring-boot-starter-logging",
             "org.springframework.boot:spring-boot-starter-json",
             "org.springframework.boot:spring-boot-starter-validation",

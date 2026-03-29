@@ -3,39 +3,32 @@ package com.micronaut.bug.config;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import jakarta.annotation.PostConstruct;
+import jakarta.servlet.FilterChain;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.reactivestreams.Publisher;
 import org.slf4j.MDC;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
-import org.springframework.core.io.buffer.DataBuffer;
-import org.springframework.core.io.buffer.DataBufferUtils;
-import org.springframework.core.io.buffer.DefaultDataBufferFactory;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
-import org.springframework.http.server.reactive.ServerHttpRequestDecorator;
-import org.springframework.http.server.reactive.ServerHttpResponse;
-import org.springframework.http.server.reactive.ServerHttpResponseDecorator;
 import org.springframework.stereotype.Component;
-import org.springframework.web.server.ServerWebExchange;
-import org.springframework.web.server.WebFilter;
-import org.springframework.web.server.WebFilterChain;
-import reactor.core.publisher.Flux;
-import reactor.core.publisher.Mono;
+import org.springframework.web.filter.OncePerRequestFilter;
+import org.springframework.web.util.ContentCachingRequestWrapper;
+import org.springframework.web.util.ContentCachingResponseWrapper;
 
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
 import java.util.UUID;
-
-import static com.micronaut.bug.config.ObservationConfig.X_REQ_ID;
 
 @Slf4j
 @Component
 @Order(Ordered.HIGHEST_PRECEDENCE)
 @RequiredArgsConstructor
-public class UnifiedLoggingFilter implements WebFilter {
+public class UnifiedLoggingFilter extends OncePerRequestFilter {
 
+    private static final String X_REQ_ID = "x-req-id";
     private static final String BODY_EMPTY = "[Empty]";
     private static final String BODY_BINARY = "Binary data";
     private static final String BODY_NO_CONTENT = "No Body";
@@ -44,10 +37,9 @@ public class UnifiedLoggingFilter implements WebFilter {
     private static final String PART_CONTENT = "Content: %s";
     private static final String PART_FILE = "File: %s";
     private static final String PART_EMPTY = "Empty content";
-    private static final String MEDIA_TYPE_MAIN_TEXT = "text";
 
-    private static final String SPACE = " ";
-    private static final String NEW_LINE = "\n";
+    private static final char SPACE = ' ';
+    private static final char NEW_LINE = '\n';
     private static final String MINUS = "-";
     private static final String EMPTY_STRING = "";
 
@@ -82,120 +74,142 @@ public class UnifiedLoggingFilter implements WebFilter {
     }
 
     @Override
-    public Mono<Void> filter(ServerWebExchange exchange, WebFilterChain chain) {
-        var rq = exchange.getRequest();
+    protected void doFilterInternal(HttpServletRequest rq, HttpServletResponse rs, FilterChain chain)
+        throws ServletException, IOException {
 
-        var requestId = rq.getHeaders().getFirst(X_REQ_ID);
+        var requestId = rq.getHeader(X_REQ_ID);
         if (requestId == null || requestId.isBlank()) {
             requestId = UUID.randomUUID().toString().replace(MINUS, EMPTY_STRING);
         }
-        final String finalId = requestId;
 
-        // КЛАДЕМ ОДИН РАЗ
-        MDC.put(X_REQ_ID, finalId);
+        MDC.put(X_REQ_ID, requestId);
 
-        var rsDecorator = new LoggingRsDecorator(exchange.getResponse());
-        var contentType = rq.getHeaders().getContentType();
-        var isMultipart = contentType != null && contentType.includes(MediaType.MULTIPART_FORM_DATA);
+//        var rqWrapper = new ContentCachingRequestWrapper(rq);
+//        var rsWrapper = new ContentCachingResponseWrapper(rs);
 
-        var exchangeMono = isMultipart ? processMultipart(exchange) : processSimple(exchange);
+        try {
+//            var isMultipart = isMultipart(rq);
+//            if (isMultipart) {
+//                logMultipartRequest(rqWrapper);
+//            }
 
-        return exchangeMono.flatMap(mutatedExchange ->
-            chain.filter(mutatedExchange.mutate().response(rsDecorator).build())
-                .doFinally(signal -> {
-                    // Логируем результат
-                    var code = exchange.getResponse().getStatusCode();
-                    var statusInfo = (code instanceof HttpStatus hs)
-                        ? hs.value() + SPACE + hs.getReasonPhrase()
-                        : (code != null ? String.valueOf(code.value()) : STATUS_UNKNOWN);
+//            chain.doFilter(rqWrapper, rsWrapper);
+            chain.doFilter(rq, rs);
 
-                    var rsBody = formatIfJson(rsDecorator.getCachedBody(), rsDecorator.getHeaders().getContentType());
+//            if (!isMultipart) {
+//                logSimpleRequest(rqWrapper);
+//            }
+//            logResponse(rqWrapper, rsWrapper);
 
-                    log.info(LOG_TEMPLATE_RS, rq.getURI(), statusInfo, rsDecorator.getHeaders(), rsBody.isBlank() ? BODY_EMPTY : rsBody);
-
-                    // УДАЛЯЕМ ОДИН РАЗ В КОНЦЕ
-                    MDC.remove(X_REQ_ID);
-                })
-        ).contextWrite(ctx -> ctx.put(X_REQ_ID, finalId)); // Проброс в реактивный контекст
-    }
-
-    private Mono<ServerWebExchange> processSimple(ServerWebExchange exchange) {
-        var rq = exchange.getRequest();
-        return DataBufferUtils.join(rq.getBody())
-            .flatMap(db -> {
-                var bytes = readBytes(db);
-                DataBufferUtils.release(db);
-                var formattedBody = formatIfJson(new String(bytes, StandardCharsets.UTF_8), rq.getHeaders().getContentType());
-
-                log.info(LOG_TEMPLATE_RQ, rq.getMethod(), rq.getURI(), rq.getHeaders(), formattedBody.isBlank() ? BODY_EMPTY : formattedBody);
-
-                var mutatedRequest = new ServerHttpRequestDecorator(rq) {
-                    @Override
-                    public Flux<DataBuffer> getBody() {
-                        return Flux.just(DefaultDataBufferFactory.sharedInstance.wrap(bytes));
-                    }
-                };
-                return Mono.just(exchange.mutate().request(mutatedRequest).build());
-            })
-            .switchIfEmpty(Mono.defer(() -> {
-                log.info(LOG_TEMPLATE_RQ, rq.getMethod(), rq.getURI(), rq.getHeaders(), BODY_NO_CONTENT);
-                return Mono.just(exchange);
-            }));
-    }
-
-    private Mono<ServerWebExchange> processMultipart(ServerWebExchange exchange) {
-        var rq = exchange.getRequest();
-        return exchange.getMultipartData().flatMap(map -> {
-            var partLogMonos = new ArrayList<Mono<String>>();
-            map.forEach((name, parts) -> {
-                for (var part : parts) {
-                    var fileName = part.headers().getContentDisposition().getFilename();
-                    if (fileName != null) {
-                        partLogMonos.add(Mono.just(PART_PREFIX.formatted(name, PART_FILE.formatted(fileName))));
-                    } else {
-                        partLogMonos.add(extractPartText(name, part));
-                    }
-                }
-            });
-
-            return Flux.concat(partLogMonos).collectList().map(logs -> {
-                log.info(LOG_TEMPLATE_RQ, rq.getMethod(), rq.getURI(), rq.getHeaders(), String.join(NEW_LINE, logs));
-                return exchange;
-            });
-        });
-    }
-
-    private Mono<String> extractPartText(String name, org.springframework.http.codec.multipart.Part part) {
-        return DataBufferUtils.join(part.content()).map(db -> {
-            try {
-                var bytes = readBytes(db);
-                if (isText(bytes)) {
-                    var formatted = formatIfJson(new String(bytes, StandardCharsets.UTF_8), part.headers().getContentType());
-                    return PART_PREFIX.formatted(name, PART_CONTENT.formatted(formatted));
-                }
-                return PART_PREFIX.formatted(name, BODY_BINARY);
-            } finally {
-                DataBufferUtils.release(db);
-            }
-        }).defaultIfEmpty(PART_PREFIX.formatted(name, PART_EMPTY));
-    }
-
-    private static byte[] readBytes(DataBuffer db) {
-        var bytes = new byte[db.readableByteCount()];
-        var offset = new int[] {0};
-        db.readableByteBuffers().forEachRemaining(buf -> {
-            var readOnly = buf.asReadOnlyBuffer();
-            var len = readOnly.remaining();
-            readOnly.get(bytes, offset[0], len);
-            offset[0] += len;
-        });
-        return bytes;
-    }
-
-    private static boolean isText(byte[] bytes) {
-        if (bytes.length == 0) {
-            return true;
+        } finally {
+//            rsWrapper.copyBodyToResponse();
+            MDC.remove(X_REQ_ID);
         }
+    }
+
+    private void logSimpleRequest(ContentCachingRequestWrapper rq) {
+        var content = rq.getContentAsByteArray();
+        var bodyText = content.length == 0 ? BODY_NO_CONTENT : formatBody(content, rq.getContentType());
+        log.info(LOG_TEMPLATE_RQ, rq.getMethod(), getFullUri(rq), getHeaders(rq), bodyText);
+    }
+
+    private void logMultipartRequest(HttpServletRequest rq) {
+        var sb = new StringBuilder();
+        try {
+            var parts = rq.getParts();
+            for (var part : parts) {
+                if (!sb.isEmpty()) {
+                    sb.append(NEW_LINE);
+                }
+
+                var fileName = part.getSubmittedFileName();
+                var name = part.getName();
+
+                if (fileName != null) {
+                    sb.append(PART_PREFIX.formatted(name, PART_FILE.formatted(fileName)));
+                } else {
+                    try (var is = part.getInputStream()) {
+                        var bytes = is.readAllBytes();
+                        if (bytes.length == 0) {
+                            sb.append(PART_PREFIX.formatted(name, PART_EMPTY));
+                        } else if (isText(bytes)) {
+                            var content = new String(bytes, StandardCharsets.UTF_8);
+                            var formatted = formatIfJson(content, part.getContentType());
+                            if (formatted.length() > LIMIT_LOG_SIZE) {
+                                formatted = formatted.substring(0, LIMIT_LOG_SIZE) + "... [TRUNCATED]";
+                            }
+
+                            sb.append(PART_PREFIX.formatted(name, PART_CONTENT.formatted(formatted)));
+                        } else {
+                            sb.append(PART_PREFIX.formatted(name, BODY_BINARY));
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            sb.append("[Multipart error: ").append(e.getMessage()).append(']');
+        }
+        var bodyResult = sb.isEmpty() ? BODY_NO_CONTENT : sb.toString();
+        log.info(LOG_TEMPLATE_RQ, rq.getMethod(), getFullUri(rq), getHeaders(rq), bodyResult);
+    }
+
+    private void logResponse(HttpServletRequest rq, ContentCachingResponseWrapper rs) {
+        var content = rs.getContentAsByteArray();
+        var status = rs.getStatus() == 0 ? STATUS_UNKNOWN : String.valueOf(rs.getStatus());
+        var bodyText = content.length == 0 ? BODY_EMPTY : formatBody(content, rs.getContentType());
+
+        log.info(LOG_TEMPLATE_RS, getFullUri(rq), status, getResponseHeaders(rs), bodyText);
+    }
+
+    private String formatBody(byte[] content, String contentType) {
+        if (!isText(content)) {
+            return BODY_BINARY;
+        }
+        var raw = new String(content, StandardCharsets.UTF_8);
+        return formatIfJson(raw, contentType);
+    }
+
+    private String formatIfJson(String body, String contentType) {
+        if (body == null || body.isBlank()) {
+            return EMPTY_STRING;
+        }
+        if (contentType != null && contentType.contains(MediaType.APPLICATION_JSON_VALUE)) {
+            try {
+                return prettyMapper.writerWithDefaultPrettyPrinter().writeValueAsString(prettyMapper.readTree(body));
+            } catch (Exception ignored) {
+            }
+        }
+        return body;
+    }
+
+    private String getHeaders(HttpServletRequest rq) {
+        var sb = new StringBuilder().append('{');
+        var names = rq.getHeaderNames();
+        while (names.hasMoreElements()) {
+            var name = names.nextElement();
+            sb.append(name).append('=').append(rq.getHeader(name));
+            if (names.hasMoreElements()) {
+                sb.append(", ");
+            }
+        }
+        return sb.append('}').toString();
+    }
+
+    private String getResponseHeaders(HttpServletResponse rs) {
+        var sb = new StringBuilder().append('{');
+        var names = rs.getHeaderNames();
+        var it = names.iterator();
+        while (it.hasNext()) {
+            var name = it.next();
+            sb.append(name).append('=').append(rs.getHeader(name));
+            if (it.hasNext()) {
+                sb.append(", ");
+            }
+        }
+        return sb.append('}').toString();
+    }
+
+    private boolean isText(byte[] bytes) {
         for (int i = 0; i < Math.min(bytes.length, 100); i++) {
             if (bytes[i] == 0) {
                 return false;
@@ -204,48 +218,13 @@ public class UnifiedLoggingFilter implements WebFilter {
         return true;
     }
 
-    private String formatIfJson(String body, MediaType type) {
-        if (body.isBlank() || (type != null && !type.includes(MediaType.APPLICATION_JSON))) {
-            return body;
-        }
-        try {
-            return prettyMapper.writerWithDefaultPrettyPrinter().writeValueAsString(prettyMapper.readTree(body));
-        } catch (Exception e) {
-            return body;
-        }
+    private boolean isMultipart(HttpServletRequest rq) {
+        var ct = rq.getContentType();
+        return ct != null && ct.startsWith(MediaType.MULTIPART_FORM_DATA_VALUE);
     }
 
-    private static class LoggingRsDecorator extends ServerHttpResponseDecorator {
-
-        private final StringBuilder body = new StringBuilder();
-
-        public LoggingRsDecorator(ServerHttpResponse delegate) {
-            super(delegate);
-        }
-
-        @Override
-        public Mono<Void> writeWith(Publisher<? extends DataBuffer> body) {
-            var type = getHeaders().getContentType();
-            var loggable = type != null && (type.includes(MediaType.APPLICATION_JSON) || type.getType().equals(MEDIA_TYPE_MAIN_TEXT));
-            return super.writeWith(Flux.from(body).doOnNext(db -> {
-                if (loggable && this.body.length() < LIMIT_LOG_SIZE) {
-                    db.readableByteBuffers().forEachRemaining(buf -> {
-                        var readOnly = buf.asReadOnlyBuffer();
-                        var bytes = new byte[readOnly.remaining()];
-                        readOnly.get(bytes);
-                        this.body.append(new String(bytes, StandardCharsets.UTF_8));
-                    });
-                }
-            }));
-        }
-
-        @Override
-        public Mono<Void> writeAndFlushWith(Publisher<? extends Publisher<? extends DataBuffer>> body) {
-            return writeWith(Flux.from(body).flatMap(Flux::from));
-        }
-
-        public String getCachedBody() {
-            return body.toString();
-        }
+    private String getFullUri(HttpServletRequest rq) {
+        var query = rq.getQueryString();
+        return query == null ? rq.getRequestURI() : rq.getRequestURI() + '?' + query;
     }
 }
