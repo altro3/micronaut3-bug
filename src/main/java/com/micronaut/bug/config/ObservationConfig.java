@@ -26,7 +26,6 @@ public class ObservationConfig {
             () -> MDC.remove(X_REQ_ID)
         );
 
-        // 2. Регистрируем наш кастомный ключ x-req-id
         registry.registerThreadLocalAccessor(TARGET_ID,
             () -> MDC.get(TARGET_ID),
             val -> MDC.put(TARGET_ID, val),
