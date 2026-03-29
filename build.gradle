@@ -42,6 +42,8 @@ dependencies {
             "org.springframework.boot:spring-boot-starter-json",
             "org.springframework.boot:spring-boot-starter-validation",
             "org.springframework.boot:spring-boot-starter-actuator",
+            "io.micrometer:micrometer-tracing",
+            "io.micrometer:context-propagation",
             "ch.qos.logback:logback-classic",
     )
 //    implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk8"
