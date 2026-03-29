@@ -10,9 +10,9 @@ spring:
   servlet:
     multipart:
       enabled: true
-#  threads:
-#    virtual:
-#      enabled: true
+  threads:
+    virtual:
+      enabled: true
   web:
     locale: en_US
     locale-resolver: fixed
