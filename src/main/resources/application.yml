@@ -4,7 +4,9 @@ server:
     enabled: true
 
 spring:
-  mandatory-file-encoding: UTF-8
+  threads:
+    virtual:
+      enabled: true
   web:
     locale: en_US
     locale-resolver: fixed

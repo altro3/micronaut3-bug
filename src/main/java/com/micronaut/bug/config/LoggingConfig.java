@@ -1,7 +1,7 @@
 package com.micronaut.bug.config;
 
+import jakarta.validation.constraints.NotNull;
 import lombok.extern.slf4j.Slf4j;
-import org.jetbrains.annotations.NotNull;
 import org.reactivestreams.Publisher;
 import org.slf4j.MDC;
 import org.springframework.context.annotation.Bean;
@@ -10,6 +10,7 @@ import org.springframework.core.io.buffer.DataBuffer;
 import org.springframework.core.io.buffer.DataBufferUtils;
 import org.springframework.http.server.reactive.ServerHttpRequestDecorator;
 import org.springframework.http.server.reactive.ServerHttpResponseDecorator;
+import org.springframework.lang.NonNull;
 import org.springframework.web.server.WebFilter;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -19,25 +20,27 @@ import java.nio.charset.StandardCharsets;
 import java.util.UUID;
 
 @Slf4j
-@Configuration
+//@Configuration
 public class LoggingConfig {
+
+    public static final String X_REQ_ID = "x-req-id";
 
     @Bean
     WebFilter tracingFilter() {
         return (exchange, chain) -> {
             var rq = exchange.getRequest();
             String traceId = null;
-            if (rq.getHeaders().containsKey("x-req-id")) {
-                traceId = rq.getHeaders().getFirst("x-req-id");
+            if (rq.getHeaders().containsKey(X_REQ_ID)) {
+                traceId = rq.getHeaders().getFirst(X_REQ_ID);
             }
             if (traceId == null) {
                 traceId = UUID.randomUUID().toString().replace("-", "");
-                rq.mutate().header("x-req-id", traceId);
+                rq.mutate().header(X_REQ_ID, traceId);
             }
-            MDC.putCloseable("x-req-id", traceId);
+            var traceIfFinal = traceId;
+            MDC.putCloseable(X_REQ_ID, traceId);
             return chain.filter(exchange)
-                .contextWrite(Context.of("x-req-id", traceId))
-                .contextWrite()
+                .contextWrite(ctx -> ctx.put(X_REQ_ID, traceIfFinal));
         };
     }
 
@@ -58,7 +61,7 @@ public class LoggingConfig {
 
                     // Re-create the request with the logged body
                     var decoratedRq = new ServerHttpRequestDecorator(rq) {
-                        @NotNull
+                        @NonNull
                         @Override
                         public Flux<DataBuffer> getBody() {
                             return Flux.just(rs.bufferFactory().wrap(bytes));
@@ -66,11 +69,9 @@ public class LoggingConfig {
                     };
 
                     var decoratedRs = new ServerHttpResponseDecorator(rs) {
-
-
-                        @NotNull
+                        @NonNull
                         @Override
-                        public Mono<Void> writeWith(@NotNull Publisher<? extends DataBuffer> body) {
+                        public Mono<Void> writeWith(@NonNull Publisher<? extends DataBuffer> body) {
                             if (body instanceof Mono<? extends DataBuffer> fluxBody) {
                                 return super.writeWith(fluxBody.map(buffer -> {
                                     // Log rs body

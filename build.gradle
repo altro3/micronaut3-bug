@@ -1,7 +1,7 @@
 plugins {
-    id 'java'
-    id "org.springframework.boot" version "3.5.6"
-    id 'org.jetbrains.kotlin.jvm'
+    id "java"
+    id "org.springframework.boot" version "3.5.13"
+//    id "org.jetbrains.kotlin.jvm" version "2.3.20"
 //    id 'io.micronaut.application' version '4.5.0'
 //    id 'io.micronaut.aot' version '4.5.0'
 //    id 'io.micronaut.openapi' version '4.5.0'
@@ -11,13 +11,12 @@ plugins {
 ext {
 
     ver = [
-            springBoot: '3.5.6',
-            micronaut : '4.10.0',
-            core      : '4.10.7',
-            openapi   : '6.19.1',
+            kotlin    : "2.3.20",
+            springBoot: '3.5.13',
+            openapi   : '6.20.0',
     ]
 
-    jreImage = 'bellsoft/liberica-openjre-alpine:17.0.10'
+    jreImage = 'bellsoft/liberica-openjre-alpine:25.0.2'
     jreImageNative = 'debian:stable-slim'
 }
 
@@ -45,7 +44,7 @@ dependencies {
             "org.springframework.boot:spring-boot-starter-actuator",
             "ch.qos.logback:logback-classic",
     )
-    implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk8"
+//    implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk8"
 }
 
 //project.gradle.startParameter.excludedTaskNames.add("generateServerOpenApiModels")
@@ -73,6 +72,6 @@ configurations.configureEach {
 repositories {
     mavenCentral()
 }
-kotlin {
-    jvmToolchain(17)
-}
+//kotlin {
+//    jvmToolchain(25)
+//}
