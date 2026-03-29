@@ -26,8 +26,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 @Slf4j
-@Component
-@Order(Ordered.HIGHEST_PRECEDENCE) // Должен быть первым, чтобы засечь время и поставить TraceId
+//@Component
+//@Order(Ordered.HIGHEST_PRECEDENCE) // Должен быть первым, чтобы засечь время и поставить TraceId
 public class LoggingFilter implements WebFilter {
 
     private static final String EMPTY_BODY = "[Empty body]";
