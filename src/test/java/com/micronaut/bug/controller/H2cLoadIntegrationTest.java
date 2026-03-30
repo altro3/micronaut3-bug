@@ -136,13 +136,12 @@ class H2cLoadIntegrationTest {
         public RestClient h2cRestClient() {
             // Настраиваем пул соединений специально для HTTP/2
             ConnectionProvider provider = ConnectionProvider.builder("h2c-test-pool")
-                .maxConnections(10) // Ограничиваем количество физических TCP-соединений
-                .pendingAcquireTimeout(Duration.ofSeconds(30))
+                .maxConnections(20) // Ограничиваем количество физических TCP-соединений
+                .pendingAcquireTimeout(Duration.ofSeconds(15))
                 .build();
 
             HttpClient httpClient = HttpClient.create(provider)
-                .protocol(HttpProtocol.H2C) // Включаем HTTP/2 без SSL
-                .wiretap(true); // Для отладки фреймов в логах
+                .protocol(HttpProtocol.H2C);
 
             return RestClient.builder()
                 .requestFactory(new ReactorClientHttpRequestFactory(httpClient))
