@@ -44,9 +44,9 @@ public class ObservationConfig {
         );
     }
 
-    @Bean
-    public NettyServerCustomizer http2CleartextCustomizer() {
-        return server -> server.protocol(HttpProtocol.H2C)
-            .wiretap(true);
-    }
+//    @Bean
+//    public NettyServerCustomizer http2CleartextCustomizer() {
+//        return server -> server.protocol(HttpProtocol.H2C)
+//            .wiretap(true);
+//    }
 }
