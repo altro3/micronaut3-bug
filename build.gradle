@@ -82,10 +82,6 @@ tasks.withType(JavaCompile).configureEach {
 //    options.forkOptions.jvmArgs += "-Dmicronaut.openapi.views.spec=swagger-ui.enabled=true,swagger-ui.js.url=/openapi/res/"
 }
 
-tasks.withType(JavaExec).configureEach {
-    jvmArgs("--enable-preview")
-}
-
 configurations.configureEach {
     resolutionStrategy {
         cacheDynamicVersionsFor 0, 'minutes'

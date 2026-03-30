@@ -22,11 +22,9 @@ import static com.micronaut.bug.config.ObservationConfig.TARGET_ID;
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     @Override
-    protected void doFilterInternal(HttpServletRequest request,
-                                    HttpServletResponse response,
-                                    FilterChain filterChain) throws ServletException, IOException {
+    protected void doFilterInternal(HttpServletRequest rq, HttpServletResponse rs, FilterChain chain) throws ServletException, IOException {
 
-        String authHeader = request.getHeader(HttpHeaders.AUTHORIZATION);
+        String authHeader = rq.getHeader(HttpHeaders.AUTHORIZATION);
         User user = null;
 
         if (authHeader != null && authHeader.startsWith("Bearer ")) {
@@ -40,17 +38,15 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 // Все, что внутри .run(), будет видеть этого юзера через SecurityContext.CURRENT_USER.get()
                 MDC.put(TARGET_ID, user.id());
                 final User finalUser = user;
-                ScopedValue.where(SecurityContext.CURRENT_USER, finalUser)
-                    .run(() -> {
-                        try {
-                            filterChain.doFilter(request, response);
-                        } catch (Exception e) {
-                            throw new RuntimeException(e);
-                        }
-                    });
+                SecurityContext.set(finalUser);
+                try {
+                    chain.doFilter(rq, rs);
+                } catch (Exception e) {
+                    throw new RuntimeException(e);
+                }
             } else {
                 // Если пользователя нет, просто идем дальше по цепочке
-                filterChain.doFilter(request, response);
+                chain.doFilter(rq, rs);
             }
         } finally {
             MDC.remove(TARGET_ID);

@@ -28,7 +28,7 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class UnifiedLoggingFilter extends OncePerRequestFilter {
 
-    private static final String X_REQ_ID = "x-req-id";
+    public static final String X_REQ_ID = "x-req-id";
     private static final String BODY_EMPTY = "[Empty]";
     private static final String BODY_BINARY = "Binary data";
     private static final String BODY_NO_CONTENT = "No Body";
@@ -74,8 +74,7 @@ public class UnifiedLoggingFilter extends OncePerRequestFilter {
     }
 
     @Override
-    protected void doFilterInternal(HttpServletRequest rq, HttpServletResponse rs, FilterChain chain)
-        throws ServletException, IOException {
+    protected void doFilterInternal(HttpServletRequest rq, HttpServletResponse rs, FilterChain chain) throws ServletException, IOException {
 
         var requestId = rq.getHeader(X_REQ_ID);
         if (requestId == null || requestId.isBlank()) {
@@ -84,12 +83,13 @@ public class UnifiedLoggingFilter extends OncePerRequestFilter {
 
         MDC.put(X_REQ_ID, requestId);
 
-//        try {
-//            chain.doFilter(rq, rs);
-//        } finally {
-//            MDC.remove(X_REQ_ID);
-//        }
+        try {
+            chain.doFilter(rq, rs);
+        } finally {
+            MDC.remove(X_REQ_ID);
+        }
 
+/*
         var rqWrapper = new ContentCachingRequestWrapper(rq);
         var rsWrapper = new ContentCachingResponseWrapper(rs);
 
@@ -110,6 +110,7 @@ public class UnifiedLoggingFilter extends OncePerRequestFilter {
             rsWrapper.copyBodyToResponse();
             MDC.remove(X_REQ_ID);
         }
+*/
     }
 
     private void logSimpleRequest(ContentCachingRequestWrapper rq) {
@@ -162,16 +163,19 @@ public class UnifiedLoggingFilter extends OncePerRequestFilter {
         var content = rs.getContentAsByteArray();
         var status = rs.getStatus() == 0 ? STATUS_UNKNOWN : String.valueOf(rs.getStatus());
         var bodyText = content.length == 0 ? BODY_EMPTY : formatBody(content, rs.getContentType());
-
         log.info(LOG_TEMPLATE_RS, getFullUri(rq), status, getResponseHeaders(rs), bodyText);
+    }
+
+    private String getFullUri(HttpServletRequest rq) {
+        var query = rq.getQueryString();
+        return query == null ? rq.getRequestURI() : rq.getRequestURI() + '?' + query;
     }
 
     private String formatBody(byte[] content, String contentType) {
         if (!isText(content)) {
             return BODY_BINARY;
         }
-        var raw = new String(content, StandardCharsets.UTF_8);
-        return formatIfJson(raw, contentType);
+        return formatIfJson(new String(content, StandardCharsets.UTF_8), contentType);
     }
 
     private String formatIfJson(String body, String contentType) {
@@ -202,8 +206,7 @@ public class UnifiedLoggingFilter extends OncePerRequestFilter {
 
     private String getResponseHeaders(HttpServletResponse rs) {
         var sb = new StringBuilder().append('{');
-        var names = rs.getHeaderNames();
-        var it = names.iterator();
+        var it = rs.getHeaderNames().iterator();
         while (it.hasNext()) {
             var name = it.next();
             sb.append(name).append('=').append(rs.getHeader(name));
@@ -226,10 +229,5 @@ public class UnifiedLoggingFilter extends OncePerRequestFilter {
     private boolean isMultipart(HttpServletRequest rq) {
         var ct = rq.getContentType();
         return ct != null && ct.startsWith(MediaType.MULTIPART_FORM_DATA_VALUE);
-    }
-
-    private String getFullUri(HttpServletRequest rq) {
-        var query = rq.getQueryString();
-        return query == null ? rq.getRequestURI() : rq.getRequestURI() + '?' + query;
     }
 }

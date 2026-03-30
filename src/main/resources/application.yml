@@ -1,18 +1,10 @@
 server:
   port: 8080
-  tomcat:
-    accept-count: 10000  # Увеличиваем очередь сокетов на уровне ОС
-    max-connections: 10000 # Максимум открытых соединений
-#  http2:
-#    enabled: true
 
 spring:
   servlet:
     multipart:
       enabled: true
-#  threads:
-#    virtual:
-#      enabled: true
   web:
     locale: en_US
     locale-resolver: fixed
@@ -29,6 +21,7 @@ logging:
     javax: info
     io.netty: info
     org.apache: info
+    org.eclipse: info
     org.hibernate: info
     org.springframework: info
 #    reactor.netty.http.server.HttpServer: DEBUG
