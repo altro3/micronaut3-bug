@@ -9,14 +9,12 @@ import org.springframework.stereotype.Service;
 @Slf4j
 public class BusinessService {
 
-    public User processOrder() {
-        // Проверяем, привязан ли пользователь
-        User user = SecurityContext.getUser();
-        if (user != null) {
-            log.info("Обработка заказа для пользователя: {}", user.username());
-        } else {
-            log.warn("Анонимный запрос");
+    public User processOrder(User user) {
+        if (user == null) {
+            log.warn("Пользователь не найден, пропускаем заказ");
+            return null;
         }
+        log.info("Оформляем заказ для пользователя: {} (ID: {})", user.username(), user.id());
         return user;
     }
 }

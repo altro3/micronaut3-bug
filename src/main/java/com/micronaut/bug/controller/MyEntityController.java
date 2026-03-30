@@ -3,19 +3,16 @@ package com.micronaut.bug.controller;
 import com.micronaut.bug.config.SecurityContext;
 import com.micronaut.bug.config.User;
 import com.micronaut.bug.service.BusinessService;
+import lombok.AllArgsConstructor;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.multipart.MultipartFile;
-
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 
 @RequiredArgsConstructor
 @Slf4j
@@ -28,28 +25,32 @@ public class MyEntityController {
     public MyData testMultipart(
         @PathVariable String pathVar,
         @RequestParam String queryVar,
-        @RequestBody(required = false) MyData dataBody,
-        @RequestPart(required = false) MyData data,
-        @RequestPart(required = false) MultipartFile file
+        @RequestBody(required = false) MyData data
+//        @RequestPart(required = false) MyData data,
+//        @RequestPart(required = false) MultipartFile file
 //        @CurrentUser User user
-    ) throws IOException {
-        log.info("body: {}", dataBody != null ? dataBody : "null");
-        log.info("file: {}", file != null ? new String(file.getBytes(), StandardCharsets.UTF_8) : "null");
+    ) {
+        log.info("body: {}", data != null ? data : "null");
+//        log.info("file: {}", file != null ? new String(file.getBytes(), StandardCharsets.UTF_8) : "null");
         log.info("pathVar: {}", pathVar);
         log.info("queryVar: {}", queryVar);
 
-//        log.info("Текущий поток: {}", Thread.currentThread());
-//        boolean isVirtual = Thread.currentThread().isVirtual();
-//        log.info("Это виртуальный поток? {}", isVirtual);
-//        var user2 = businessService.processOrder();
+        var user = SecurityContext.getUser();
 
-        if (dataBody != null) {
-            dataBody.setUser(SecurityContext.getUser());
+        var user2 = businessService.processOrder(user);
+        if (data != null) {
+            data.user = user2;
+        } else {
+            data = new MyData();
+            data.user = user2;
         }
-        return dataBody;
+
+        return data;
     }
 
     @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
     public static class MyData {
 
         private String name;
