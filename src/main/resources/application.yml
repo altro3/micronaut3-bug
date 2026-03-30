@@ -3,8 +3,8 @@ server:
   tomcat:
     accept-count: 10000  # Увеличиваем очередь сокетов на уровне ОС
     max-connections: 10000 # Максимум открытых соединений
-  http2:
-    enabled: true
+#  http2:
+#    enabled: true
 
 spring:
   servlet:
