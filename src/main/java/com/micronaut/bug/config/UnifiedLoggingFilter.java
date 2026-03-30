@@ -84,25 +84,30 @@ public class UnifiedLoggingFilter extends OncePerRequestFilter {
 
         MDC.put(X_REQ_ID, requestId);
 
-//        var rqWrapper = new ContentCachingRequestWrapper(rq);
-//        var rsWrapper = new ContentCachingResponseWrapper(rs);
+//        try {
+//            chain.doFilter(rq, rs);
+//        } finally {
+//            MDC.remove(X_REQ_ID);
+//        }
+
+        var rqWrapper = new ContentCachingRequestWrapper(rq);
+        var rsWrapper = new ContentCachingResponseWrapper(rs);
 
         try {
-//            var isMultipart = isMultipart(rq);
-//            if (isMultipart) {
-//                logMultipartRequest(rqWrapper);
-//            }
+            var isMultipart = isMultipart(rq);
+            if (isMultipart) {
+                logMultipartRequest(rqWrapper);
+            }
 
-//            chain.doFilter(rqWrapper, rsWrapper);
-            chain.doFilter(rq, rs);
+            chain.doFilter(rqWrapper, rsWrapper);
 
-//            if (!isMultipart) {
-//                logSimpleRequest(rqWrapper);
-//            }
-//            logResponse(rqWrapper, rsWrapper);
+            if (!isMultipart) {
+                logSimpleRequest(rqWrapper);
+            }
+            logResponse(rqWrapper, rsWrapper);
 
         } finally {
-//            rsWrapper.copyBodyToResponse();
+            rsWrapper.copyBodyToResponse();
             MDC.remove(X_REQ_ID);
         }
     }
