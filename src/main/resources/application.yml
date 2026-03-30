@@ -6,10 +6,14 @@ server:
 spring:
   reactor:
     context-propagation: auto
+  threads:
+    virtual:
+      enabled: true
   web:
     locale: en_US
     locale-resolver: fixed
   main:
+    allow-bean-definition-overriding: true
     banner-mode: off
   http:
     codecs:
@@ -24,4 +28,5 @@ logging:
     org.apache: info
     org.hibernate: info
     org.springframework: info
+#    reactor.netty.http.server.HttpServer: DEBUG
     reactor: info

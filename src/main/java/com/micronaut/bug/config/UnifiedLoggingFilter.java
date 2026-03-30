@@ -91,9 +91,11 @@ public class UnifiedLoggingFilter implements WebFilter {
         }
         final String finalId = requestId;
 
-        // КЛАДЕМ ОДИН РАЗ
-        MDC.put(X_REQ_ID, finalId);
+        return chain.filter(exchange)
+            .doFinally(signal -> LoggingContext.reset()) // Очистка при завершении
+            .contextWrite(ctx -> ctx.put(X_REQ_ID, finalId)); // Проброс в Reactor Context для Observation/Tracing
 
+/*
         var rsDecorator = new LoggingRsDecorator(exchange.getResponse());
         var contentType = rq.getHeaders().getContentType();
         var isMultipart = contentType != null && contentType.includes(MediaType.MULTIPART_FORM_DATA);
@@ -114,9 +116,10 @@ public class UnifiedLoggingFilter implements WebFilter {
                     log.info(LOG_TEMPLATE_RS, rq.getURI(), statusInfo, rsDecorator.getHeaders(), rsBody.isBlank() ? BODY_EMPTY : rsBody);
 
                     // УДАЛЯЕМ ОДИН РАЗ В КОНЦЕ
-                    MDC.remove(X_REQ_ID);
+                    LoggingContext.reset();
                 })
         ).contextWrite(ctx -> ctx.put(X_REQ_ID, finalId)); // Проброс в реактивный контекст
+*/
     }
 
     private Mono<ServerWebExchange> processSimple(ServerWebExchange exchange) {

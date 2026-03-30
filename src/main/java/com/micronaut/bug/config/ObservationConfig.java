@@ -3,8 +3,11 @@ package com.micronaut.bug.config;
 import io.micrometer.context.ContextRegistry;
 import jakarta.annotation.PostConstruct;
 import org.slf4j.MDC;
+import org.springframework.boot.web.embedded.netty.NettyServerCustomizer;
+import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import reactor.core.publisher.Hooks;
+import reactor.netty.http.HttpProtocol;
 
 @Configuration
 public class ObservationConfig {
@@ -20,10 +23,11 @@ public class ObservationConfig {
         var registry = ContextRegistry.getInstance();
 
         // 2. Регистрируем наш кастомный ключ x-req-id
-        registry.registerThreadLocalAccessor(X_REQ_ID,
-            () -> MDC.get(X_REQ_ID),
-            val -> MDC.put(X_REQ_ID, val),
-            () -> MDC.remove(X_REQ_ID)
+        registry.registerThreadLocalAccessor(
+            X_REQ_ID,
+            LoggingContext::get,
+            LoggingContext::set,
+            LoggingContext::reset
         );
 
         registry.registerThreadLocalAccessor(TARGET_ID,
@@ -31,5 +35,18 @@ public class ObservationConfig {
             val -> MDC.put(TARGET_ID, val),
             () -> MDC.remove(TARGET_ID)
         );
+
+        registry.registerThreadLocalAccessor(
+            "current-user",
+            UserContext::get,
+            UserContext::set, // Используем временный ThreadLocal как транспорт
+            UserContext::reset
+        );
+    }
+
+    @Bean
+    public NettyServerCustomizer http2CleartextCustomizer() {
+        return server -> server.protocol(HttpProtocol.H2C)
+            .wiretap(true);
     }
 }

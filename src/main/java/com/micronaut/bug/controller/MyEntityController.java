@@ -1,8 +1,11 @@
 package com.micronaut.bug.controller;
 
 import com.micronaut.bug.config.User;
+import com.micronaut.bug.config.UserContext;
 import com.micronaut.bug.service.BusinessService;
+import lombok.AllArgsConstructor;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.io.buffer.DataBufferUtils;
@@ -25,25 +28,30 @@ public class MyEntityController {
     private final BusinessService businessService;
 
     @PostMapping("/testMultipart/{pathVar}")
-    public Mono<MyData> testMultipart(
+    public MyData testMultipart(
         @PathVariable String pathVar,
         @RequestParam String queryVar,
-        @RequestBody(required = false) MyData dataBody,
-        @RequestPart(required = false) MyData data,
-        @RequestPart(required = false) FilePart file,
-        @CurrentUser User user
+        @RequestBody(required = false) MyData data
+//        @RequestPart(required = false) MyData data,
+//        @RequestPart(required = false) FilePart file
+//        @CurrentUser User user
     ) {
-        log.info("body: {}", dataBody != null ? dataBody : "null");
-        log.info("file: {}", file != null ? file : "null");
+        log.info("body: {}", data != null ? data : "null");
+//        log.info("file: {}", file != null ? new String(readFilePart(file)) : "null");
         log.info("pathVar: {}", pathVar);
         log.info("queryVar: {}", queryVar);
+
+        var user = UserContext.get();
 
         var user2 = businessService.processOrder(user);
         if (data != null) {
             data.user = user2;
+        } else {
+            data = new MyData();
+            data.user = user2;
         }
 
-        return Mono.justOrEmpty(data);
+        return data;
     }
 
     private Mono<String> readFile(FilePart file) {
@@ -56,7 +64,20 @@ public class MyEntityController {
             });
     }
 
+    private byte[] readFilePart(FilePart filePart) {
+        return DataBufferUtils.join(filePart.content()) // Собираем все чанки в один Mono<DataBuffer>
+            .map(dataBuffer -> {
+                byte[] bytes = new byte[dataBuffer.readableByteCount()];
+                dataBuffer.read(bytes);
+                DataBufferUtils.release(dataBuffer); // ВАЖНО: освобождаем память Netty
+                return bytes;
+            })
+            .block(); // Блокируем виртуальный поток до завершения чтения
+    }
+
     @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
     public static class MyData {
 
         private String name;

@@ -9,6 +9,10 @@ import org.springframework.stereotype.Service;
 public class BusinessService {
 
     public User processOrder(User user) {
+        if (user == null) {
+            log.warn("Пользователь не найден, пропускаем заказ");
+            return null;
+        }
         log.info("Оформляем заказ для пользователя: {} (ID: {})", user.username(), user.id());
         return user;
     }
