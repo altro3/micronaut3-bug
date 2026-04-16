@@ -39,11 +39,16 @@ class UnifiedLoggingFilter(
         rs: HttpServletResponse,
         chain: FilterChain,
     ) {
-        val requestId = rq.getHeader(X_REQ_ID)?.takeIf { it.isNotBlank() } ?: genTraceId()
-        MDC.put(X_REQ_ID, requestId)
+        val rqId = rq.getHeader(X_REQ_ID)?.takeIf { it.isNotBlank() } ?: genTraceId()
+        MDC.put(X_REQ_ID, rqId)
+
+        if (!log.isDebugEnabled()) {
+            chain.doFilter(rq, rs)
+            return
+        }
 
         val rsWrapper = ContentCachingResponseWrapper(rs)
-        val currentRq = wrapRequest(rq)
+        val currentRq = wrapAndLogRequest(rq)
 
         try {
             chain.doFilter(currentRq, rsWrapper)
@@ -54,66 +59,56 @@ class UnifiedLoggingFilter(
         }
     }
 
-    private fun wrapRequest(rq: HttpServletRequest): HttpServletRequest {
-        return if (isMultipart(rq.contentType)) {
-            val wrapper = MultipartTypeWrapper(rq)
-            logMultipartRequest(wrapper)
-            wrapper
+    private fun wrapAndLogRequest(rq: HttpServletRequest): HttpServletRequest {
+        val isMultipart = isMultipart(rq.contentType)
+        val (wrapper, bodyResult) = if (isMultipart) {
+            val mw = MultipartTypeWrapper(rq)
+            mw to getMultipartBody(mw)
         } else {
-            val bodyBytes = rq.inputStream.readAllBytes()
-            val wrapper = CachedBodyRequestWrapper(rq, bodyBytes)
-            logSimpleRequest(wrapper, bodyBytes)
-            wrapper
+            val bytes = rq.inputStream.readAllBytes()
+            val cw = CachedBodyRequestWrapper(rq, bytes)
+            val body = if (bytes.isEmpty()) BODY_EMPTY else formatBody(bytes, rq.contentType)
+            cw to body
         }
+
+        log.debug {
+            """
+================== Service request ==================
+URI: ${rq.method} ${getFullUri(rq)}
+Headers: ${getHeaders(rq)}
+Body:
+$bodyResult
+================== /Service request ==================
+            """.trimIndent()
+        }
+        return wrapper
     }
 
-    private fun logMultipartRequest(rq: HttpServletRequest) {
-        val bodyResult = runCatching {
+    private fun getMultipartBody(rq: MultipartTypeWrapper): String =
+        runCatching {
             rq.parts.joinToString(NEW_LINE_DELIMITER) { part ->
-                val fileName = part.submittedFileName
-                val name = part.name
-                val ct = part.contentType
+                val bytes = (part as ObservedPart).getContentBytes()
+                val description = part.submittedFileName?.let {
+                    PART_FILE_INFO.format(part.name, it, part.size)
+                } ?: part.name
 
-                val description = if (fileName != null) {
-                    PART_FILE_INFO.format(name, fileName, part.size)
-                } else {
-                    name
-                }
-
-                val bytes = if (part is ObservedPart) {
-                    part.getContentBytes()
-                } else {
-                    part.inputStream.use { it.readBytes() }
-                }
-
-                processPartContent(bytes, ct, description)
+                processPartContent(bytes, part.contentType, description)
             }.ifEmpty { BODY_EMPTY }
-        }.getOrElse { MULTIPART_ERROR_TEMPLATE.format(it.message) }
-
-        log.info {
-            LOG_TEMPLATE_RQ.format(
-                rq.method,
-                getFullUri(rq),
-                getHeaders(rq),
-                bodyResult,
-            )
-        }
-    }
+        }.getOrElse { "[MULTIPART ERROR: ${it.message}]" }
 
     private fun processPartContent(bytes: ByteArray, ct: String?, description: String): String =
         when {
             bytes.isEmpty() -> PART_PREFIX.format(description, PART_EMPTY)
 
             isText(bytes) -> {
-                val content = String(bytes)
-                val formatted = formatIfJson(content, ct).let {
+                val formatted = formatIfJson(bytes, ct).let {
                     if (it.length > LIMIT_LOG_SIZE) {
                         it.take(LIMIT_LOG_SIZE) + TRUNCATED_SUFFIX
                     } else {
                         it
                     }
                 }
-                PART_PREFIX.format(description, PART_CONTENT.format(formatted))
+                PART_PREFIX.format(description, "Content: $formatted")
             }
 
             else -> PART_PREFIX.format(description, BODY_BINARY)
@@ -121,23 +116,6 @@ class UnifiedLoggingFilter(
 
     private fun genTraceId(): String =
         UUID.randomUUID().toString().replace(DASH, EMPTY)
-
-    private fun logSimpleRequest(rq: HttpServletRequest, body: ByteArray) {
-        val bodyText = if (body.isEmpty()) {
-            BODY_EMPTY
-        } else {
-            formatBody(body, rq.contentType)
-        }
-
-        log.info {
-            LOG_TEMPLATE_RQ.format(
-                rq.method,
-                getFullUri(rq),
-                getHeaders(rq),
-                bodyText,
-            )
-        }
-    }
 
     private fun logResponse(rq: HttpServletRequest, rs: ContentCachingResponseWrapper) {
         val statusInt = rs.status.takeIf { it != 0 } ?: 200
@@ -156,15 +134,16 @@ class UnifiedLoggingFilter(
             else -> formatBody(rs.contentAsByteArray, contentType)
         }
 
-        log.info {
-            LOG_TEMPLATE_RS.format(
-                rq.method,
-                getFullUri(rq),
-                statusInt.toString(),
-                statusMessage,
-                getResponseHeaders(rs),
-                bodyText
-            )
+        log.debug {
+            """
+================== Service response ==================
+URI: ${rq.method} ${getFullUri(rq)}
+Status: $statusInt $statusMessage
+Headers: ${getResponseHeaders(rs)}
+Body:
+$bodyText
+================== /Service response ==================
+            """.trimIndent()
         }
     }
 
@@ -204,7 +183,7 @@ class UnifiedLoggingFilter(
 
                     val contentBytes = content.toByteArray()
                     val description = if (fileName != null) {
-                        PART_FILE_INFO.format(name, fileName, contentBytes.size.toLong())
+                        PART_FILE_INFO.format(name, fileName, contentBytes.size)
                     } else {
                         name
                     }
@@ -223,32 +202,30 @@ class UnifiedLoggingFilter(
     }
 
     private fun getFullUri(rq: HttpServletRequest): String =
-        rq.queryString?.let { URI_WITH_QUERY.format(rq.requestURI, it) } ?: rq.requestURI
+        rq.queryString?.let { "${rq.requestURI}?$it" } ?: rq.requestURI
 
-    private fun formatBody(content: ByteArray, contentType: String?): String =
+    private fun formatBody(content: ByteArray, contentType: String?): String {
         if (!isText(content)) {
-            BODY_BINARY
-        } else {
-            formatIfJson(String(content), contentType)
+            return BODY_BINARY
         }
+        return formatIfJson(content, contentType)
+    }
 
-    private fun formatIfJson(body: String?, contentType: String?): String {
-        if (body.isNullOrBlank()) {
+    private fun formatIfJson(bytes: ByteArray, contentType: String?): String {
+        if (bytes.isEmpty()) {
             return EMPTY
         }
 
-        val trimmed = body.trim()
         val isJson = contentType?.contains(MediaType.APPLICATION_JSON_VALUE) == true
-                || trimmed.startsWith(JSON_OBJECT_START)
-                || trimmed.startsWith(JSON_ARRAY_START)
+                || isJsonContent(bytes)
 
         return if (isJson) {
             runCatching {
-                val tree = prettyMapper.readTree(trimmed)
-                prettyMapper.writerWithDefaultPrettyPrinter().writeValueAsString(tree)
-            }.getOrDefault(body)
+                val tree = prettyMapper.readTree(bytes)
+                prettyMapper.writeValueAsString(tree)
+            }.getOrElse { String(bytes) }
         } else {
-            body
+            String(bytes)
         }
     }
 
@@ -257,9 +234,6 @@ class UnifiedLoggingFilter(
 
     private fun getResponseHeaders(rs: HttpServletResponse): String =
         rs.headerNames.associateWith { rs.getHeader(it) }.toString()
-
-    private fun isText(bytes: ByteArray): Boolean =
-        bytes.take(TEXT_CHECK_THRESHOLD).none { it == NULL_BYTE }
 
     private fun isMultipart(contentType: String?): Boolean =
         contentType?.startsWith(MediaType.MULTIPART_FORM_DATA_VALUE) == true
@@ -274,9 +248,9 @@ class UnifiedLoggingFilter(
     }
 
     private class CachedBodyRequestWrapper(
-        request: HttpServletRequest,
-        private val body: ByteArray
-    ) : HttpServletRequestWrapper(request) {
+        rq: HttpServletRequest,
+        private val body: ByteArray,
+    ) : HttpServletRequestWrapper(rq) {
 
         override fun getInputStream(): ServletInputStream {
             val byteArrayInputStream = ByteArrayInputStream(body)
@@ -296,7 +270,9 @@ class UnifiedLoggingFilter(
             BufferedReader(InputStreamReader(getInputStream()))
     }
 
-    private class MultipartTypeWrapper(request: HttpServletRequest) : HttpServletRequestWrapper(request) {
+    private class MultipartTypeWrapper(
+        rq: HttpServletRequest,
+    ) : HttpServletRequestWrapper(rq) {
 
         private val cachedParts by lazy {
             super.getParts().map { part ->
@@ -317,14 +293,6 @@ class UnifiedLoggingFilter(
         override fun getParts(): Collection<Part> = cachedParts
 
         override fun getPart(name: String): Part? = cachedParts.find { it.name == name }
-
-        companion object {
-
-            private fun isJsonContent(bytes: ByteArray): Boolean {
-                val s = String(bytes).trim()
-                return s.startsWith(JSON_OBJECT_START) || s.startsWith(JSON_ARRAY_START)
-            }
-        }
     }
 
     private class ObservedPart(
@@ -346,22 +314,17 @@ class UnifiedLoggingFilter(
         const val X_REQ_ID = "x-req-id"
         private const val EMPTY = ""
         private const val DASH = "-"
-        private const val URI_WITH_QUERY = "%s?%s"
 
         private const val BODY_EMPTY = "[EMPTY]"
         private const val BODY_BINARY = "[BINARY DATA]"
         private const val BODY_MULTIPART_RS = "[MULTIPART RAW DISABLED]"
 
         private const val PART_PREFIX = "  [PART] -> Name: %s | %s"
-        private const val PART_CONTENT = "Content: %s"
         private const val PART_FILE_INFO = "%s (File: %s, Size: %d bytes)"
         private const val PART_EMPTY = "[EMPTY CONTENT]"
         private const val TRUNCATED_SUFFIX = "... [TRUNCATED]"
-        private const val MULTIPART_ERROR_TEMPLATE = "[MULTIPART ERROR: %s]"
 
         private const val NEW_LINE_DELIMITER = "\n"
-        private const val JSON_OBJECT_START = "{"
-        private const val JSON_ARRAY_START = "["
         private const val TEXT_CT_MARKER = "text"
         private const val BOUNDARY_MARKER = "boundary="
         private const val DASH_PREFIX = "--"
@@ -376,27 +339,19 @@ class UnifiedLoggingFilter(
         private const val QUOTE = "\""
         private const val UNKNOWN_PART = "UNKNOWN"
 
+        private const val JSON_BYTE_OBJECT = '{'.code.toByte()
+        private const val JSON_BYTE_ARRAY = '['.code.toByte()
+
         private const val LIMIT_LOG_SIZE = 8192
         private const val TEXT_CHECK_THRESHOLD = 100
         private const val NULL_BYTE: Byte = 0
 
-        private const val LOG_TEMPLATE_RQ = """
-================== Service request ==================
-URI: %s %s
-Headers: %s
-Body:
-%s
-================== /Service request ==================
-        """
+        private fun isJsonContent(bytes: ByteArray): Boolean {
+            val firstByte = bytes.find { it > 32 }
+            return firstByte == JSON_BYTE_OBJECT || firstByte == JSON_BYTE_ARRAY
+        }
 
-        private const val LOG_TEMPLATE_RS = """
-================== Service response ==================
-URI: %s %s
-Status: %s %s
-Headers: %s
-Body:
-%s
-================== /Service response ==================
-        """
+        private fun isText(bytes: ByteArray): Boolean =
+            bytes.take(TEXT_CHECK_THRESHOLD).none { it == NULL_BYTE }
     }
 }
