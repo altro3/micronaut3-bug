@@ -221,8 +221,7 @@ $bodyText
 
         return if (isJson) {
             runCatching {
-                val tree = prettyMapper.readTree(bytes)
-                prettyMapper.writeValueAsString(tree)
+                prettyMapper.writeValueAsString(prettyMapper.readTree(bytes))
             }.getOrElse { String(bytes) }
         } else {
             String(bytes)
