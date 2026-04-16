@@ -20,13 +20,20 @@ import java.util.UUID
 
 @Component
 @Order(Ordered.HIGHEST_PRECEDENCE)
-class UnifiedLoggingFilter(objectMapper: ObjectMapper) : OncePerRequestFilter() {
+class UnifiedLoggingFilter(
+    objectMapper: ObjectMapper,
+) : OncePerRequestFilter() {
 
     private val log = KotlinLogging.logger {}
+
     private val prettyMapper: ObjectMapper = objectMapper.copy()
         .enable(SerializationFeature.INDENT_OUTPUT)
 
-    override fun doFilterInternal(rq: HttpServletRequest, rs: HttpServletResponse, chain: FilterChain) {
+    override fun doFilterInternal(
+        rq: HttpServletRequest,
+        rs: HttpServletResponse,
+        chain: FilterChain,
+    ) {
         val requestId = rq.getHeader(X_REQ_ID)?.takeIf { it.isNotBlank() } ?: genTraceId()
         MDC.put(X_REQ_ID, requestId)
 
@@ -60,12 +67,11 @@ class UnifiedLoggingFilter(objectMapper: ObjectMapper) : OncePerRequestFilter() 
                 val ct = part.contentType
 
                 val description = if (fileName != null) {
-                    PART_FILE_INFO.format(name, fileName)
+                    PART_FILE_INFO.format(name, fileName, part.size)
                 } else {
                     name
                 }
 
-                // УБРАЛИ лишнюю проверку fileName, теперь всегда читаем байты
                 val bytes = if (part is ObservedPart) {
                     part.getContentBytes()
                 } else {
@@ -76,7 +82,14 @@ class UnifiedLoggingFilter(objectMapper: ObjectMapper) : OncePerRequestFilter() 
             }.ifEmpty { BODY_NO_CONTENT }
         }.getOrElse { MULTIPART_ERROR_TEMPLATE.format(it.message) }
 
-        log.info { LOG_TEMPLATE_RQ.format(rq.method, getFullUri(rq), getHeaders(rq), bodyResult) }
+        log.info {
+            LOG_TEMPLATE_RQ.format(
+                rq.method,
+                getFullUri(rq),
+                getHeaders(rq),
+                bodyResult,
+            )
+        }
     }
 
     private fun processPartContent(bytes: ByteArray, ct: String?, description: String): String = when {
@@ -96,8 +109,19 @@ class UnifiedLoggingFilter(objectMapper: ObjectMapper) : OncePerRequestFilter() 
         UUID.randomUUID().toString().replace(DASH, EMPTY)
 
     private fun logSimpleRequest(rq: ContentCachingRequestWrapper) {
-        val bodyText = if (rq.contentAsByteArray.isEmpty()) BODY_NO_CONTENT else formatBody(rq.contentAsByteArray, rq.contentType)
-        log.info { LOG_TEMPLATE_RQ.format(rq.method, getFullUri(rq), getHeaders(rq), bodyText) }
+        val bodyText = if (rq.contentAsByteArray.isEmpty()) {
+            BODY_NO_CONTENT
+        } else {
+            formatBody(rq.contentAsByteArray, rq.contentType)
+        }
+        log.info {
+            LOG_TEMPLATE_RQ.format(
+                rq.method,
+                getFullUri(rq),
+                getHeaders(rq),
+                bodyText,
+            )
+        }
     }
 
     private fun logResponse(rq: HttpServletRequest, rs: ContentCachingResponseWrapper) {
@@ -110,11 +134,20 @@ class UnifiedLoggingFilter(objectMapper: ObjectMapper) : OncePerRequestFilter() 
             else -> formatBody(rs.contentAsByteArray, contentType)
         }
 
-        log.info { LOG_TEMPLATE_RS.format(getFullUri(rq), status, getResponseHeaders(rs), bodyText) }
+        log.info {
+            LOG_TEMPLATE_RS.format(
+                getFullUri(rq),
+                status,
+                getResponseHeaders(rs),
+                bodyText,
+            )
+        }
     }
 
     private fun formatMultipartResponse(bytes: ByteArray, contentType: String?): String {
-        if (bytes.isEmpty()) return BODY_EMPTY
+        if (bytes.isEmpty()) {
+            return BODY_EMPTY
+        }
 
         val boundary = contentType?.split(BOUNDARY_MARKER)?.getOrNull(1)?.let {
             DASH_PREFIX + it
@@ -127,27 +160,34 @@ class UnifiedLoggingFilter(objectMapper: ObjectMapper) : OncePerRequestFilter() 
                 .joinToString(NEW_LINE_DELIMITER) { partRaw ->
                     val lines = partRaw.trim().lines()
                     val headers = lines.takeWhile { it.isNotBlank() }
-                    val content = lines.dropWhile { it.isNotBlank() }.drop(1).joinToString(NEW_LINE_DELIMITER)
+
+                    val content = lines
+                        .dropWhile { it.isNotBlank() }
+                        .drop(1)
+                        .joinToString(NEW_LINE_DELIMITER)
 
                     val name = headers.find { it.contains(NAME_MARKER) }
-                        ?.substringAfter(NAME_EQUALS)?.substringBefore(SEMICOLON)?.replace(QUOTE, EMPTY) ?: UNKNOWN_PART
+                        ?.substringAfter(NAME_EQUALS)
+                        ?.substringBefore(SEMICOLON)
+                        ?.replace(QUOTE, EMPTY) ?: UNKNOWN_PART
                     val fileName = headers.find { it.contains(FILENAME_MARKER) }
-                        ?.substringAfter(FILENAME_EQUALS)?.substringBefore(QUOTE)
+                        ?.substringAfter(FILENAME_EQUALS)
+                        ?.substringBefore(QUOTE)
                     val partCt = headers.find { it.contains(CONTENT_TYPE_HEADER) }
                         ?.substringAfter(COLON_SPACE)
 
-                    val description = if (fileName != null) PART_FILE_INFO.format(name, fileName) else name
-
-                    // ИСПРАВЛЕНО: Теперь всегда вызываем processPartContent для консистентности маркеров
-                    if (fileName != null && !isAlwaysTextField(partCt)) {
-                        val contentBytes = content.toByteArray()
-                        if (isText(contentBytes)) {
-                            processPartContent(contentBytes, partCt, description)
-                        } else {
-                            PART_PREFIX.format(description, BODY_BINARY)
-                        }
+                    val contentBytes = content.toByteArray()
+                    val description = if (fileName != null) {
+                        PART_FILE_INFO.format(name, fileName, contentBytes.size.toLong())
                     } else {
-                        processPartContent(content.toByteArray(), partCt, description)
+                        name
+                    }
+
+                    if (fileName != null && !isAlwaysTextField(partCt)) {
+                        if (isText(contentBytes)) processPartContent(contentBytes, partCt, description)
+                        else PART_PREFIX.format(description, BODY_BINARY)
+                    } else {
+                        processPartContent(contentBytes, partCt, description)
                     }
                 }
         }.getOrElse { BODY_MULTIPART_RS }
@@ -160,7 +200,9 @@ class UnifiedLoggingFilter(objectMapper: ObjectMapper) : OncePerRequestFilter() 
         if (!isText(content)) BODY_BINARY else formatIfJson(String(content), contentType)
 
     private fun formatIfJson(body: String?, contentType: String?): String {
-        if (body.isNullOrBlank()) return EMPTY
+        if (body.isNullOrBlank()) {
+            return EMPTY
+        }
 
         val trimmed = body.trim()
         val isJson = contentType?.contains(MediaType.APPLICATION_JSON_VALUE) == true
@@ -190,9 +232,12 @@ class UnifiedLoggingFilter(objectMapper: ObjectMapper) : OncePerRequestFilter() 
         contentType?.startsWith(MediaType.MULTIPART_FORM_DATA_VALUE) == true
 
     private fun isAlwaysTextField(contentType: String?): Boolean {
-        if (contentType == null) return false
+        if (contentType == null) {
+            return false
+        }
         val ct = contentType.lowercase()
-        return ct.contains(MediaType.APPLICATION_JSON_VALUE) || ct.contains(TEXT_CT_MARKER)
+        return ct.contains(MediaType.APPLICATION_JSON_VALUE)
+                || ct.contains(TEXT_CT_MARKER)
     }
 
     private class MultipartTypeWrapper(request: HttpServletRequest) : HttpServletRequestWrapper(request) {
@@ -225,7 +270,7 @@ class UnifiedLoggingFilter(objectMapper: ObjectMapper) : OncePerRequestFilter() 
     private class ObservedPart(
         private val original: Part,
         private val overriddenContentType: String?,
-        private val bytes: ByteArray
+        private val bytes: ByteArray,
     ) : Part by original {
 
         override fun getContentType() = overriddenContentType
@@ -252,7 +297,7 @@ class UnifiedLoggingFilter(objectMapper: ObjectMapper) : OncePerRequestFilter() 
         private const val PART_PREFIX = "  [PART] -> Name: %s | %s"
         private const val PART_CONTENT = "Content: %s"
         private const val PART_FILE = "File: %s"
-        private const val PART_FILE_INFO = "%s (File: %s)"
+        private const val PART_FILE_INFO = "%s (File: %s, Size: %d bytes)"
         private const val PART_EMPTY = "[EMPTY CONTENT]"
         private const val TRUNCATED_SUFFIX = "... [TRUNCATED]"
         private const val MULTIPART_ERROR_TEMPLATE = "[MULTIPART ERROR: %s]"
