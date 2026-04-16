@@ -39,8 +39,8 @@ class UnifiedLoggingFilter(
         rs: HttpServletResponse,
         chain: FilterChain,
     ) {
-        val requestId = rq.getHeader(X_REQ_ID)?.takeIf { it.isNotBlank() } ?: genTraceId()
-        MDC.put(X_REQ_ID, requestId)
+        val rqId = rq.getHeader(X_REQ_ID)?.takeIf { it.isNotBlank() } ?: genTraceId()
+        MDC.put(X_REQ_ID, rqId)
 
         try {
             if (!log.isDebugEnabled()) {
