@@ -27,7 +27,7 @@ class UnifiedLoggingFilter(objectMapper: ObjectMapper) : OncePerRequestFilter() 
         .enable(SerializationFeature.INDENT_OUTPUT)
 
     override fun doFilterInternal(rq: HttpServletRequest, rs: HttpServletResponse, chain: FilterChain) {
-        val requestId = genTraceId(rq)
+        val requestId = rq.getHeader(X_REQ_ID)?.takeIf { it.isNotBlank() } ?: genTraceId()
         MDC.put(X_REQ_ID, requestId)
 
         val rsWrapper = ContentCachingResponseWrapper(rs)
@@ -65,12 +65,14 @@ class UnifiedLoggingFilter(objectMapper: ObjectMapper) : OncePerRequestFilter() 
                     name
                 }
 
-                if (fileName != null && !isAlwaysTextField(ct)) {
-                    PART_PREFIX.format(description, PART_FILE.format(fileName))
+                // УБРАЛИ лишнюю проверку fileName, теперь всегда читаем байты
+                val bytes = if (part is ObservedPart) {
+                    part.getContentBytes()
                 } else {
-                    val bytes = if (part is ObservedPart) part.getContentBytes() else part.inputStream.use { it.readBytes() }
-                    processPartContent(bytes, ct, description)
+                    part.inputStream.use { it.readBytes() }
                 }
+
+                processPartContent(bytes, ct, description)
             }.ifEmpty { BODY_NO_CONTENT }
         }.getOrElse { MULTIPART_ERROR_TEMPLATE.format(it.message) }
 
@@ -82,11 +84,7 @@ class UnifiedLoggingFilter(objectMapper: ObjectMapper) : OncePerRequestFilter() 
         isText(bytes) -> {
             val content = String(bytes)
             val formatted = formatIfJson(content, ct).let {
-                if (it.length > LIMIT_LOG_SIZE) {
-                    it.take(LIMIT_LOG_SIZE) + TRUNCATED_SUFFIX
-                } else {
-                    it
-                }
+                if (it.length > LIMIT_LOG_SIZE) it.take(LIMIT_LOG_SIZE) + TRUNCATED_SUFFIX else it
             }
             PART_PREFIX.format(description, PART_CONTENT.format(formatted))
         }
@@ -94,43 +92,75 @@ class UnifiedLoggingFilter(objectMapper: ObjectMapper) : OncePerRequestFilter() 
         else -> PART_PREFIX.format(description, BODY_BINARY)
     }
 
-    private fun genTraceId(rq: HttpServletRequest): String =
-        rq.getHeader(X_REQ_ID)?.takeIf { it.isNotBlank() }
-            ?: UUID.randomUUID().toString().replace(DASH, EMPTY)
+    private fun genTraceId(): String =
+        UUID.randomUUID().toString().replace(DASH, EMPTY)
 
     private fun logSimpleRequest(rq: ContentCachingRequestWrapper) {
-        val bodyText = if (rq.contentAsByteArray.isEmpty()) {
-            BODY_NO_CONTENT
-        } else {
-            formatBody(rq.contentAsByteArray, rq.contentType)
-        }
+        val bodyText = if (rq.contentAsByteArray.isEmpty()) BODY_NO_CONTENT else formatBody(rq.contentAsByteArray, rq.contentType)
         log.info { LOG_TEMPLATE_RQ.format(rq.method, getFullUri(rq), getHeaders(rq), bodyText) }
     }
 
     private fun logResponse(rq: HttpServletRequest, rs: ContentCachingResponseWrapper) {
         val status = rs.status.takeIf { it != 0 }?.toString() ?: STATUS_UNKNOWN
+        val contentType = rs.contentType
+
         val bodyText = when {
-            isMultipart(rs.contentType) -> BODY_MULTIPART_RS
+            isMultipart(contentType) -> formatMultipartResponse(rs.contentAsByteArray, contentType)
             rs.contentAsByteArray.isEmpty() -> BODY_EMPTY
-            else -> formatBody(rs.contentAsByteArray, rs.contentType)
+            else -> formatBody(rs.contentAsByteArray, contentType)
         }
+
         log.info { LOG_TEMPLATE_RS.format(getFullUri(rq), status, getResponseHeaders(rs), bodyText) }
+    }
+
+    private fun formatMultipartResponse(bytes: ByteArray, contentType: String?): String {
+        if (bytes.isEmpty()) return BODY_EMPTY
+
+        val boundary = contentType?.split(BOUNDARY_MARKER)?.getOrNull(1)?.let {
+            DASH_PREFIX + it
+        } ?: return BODY_MULTIPART_RS
+
+        return runCatching {
+            val bodyString = String(bytes)
+            bodyString.split(boundary)
+                .filter { it.contains(CONTENT_DISPOSITION_MARKER) }
+                .joinToString(NEW_LINE_DELIMITER) { partRaw ->
+                    val lines = partRaw.trim().lines()
+                    val headers = lines.takeWhile { it.isNotBlank() }
+                    val content = lines.dropWhile { it.isNotBlank() }.drop(1).joinToString(NEW_LINE_DELIMITER)
+
+                    val name = headers.find { it.contains(NAME_MARKER) }
+                        ?.substringAfter(NAME_EQUALS)?.substringBefore(SEMICOLON)?.replace(QUOTE, EMPTY) ?: UNKNOWN_PART
+                    val fileName = headers.find { it.contains(FILENAME_MARKER) }
+                        ?.substringAfter(FILENAME_EQUALS)?.substringBefore(QUOTE)
+                    val partCt = headers.find { it.contains(CONTENT_TYPE_HEADER) }
+                        ?.substringAfter(COLON_SPACE)
+
+                    val description = if (fileName != null) PART_FILE_INFO.format(name, fileName) else name
+
+                    // ИСПРАВЛЕНО: Теперь всегда вызываем processPartContent для консистентности маркеров
+                    if (fileName != null && !isAlwaysTextField(partCt)) {
+                        val contentBytes = content.toByteArray()
+                        if (isText(contentBytes)) {
+                            processPartContent(contentBytes, partCt, description)
+                        } else {
+                            PART_PREFIX.format(description, BODY_BINARY)
+                        }
+                    } else {
+                        processPartContent(content.toByteArray(), partCt, description)
+                    }
+                }
+        }.getOrElse { BODY_MULTIPART_RS }
     }
 
     private fun getFullUri(rq: HttpServletRequest): String =
         rq.queryString?.let { URI_WITH_QUERY.format(rq.requestURI, it) } ?: rq.requestURI
 
     private fun formatBody(content: ByteArray, contentType: String?): String =
-        if (!isText(content)) {
-            BODY_BINARY
-        } else {
-            formatIfJson(String(content), contentType)
-        }
+        if (!isText(content)) BODY_BINARY else formatIfJson(String(content), contentType)
 
     private fun formatIfJson(body: String?, contentType: String?): String {
-        if (body.isNullOrBlank()) {
-            return EMPTY
-        }
+        if (body.isNullOrBlank()) return EMPTY
 
         val trimmed = body.trim()
         val isJson = contentType?.contains(MediaType.APPLICATION_JSON_VALUE) == true
@@ -160,9 +190,7 @@ class UnifiedLoggingFilter(objectMapper: ObjectMapper) : OncePerRequestFilter() 
         contentType?.startsWith(MediaType.MULTIPART_FORM_DATA_VALUE) == true
 
     private fun isAlwaysTextField(contentType: String?): Boolean {
-        if (contentType == null) {
-            return false
-        }
+        if (contentType == null) return false
         val ct = contentType.lowercase()
         return ct.contains(MediaType.APPLICATION_JSON_VALUE) || ct.contains(TEXT_CT_MARKER)
     }
@@ -175,11 +203,7 @@ class UnifiedLoggingFilter(objectMapper: ObjectMapper) : OncePerRequestFilter() 
                 val ct = part.contentType
 
                 val isJson = (ct == null || ct == MediaType.APPLICATION_OCTET_STREAM_VALUE) && isJsonContent(bytes)
-                val finalCt = if (isJson) {
-                    MediaType.APPLICATION_JSON_VALUE
-                } else {
-                    ct
-                }
+                val finalCt = if (isJson) MediaType.APPLICATION_JSON_VALUE else ct
 
                 ObservedPart(part, finalCt, bytes)
             }
@@ -219,21 +243,37 @@ class UnifiedLoggingFilter(objectMapper: ObjectMapper) : OncePerRequestFilter() 
         private const val DASH = "-"
         private const val URI_WITH_QUERY = "%s?%s"
         private const val STATUS_UNKNOWN = "UNKNOWN"
-        private const val BODY_EMPTY = "[Empty]"
-        private const val BODY_BINARY = "Binary data"
-        private const val BODY_NO_CONTENT = "No Body"
-        private const val BODY_MULTIPART_RS = "[Multipart Response - Raw log disabled]"
+
+        private const val BODY_EMPTY = "[EMPTY]"
+        private const val BODY_BINARY = "[BINARY DATA]"
+        private const val BODY_NO_CONTENT = "[NO CONTENT]"
+        private const val BODY_MULTIPART_RS = "[MULTIPART RAW DISABLED]"
+
         private const val PART_PREFIX = "  [PART] -> Name: %s | %s"
         private const val PART_CONTENT = "Content: %s"
         private const val PART_FILE = "File: %s"
         private const val PART_FILE_INFO = "%s (File: %s)"
-        private const val PART_EMPTY = "Empty content"
+        private const val PART_EMPTY = "[EMPTY CONTENT]"
         private const val TRUNCATED_SUFFIX = "... [TRUNCATED]"
-        private const val MULTIPART_ERROR_TEMPLATE = "[Multipart error: %s]"
+        private const val MULTIPART_ERROR_TEMPLATE = "[MULTIPART ERROR: %s]"
+
         private const val NEW_LINE_DELIMITER = "\n"
         private const val JSON_OBJECT_START = "{"
         private const val JSON_ARRAY_START = "["
         private const val TEXT_CT_MARKER = "text"
+        private const val BOUNDARY_MARKER = "boundary="
+        private const val DASH_PREFIX = "--"
+        private const val CONTENT_DISPOSITION_MARKER = "Content-Disposition"
+        private const val NAME_MARKER = "name="
+        private const val NAME_EQUALS = "name=\""
+        private const val FILENAME_MARKER = "filename="
+        private const val FILENAME_EQUALS = "filename=\""
+        private const val CONTENT_TYPE_HEADER = "Content-Type"
+        private const val COLON_SPACE = ": "
+        private const val SEMICOLON = ";"
+        private const val QUOTE = "\""
+        private const val UNKNOWN_PART = "UNKNOWN"
+
         private const val LIMIT_LOG_SIZE = 8192
         private const val TEXT_CHECK_THRESHOLD = 100
         private const val NULL_BYTE: Byte = 0
