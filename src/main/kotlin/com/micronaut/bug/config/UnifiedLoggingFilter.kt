@@ -4,6 +4,8 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.databind.SerializationFeature
 import io.github.oshai.kotlinlogging.KotlinLogging
 import jakarta.servlet.FilterChain
+import jakarta.servlet.ReadListener
+import jakarta.servlet.ServletInputStream
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletRequestWrapper
 import jakarta.servlet.http.HttpServletResponse
@@ -11,11 +13,14 @@ import jakarta.servlet.http.Part
 import org.slf4j.MDC
 import org.springframework.core.Ordered
 import org.springframework.core.annotation.Order
+import org.springframework.http.HttpStatus
 import org.springframework.http.MediaType
 import org.springframework.stereotype.Component
 import org.springframework.web.filter.OncePerRequestFilter
-import org.springframework.web.util.ContentCachingRequestWrapper
 import org.springframework.web.util.ContentCachingResponseWrapper
+import java.io.BufferedReader
+import java.io.ByteArrayInputStream
+import java.io.InputStreamReader
 import java.util.UUID
 
 @Component
@@ -38,17 +43,7 @@ class UnifiedLoggingFilter(
         MDC.put(X_REQ_ID, requestId)
 
         val rsWrapper = ContentCachingResponseWrapper(rs)
-        val contentType = rq.contentType
-        val isRqMultipart = isMultipart(contentType)
-
-        val currentRq = if (isRqMultipart) {
-            MultipartTypeWrapper(rq).also { logMultipartRequest(it) }
-        } else {
-            ContentCachingRequestWrapper(rq).apply {
-                inputStream.readAllBytes()
-                logSimpleRequest(this)
-            }
-        }
+        val currentRq = wrapRequest(rq)
 
         try {
             chain.doFilter(currentRq, rsWrapper)
@@ -56,6 +51,19 @@ class UnifiedLoggingFilter(
             logResponse(currentRq, rsWrapper)
             rsWrapper.copyBodyToResponse()
             MDC.remove(X_REQ_ID)
+        }
+    }
+
+    private fun wrapRequest(rq: HttpServletRequest): HttpServletRequest {
+        return if (isMultipart(rq.contentType)) {
+            val wrapper = MultipartTypeWrapper(rq)
+            logMultipartRequest(wrapper)
+            wrapper
+        } else {
+            val bodyBytes = rq.inputStream.readAllBytes()
+            val wrapper = CachedBodyRequestWrapper(rq, bodyBytes)
+            logSimpleRequest(wrapper, bodyBytes)
+            wrapper
         }
     }
 
@@ -79,7 +87,7 @@ class UnifiedLoggingFilter(
                 }
 
                 processPartContent(bytes, ct, description)
-            }.ifEmpty { BODY_NO_CONTENT }
+            }.ifEmpty { BODY_EMPTY }
         }.getOrElse { MULTIPART_ERROR_TEMPLATE.format(it.message) }
 
         log.info {
@@ -92,28 +100,35 @@ class UnifiedLoggingFilter(
         }
     }
 
-    private fun processPartContent(bytes: ByteArray, ct: String?, description: String): String = when {
-        bytes.isEmpty() -> PART_PREFIX.format(description, PART_EMPTY)
-        isText(bytes) -> {
-            val content = String(bytes)
-            val formatted = formatIfJson(content, ct).let {
-                if (it.length > LIMIT_LOG_SIZE) it.take(LIMIT_LOG_SIZE) + TRUNCATED_SUFFIX else it
-            }
-            PART_PREFIX.format(description, PART_CONTENT.format(formatted))
-        }
+    private fun processPartContent(bytes: ByteArray, ct: String?, description: String): String =
+        when {
+            bytes.isEmpty() -> PART_PREFIX.format(description, PART_EMPTY)
 
-        else -> PART_PREFIX.format(description, BODY_BINARY)
-    }
+            isText(bytes) -> {
+                val content = String(bytes)
+                val formatted = formatIfJson(content, ct).let {
+                    if (it.length > LIMIT_LOG_SIZE) {
+                        it.take(LIMIT_LOG_SIZE) + TRUNCATED_SUFFIX
+                    } else {
+                        it
+                    }
+                }
+                PART_PREFIX.format(description, PART_CONTENT.format(formatted))
+            }
+
+            else -> PART_PREFIX.format(description, BODY_BINARY)
+        }
 
     private fun genTraceId(): String =
         UUID.randomUUID().toString().replace(DASH, EMPTY)
 
-    private fun logSimpleRequest(rq: ContentCachingRequestWrapper) {
-        val bodyText = if (rq.contentAsByteArray.isEmpty()) {
-            BODY_NO_CONTENT
+    private fun logSimpleRequest(rq: HttpServletRequest, body: ByteArray) {
+        val bodyText = if (body.isEmpty()) {
+            BODY_EMPTY
         } else {
-            formatBody(rq.contentAsByteArray, rq.contentType)
+            formatBody(body, rq.contentType)
         }
+
         log.info {
             LOG_TEMPLATE_RQ.format(
                 rq.method,
@@ -125,21 +140,30 @@ class UnifiedLoggingFilter(
     }
 
     private fun logResponse(rq: HttpServletRequest, rs: ContentCachingResponseWrapper) {
-        val status = rs.status.takeIf { it != 0 }?.toString() ?: STATUS_UNKNOWN
-        val contentType = rs.contentType
+        val statusInt = rs.status.takeIf { it != 0 } ?: 200
 
+        // Безопасно ищем описание статуса
+        val statusMessage = runCatching {
+            HttpStatus.resolve(statusInt)?.reasonPhrase
+        }.getOrNull() ?: EMPTY // Если статус кастомный (resolve вернет null), будет просто пустая строка
+
+        val contentType = rs.contentType
         val bodyText = when {
             isMultipart(contentType) -> formatMultipartResponse(rs.contentAsByteArray, contentType)
+
             rs.contentAsByteArray.isEmpty() -> BODY_EMPTY
+
             else -> formatBody(rs.contentAsByteArray, contentType)
         }
 
         log.info {
             LOG_TEMPLATE_RS.format(
+                rq.method,
                 getFullUri(rq),
-                status,
+                statusInt.toString(),
+                statusMessage,
                 getResponseHeaders(rs),
-                bodyText,
+                bodyText
             )
         }
     }
@@ -161,8 +185,8 @@ class UnifiedLoggingFilter(
                     val lines = partRaw.trim().lines()
                     val headers = lines.takeWhile { it.isNotBlank() }
 
-                    val content = lines
-                        .dropWhile { it.isNotBlank() }
+                    val contentLines = lines.dropWhile { it.isNotBlank() }
+                    val content = contentLines
                         .drop(1)
                         .joinToString(NEW_LINE_DELIMITER)
 
@@ -170,9 +194,11 @@ class UnifiedLoggingFilter(
                         ?.substringAfter(NAME_EQUALS)
                         ?.substringBefore(SEMICOLON)
                         ?.replace(QUOTE, EMPTY) ?: UNKNOWN_PART
+
                     val fileName = headers.find { it.contains(FILENAME_MARKER) }
                         ?.substringAfter(FILENAME_EQUALS)
                         ?.substringBefore(QUOTE)
+
                     val partCt = headers.find { it.contains(CONTENT_TYPE_HEADER) }
                         ?.substringAfter(COLON_SPACE)
 
@@ -184,8 +210,11 @@ class UnifiedLoggingFilter(
                     }
 
                     if (fileName != null && !isAlwaysTextField(partCt)) {
-                        if (isText(contentBytes)) processPartContent(contentBytes, partCt, description)
-                        else PART_PREFIX.format(description, BODY_BINARY)
+                        if (isText(contentBytes)) {
+                            processPartContent(contentBytes, partCt, description)
+                        } else {
+                            PART_PREFIX.format(description, BODY_BINARY)
+                        }
                     } else {
                         processPartContent(contentBytes, partCt, description)
                     }
@@ -197,7 +226,11 @@ class UnifiedLoggingFilter(
         rq.queryString?.let { URI_WITH_QUERY.format(rq.requestURI, it) } ?: rq.requestURI
 
     private fun formatBody(content: ByteArray, contentType: String?): String =
-        if (!isText(content)) BODY_BINARY else formatIfJson(String(content), contentType)
+        if (!isText(content)) {
+            BODY_BINARY
+        } else {
+            formatIfJson(String(content), contentType)
+        }
 
     private fun formatIfJson(body: String?, contentType: String?): String {
         if (body.isNullOrBlank()) {
@@ -240,6 +273,29 @@ class UnifiedLoggingFilter(
                 || ct.contains(TEXT_CT_MARKER)
     }
 
+    private class CachedBodyRequestWrapper(
+        request: HttpServletRequest,
+        private val body: ByteArray
+    ) : HttpServletRequestWrapper(request) {
+
+        override fun getInputStream(): ServletInputStream {
+            val byteArrayInputStream = ByteArrayInputStream(body)
+            return object : ServletInputStream() {
+
+                override fun read(): Int = byteArrayInputStream.read()
+
+                override fun isFinished(): Boolean = byteArrayInputStream.available() == 0
+
+                override fun isReady(): Boolean = true
+
+                override fun setReadListener(readListener: ReadListener?) {}
+            }
+        }
+
+        override fun getReader(): BufferedReader =
+            BufferedReader(InputStreamReader(getInputStream()))
+    }
+
     private class MultipartTypeWrapper(request: HttpServletRequest) : HttpServletRequestWrapper(request) {
 
         private val cachedParts by lazy {
@@ -248,7 +304,11 @@ class UnifiedLoggingFilter(
                 val ct = part.contentType
 
                 val isJson = (ct == null || ct == MediaType.APPLICATION_OCTET_STREAM_VALUE) && isJsonContent(bytes)
-                val finalCt = if (isJson) MediaType.APPLICATION_JSON_VALUE else ct
+                val finalCt = if (isJson) {
+                    MediaType.APPLICATION_JSON_VALUE
+                } else {
+                    ct
+                }
 
                 ObservedPart(part, finalCt, bytes)
             }
@@ -287,16 +347,13 @@ class UnifiedLoggingFilter(
         private const val EMPTY = ""
         private const val DASH = "-"
         private const val URI_WITH_QUERY = "%s?%s"
-        private const val STATUS_UNKNOWN = "UNKNOWN"
 
         private const val BODY_EMPTY = "[EMPTY]"
         private const val BODY_BINARY = "[BINARY DATA]"
-        private const val BODY_NO_CONTENT = "[NO CONTENT]"
         private const val BODY_MULTIPART_RS = "[MULTIPART RAW DISABLED]"
 
         private const val PART_PREFIX = "  [PART] -> Name: %s | %s"
         private const val PART_CONTENT = "Content: %s"
-        private const val PART_FILE = "File: %s"
         private const val PART_FILE_INFO = "%s (File: %s, Size: %d bytes)"
         private const val PART_EMPTY = "[EMPTY CONTENT]"
         private const val TRUNCATED_SUFFIX = "... [TRUNCATED]"
@@ -334,10 +391,11 @@ Body:
 
         private const val LOG_TEMPLATE_RS = """
 ================== Service response ==================
-URI: %s
-Status: %s
+URI: %s %s
+Status: %s %s
 Headers: %s
-Body: %s
+Body:
+%s
 ================== /Service response ==================
         """
     }

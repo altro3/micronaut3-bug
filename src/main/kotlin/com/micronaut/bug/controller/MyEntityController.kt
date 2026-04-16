@@ -8,13 +8,17 @@ import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.core.io.ByteArrayResource
 import org.springframework.http.HttpEntity
 import org.springframework.http.HttpHeaders
+import org.springframework.http.HttpStatus
 import org.springframework.http.MediaType
 import org.springframework.util.LinkedMultiValueMap
 import org.springframework.util.MultiValueMap
+import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
+import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RequestPart
+import org.springframework.web.bind.annotation.ResponseStatus
 import org.springframework.web.bind.annotation.RestController
 import org.springframework.web.multipart.MultipartFile
 
@@ -25,6 +29,37 @@ class MyEntityController(
 ) {
 
     private val log = KotlinLogging.logger {}
+
+    @PostMapping(
+        "/testBinary",
+        consumes = [MediaType.APPLICATION_OCTET_STREAM_VALUE],
+        produces = [MediaType.APPLICATION_OCTET_STREAM_VALUE]
+    )
+    fun testBinary(@RequestBody bytes: ByteArray): ByteArray {
+        log.info { "Received binary data, size: ${bytes.size}" }
+
+        return bytes
+    }
+
+    @GetMapping(
+        "/testJson",
+        produces = [MediaType.APPLICATION_JSON_VALUE]
+    )
+    fun testJson(): MyData {
+        log.info { "GET request for JSON received" }
+
+        return MyData(name = "Test", secondName = "User", age = 25)
+    }
+
+    @PostMapping("/testJson2")
+    fun testEmpty(@RequestBody body: MyData): MyData =
+        body
+
+    @PostMapping("/testEmpty")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    fun testEmpty() {
+        log.info { "Empty request/response endpoint called" }
+    }
 
     @PostMapping(
         "/testMultipart/{pathVar}",
