@@ -76,13 +76,14 @@ class UnifiedLoggingFilter(
 
         log.debug {
             """
-================== Service request ==================
-URI: ${rq.method} ${getFullUri(rq)}
-Headers: ${getHeaders(rq)}
-Body:
-$bodyResult
-================== /Service request ==================
-            """.trimIndent()
+            |
+            |================== Service request ==================
+            |URI: ${rq.method} ${getFullUri(rq)}
+            |Headers: ${getHeaders(rq)}
+            |Body:
+            |$bodyResult
+            |================== /Service request ==================
+            """.trimMargin()
         }
         return wrapper
     }
@@ -136,14 +137,15 @@ $bodyResult
 
         log.debug {
             """
-================== Service response ==================
-URI: ${rq.method} ${getFullUri(rq)}
-Status: $statusInt $statusMessage
-Headers: ${getResponseHeaders(rs)}
-Body:
-$bodyText
-================== /Service response ==================
-            """.trimIndent()
+                |
+                |================== Service response ==================
+                |URI: ${rq.method} ${getFullUri(rq)}
+                |Status: $statusInt $statusMessage
+                |Headers: ${getResponseHeaders(rs)}
+                |Body:
+                |$bodyText
+                |================== /Service response ==================
+            """.trimMargin()
         }
     }
 

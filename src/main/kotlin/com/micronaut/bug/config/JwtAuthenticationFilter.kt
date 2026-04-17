@@ -38,7 +38,7 @@ class JwtAuthenticationFilter : OncePerRequestFilter() {
             chain.doFilter(rq, rs)
         } finally {
             MDC.remove(TARGET_ID)
-            // Здесь стоит добавить SecurityContext.clear(), если вы используете ThreadLocal
+            SecurityContext.clear()
         }
     }
 
