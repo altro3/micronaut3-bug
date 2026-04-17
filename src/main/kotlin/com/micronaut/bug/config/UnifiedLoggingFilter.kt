@@ -78,19 +78,17 @@ class UnifiedLoggingFilter(
                 rsWrapper.copyBodyToResponse()
             }
         } finally {
-            MDC.remove(X_REQ_ID)
+            MDC.clear()
         }
     }
 
-    private fun wrapRequest(rq: HttpServletRequest): HttpServletRequest {
-        val isMultipart = isMultipart(rq.contentType)
-        return if (isMultipart) {
+    private fun wrapRequest(rq: HttpServletRequest): HttpServletRequest =
+        if (isMultipart(rq.contentType)) {
             MultipartTypeWrapper(rq) // Твой враппер для Multipart
         } else {
             val bytes = rq.inputStream.readAllBytes()
             CachedBodyRequestWrapper(rq, bytes) // Твой враппер для обычных тел
         }
-    }
 
     private fun getRequestLogString(rq: HttpServletRequest): String {
         val bodyResult = if (rq is CachedBodyRequestWrapper) {
@@ -119,18 +117,31 @@ class UnifiedLoggingFilter(
     private fun getMultipartBody(rq: MultipartTypeWrapper): String =
         runCatching {
             rq.parts.joinToString(STRING_NEW_LINE) { part ->
-                val bytes = (part as ObservedPart).getContentBytes()
+                val observedPart = part as ObservedPart
+                val bytes = observedPart.getContentBytes()
+
+                // Собираем хедеры текущей части
+                val partHeaders = observedPart.headerNames.associateWith { observedPart.getHeader(it) }
+
                 val description = part.submittedFileName?.let {
                     TEMPLATE_PART_FILE_INFO.format(part.name, it, part.size)
                 } ?: part.name
 
-                processPartContent(bytes, part.contentType, description)
+                // Передаем хедеры в метод обработки контента
+                processPartContent(bytes, part.contentType, description, partHeaders)
             }.ifEmpty { BODY_EMPTY }
         }.getOrElse { "[MULTIPART ERROR: ${it.message}]" }
 
-    private fun processPartContent(bytes: ByteArray, ct: String?, description: String): String =
-        when {
-            bytes.isEmpty() -> TEMPLATE_PART_PREFIX.format(description, BODY_EMPTY)
+    private fun processPartContent(
+        bytes: ByteArray,
+        ct: String?,
+        description: String,
+        headers: Map<String, String> = emptyMap()
+    ): String {
+        val headersString = if (headers.isNotEmpty()) " | Headers: $headers" else STRING_EMPTY
+
+        return when {
+            bytes.isEmpty() -> TEMPLATE_PART_PREFIX.format(description, headersString, BODY_EMPTY)
 
             isText(bytes) -> {
                 val formatted = formatIfJson(bytes, ct).let {
@@ -140,11 +151,12 @@ class UnifiedLoggingFilter(
                         it
                     }
                 }
-                TEMPLATE_PART_PREFIX.format(description, "Content: $formatted")
+                TEMPLATE_PART_PREFIX.format(description, headersString, "Content: $formatted")
             }
 
-            else -> TEMPLATE_PART_PREFIX.format(description, BODY_BINARY)
+            else -> TEMPLATE_PART_PREFIX.format(description, headersString, BODY_BINARY)
         }
+    }
 
     private fun getResponseLogString(rq: HttpServletRequest, rs: ContentCachingResponseWrapper): String {
         val statusInt = rs.status.takeIf { it != 0 } ?: 200
@@ -185,32 +197,28 @@ class UnifiedLoggingFilter(
                 .filter { it.contains(MARKER_CONTENT_DISPOSITION) }
                 .joinToString(STRING_NEW_LINE) { partRaw ->
                     val lines = partRaw.trim().lines()
-                    val headers = lines.takeWhile { it.isNotBlank() }
+                    val headerLines = lines.takeWhile { it.isNotBlank() }
 
-                    val content = lines.dropWhile { it.isNotBlank() }
-                        .drop(1)
-                        .joinToString(STRING_NEW_LINE)
+                    // Сбор хедеров парта из строк
+                    val partHeaders = headerLines.associate {
+                        it.substringBefore(STRING_COLON_SPACE) to it.substringAfter(STRING_COLON_SPACE)
+                    }
+
+                    val content = lines.dropWhile { it.isNotBlank() }.drop(1).joinToString(STRING_NEW_LINE)
 
                     var name: String? = null
                     var fileName: String? = null
                     var partCt: String? = null
 
-                    headers.forEach { header ->
+                    // Извлекаем метаданные из собранных хедеров
+                    partHeaders.forEach { (k, v) ->
                         when {
-                            header.contains(MARKER_NAME) -> {
-                                name = header.substringAfter(EQUALS_NAME)
-                                    .substringBefore(STRING_SEMICOLON)
-                                    .substringBefore(STRING_QUOTE)
+                            k.contains(MARKER_CONTENT_DISPOSITION) -> {
+                                name = v.substringAfter(EQUALS_NAME, "").substringBefore(STRING_QUOTE)
+                                fileName = if (v.contains(MARKER_FILENAME)) v.substringAfter(EQUALS_FILENAME).substringBefore(STRING_QUOTE) else null
                             }
 
-                            header.contains(MARKER_FILENAME) -> {
-                                fileName = header.substringAfter(EQUALS_FILENAME)
-                                    .substringBefore(STRING_QUOTE)
-                            }
-
-                            header.contains(HEADER_CONTENT_TYPE) -> {
-                                partCt = header.substringAfter(STRING_COLON_SPACE)
-                            }
+                            k.equals(HEADER_CONTENT_TYPE, ignoreCase = true) -> partCt = v
                         }
                     }
 
@@ -222,11 +230,13 @@ class UnifiedLoggingFilter(
                         finalName
                     }
 
+                    val headersInfo = if (partHeaders.isNotEmpty()) " | Headers: $partHeaders" else STRING_EMPTY
                     val isBinaryFile = fileName != null && !isAlwaysTextField(partCt) && !isText(contentBytes)
+
                     if (isBinaryFile) {
-                        TEMPLATE_PART_PREFIX.format(description, BODY_BINARY)
+                        TEMPLATE_PART_PREFIX.format(description, headersInfo, BODY_BINARY)
                     } else {
-                        processPartContent(contentBytes, partCt, description)
+                        processPartContent(contentBytes, partCt, description, partHeaders)
                     }
                 }
         }.getOrElse { BODY_MULTIPART_RS }
@@ -343,7 +353,7 @@ class UnifiedLoggingFilter(
 
         private const val PART_UNKNOWN = "UNKNOWN"
 
-        private const val TEMPLATE_PART_PREFIX = "  [PART] -> Name: %s | %s"
+        private const val TEMPLATE_PART_PREFIX = "  [PART] -> Name: %s%s | %s"
         private const val TEMPLATE_PART_FILE_INFO = "%s (File: %s, Size: %d bytes)"
 
         private const val SUFFIX_TRUNCATED = "... [TRUNCATED]"
@@ -408,5 +418,4 @@ class UnifiedLoggingFilter(
         private fun genTraceId(): String =
             UUID.randomUUID().toString().replace(STRING_DASH, STRING_EMPTY)
     }
-
 }
