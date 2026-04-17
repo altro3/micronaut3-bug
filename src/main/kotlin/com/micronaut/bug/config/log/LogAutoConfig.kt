@@ -1,6 +1,9 @@
 package com.micronaut.bug.config.log
 
+import com.fasterxml.jackson.databind.ObjectMapper
+import com.micronaut.bug.config.UnifiedLoggingFilter
 import org.springframework.boot.context.properties.EnableConfigurationProperties
+import org.springframework.boot.web.servlet.FilterRegistrationBean
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 import org.springframework.core.env.Environment
@@ -12,4 +15,15 @@ class LogAutoConfig {
     @Bean
     fun logbackReconfigurator(environment: Environment, logProperties: LogProperties) =
         LogReconfigurator(environment, logProperties)
+
+    @Bean
+    fun unifiedLoggingFilterRegistration(
+        objectMapper: ObjectMapper,
+        props: LogProperties
+    ): FilterRegistrationBean<UnifiedLoggingFilter> {
+        val registration = FilterRegistrationBean<UnifiedLoggingFilter>()
+        registration.filter = UnifiedLoggingFilter(objectMapper, props)
+        registration.order = props.order
+        return registration
+    }
 }

@@ -2,6 +2,7 @@ package com.micronaut.bug.config
 
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.databind.SerializationFeature
+import com.micronaut.bug.config.log.LogProperties
 import io.github.oshai.kotlinlogging.KotlinLogging
 import jakarta.servlet.FilterChain
 import jakarta.servlet.ReadListener
@@ -11,11 +12,9 @@ import jakarta.servlet.http.HttpServletRequestWrapper
 import jakarta.servlet.http.HttpServletResponse
 import jakarta.servlet.http.Part
 import org.slf4j.MDC
-import org.springframework.core.Ordered
-import org.springframework.core.annotation.Order
 import org.springframework.http.HttpStatus
 import org.springframework.http.MediaType
-import org.springframework.stereotype.Component
+import org.springframework.util.ClassUtils
 import org.springframework.web.filter.OncePerRequestFilter
 import org.springframework.web.util.ContentCachingResponseWrapper
 import java.io.BufferedReader
@@ -23,16 +22,16 @@ import java.io.ByteArrayInputStream
 import java.io.InputStreamReader
 import java.util.UUID
 
-@Component
-@Order(Ordered.HIGHEST_PRECEDENCE)
 class UnifiedLoggingFilter(
     objectMapper: ObjectMapper,
+    private val props: LogProperties,
 ) : OncePerRequestFilter() {
 
     private val log = KotlinLogging.logger {}
 
     private val prettyMapper: ObjectMapper = objectMapper.copy()
         .enable(SerializationFeature.INDENT_OUTPUT)
+    private val withActuator: Boolean = ClassUtils.isPresent("org.springframework.boot.actuate.autoconfigure.endpoint.web.WebEndpointProperties", null)
 
     override fun doFilterInternal(
         rq: HttpServletRequest,
@@ -43,18 +42,39 @@ class UnifiedLoggingFilter(
         MDC.put(X_REQ_ID, rqId)
 
         try {
-            if (!log.isDebugEnabled()) {
+
+            if (withActuator && props.skipActuator && rq.requestURI.contains(PATH_ACTUATOR)) {
                 chain.doFilter(rq, rs)
                 return
             }
 
+            val isDebugProvider = log.isDebugEnabled() && props.enabledControllerLogging
+
+            // Оборачиваем запрос всегда, чтобы иметь возможность прочитать тело при ошибке
+            val currentRq = wrapRequest(rq)
+
+            // Сразу формируем строку запроса, но не печатаем её
+            val requestLogData by lazy { getRequestLogString(currentRq) }
+
             val rsWrapper = ContentCachingResponseWrapper(rs)
-            val currentRq = wrapAndLogRequest(rq)
 
             try {
+                // Если включен обычный дебаг-логинг — печатаем запрос сразу
+                if (isDebugProvider) {
+                    log.debug { requestLogData }
+                }
+
                 chain.doFilter(currentRq, rsWrapper)
             } finally {
-                logResponse(currentRq, rsWrapper)
+                val status = rsWrapper.status
+                val isError = status >= 400
+                if (isError) {
+                    // ПРИ ОШИБКЕ: логируем и запрос, и ответ на уровне ERROR
+                    log.error { "Service failure detected!\n$requestLogData\n${getResponseLogString(currentRq, rsWrapper)}" }
+                } else if (isDebugProvider) {
+                    // В штатном режиме: логируем только ответ в DEBUG
+                    log.debug { getResponseLogString(currentRq, rsWrapper) }
+                }
                 rsWrapper.copyBodyToResponse()
             }
         } finally {
@@ -62,30 +82,38 @@ class UnifiedLoggingFilter(
         }
     }
 
-    private fun wrapAndLogRequest(rq: HttpServletRequest): HttpServletRequest {
+    private fun wrapRequest(rq: HttpServletRequest): HttpServletRequest {
         val isMultipart = isMultipart(rq.contentType)
-        val (wrapper, bodyResult) = if (isMultipart) {
-            val mw = MultipartTypeWrapper(rq)
-            mw to getMultipartBody(mw)
+        return if (isMultipart) {
+            MultipartTypeWrapper(rq) // Твой враппер для Multipart
         } else {
             val bytes = rq.inputStream.readAllBytes()
-            val cw = CachedBodyRequestWrapper(rq, bytes)
-            val body = if (bytes.isEmpty()) BODY_EMPTY else formatBody(bytes, rq.contentType)
-            cw to body
+            CachedBodyRequestWrapper(rq, bytes) // Твой враппер для обычных тел
+        }
+    }
+
+    private fun getRequestLogString(rq: HttpServletRequest): String {
+        val bodyResult = if (rq is CachedBodyRequestWrapper) {
+            if (rq.body.isEmpty()) {
+                BODY_EMPTY
+            } else {
+                formatBody(rq.body, rq.contentType)
+            }
+        } else if (rq is MultipartTypeWrapper) {
+            getMultipartBody(rq)
+        } else {
+            BODY_EMPTY
         }
 
-        log.debug {
-            """
-            |
-            |================== Service request ==================
-            |URI: ${rq.method} ${getFullUri(rq)}
-            |Headers: ${getHeaders(rq)}
-            |Body:
-            |$bodyResult
-            |================== /Service request ==================
-            """.trimMargin()
-        }
-        return wrapper
+        return """
+        |
+        |================== Service request ==================
+        |URI: ${rq.method} ${getFullUri(rq)}
+        |Headers: ${getHeaders(rq)}
+        |Body:
+        |$bodyResult
+        |================== /Service request ==================
+    """.trimMargin()
     }
 
     private fun getMultipartBody(rq: MultipartTypeWrapper): String =
@@ -118,35 +146,29 @@ class UnifiedLoggingFilter(
             else -> TEMPLATE_PART_PREFIX.format(description, BODY_BINARY)
         }
 
-    private fun logResponse(rq: HttpServletRequest, rs: ContentCachingResponseWrapper) {
+    private fun getResponseLogString(rq: HttpServletRequest, rs: ContentCachingResponseWrapper): String {
         val statusInt = rs.status.takeIf { it != 0 } ?: 200
-
-        // Безопасно ищем описание статуса
         val statusMessage = runCatching {
             HttpStatus.resolve(statusInt)?.reasonPhrase
-        }.getOrNull() ?: STRING_EMPTY // Если статус кастомный (resolve вернет null), будет просто пустая строка
+        }.getOrNull() ?: STRING_EMPTY
 
         val contentType = rs.contentType
         val bodyText = when {
             isMultipart(contentType) -> formatMultipartResponse(rs.contentAsByteArray, contentType)
-
             rs.contentAsByteArray.isEmpty() -> BODY_EMPTY
-
             else -> formatBody(rs.contentAsByteArray, contentType)
         }
 
-        log.debug {
-            """
-                |
-                |================== Service response ==================
-                |URI: ${rq.method} ${getFullUri(rq)}
-                |Status: $statusInt $statusMessage
-                |Headers: ${getResponseHeaders(rs)}
-                |Body:
-                |$bodyText
-                |================== /Service response ==================
-            """.trimMargin()
-        }
+        return """
+        |
+        |================== Service response ==================
+        |URI: ${rq.method} ${getFullUri(rq)}
+        |Status: $statusInt $statusMessage
+        |Headers: ${getResponseHeaders(rs)}
+        |Body:
+        |$bodyText
+        |================== /Service response ==================
+    """.trimMargin()
     }
 
     private fun formatMultipartResponse(bytes: ByteArray, contentType: String?): String {
@@ -242,7 +264,7 @@ class UnifiedLoggingFilter(
 
     private class CachedBodyRequestWrapper(
         rq: HttpServletRequest,
-        private val body: ByteArray,
+        val body: ByteArray,
     ) : HttpServletRequestWrapper(rq) {
 
         override fun getInputStream(): ServletInputStream {
@@ -306,6 +328,8 @@ class UnifiedLoggingFilter(
     companion object {
         const val X_REQ_ID = "x-req-id"
 
+        private const val PATH_ACTUATOR = "/actuator"
+
         private const val STRING_EMPTY = ""
         private const val STRING_DASH = "-"
         private const val STRING_QUOTE = "\""
@@ -344,12 +368,28 @@ class UnifiedLoggingFilter(
         private const val BYTE_JSON_ARRAY = '['.code.toByte()
 
         private fun isJsonContent(bytes: ByteArray): Boolean {
-            val firstByte = bytes.find { it > 32 }
-            return firstByte == BYTE_JSON_OBJECT || firstByte == BYTE_JSON_ARRAY
+            // Ищем первый не пробельный символ
+            for (b in bytes) {
+                if (b <= 32) {
+                    continue
+                }
+                return b == BYTE_JSON_OBJECT || b == BYTE_JSON_ARRAY
+            }
+            return false
         }
 
-        private fun isText(bytes: ByteArray): Boolean =
-            bytes.take(LIMIT_TEXT_CHECK_THRESHOLD).none { it == BYTE_NULL }
+        private fun isText(bytes: ByteArray): Boolean {
+            if (bytes.isEmpty()) {
+                return true
+            }
+            val checkLimit = minOf(bytes.size, LIMIT_TEXT_CHECK_THRESHOLD)
+            for (i in 0 until checkLimit) {
+                if (bytes[i] == BYTE_NULL) {
+                    return false
+                }
+            }
+            return true
+        }
 
         private fun isMultipart(ct: String?): Boolean =
             ct?.startsWith(MediaType.MULTIPART_FORM_DATA_VALUE) == true
