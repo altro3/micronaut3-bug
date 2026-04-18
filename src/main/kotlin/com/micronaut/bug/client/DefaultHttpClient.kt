@@ -1,6 +1,10 @@
 package com.micronaut.bug.client
 
 import com.fasterxml.jackson.databind.ObjectMapper
+import com.micronaut.bug.client.HttpClientConst.HEADER_API_KEY
+import com.micronaut.bug.client.HttpClientUtils.DEFAULT_RETRY_ON
+import com.micronaut.bug.client.HttpClientUtils.createRestClient
+import com.micronaut.bug.client.HttpClientUtils.createRetryTemplate
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.core.ParameterizedTypeReference
 import org.springframework.http.HttpHeaders
@@ -13,10 +17,6 @@ import org.springframework.util.StopWatch
 import org.springframework.web.client.ResponseErrorHandler
 import org.springframework.web.client.RestClient
 import org.springframework.web.client.RestClient.ResponseSpec
-import com.micronaut.bug.client.HttpClientConst.HEADER_API_KEY
-import com.micronaut.bug.client.HttpClientUtils.DEFAULT_RETRY_ON
-import com.micronaut.bug.client.HttpClientUtils.createRestClient
-import com.micronaut.bug.client.HttpClientUtils.createRetryTemplate
 
 open class DefaultHttpClient {
 
@@ -248,18 +248,6 @@ open class DefaultHttpClient {
             rqBuilder.header(HEADER_API_KEY, httpClientProperties.apiKey)
         }
 
-        var stopWatch: StopWatch? = null
-        if (log.isDebugEnabled() && httpClientProperties.requestTiming) {
-            stopWatch = StopWatch()
-            stopWatch.start()
-        }
-
-        val response = rqBuilder.retrieve()
-
-        if (stopWatch != null) {
-            stopWatch.stop()
-            log.debug { "Request to $method $path was processed for ${stopWatch.totalTimeMillis}ms" }
-        }
-        return response
+        return rqBuilder.retrieve()
     }
 }

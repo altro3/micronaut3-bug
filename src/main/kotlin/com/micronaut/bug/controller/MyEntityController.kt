@@ -4,6 +4,9 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import com.micronaut.bug.config.SecurityContext
 import com.micronaut.bug.config.User
 import com.micronaut.bug.service.BusinessService
+import com.micronaut.bug.service.integration.extservice.ExtServiceClient
+import com.micronaut.bug.service.integration.extservice.api.MyDataRequest
+import com.micronaut.bug.service.integration.extservice.api.MyDto
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.core.io.ByteArrayResource
 import org.springframework.http.HttpEntity
@@ -25,7 +28,8 @@ import org.springframework.web.multipart.MultipartFile
 @RestController
 class MyEntityController(
     private val businessService: BusinessService,
-    private val objectMapper: ObjectMapper
+    private val objectMapper: ObjectMapper,
+    private val extServiceClient: ExtServiceClient,
 ) {
 
     private val log = KotlinLogging.logger {}
@@ -110,6 +114,82 @@ class MyEntityController(
         responseMap.add(PART_RESPONSE_BINARY, HttpEntity(binaryResource, binaryHeaders))
 
         return responseMap
+    }
+
+    @GetMapping("/run-all")
+    fun runAllTests(): String {
+        log.info { "Starting sequential integration tests..." }
+
+        // 1. Тест Ping (GET без тела)
+        log.info { "--- Test 1: Ping ---" }
+        extServiceClient.ping()
+
+        // 2. Тест JSON (POST JSON -> JSON)
+        log.info { "--- Test 2: Update Data (JSON) ---" }
+        val updateRs = extServiceClient.updateData(MyDataRequest(name = "Test item"))
+        log.info { "Update result: $updateRs" }
+
+        // 3. Тест Process File (POST Binary -> Binary)
+        log.info { "--- Test 3: Process File (Binary) ---" }
+
+        // Создаем реальные бинарные данные, начинающиеся с NULL-байта
+        val binaryContent = byteArrayOf(0, 1, 2, 3, 4, 5, 0x89.toByte(), 'P'.code.toByte(), 'N'.code.toByte(), 'G'.code.toByte())
+
+        val binaryFile = object : ByteArrayResource(binaryContent) {
+            override fun getFilename() = "actual-binary-data.bin"
+        }
+
+        val fileRs = extServiceClient.processFile(binaryFile)
+
+        log.info { "Binary request sent. Received response size: ${fileRs?.size ?: 0} bytes" }
+
+        // 4. Тест Complex Multipart (Path Var + Query + Different Parts)
+        log.info { "--- Test 4: Complex Multipart ---" }
+        val complexRs = extServiceClient.sendComplexMultipart(
+            id = "RQ-777",
+            queryTag = "test-tag",
+            jsonWithCt = MyDto("key", "val"),
+            jsonNoCt = MyDto("k", "v"),
+            binaryFile = object : ByteArrayResource(byteArrayOf(0, 1, 2, 3)) { override fun getFilename() = "req.bin" },
+            textFile = "hello"
+        )
+
+        if (complexRs != null) {
+            log.info { "--- Multipart Response Verification ---" }
+
+            // 1. Проверка JSON части (status)
+            val statusEntity = complexRs.getFirst("status") as? HttpEntity<ByteArray>
+            val statusJson = statusEntity?.body?.let { String(it) }
+            log.info { "Part 'status': content=$statusJson, contentType=${statusEntity?.headers?.contentType}" }
+
+            // 2. Проверка текстового файла (report)
+            val reportEntity = complexRs.getFirst("report") as? HttpEntity<ByteArray>
+            val reportText = reportEntity?.body?.let { String(it) }
+            log.info { "Part 'report': filename=summary.txt, content='$reportText'" }
+
+            // 3. Проверка бинарного файла (image)
+            val imageEntity = complexRs.getFirst("image") as? HttpEntity<ByteArray>
+            val imageBytes = imageEntity?.body
+            val isPng = imageBytes?.get(1) == 'P'.code.toByte() // Простейшая проверка сигнатуры PNG
+
+            log.info {
+                "Part 'image': size=${imageBytes?.size} bytes, " +
+                        "isActuallyBinary=${imageBytes?.contains(0.toByte())}, " +
+                        "isPng=$isPng"
+            }
+
+            // Итоговый ассерт в логи
+            if (statusJson?.contains("all_parts_received") == true && isPng) {
+                log.info { "SUCCESS: All multipart response parts correctly parsed and verified!" }
+            } else {
+                log.error { "FAILURE: Multipart response verification failed!" }
+            }
+        } else {
+            log.error { "FAILURE: Complex multipart response is null" }
+        }
+        log.info { "Complex multipart test finished. Result exists: ${complexRs != null}" }
+
+        return "All tests executed! Check logs for details."
     }
 
     data class MyData(

@@ -3,11 +3,31 @@ app:
     pattern:
       console: "%d{HH:mm:ss.SSS} %highlight(%-5level) %magenta(%mdcBlock)[%thread] %cyan(%logger{25}) - %msg%n%throwable"
     mdc-keys: test
+  integration:
+    ext-service:
+      endpoints:
+        ping:
+          path: /health/check
+          method: GET
+          with-api-key: false
+        process-file:
+          path: /v1/files/upload
+          method: POST
+        update-data:
+          path: /v1/data/sync
+          method: POST
+        complex-multipart:
+          path: /v2/complex-process/{id}
+          method: POST
+      http:
+        url: http://localhost:8081
 
 server:
   port: 8080
 
 spring:
+  application:
+    name: spring-log
   servlet:
     multipart:
       enabled: true
@@ -25,6 +45,7 @@ logging:
     console: "%d{HH:mm:ss.SSS} %highlight(%-5level) [%thread] %cyan(%logger{25}) - %msg%n%throwable"
   level:
     root: debug
+    jdk: info
     sun: info
     javax: info
     io.netty: info

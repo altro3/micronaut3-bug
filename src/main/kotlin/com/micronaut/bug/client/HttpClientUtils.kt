@@ -56,6 +56,7 @@ object HttpClientUtils {
                     ByteArrayHttpMessageConverter(),
                     ResourceHttpMessageConverter(false),
                     AllEncompassingFormHttpMessageConverter(),
+                    MultipartReadHttpMessageConverter()
                 )
             )
 

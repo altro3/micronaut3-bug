@@ -235,9 +235,7 @@ class UnifiedLoggingFilter(
                     }
 
                     val headersInfo = if (partHeaders.isNotEmpty()) " | Headers: $partHeaders" else STRING_EMPTY
-                    val isBinaryFile = fileName != null && !isAlwaysTextField(partCt) && !isText(contentBytes)
-
-                    if (isBinaryFile) {
+                    if (isBinaryContent(finalName, fileName, partCt, contentBytes)) {
                         TEMPLATE_PART_PREFIX.format(description, headersInfo, BODY_BINARY)
                     } else {
                         processPartContent(contentBytes, partCt, description, partHeaders)
@@ -390,6 +388,26 @@ class UnifiedLoggingFilter(
             return false
         }
 
+        private fun isBinaryContent(name: String, fileName: String?, contentType: String?, bytes: ByteArray): Boolean {
+            // 1. Если это "всегда текстовый" тип (json, xml, plain text), то это НЕ бинарник
+            if (isAlwaysTextField(contentType)) return false
+
+            // 2. Если в Content-Type есть признаки бинарных данных
+            if (contentType?.lowercase()?.let {
+                    it.contains("octet-stream") || it.contains("image/") || it.contains("pdf") || it.contains("zip")
+                } == true) return true
+
+            // 3. Если есть имя файла и это не .txt / .json (простейшая проверка расширения)
+            if (fileName != null) {
+                val ext = fileName.substringAfterLast('.', "").lowercase()
+                val textExtensions = setOf("txt", "json", "xml", "html", "csv")
+                if (ext.isNotEmpty() && ext !in textExtensions) return true
+            }
+
+            // 4. И только в последнюю очередь, если метаданных нет, смотрим на байты
+            return !isText(bytes)
+        }
+
         private fun isText(bytes: ByteArray): Boolean {
             if (bytes.isEmpty()) {
                 return true
@@ -401,6 +419,11 @@ class UnifiedLoggingFilter(
                 }
             }
             return true
+        }
+
+        private fun isBinaryType(ct: String?): Boolean {
+            val lower = ct?.lowercase() ?: return false
+            return lower.contains("octet-stream") || lower.contains("image/") || lower.contains("pdf")
         }
 
         private fun isMultipart(ct: String?): Boolean =

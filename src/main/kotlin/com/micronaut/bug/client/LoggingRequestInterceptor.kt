@@ -91,6 +91,7 @@ class LoggingRequestInterceptor(
         val bodyResult = if (isMultipart(ct)) formatMultipart(body, ct) else formatBody(body, ct)
 
         return """
+            |
             |================== Client request ==================
             |URI: ${rq.method} ${getFullUri(rq)}
             |ExtRqId: $extRqId
@@ -109,6 +110,7 @@ class LoggingRequestInterceptor(
         val bodyResult = if (isMultipart(ct)) formatMultipart(body, ct) else formatBody(body, ct)
 
         return """
+            |
             |================== Client response ==================
             |URI: ${rq.method} ${getFullUri(rq)}
             |ExtRqId: $extRqId
@@ -172,7 +174,7 @@ class LoggingRequestInterceptor(
 
                     val headersInfo = if (partHeaders.isNotEmpty()) " | Headers: $partHeaders" else STRING_EMPTY
 
-                    if (fileName != null && !isAlwaysTextField(partCt) && !isText(contentBytes)) {
+                    if (isBinaryContent(name, fileName, partCt, contentBytes)) {
                         TEMPLATE_PART_PREFIX.format(description, headersInfo, BODY_BINARY)
                     } else {
                         val formattedContent = formatBody(contentBytes, partCt)
@@ -232,6 +234,26 @@ class LoggingRequestInterceptor(
         }
         val lower = ct.lowercase()
         return lower.contains(MediaType.APPLICATION_JSON_VALUE) || lower.contains(MARKER_TEXT)
+    }
+
+    private fun isBinaryContent(name: String, fileName: String?, contentType: String?, bytes: ByteArray): Boolean {
+        // 1. Если это "всегда текстовый" тип (json, xml, plain text), то это НЕ бинарник
+        if (isAlwaysTextField(contentType)) return false
+
+        // 2. Если в Content-Type есть признаки бинарных данных
+        if (contentType?.lowercase()?.let {
+                it.contains("octet-stream") || it.contains("image/") || it.contains("pdf") || it.contains("zip")
+            } == true) return true
+
+        // 3. Если есть имя файла и это не .txt / .json (простейшая проверка расширения)
+        if (fileName != null) {
+            val ext = fileName.substringAfterLast('.', "").lowercase()
+            val textExtensions = setOf("txt", "json", "xml", "html", "csv")
+            if (ext.isNotEmpty() && ext !in textExtensions) return true
+        }
+
+        // 4. И только в последнюю очередь, если метаданных нет, смотрим на байты
+        return !isText(bytes)
     }
 
     /**

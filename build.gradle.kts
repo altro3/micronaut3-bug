@@ -48,6 +48,7 @@ dependencies {
     implementation("io.micrometer:micrometer-tracing")
     implementation("io.micrometer:context-propagation")
     implementation("ch.qos.logback:logback-classic")
+    implementation("org.wiremock:wiremock-standalone:3.13.2")
 
     // Testing
     testImplementation("org.springframework.boot:spring-boot-starter-test")
