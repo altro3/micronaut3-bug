@@ -36,6 +36,8 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-json")
     implementation("org.springframework.boot:spring-boot-starter-validation")
     implementation("org.springframework.boot:spring-boot-starter-actuator")
+    implementation("org.springframework.retry:spring-retry")
+    implementation("io.projectreactor.netty:reactor-netty-http")
 
     // Kotlin Essential
     implementation("org.jetbrains.kotlin:kotlin-reflect")

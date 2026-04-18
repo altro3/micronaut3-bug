@@ -104,14 +104,14 @@ class UnifiedLoggingFilter(
         }
 
         return """
-        |
-        |================== Service request ==================
-        |URI: ${rq.method} ${getFullUri(rq)}
-        |Headers: ${getHeaders(rq)}
-        |Body:
-        |$bodyResult
-        |================== /Service request ==================
-    """.trimMargin()
+            |
+            |================== Service request ==================
+            |URI: ${rq.method} ${getFullUri(rq)}
+            |Headers: ${getHeaders(rq)}
+            |Body:
+            |$bodyResult
+            |================== /Service request ==================
+        """.trimMargin()
     }
 
     private fun getMultipartBody(rq: MultipartTypeWrapper): String =
@@ -172,15 +172,15 @@ class UnifiedLoggingFilter(
         }
 
         return """
-        |
-        |================== Service response ==================
-        |URI: ${rq.method} ${getFullUri(rq)}
-        |Status: $statusInt $statusMessage
-        |Headers: ${getResponseHeaders(rs)}
-        |Body:
-        |$bodyText
-        |================== /Service response ==================
-    """.trimMargin()
+            |
+            |================== Service response ==================
+            |URI: ${rq.method} ${getFullUri(rq)}
+            |Status: $statusInt $statusMessage
+            |Headers: ${getResponseHeaders(rs)}
+            |Body:
+            |$bodyText
+            |================== /Service response ==================
+        """.trimMargin()
     }
 
     private fun formatMultipartResponse(bytes: ByteArray, contentType: String?): String {
@@ -345,7 +345,6 @@ class UnifiedLoggingFilter(
         private const val STRING_QUOTE = "\""
         private const val STRING_NEW_LINE = "\n"
         private const val STRING_COLON_SPACE = ": "
-        private const val STRING_SEMICOLON = ";"
 
         private const val BODY_EMPTY = "[EMPTY]"
         private const val BODY_BINARY = "[BINARY DATA]"
@@ -360,7 +359,6 @@ class UnifiedLoggingFilter(
 
         private const val MARKER_BOUNDARY = "boundary="
         private const val MARKER_CONTENT_DISPOSITION = "Content-Disposition"
-        private const val MARKER_NAME = "name="
         private const val MARKER_FILENAME = "filename="
         private const val MARKER_TEXT = "text"
 

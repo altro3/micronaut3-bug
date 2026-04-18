@@ -56,7 +56,6 @@ class LogReconfigurator(
         private const val CONSOLE_PATTERN_KEY = "app.log.pattern.console"
 
         // Дефолтный паттерн: Дата Уровень [MDC] [Поток] Логгер - Сообщение
-        private const val DEFAULT_PATTERN =
-            "%d{HH:mm:ss.SSS} %highlight(%-5level) %magenta(%$MDC_BLOCK_WORD) [%thread] %cyan(%logger{25}) - %msg%n%throwable"
+        private const val DEFAULT_PATTERN = "%d{HH:mm:ss.SSS} %highlight(%-5level) %magenta(%$MDC_BLOCK_WORD) [%thread] %cyan(%logger{25}) - %msg%n%throwable"
     }
 }
