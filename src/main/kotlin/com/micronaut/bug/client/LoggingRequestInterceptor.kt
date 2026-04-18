@@ -2,6 +2,7 @@ package com.micronaut.bug.client
 
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.databind.SerializationFeature
+import com.micronaut.bug.client.LoggingRequestInterceptor.Companion.LIMIT_TEXT_CHECK_THRESHOLD
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.http.HttpRequest
 import org.springframework.http.MediaType
@@ -257,16 +258,44 @@ class LoggingRequestInterceptor(
     }
 
     /**
-     * Проверяет начало массива байтов на наличие NULL-символов.
-     * Используется для быстрого детектирования бинарных файлов.
+     * Эвристически определяет, является ли массив байтов текстовым контентом.
+     *
+     * Алгоритм анализирует начало массива (первые [LIMIT_TEXT_CHECK_THRESHOLD] байт) на наличие
+     * непечатных управляющих символов ASCII.
+     *
+     * Основные правила:
+     * 1. Наличие NULL-байта (0x00) однозначно классифицирует контент как бинарный.
+     * 2. Наличие управляющих символов (диапазон 0x00-0x1F), за исключением стандартных
+     *    символов форматирования (табуляция, перенос строки, возврат каретки), считается
+     *    признаком бинарных данных.
+     * 3. Байты выше 0x7F (включая кириллицу UTF-8, иероглифы и эмодзи) считаются допустимыми,
+     *    так как они являются частью многобайтовых текстовых кодировок.
+     *
+     * @param bytes Массив байтов для анализа.
+     * @return true, если данные похожи на текст (JSON, XML, Plain Text);
+     *         false, если обнаружены признаки бинарных данных (изображения, архивы и т.д.).
      */
     private fun isText(bytes: ByteArray): Boolean {
         if (bytes.isEmpty()) {
             return true
         }
+
+        // Берем чуть больше данных для анализа
         val limit = minOf(bytes.size, LIMIT_TEXT_CHECK_THRESHOLD)
+
         for (i in 0 until limit) {
-            if (bytes[i] == BYTE_ZERO) {
+            val b = bytes[i].toInt() and 0xFF
+
+            // NULL-байт — это 100% бинарник в контексте REST
+            if (b == 0) {
+                return false
+            }
+
+            // Управляющие символы ASCII (кроме таба и переносов)
+            // Если их больше определенного порога, значит это не случайный символ, а бинарные данные
+            if (b < 32 && b != 9 && b != 10 && b != 13) {
+                // Можно добавить счетчик, но обычно даже одного такого байта
+                // в начале JSON/XML быть не может.
                 return false
             }
         }
@@ -324,7 +353,7 @@ class LoggingRequestInterceptor(
 
         private const val SUFFIX_TRUNCATED = "... [TRUNCATED]"
         private const val LIMIT_LOG_SIZE = 8192
-        private const val LIMIT_TEXT_CHECK_THRESHOLD = 100
+        private const val LIMIT_TEXT_CHECK_THRESHOLD = 512
 
         /** Байтовые константы для оптимизации производительности в циклах */
         private const val BYTE_ZERO = 0.toByte()

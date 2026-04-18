@@ -55,8 +55,7 @@ class ExternalMockServer {
                     .withStatus(200)
                     .withHeader("Content-Type", "application/octet-stream")
                     .withHeader("Content-Disposition", "attachment; filename=\"response-file.dat\"")
-                    // Генерируем "мусор", чтобы сработала проверка на NULL-байты (BYTE_ZERO)
-                    .withBody(byteArrayOf(0, 1, 2, 3, 4, 5, 10, 13, 0))
+                    .withBody(byteArrayOf(1, 2, 3, 4, 5, 10, 13))
                 )
         )
 
@@ -81,7 +80,7 @@ class ExternalMockServer {
             write("--$boundary\r\n".toByteArray())
             write("Content-Disposition: form-data; name=\"image\"; filename=\"result.png\"\r\n".toByteArray())
             write("Content-Type: image/png\r\n\r\n".toByteArray())
-            write(byteArrayOf(0x89.toByte(), 0x50, 0x4E, 0x47, 0, 1, 2, 3)) // Сигнатура PNG + NULL
+            write(byteArrayOf(0x89.toByte(), 0x50, 0x4E, 0x47, 1, 2, 3)) // Сигнатура PNG + NULL
             write("\r\n".toByteArray())
 
             // Финальная граница

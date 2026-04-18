@@ -133,7 +133,7 @@ class MyEntityController(
         log.info { "--- Test 3: Process File (Binary) ---" }
 
         // Создаем реальные бинарные данные, начинающиеся с NULL-байта
-        val binaryContent = byteArrayOf(0, 1, 2, 3, 4, 5, 0x89.toByte(), 'P'.code.toByte(), 'N'.code.toByte(), 'G'.code.toByte())
+        val binaryContent = byteArrayOf(1, 2, 3, 4, 5, 0x89.toByte(), 'P'.code.toByte(), 'N'.code.toByte(), 'G'.code.toByte())
 
         val binaryFile = object : ByteArrayResource(binaryContent) {
             override fun getFilename() = "actual-binary-data.bin"
@@ -150,7 +150,7 @@ class MyEntityController(
             queryTag = "test-tag",
             jsonWithCt = MyDto("key", "val"),
             jsonNoCt = MyDto("k", "v"),
-            binaryFile = object : ByteArrayResource(byteArrayOf(0, 1, 2, 3)) { override fun getFilename() = "req.bin" },
+            binaryFile = object : ByteArrayResource(byteArrayOf(1, 2, 3)) { override fun getFilename() = "req.bin" },
             textFile = "hello"
         )
 
