@@ -39,11 +39,11 @@ class LoggingRequestInterceptor(
         execution: ClientHttpRequestExecution
     ): ClientHttpResponse {
 
-        // Ленивая подготовка данных лога запроса (вычислится только при записи в лог).
+        val isDebug = log.isDebugEnabled()
         val rqLogData by lazy { getRequestLogString(rq, body) }
 
-        // Если DEBUG включен, печатаем данные запроса сразу.
-        if (log.isDebugEnabled()) {
+        // Если включен дебаг — печатаем запрос сразу перед отправкой
+        if (isDebug) {
             log.debug { rqLogData }
         }
 
@@ -51,40 +51,31 @@ class LoggingRequestInterceptor(
         val rs: ClientHttpResponse
 
         try {
-            // Выполнение сетевого вызова.
             rs = execution.execute(rq, body)
         } catch (ex: Exception) {
             val duration = System.currentTimeMillis() - startTime
-            // Если DEBUG выключен, выводим данные запроса в ERROR для диагностики.
-            // Если DEBUG включен, запрос уже напечатан выше, выводим только ошибку и время.
-            if (!log.isDebugEnabled()) {
-                log.error(ex) { "External call failed! [${duration}ms]\n$rqLogData" }
-            } else {
+            // При сетевом исключении: в DEBUG пишем только факт ошибки, без DEBUG — полный контекст запроса
+            if (isDebug) {
                 log.error(ex) { "External call failed! [${duration}ms]" }
+            } else {
+                log.error(ex) { "External call failed! [${duration}ms]\n$rqLogData" }
             }
             throw ex
         }
 
         val duration = System.currentTimeMillis() - startTime
-
-        // Чтение тела ответа (требует использования BufferingClientHttpRequestFactory).
         val rsBody = rs.body.readAllBytes()
         val isError = rs.statusCode.isError
 
-        if (isError) {
-            // Если DEBUG выключен — выводим полный контекст (запрос + ответ) в ERROR.
-            // Если DEBUG включен — данные запроса уже в логах, выводим только ответ.
-            if (!log.isDebugEnabled()) {
-                log.error {
-                    "External service failure! [${duration}ms]\n$rqLogData\n${getResponseLogString(rq, rs, rsBody, duration)}"
-                }
-            } else {
-                log.debug { "External service failure [${duration}ms]\n${getResponseLogString(rq, rs, rsBody, duration)}" }
-                log.error { "External service failure detected! [${duration}ms]. See DEBUG logs for details." }
+        if (isDebug) {
+            // В режиме дебага всегда печатаем ответ отдельно (хоть успех, хоть ошибка)
+            log.debug { getResponseLogString(rq, rs, rsBody, duration) }
+            if (isError) {
+                log.error { "External service failure detected! Check DEBUG logs for details." }
             }
-        } else if (log.isDebugEnabled()) {
-            // В штатном режиме при успехе выводим данные только в DEBUG.
-            log.debug { "External service success [${duration}ms]\n${getResponseLogString(rq, rs, rsBody, duration)}" }
+        } else if (isError) {
+            // На проде (без дебага) при ошибке выводим всё одним информативным блоком
+            log.error { "External service failure!\n$rqLogData\n${getResponseLogString(rq, rs, rsBody, duration)}" }
         }
 
         return rs
