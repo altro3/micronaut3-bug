@@ -3,11 +3,13 @@ package com.micronaut.bug.client
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.databind.SerializationFeature
 import io.github.oshai.kotlinlogging.KotlinLogging
+import org.slf4j.MDC
 import org.springframework.http.HttpRequest
 import org.springframework.http.MediaType
 import org.springframework.http.client.ClientHttpRequestExecution
 import org.springframework.http.client.ClientHttpRequestInterceptor
 import org.springframework.http.client.ClientHttpResponse
+import java.util.UUID
 
 /**
  * Интерцептор для детального логирования исходящих HTTP-запросов и ответов.
@@ -39,46 +41,53 @@ class LoggingRequestInterceptor(
         execution: ClientHttpRequestExecution
     ): ClientHttpResponse {
 
-        val isDebug = log.isDebugEnabled()
-        val rqLogData by lazy { getRequestLogString(rq, body) }
-
-        // Если включен дебаг — печатаем запрос сразу перед отправкой
-        if (isDebug) {
-            log.debug { rqLogData }
-        }
-
-        val startTime = System.currentTimeMillis()
-        val rs: ClientHttpResponse
+        val extRqId = UUID.randomUUID().toString().replace("-", "")
+        MDC.put(MDC_EXT_RQ_ID, extRqId)
 
         try {
-            rs = execution.execute(rq, body)
-        } catch (ex: Exception) {
-            val duration = System.currentTimeMillis() - startTime
-            // При сетевом исключении: в DEBUG пишем только факт ошибки, без DEBUG — полный контекст запроса
+            val isDebug = log.isDebugEnabled()
+            val rqLogData by lazy { getRequestLogString(rq, body) }
+
+            // Если включен дебаг — печатаем запрос сразу перед отправкой
             if (isDebug) {
-                log.error(ex) { "External call failed! [${duration}ms]" }
-            } else {
-                log.error(ex) { "External call failed! [${duration}ms]\n$rqLogData" }
+                log.debug { rqLogData }
             }
-            throw ex
-        }
 
-        val duration = System.currentTimeMillis() - startTime
-        val rsBody = rs.body.readAllBytes()
-        val isError = rs.statusCode.isError
+            val startTime = System.currentTimeMillis()
+            val rs: ClientHttpResponse
 
-        if (isDebug) {
-            // В режиме дебага всегда печатаем ответ отдельно (хоть успех, хоть ошибка)
-            log.debug { getResponseLogString(rq, rs, rsBody, duration) }
-            if (isError) {
-                log.error { "External service failure detected! Check DEBUG logs for details." }
+            try {
+                rs = execution.execute(rq, body)
+            } catch (ex: Exception) {
+                val duration = System.currentTimeMillis() - startTime
+                // При сетевом исключении: в DEBUG пишем только факт ошибки, без DEBUG — полный контекст запроса
+                if (isDebug) {
+                    log.error(ex) { "External call failed! [${duration}ms]" }
+                } else {
+                    log.error(ex) { "External call failed! [${duration}ms]\n$rqLogData" }
+                }
+                throw ex
             }
-        } else if (isError) {
-            // На проде (без дебага) при ошибке выводим всё одним информативным блоком
-            log.error { "External service failure!\n$rqLogData\n${getResponseLogString(rq, rs, rsBody, duration)}" }
-        }
 
-        return rs
+            val duration = System.currentTimeMillis() - startTime
+            val rsBody = rs.body.readAllBytes()
+            val isError = rs.statusCode.isError
+
+            if (isDebug) {
+                // В режиме дебага всегда печатаем ответ отдельно (хоть успех, хоть ошибка)
+                log.debug { getResponseLogString(rq, rs, rsBody, duration) }
+                if (isError) {
+                    log.error { "External service failure detected! Check DEBUG logs for details." }
+                }
+            } else if (isError) {
+                // На проде (без дебага) при ошибке выводим всё одним информативным блоком
+                log.error { "External service failure!\n$rqLogData\n${getResponseLogString(rq, rs, rsBody, duration)}" }
+            }
+            return rs
+        } finally {
+            // Очищаем идентификатор внешнего запроса, чтобы он не "протек" в логи последующих операций в этом потоке.
+            MDC.remove(MDC_EXT_RQ_ID)
+        }
     }
 
     /**
@@ -312,5 +321,6 @@ class LoggingRequestInterceptor(
         private const val BYTE_SPACE = 32.toByte()
         private const val BYTE_JSON_OBJECT = '{'.code.toByte()
         private const val BYTE_JSON_ARRAY = '['.code.toByte()
+        private const val MDC_EXT_RQ_ID = "extRqId"
     }
 }
