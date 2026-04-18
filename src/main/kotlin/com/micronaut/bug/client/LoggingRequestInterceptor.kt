@@ -13,27 +13,25 @@ import org.springframework.http.client.ClientHttpResponse
  * Интерцептор для детального логирования исходящих HTTP-запросов и ответов.
  *
  * Основные возможности:
- * - Поддержка Pretty Print для JSON-контента.
- * - Детальный разбор Multipart-запросов с отображением метаданных частей.
- * - Эвристическая проверка на бинарные данные для предотвращения повреждения логов.
- * - Измерение времени выполнения запроса (Duration).
- * - Группировка запроса и ответа в одном событии при возникновении ошибок.
+ * - Формирует полный URI, комбинируя baseUrl и относительный путь.
+ * - Поддерживает Pretty Print для JSON-контента.
+ * - Выполняет детальный разбор Multipart-запросов аналогично серверному фильтру.
+ * - Эвристически определяет бинарные данные, предотвращая вывод "мусора" в логи.
+ * - Исключает дублирование данных в логах при включенном DEBUG уровне.
  */
 class LoggingRequestInterceptor(
-    private val props: HttpClientProperties
+    props: HttpClientProperties
 ) : ClientHttpRequestInterceptor {
 
     private val log = KotlinLogging.logger {}
 
     /**
-     * Префикс для формирования полного URI.
-     * Если логирование полного пути отключено, префикс остается пустым.
+     * Префикс для формирования полного URI. Вычисляется один раз при создании интерцептора.
      */
     private val basePrefix: String = if (props.logFullUrl) props.url.toString().removeSuffix(SLASH) else STRING_EMPTY
 
     /**
-     * Перехватывает выполнение HTTP-запроса.
-     * Замеряет время выполнения и выводит логи в зависимости от статуса ответа.
+     * Основной метод перехвата запроса. Управляет замером времени и выводом данных в лог.
      */
     override fun intercept(
         rq: HttpRequest,
@@ -41,10 +39,10 @@ class LoggingRequestInterceptor(
         execution: ClientHttpRequestExecution
     ): ClientHttpResponse {
 
-        // Используем lazy для подготовки строки лога запроса.
-        // Если логирование уровня DEBUG выключено, ресурсоемкие операции по сборке строки не выполнятся.
+        // Ленивая подготовка данных лога запроса (вычислится только при записи в лог).
         val rqLogData by lazy { getRequestLogString(rq, body) }
 
+        // Если DEBUG включен, печатаем данные запроса сразу.
         if (log.isDebugEnabled()) {
             log.debug { rqLogData }
         }
@@ -53,29 +51,39 @@ class LoggingRequestInterceptor(
         val rs: ClientHttpResponse
 
         try {
-            // Выполнение запроса далее по цепочке интерцепторов
+            // Выполнение сетевого вызова.
             rs = execution.execute(rq, body)
         } catch (ex: Exception) {
             val duration = System.currentTimeMillis() - startTime
-            // При сетевых ошибках (Timeout, Connection Refused) выводим контекст запроса на уровне ERROR
-            log.error(ex) { "External call failed! [${duration}ms]\n$rqLogData" }
+            // Если DEBUG выключен, выводим данные запроса в ERROR для диагностики.
+            // Если DEBUG включен, запрос уже напечатан выше, выводим только ошибку и время.
+            if (!log.isDebugEnabled()) {
+                log.error(ex) { "External call failed! [${duration}ms]\n$rqLogData" }
+            } else {
+                log.error(ex) { "External call failed! [${duration}ms]" }
+            }
             throw ex
         }
 
         val duration = System.currentTimeMillis() - startTime
 
-        // Чтение тела ответа. Требует наличия BufferingClientHttpRequestFactory в конфигурации клиента,
-        // иначе поток ответа будет закрыт после этого прочтения.
+        // Чтение тела ответа (требует использования BufferingClientHttpRequestFactory).
         val rsBody = rs.body.readAllBytes()
         val isError = rs.statusCode.isError
 
         if (isError) {
-            // В случае ошибки (4xx, 5xx) логируем и запрос, и ответ вместе для упрощения отладки в ELK/Splunk
-            log.error {
-                "External service error! [${duration}ms]\n$rqLogData\n${getResponseLogString(rq, rs, rsBody, duration)}"
+            // Если DEBUG выключен — выводим полный контекст (запрос + ответ) в ERROR.
+            // Если DEBUG включен — данные запроса уже в логах, выводим только ответ.
+            if (!log.isDebugEnabled()) {
+                log.error {
+                    "External service failure! [${duration}ms]\n$rqLogData\n${getResponseLogString(rq, rs, rsBody, duration)}"
+                }
+            } else {
+                log.debug { "External service failure [${duration}ms]\n${getResponseLogString(rq, rs, rsBody, duration)}" }
+                log.error { "External service failure detected! [${duration}ms]. See DEBUG logs for details." }
             }
         } else if (log.isDebugEnabled()) {
-            // В штатном режиме выводим только данные ответа в DEBUG
+            // В штатном режиме при успехе выводим данные только в DEBUG.
             log.debug { "External service success [${duration}ms]\n${getResponseLogString(rq, rs, rsBody, duration)}" }
         }
 
@@ -147,12 +155,10 @@ class LoggingRequestInterceptor(
                     val lines = partRaw.trim().lines()
                     val headerLines = lines.takeWhile { it.isNotBlank() }
 
-                    // Сбор локальных заголовков конкретной части Multipart
                     val partHeaders = headerLines.associate {
                         it.substringBefore(STRING_COLON_SPACE) to it.substringAfter(STRING_COLON_SPACE)
                     }
 
-                    // Содержимое части (тело) находится после пустой строки-разделителя
                     val content = lines.dropWhile { it.isNotBlank() }.drop(1).joinToString(STRING_NEW_LINE)
                     val contentBytes = content.toByteArray()
 
@@ -160,7 +166,6 @@ class LoggingRequestInterceptor(
                     var fileName: String? = null
                     var partCt: String? = null
 
-                    // Извлечение метаданных из заголовков части
                     partHeaders.forEach { (k, v) ->
                         if (k.contains(MARKER_CONTENT_DISPOSITION)) {
                             name = v.substringAfter(EQUALS_NAME, "").substringBefore(STRING_QUOTE)
@@ -178,13 +183,8 @@ class LoggingRequestInterceptor(
                         name
                     }
 
-                    val headersInfo = if (partHeaders.isNotEmpty()) {
-                        " | Headers: $partHeaders"
-                    } else {
-                        STRING_EMPTY
-                    }
+                    val headersInfo = if (partHeaders.isNotEmpty()) " | Headers: $partHeaders" else STRING_EMPTY
 
-                    // Проверка: если часть является файлом и содержит бинарный контент — логируем только метаданные
                     if (fileName != null && !isAlwaysTextField(partCt) && !isText(contentBytes)) {
                         TEMPLATE_PART_PREFIX.format(description, headersInfo, BODY_BINARY)
                     } else {
@@ -196,15 +196,14 @@ class LoggingRequestInterceptor(
     }
 
     /**
-     * Форматирует тело сообщения.
-     * Если определен JSON — делает Pretty Print, иначе возвращает строку (с ограничением по длине).
+     * Форматирует тело сообщения (JSON Pretty Print или текст с ограничением длины).
      */
     private fun formatBody(content: ByteArray, ct: String?): String {
         if (content.isEmpty()) {
             return BODY_EMPTY
         }
 
-        // Предотвращаем вывод бинарных данных (картинки, архивы) в текстовый лог
+        // Защита от логирования бинарных данных через поиск NULL-байтов.
         if (!isText(content)) {
             return BODY_BINARY
         }
@@ -238,7 +237,7 @@ class LoggingRequestInterceptor(
     }
 
     /**
-     * Проверяет, является ли переданный Content-Type гарантированно текстовым (JSON или явный Text).
+     * Проверяет, является ли переданный Content-Type текстовым.
      */
     private fun isAlwaysTextField(ct: String?): Boolean {
         if (ct == null) {
@@ -266,7 +265,7 @@ class LoggingRequestInterceptor(
     }
 
     /**
-     * Выполняет быструю проверку первого значащего байта на соответствие структуре JSON ( { или [ ).
+     * Быстрая проверка первых значащих байтов на соответствие JSON ( { или [ ).
      */
     private fun isJsonContent(bytes: ByteArray): Boolean {
         for (b in bytes) {
@@ -279,7 +278,7 @@ class LoggingRequestInterceptor(
     }
 
     /**
-     * Проверяет, является ли заголовок Content-Type признаком Multipart-запроса.
+     * Проверяет заголовок на соответствие Multipart-типу.
      */
     private fun isMultipart(ct: String?): Boolean {
         return ct?.startsWith(MediaType.MULTIPART_FORM_DATA_VALUE) == true
