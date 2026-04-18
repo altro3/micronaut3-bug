@@ -66,9 +66,11 @@ object HttpClientUtils {
         }
 
         if (clientProps.logging) {
-            // Тут используем LoggingRequestInterceptor, т.к. он более красиво и сгруппировано выводит логи
-            builder.requestInterceptor(LoggingRequestInterceptorOld(clientProps))
-                .requestFactory(BufferingClientHttpRequestFactory(requestFactory))
+            // ВАЖНО: BufferingClientHttpRequestFactory позволяет перечитывать InputStream тела.
+            // Без него интерцептор логирования "съест" данные, и клиент получит пустое тело.
+            // Добавляем наш интерцептор
+            builder.requestFactory(BufferingClientHttpRequestFactory(requestFactory))
+                .requestInterceptor(LoggingRequestInterceptor(clientProps))
         } else {
             builder.requestFactory(requestFactory)
         }

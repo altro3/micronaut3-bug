@@ -41,6 +41,8 @@ class UnifiedLoggingFilter(
         val rqId = rq.getHeader(X_REQ_ID)?.takeIf { it.isNotBlank() } ?: genTraceId()
         MDC.put(X_REQ_ID, rqId)
 
+        val startTime = System.currentTimeMillis()
+
         try {
 
             if (withActuator && props.skipActuator && rq.requestURI.contains(PATH_ACTUATOR)) {
@@ -66,14 +68,15 @@ class UnifiedLoggingFilter(
 
                 chain.doFilter(currentRq, rsWrapper)
             } finally {
+                val duration = System.currentTimeMillis() - startTime
                 val status = rsWrapper.status
                 val isError = status >= 400
                 if (isError) {
                     // ПРИ ОШИБКЕ: логируем и запрос, и ответ на уровне ERROR
-                    log.error { "Service failure detected!\n$requestLogData\n${getResponseLogString(currentRq, rsWrapper)}" }
+                    log.error { "Service failure detected!\n$requestLogData\n${getResponseLogString(currentRq, rsWrapper, duration)}" }
                 } else if (isDebugProvider) {
                     // В штатном режиме: логируем только ответ в DEBUG
-                    log.debug { getResponseLogString(currentRq, rsWrapper) }
+                    log.debug { getResponseLogString(currentRq, rsWrapper, duration) }
                 }
                 rsWrapper.copyBodyToResponse()
             }
@@ -158,7 +161,7 @@ class UnifiedLoggingFilter(
         }
     }
 
-    private fun getResponseLogString(rq: HttpServletRequest, rs: ContentCachingResponseWrapper): String {
+    private fun getResponseLogString(rq: HttpServletRequest, rs: ContentCachingResponseWrapper, duration: Long): String {
         val statusInt = rs.status.takeIf { it != 0 } ?: 200
         val statusMessage = runCatching {
             HttpStatus.resolve(statusInt)?.reasonPhrase
@@ -176,6 +179,7 @@ class UnifiedLoggingFilter(
             |================== Service response ==================
             |URI: ${rq.method} ${getFullUri(rq)}
             |Status: $statusInt $statusMessage
+            |Duration: ${duration}ms
             |Headers: ${getResponseHeaders(rs)}
             |Body:
             |$bodyText

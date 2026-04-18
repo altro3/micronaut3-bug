@@ -39,30 +39,33 @@ class LoggingRequestInterceptor(
         body: ByteArray,
         execution: ClientHttpRequestExecution
     ): ClientHttpResponse {
-
-        val extRqId = UUID.randomUUID().toString().replace("-", "")
         val isDebug = log.isDebugEnabled()
-        val rqLogData by lazy { getRequestLogString(rq, body) }
 
-        // Если включен дебаг — печатаем запрос сразу перед отправкой
+        // Уникальный ID для связки конкретной пары запрос-ответ
+        val extRqId = UUID.randomUUID().toString().replace(STRING_DASH, STRING_EMPTY)
+
+        // Данные запроса готовим лениво
+        val rqLogData by lazy { getRequestLogString(rq, body, extRqId) }
+
+        // 1. Включен DEBUG: логируем запрос сразу перед отправкой
         if (isDebug) {
             log.debug { rqLogData }
         }
 
         val startTime = System.currentTimeMillis()
         val rs: ClientHttpResponse
-
         try {
             rs = execution.execute(rq, body)
-        } catch (ex: Exception) {
+        } catch (e: Exception) {
             val duration = System.currentTimeMillis() - startTime
-            // При сетевом исключении: в DEBUG пишем только факт ошибки, без DEBUG — полный контекст запроса
             if (isDebug) {
-                log.error(ex) { "External call failed! [${duration}ms]" }
+                // В DEBUG запрос уже есть в логах, пишем только ID и ошибку
+                log.error(e) { "External call failed! [extRqId: $extRqId, duration: ${duration}ms]" }
             } else {
-                log.error(ex) { "External call failed! [${duration}ms]\n$rqLogData" }
+                // Без DEBUG выводим всё вместе: и данные запроса, и ошибку
+                log.error(e) { "External call failed! [extRqId: $extRqId, duration: ${duration}ms]\n$rqLogData" }
             }
-            throw ex
+            throw e
         }
 
         val duration = System.currentTimeMillis() - startTime
@@ -70,32 +73,27 @@ class LoggingRequestInterceptor(
         val isError = rs.statusCode.isError
 
         if (isDebug) {
-            // В режиме дебага всегда печатаем ответ отдельно (хоть успех, хоть ошибка)
-            log.debug { getResponseLogString(rq, rs, rsBody, duration) }
-            if (isError) {
-                log.error { "External service failure detected! Check DEBUG logs for details." }
-            }
+            // В DEBUG всегда пишем ответ отдельно (статус ошибки будет внутри шаблона)
+            log.debug { getResponseLogString(rq, rs, rsBody, duration, extRqId) }
         } else if (isError) {
-            // На проде (без дебага) при ошибке выводим всё одним информативным блоком
-            log.error { "External service failure!\n$rqLogData\n${getResponseLogString(rq, rs, rsBody, duration)}" }
+            // Без DEBUG логируем только ошибки: запрос и ответ одним блоком
+            log.error { "External service failure!\n$rqLogData\n${getResponseLogString(rq, rs, rsBody, duration, extRqId)}" }
         }
+
         return rs
     }
 
     /**
      * Формирует текстовый блок данных исходящего запроса.
      */
-    private fun getRequestLogString(rq: HttpRequest, body: ByteArray): String {
+    private fun getRequestLogString(rq: HttpRequest, body: ByteArray, extRqId: String): String {
         val ct = rq.headers.contentType?.toString()
-        val bodyResult = if (isMultipart(ct)) {
-            formatMultipart(body, ct)
-        } else {
-            formatBody(body, ct)
-        }
+        val bodyResult = if (isMultipart(ct)) formatMultipart(body, ct) else formatBody(body, ct)
 
         return """
             |================== Client request ==================
             |URI: ${rq.method} ${getFullUri(rq)}
+            |ExtRqId: $extRqId
             |Headers: ${rq.headers}
             |Body:
             |$bodyResult
@@ -106,17 +104,14 @@ class LoggingRequestInterceptor(
     /**
      * Формирует текстовый блок данных входящего ответа.
      */
-    private fun getResponseLogString(rq: HttpRequest, rs: ClientHttpResponse, body: ByteArray, duration: Long): String {
+    private fun getResponseLogString(rq: HttpRequest, rs: ClientHttpResponse, body: ByteArray, duration: Long, extRqId: String): String {
         val ct = rs.headers.contentType?.toString()
-        val bodyResult = if (isMultipart(ct)) {
-            formatMultipart(body, ct)
-        } else {
-            formatBody(body, ct)
-        }
+        val bodyResult = if (isMultipart(ct)) formatMultipart(body, ct) else formatBody(body, ct)
 
         return """
             |================== Client response ==================
             |URI: ${rq.method} ${getFullUri(rq)}
+            |ExtRqId: $extRqId
             |Status: ${rs.statusCode} (${rs.statusText})
             |Duration: ${duration}ms
             |Headers: ${rs.headers}
@@ -280,6 +275,7 @@ class LoggingRequestInterceptor(
         private val prettyMapper = ObjectMapper().enable(SerializationFeature.INDENT_OUTPUT)
 
         private const val STRING_EMPTY = ""
+        private const val STRING_DASH = "-"
         private const val STRING_NEW_LINE = "\n"
         private const val STRING_COLON_SPACE = ": "
         private const val STRING_QUOTE = "\""
