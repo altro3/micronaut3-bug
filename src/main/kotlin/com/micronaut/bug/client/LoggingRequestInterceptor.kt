@@ -135,7 +135,7 @@ class LoggingRequestInterceptor(
         } else if (isMultipart(ct)) {
             formatMultipart(body, ct)
         } else {
-            formatBody(body, ct)
+            formatBody(body, ct, rq.headers.toSingleValueMap())
         }
 
         return """
@@ -169,7 +169,7 @@ class LoggingRequestInterceptor(
         } else if (logProps.prettyPrint && isMultipart(ct)) {
             formatMultipart(processedBody, ct)
         } else {
-            formatBody(processedBody, ct) // formatBody сам проверит isText
+            formatBody(processedBody, ct, rs.headers.toSingleValueMap()) // formatBody сам проверит isText
         }
 
         return """
@@ -188,7 +188,14 @@ class LoggingRequestInterceptor(
 
     /**
      * Выполняет разбор массива байтов Multipart-сообщения.
-     * Разделяет тело по границе (boundary), извлекает заголовки и контент каждой части.
+     *
+     * Если [prettyPrint] включен, разбивает тело на части по границе (boundary),
+     * извлекает заголовки каждой части и форматирует контент.
+     * Для каждой части выполняется индивидуальная проверка на бинарные данные.
+     *
+     * @param bytes сырые байты всего multipart-тела.
+     * @param ct заголовок Content-Type, содержащий маркер boundary.
+     * @return отформатированная строка с детализацией по каждой части.
      */
     private fun formatMultipart(bytes: ByteArray, ct: String?): String {
         if (bytes.isEmpty()) {
@@ -242,10 +249,10 @@ class LoggingRequestInterceptor(
 
                     val headersInfo = if (partHeaders.isNotEmpty()) " | Headers: $partHeaders" else STRING_EMPTY
 
-                    if (isBinaryContent(name, fileName, partCt, contentBytes)) {
+                    if (isBinaryContent(contentBytes, partCt, partHeaders, fileName)) {
                         TEMPLATE_PART_PREFIX.format(description, headersInfo, BODY_BINARY)
                     } else {
-                        val formattedContent = formatBody(contentBytes, partCt)
+                        val formattedContent = formatBody(contentBytes, partCt, partHeaders)
                         TEMPLATE_PART_PREFIX.format(description, headersInfo, "Content: $formattedContent")
                     }
                 }
@@ -253,22 +260,32 @@ class LoggingRequestInterceptor(
     }
 
     /**
-     * Форматирует тело сообщения (JSON Pretty Print или текст с ограничением длины).
+     * Форматирует тело сообщения для вывода в лог.
+     *
+     * Логика работы:
+     * 1. Проверка на пустое тело.
+     * 2. Определение бинарного контента (MIME, расширение, байты).
+     * 3. Если Pretty Print выключен — вывод "как есть".
+     * 4. Если Pretty Print включен — попытка отформатировать JSON.
+     * 5. Применение ограничений на размер (Truncate).
      */
-    private fun formatBody(content: ByteArray, ct: String?): String {
+    private fun formatBody(content: ByteArray, ct: String?, headers: Map<String, String>? = null): String {
+        // 1. Быстрая проверка на пустое тело
         if (content.isEmpty()) {
             return BODY_EMPTY
         }
 
-        if (!isText(content)) {
+        // 2. Комплексная проверка на бинарные данные (наша финальная сигнатура)
+        if (isBinaryContent(content, ct, headers)) {
             return BODY_BINARY
         }
 
-        // Если Pretty Print выключен, просто переводим в UTF-8 без анализа контента
+        // 3. Формирование текстового представления
         val resultText = if (!logProps.prettyPrint) {
+            // Режим Raw: просто переводим байты в строку
             content.toString(Charsets.UTF_8)
         } else {
-
+            // Режим Pretty: пытаемся причесать JSON, если это он
             val isJson = ct?.contains(MediaType.APPLICATION_JSON_VALUE) == true || isJsonContent(content)
             if (isJson) {
                 runCatching {
@@ -280,11 +297,13 @@ class LoggingRequestInterceptor(
             }
         }
 
-        // 2. Теперь проверяем размер ИТОГОВОЙ строки (результата форматирования)
-        return if (resultText.length > logProps.limitLogSize) {
+        // 4. Проверка лимитов и обрезка (Truncate)
+        return if (logProps.limitLogSize > 0 && resultText.length > logProps.limitLogSize) {
             val head = resultText.take(logProps.truncateChunkSize)
             val tail = resultText.takeLast(logProps.truncateChunkSize)
-            "$head\n$SUFFIX_TRUNCATED [Skipped ${resultText.length - 2 * logProps.truncateChunkSize} characters]\n$tail"
+            val skipped = resultText.length - (head.length + tail.length)
+
+            "$head\n$SUFFIX_TRUNCATED [Skipped $skipped characters]\n$tail"
         } else {
             resultText
         }
@@ -313,22 +332,45 @@ class LoggingRequestInterceptor(
         return lower.contains(MediaType.APPLICATION_JSON_VALUE) || lower.contains(MARKER_TEXT)
     }
 
-    private fun isBinaryContent(name: String, fileName: String?, contentType: String?, bytes: ByteArray): Boolean {
-        // 1. Если это "всегда текстовый" тип (json, xml, plain text), то это НЕ бинарник
+    /**
+     * Определяет, является ли контент бинарным на основе заголовков, имени файла и анализа байтов.
+     *
+     * Алгоритм работает по принципу «от транспортного уровня к контенту»:
+     * 1. Проверяет транспортное сжатие (GZIP, Brotli, Deflate). Если данные сжаты — они бинарны.
+     * 2. Проверяет явно текстовые MIME-типы (JSON, XML и т.д.). Если да — доверяем и считаем текстом.
+     * 3. Анализирует подозрительные MIME-маркеры (картинки, архивы, офисные документы).
+     * 4. Проверяет расширение файла (актуально для Multipart-частей или вложений).
+     * 5. Финальная эвристика по байтам (поиск NULL-символов и непечатных знаков).
+     *
+     * @param bytes массив байтов для анализа.
+     * @param headers карта заголовков (обычно [HttpHeaders.toSingleValueMap]).
+     * @param contentType строка заголовка Content-Type.
+     * @param fileName имя файла (из параметров парты или Content-Disposition).
+     * @return true, если контент классифицирован как бинарный; false, если это текст.
+     */
+    private fun isBinaryContent(bytes: ByteArray, contentType: String? = null, headers: Map<String, String>? = null, fileName: String? = null): Boolean {
+
+        // 1. Проверка на GZIP (приоритет над текстом)
+        // Если данные сжаты (по заголовку или сигнатуре), они бинарны для логгера.
+        val encoding = headers?.get(HttpHeaders.CONTENT_ENCODING)
+        if (!encoding.isNullOrEmpty() && COMPRESSION_ENCODINGS.any { encoding.contains(it, ignoreCase = true) } || isGzipSignature(bytes)) {
+            return true
+        }
+        // 2. ТЕКСТ: Если тип текстовый — доверяем и выводим как текст
         if (isAlwaysTextField(contentType)) {
             return false
         }
 
-        // 2. Если в Content-Type есть признаки бинарных данных
-        if (contentType?.lowercase()?.let {
-                it.contains("octet-stream") || it.contains("image/") || it.contains("pdf") || it.contains("zip")
-            } == true) {
+        // 3. MIME: Проверка по бинарным маркерам
+        if (contentType?.lowercase()?.let { ct -> BINARY_MIME_MARKERS.any { ct.contains(it) } } == true) {
             return true
         }
 
-        // 3. Если есть имя файла и это не .txt / .json (простейшая проверка расширения)
-        if (fileName != null) {
-            val ext = fileName.substringAfterLast('.', STRING_EMPTY).lowercase()
+        // 4. ФАЙЛ: Проверка по расширению
+        // Берем либо переданный fileName, либо пытаемся вытащить его из Content-Type
+        val effectiveFileName = fileName ?: extractFileNameFromContentType(contentType)
+        if (effectiveFileName != null) {
+            val ext = effectiveFileName.substringAfterLast('.', STRING_EMPTY).lowercase()
             if (ext.isNotEmpty() && ext !in EXTENSIONS_TEXT) {
                 return true
             }
@@ -336,6 +378,32 @@ class LoggingRequestInterceptor(
 
         // 4. И только в последнюю очередь, если метаданных нет, смотрим на байты
         return !isText(bytes)
+    }
+
+    /**
+     * Проверяет магические байты GZIP (0x1f, 0x8b) в начале массива.
+     */
+    private fun isGzipSignature(bytes: ByteArray): Boolean {
+        if (bytes.size < 2) {
+            return false
+        }
+        return (bytes[0].toInt() and 0xFF == 0x1F) && (bytes[1].toInt() and 0xFF == 0x8B)
+    }
+
+    /**
+     * Пытается вытащить расширение, если оно спрятано в Content-Type
+     * (иногда бывает: application/vnd.ms-excel; name="report.xlsx")
+     */
+    private fun extractFileNameFromContentType(ct: String?): String? {
+        if (ct == null || !ct.contains(EQUALS_NAME)) {
+            return null
+        }
+
+        return runCatching {
+            ct.substringAfter(EQUALS_NAME)
+                .substringBefore(STRING_QUOTE)
+                .takeIf { it.isNotBlank() }
+        }.getOrNull()
     }
 
     /**
@@ -418,8 +486,16 @@ class LoggingRequestInterceptor(
         private const val BODY_MULTIPART_RAW = "[MULTIPART RAW]"
         private const val BODY_LOG_DISABLED = "[BODY LOGGING DISABLED BY CLIENT]"
 
-        private val EXTENSIONS_TEXT = setOf("txt", "json", "xml", "html", "csv")
-
+        private val COMPRESSION_ENCODINGS = setOf("gzip", "br", "deflate")
+        private val EXTENSIONS_TEXT = setOf(
+            "txt", "json", "xml", "html", "csv", "yml", "yaml", // Базовые
+            "log", "toml", "properties", "conf", "config",    // Конфиги и логи
+            "md", "sql", "js", "css", "sh", "bat", "py"       // Скрипты и разметка
+        )
+        private val BINARY_MIME_MARKERS = setOf(
+            "octet-stream", "image/", "video/", "audio/", "pdf", "zip",
+            "vnd.ms-excel", "vnd.openxmlformats-officedocument", "application/msword"
+        )
         const val ENCODING_GZIP = "gzip"
 
         private const val PART_UNKNOWN = "UNKNOWN"

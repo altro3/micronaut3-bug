@@ -38,7 +38,7 @@ class GzipRequestInterceptor : ClientHttpRequestInterceptor {
             val compressedBody = compress(body)
 
             // Извлекаем наш ID из атрибутов
-            val extRqId = rq.attributes[ATTR_EXT_RQ_ID] as? String ?: "unknown"
+            val extRqId = rq.attributes[ATTR_EXT_RQ_ID] as? String ?: EXT_REQ_ID_UNKNOWN
 
             log.debug {
                 val original = body.size.toLong()
@@ -67,5 +67,10 @@ class GzipRequestInterceptor : ClientHttpRequestInterceptor {
         val baos = ByteArrayOutputStream()
         GZIPOutputStream(baos).use { it.write(body) }
         return baos.toByteArray()
+    }
+
+    companion object {
+
+        const val EXT_REQ_ID_UNKNOWN = "unknown"
     }
 }

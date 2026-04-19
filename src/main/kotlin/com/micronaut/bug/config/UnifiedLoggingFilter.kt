@@ -2,6 +2,7 @@ package com.micronaut.bug.config
 
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.databind.SerializationFeature
+import com.micronaut.bug.config.UnifiedLoggingFilter.Companion.LIMIT_TEXT_CHECK_THRESHOLD
 import com.micronaut.bug.config.log.LogProperties
 import io.github.oshai.kotlinlogging.KotlinLogging
 import jakarta.servlet.FilterChain
@@ -352,6 +353,16 @@ class UnifiedLoggingFilter(
         private const val BODY_BINARY = "[BINARY DATA]"
         private const val BODY_MULTIPART_RS = "[MULTIPART RAW DISABLED]"
 
+        private val EXTENSIONS_TEXT = setOf(
+            "txt", "json", "xml", "html", "csv", "yml", "yaml", // Базовые
+            "log", "toml", "properties", "conf", "config",    // Конфиги и логи
+            "md", "sql", "js", "css", "sh", "bat", "py"       // Скрипты и разметка
+        )
+        private val BINARY_MIME_MARKERS = setOf(
+            "octet-stream", "image/", "video/", "audio/", "pdf", "zip",
+            "vnd.ms-excel", "vnd.openxmlformats-officedocument", "application/msword"
+        )
+
         private const val PART_UNKNOWN = "UNKNOWN"
 
         private const val TEMPLATE_PART_PREFIX = "  [PART] -> Name: %s%s | %s"
@@ -373,7 +384,6 @@ class UnifiedLoggingFilter(
         private const val LIMIT_LOG_SIZE = 8192
         private const val LIMIT_TEXT_CHECK_THRESHOLD = 100
 
-        private const val BYTE_NULL: Byte = 0
         private const val BYTE_JSON_OBJECT = '{'.code.toByte()
         private const val BYTE_JSON_ARRAY = '['.code.toByte()
 
@@ -390,18 +400,22 @@ class UnifiedLoggingFilter(
 
         private fun isBinaryContent(name: String, fileName: String?, contentType: String?, bytes: ByteArray): Boolean {
             // 1. Если это "всегда текстовый" тип (json, xml, plain text), то это НЕ бинарник
-            if (isAlwaysTextField(contentType)) return false
+            if (isAlwaysTextField(contentType)) {
+                return false
+            }
 
+            val ctLower = contentType?.lowercase() ?: STRING_EMPTY
             // 2. Если в Content-Type есть признаки бинарных данных
-            if (contentType?.lowercase()?.let {
-                    it.contains("octet-stream") || it.contains("image/") || it.contains("pdf") || it.contains("zip")
-                } == true) return true
+            if (ctLower.isNotEmpty() && BINARY_MIME_MARKERS.any { ctLower.contains(it) }) {
+                return true
+            }
 
             // 3. Если есть имя файла и это не .txt / .json (простейшая проверка расширения)
             if (fileName != null) {
-                val ext = fileName.substringAfterLast('.', "").lowercase()
-                val textExtensions = setOf("txt", "json", "xml", "html", "csv")
-                if (ext.isNotEmpty() && ext !in textExtensions) return true
+                val ext = fileName.substringAfterLast('.', STRING_EMPTY).lowercase()
+                if (ext.isNotEmpty() && ext !in EXTENSIONS_TEXT) {
+                    return true
+                }
             }
 
             // 4. И только в последнюю очередь, если метаданных нет, смотрим на байты
@@ -451,11 +465,6 @@ class UnifiedLoggingFilter(
                 }
             }
             return true
-        }
-
-        private fun isBinaryType(ct: String?): Boolean {
-            val lower = ct?.lowercase() ?: return false
-            return lower.contains("octet-stream") || lower.contains("image/") || lower.contains("pdf")
         }
 
         private fun isMultipart(ct: String?): Boolean =
