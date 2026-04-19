@@ -1,6 +1,7 @@
 package com.micronaut.bug.client
 
 import com.micronaut.bug.client.LoggingRequestInterceptor.Companion.ATTR_EXT_RQ_ID
+import com.micronaut.bug.client.LoggingRequestInterceptor.Companion.ATTR_SKIP_LOGGING
 import com.micronaut.bug.client.LoggingRequestInterceptor.Companion.ENCODING_GZIP
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.http.HttpHeaders
@@ -31,33 +32,38 @@ class GzipRequestInterceptor : ClientHttpRequestInterceptor {
         body: ByteArray,
         execution: ClientHttpRequestExecution
     ): ClientHttpResponse {
+
+        if (!log.isDebugEnabled() || rq.attributes[ATTR_SKIP_LOGGING] as? Boolean == true) {
+            return execution.execute(rq, body)
+        }
+
         val isGzipRequested = rq.headers.getFirst(HttpHeaders.CONTENT_ENCODING)
             ?.contains(ENCODING_GZIP, true) == true
 
-        if (isGzipRequested && body.isNotEmpty()) {
-            val compressedBody = compress(body)
-
-            // Извлекаем наш ID из атрибутов
-            val extRqId = rq.attributes[ATTR_EXT_RQ_ID] as? String ?: EXT_REQ_ID_UNKNOWN
-
-            log.debug {
-                val original = body.size.toLong()
-                val compressed = compressedBody.size.toLong()
-                val diff = compressed - original
-
-                // Вычисляем процент изменения через Double для точности
-                val percentChange = (diff.toDouble() / original * 100).toInt()
-
-                // Формируем наглядный индикатор изменения (например: -450 B или +12 B)
-                val diffFormatted = if (diff > 0) "+$diff B" else "$diff B"
-                val percentFormatted = if (percentChange > 0) "+$percentChange%" else "$percentChange%"
-
-                "GZIP applied [extRqId: $extRqId]. Size: $original -> $compressed bytes | Diff: $diffFormatted ($percentFormatted)"
-            }
-            return execution.execute(rq, compressedBody)
+        if (!isGzipRequested || body.isEmpty()) {
+            return execution.execute(rq, body)
         }
 
-        return execution.execute(rq, body)
+        val compressedBody = compress(body)
+
+        // Извлекаем наш ID из атрибутов
+        val extRqId = rq.attributes[ATTR_EXT_RQ_ID] as? String ?: EXT_REQ_ID_UNKNOWN
+
+        log.debug {
+            val original = body.size.toLong()
+            val compressed = compressedBody.size.toLong()
+            val diff = compressed - original
+
+            // Вычисляем процент изменения через Double для точности
+            val percentChange = (diff.toDouble() / original * 100).toInt()
+
+            // Формируем наглядный индикатор изменения (например: -450 B или +12 B)
+            val diffFormatted = if (diff > 0) "+$diff B" else "$diff B"
+            val percentFormatted = if (percentChange > 0) "+$percentChange%" else "$percentChange%"
+
+            "GZIP applied [extRqId: $extRqId]. Size: $original -> $compressed bytes | Diff: $diffFormatted ($percentFormatted)"
+        }
+        return execution.execute(rq, compressedBody)
     }
 
     /**

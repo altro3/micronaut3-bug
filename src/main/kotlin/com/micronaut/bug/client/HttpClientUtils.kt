@@ -73,15 +73,16 @@ object HttpClientUtils {
             // Добавляем наш интерцептор
             builder.requestFactory(BufferingClientHttpRequestFactory(requestFactory))
                 .requestInterceptor(LoggingRequestInterceptor(clientProps))
+
+            // 2. Регистрация GZIP-интерцептора
+            // Эта логика независима от логирования. Если сжатие включено в конфиге,
+            // клиент обязан уметь сжимать исходящие тела запросов.
+            if (clientProps.compress) {
+                builder.requestInterceptor(GzipRequestInterceptor())
+            }
+
         } else {
             builder.requestFactory(requestFactory)
-        }
-
-        // 2. Регистрация GZIP-интерцептора
-        // Эта логика независима от логирования. Если сжатие включено в конфиге,
-        // клиент обязан уметь сжимать исходящие тела запросов.
-        if (clientProps.compress) {
-            builder.requestInterceptor(GzipRequestInterceptor())
         }
 
         if (clientProps.tracing) {
