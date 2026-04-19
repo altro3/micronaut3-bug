@@ -225,7 +225,7 @@ class MyEntityController(
 
         return mapOf(
             "status" to (if (response?.status == "success") "OK" else "ERROR"),
-            "received_data" to (response ?: "null")
+            "received_data" to (response ?: "null"),
         )
     }
 
