@@ -14,6 +14,7 @@ import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpMethod
 import org.springframework.http.HttpStatus
 import org.springframework.http.MediaType
+import org.springframework.http.ResponseEntity
 import org.springframework.util.LinkedMultiValueMap
 import org.springframework.util.MultiValueMap
 import org.springframework.web.bind.annotation.GetMapping
@@ -25,6 +26,8 @@ import org.springframework.web.bind.annotation.RequestPart
 import org.springframework.web.bind.annotation.ResponseStatus
 import org.springframework.web.bind.annotation.RestController
 import org.springframework.web.multipart.MultipartFile
+import java.io.ByteArrayOutputStream
+import java.util.zip.GZIPOutputStream
 
 @RestController
 class MyEntityController(
@@ -34,6 +37,21 @@ class MyEntityController(
 ) {
 
     private val log = KotlinLogging.logger {}
+
+    @PostMapping("/get-gzip", produces = [MediaType.APPLICATION_JSON_VALUE])
+    fun getGzipData(): ResponseEntity<ByteArray> {
+        val jsonResponse = """{"status":"success","message":"This data is compressed by server"}"""
+
+        val baos = ByteArrayOutputStream()
+        GZIPOutputStream(baos).use { it.write(jsonResponse.toByteArray()) }
+        val compressedData = baos.toByteArray()
+
+        val headers = HttpHeaders()
+        headers.set(HttpHeaders.CONTENT_ENCODING, "gzip")
+        headers.contentType = MediaType.APPLICATION_JSON
+
+        return ResponseEntity(compressedData, headers, HttpStatus.OK)
+    }
 
     @PostMapping(
         "/testBinary",
@@ -117,6 +135,7 @@ class MyEntityController(
         return responseMap
     }
 
+    ///////////////////////////////////// Клиент!!! //////////////////////////////////////////
     @GetMapping("/run-all")
     fun runAllTests(): String {
         log.info { "Starting sequential integration tests..." }
@@ -151,7 +170,9 @@ class MyEntityController(
             queryTag = "test-tag",
             jsonWithCt = MyDto("key", "val"),
             jsonNoCt = MyDto("k", "v"),
-            binaryFile = object : ByteArrayResource(byteArrayOf(1, 2, 3)) { override fun getFilename() = "req.bin" },
+            binaryFile = object : ByteArrayResource(byteArrayOf(1, 2, 3)) {
+                override fun getFilename() = "req.bin"
+            },
             textFile = "hello"
         )
 

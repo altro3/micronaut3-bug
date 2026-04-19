@@ -30,6 +30,10 @@ class UnifiedLoggingFilter(
 
     private val log = KotlinLogging.logger {}
 
+    /**
+     * Mapper для красивого вывода JSON.
+     * Копируем основной, чтобы не менять глобальные настройки сериализации.
+     */
     private val prettyMapper: ObjectMapper = objectMapper.copy()
         .enable(SerializationFeature.INDENT_OUTPUT)
     private val withActuator: Boolean = ClassUtils.isPresent("org.springframework.boot.actuate.autoconfigure.endpoint.web.WebEndpointProperties", null)
@@ -39,6 +43,7 @@ class UnifiedLoggingFilter(
         rs: HttpServletResponse,
         chain: FilterChain,
     ) {
+        // Извлекаем или генерируем ID запроса для сквозной трассировки в MDC
         val rqId = rq.getHeader(X_REQ_ID)?.takeIf { it.isNotBlank() } ?: genTraceId()
         MDC.put(X_REQ_ID, rqId)
 
@@ -46,6 +51,7 @@ class UnifiedLoggingFilter(
 
         try {
 
+            // Пропускаем Actuator-эндпоинты, если это указано в настройках
             if (withActuator && props.skipActuator && rq.requestURI.contains(PATH_ACTUATOR)) {
                 chain.doFilter(rq, rs)
                 return
@@ -53,12 +59,13 @@ class UnifiedLoggingFilter(
 
             val isDebugProvider = log.isDebugEnabled() && props.enabledControllerLogging
 
-            // Оборачиваем запрос всегда, чтобы иметь возможность прочитать тело при ошибке
+            // Оборачиваем запрос: кэшируем тело, чтобы прочитать его для лога и оставить доступным для контроллера
             val currentRq = wrapRequest(rq)
 
             // Сразу формируем строку запроса, но не печатаем её
             val requestLogData by lazy { getRequestLogString(currentRq) }
 
+            // Оборачиваем ответ для кэширования исходящего потока
             val rsWrapper = ContentCachingResponseWrapper(rs)
 
             try {
@@ -79,6 +86,7 @@ class UnifiedLoggingFilter(
                     // В штатном режиме: логируем только ответ в DEBUG
                     log.debug { getResponseLogString(currentRq, rsWrapper, duration) }
                 }
+                // Важно: копируем кэшированное тело ответа обратно в реальный поток
                 rsWrapper.copyBodyToResponse()
             }
         } finally {
@@ -86,6 +94,9 @@ class UnifiedLoggingFilter(
         }
     }
 
+    /**
+     * Выбирает стратегию оборачивания запроса в зависимости от типа контента.
+     */
     private fun wrapRequest(rq: HttpServletRequest): HttpServletRequest =
         if (isMultipart(rq.contentType)) {
             MultipartTypeWrapper(rq) // Твой враппер для Multipart
@@ -94,6 +105,9 @@ class UnifiedLoggingFilter(
             CachedBodyRequestWrapper(rq, bytes) // Твой враппер для обычных тел
         }
 
+    /**
+     * Формирует строковое представление входящего запроса.
+     */
     private fun getRequestLogString(rq: HttpServletRequest): String {
         val bodyResult = if (rq is CachedBodyRequestWrapper) {
             if (rq.body.isEmpty()) {
@@ -118,6 +132,9 @@ class UnifiedLoggingFilter(
         """.trimMargin()
     }
 
+    /**
+     * Разбирает Multipart запрос на отдельные части и форматирует их.
+     */
     private fun getMultipartBody(rq: MultipartTypeWrapper): String =
         runCatching {
             rq.parts.joinToString(STRING_NEW_LINE) { part ->
@@ -136,6 +153,9 @@ class UnifiedLoggingFilter(
             }.ifEmpty { BODY_EMPTY }
         }.getOrElse { "[MULTIPART ERROR: ${it.message}]" }
 
+    /**
+     * Обрабатывает контент конкретной части Multipart сообщения.
+     */
     private fun processPartContent(
         bytes: ByteArray,
         ct: String?,
@@ -143,36 +163,26 @@ class UnifiedLoggingFilter(
         headers: Map<String, String> = emptyMap()
     ): String {
         val headersString = if (headers.isNotEmpty()) " | Headers: $headers" else STRING_EMPTY
-
-        return when {
-            bytes.isEmpty() -> TEMPLATE_PART_PREFIX.format(description, headersString, BODY_EMPTY)
-
-            isText(bytes) -> {
-                val formatted = formatIfJson(bytes, ct).let {
-                    if (it.length > LIMIT_LOG_SIZE) {
-                        it.take(LIMIT_LOG_SIZE) + SUFFIX_TRUNCATED
-                    } else {
-                        it
-                    }
-                }
-                TEMPLATE_PART_PREFIX.format(description, headersString, "Content: $formatted")
-            }
-
-            else -> TEMPLATE_PART_PREFIX.format(description, headersString, BODY_BINARY)
-        }
+        val content = formatBody(bytes, ct, headers)
+        val prefix = if (content == BODY_BINARY) BODY_BINARY else "Content: $content"
+        return TEMPLATE_PART_PREFIX.format(description, headersString, prefix)
     }
 
+    /**
+     * Формирует строковое представление исходящего ответа.
+     */
     private fun getResponseLogString(rq: HttpServletRequest, rs: ContentCachingResponseWrapper, duration: Long): String {
         val statusInt = rs.status.takeIf { it != 0 } ?: 200
         val statusMessage = runCatching {
             HttpStatus.resolve(statusInt)?.reasonPhrase
         }.getOrNull() ?: STRING_EMPTY
 
+        val headers = getResponseHeaders(rs)
         val contentType = rs.contentType
         val bodyText = when {
             isMultipart(contentType) -> formatMultipartResponse(rs.contentAsByteArray, contentType)
             rs.contentAsByteArray.isEmpty() -> BODY_EMPTY
-            else -> formatBody(rs.contentAsByteArray, contentType)
+            else -> formatBody(rs.contentAsByteArray, contentType, headers)
         }
 
         return """
@@ -181,13 +191,16 @@ class UnifiedLoggingFilter(
             |URI: ${rq.method} ${getFullUri(rq)}
             |Status: $statusInt $statusMessage
             |Duration: ${duration}ms
-            |Headers: ${getResponseHeaders(rs)}
+            |Headers: $headers
             |Body:
             |$bodyText
             |================== /Service response ==================
         """.trimMargin()
     }
 
+    /**
+     * Ручной разбор Multipart-ответа (используется редко, для симметрии с клиентом).
+     */
     private fun formatMultipartResponse(bytes: ByteArray, contentType: String?): String {
         if (bytes.isEmpty()) {
             return BODY_EMPTY
@@ -236,7 +249,7 @@ class UnifiedLoggingFilter(
                     }
 
                     val headersInfo = if (partHeaders.isNotEmpty()) " | Headers: $partHeaders" else STRING_EMPTY
-                    if (isBinaryContent(finalName, fileName, partCt, contentBytes)) {
+                    if (isBinaryContent(contentBytes, partHeaders, partCt, finalName)) {
                         TEMPLATE_PART_PREFIX.format(description, headersInfo, BODY_BINARY)
                     } else {
                         processPartContent(contentBytes, partCt, description, partHeaders)
@@ -245,11 +258,27 @@ class UnifiedLoggingFilter(
         }.getOrElse { BODY_MULTIPART_RS }
     }
 
-    private fun formatBody(content: ByteArray, contentType: String?): String {
-        if (!isText(content)) {
+    /**
+     * Основной метод форматирования тела (JSON Pretty Print, Raw или Binary).
+     */
+    private fun formatBody(content: ByteArray, contentType: String?, headers: Map<String, String>? = null): String {
+        // Умная проверка на бинарные данные, включая GZIP и расширения
+        if (isBinaryContent(content, headers, contentType)) {
             return BODY_BINARY
         }
-        return formatIfJson(content, contentType)
+
+        val resultText = if (props.prettyPrint) {
+            formatIfJson(content, contentType)
+        } else {
+            String(content, Charsets.UTF_8)
+        }
+
+        // Обрезка по принципу "голова...хвост"
+        return if (props.limitLogSize > 0 && resultText.length > props.limitLogSize) {
+            val head = resultText.take(props.truncateChunkSize)
+            val tail = resultText.takeLast(props.truncateChunkSize)
+            "$head\n$SUFFIX_TRUNCATED [Skipped ${resultText.length - 2 * props.truncateChunkSize} chars]\n$tail"
+        } else resultText
     }
 
     private fun formatIfJson(bytes: ByteArray, contentType: String?): String {
@@ -272,8 +301,8 @@ class UnifiedLoggingFilter(
     private fun getHeaders(rq: HttpServletRequest): String =
         rq.headerNames.asSequence().associateWith { rq.getHeader(it) }.toString()
 
-    private fun getResponseHeaders(rs: HttpServletResponse): String =
-        rs.headerNames.associateWith { rs.getHeader(it) }.toString()
+    private fun getResponseHeaders(rs: HttpServletResponse): Map<String, String> =
+        rs.headerNames.associateWith { rs.getHeader(it) }
 
     private class CachedBodyRequestWrapper(
         rq: HttpServletRequest,
@@ -353,6 +382,7 @@ class UnifiedLoggingFilter(
         private const val BODY_BINARY = "[BINARY DATA]"
         private const val BODY_MULTIPART_RS = "[MULTIPART RAW DISABLED]"
 
+        private val COMPRESSION_ENCODINGS = setOf("gzip", "br", "deflate")
         private val EXTENSIONS_TEXT = setOf(
             "txt", "json", "xml", "html", "csv", "yml", "yaml", // Базовые
             "log", "toml", "properties", "conf", "config",    // Конфиги и логи
@@ -381,7 +411,6 @@ class UnifiedLoggingFilter(
         private const val PREFIX_DASH = "--"
         private const val HEADER_CONTENT_TYPE = "Content-Type"
 
-        private const val LIMIT_LOG_SIZE = 8192
         private const val LIMIT_TEXT_CHECK_THRESHOLD = 100
 
         private const val BYTE_JSON_OBJECT = '{'.code.toByte()
@@ -398,29 +427,40 @@ class UnifiedLoggingFilter(
             return false
         }
 
-        private fun isBinaryContent(name: String, fileName: String?, contentType: String?, bytes: ByteArray): Boolean {
-            // 1. Если это "всегда текстовый" тип (json, xml, plain text), то это НЕ бинарник
+        /**
+         * Определяет, является ли контент бинарным (GZIP, MIME, расширение или байты).
+         * Синхронизировано с логикой клиентского интерцептора.
+         */
+        private fun isBinaryContent(bytes: ByteArray, headers: Map<String, String>? = null, contentType: String? = null, fileName: String? = null): Boolean {
+            // 1. Проверка на сжатие (защита от кракозябр)
+            val encoding = headers?.get(org.springframework.http.HttpHeaders.CONTENT_ENCODING)
+            if (!encoding.isNullOrEmpty() && COMPRESSION_ENCODINGS.any { encoding.contains(it, ignoreCase = true) } || isGzipSignature(bytes)) {
+                return true
+            }
+
             if (isAlwaysTextField(contentType)) {
                 return false
             }
 
-            val ctLower = contentType?.lowercase() ?: STRING_EMPTY
-            // 2. Если в Content-Type есть признаки бинарных данных
-            if (ctLower.isNotEmpty() && BINARY_MIME_MARKERS.any { ctLower.contains(it) }) {
+            // 2. Проверка по MIME-типам
+            if (contentType?.lowercase()?.let { ct -> BINARY_MIME_MARKERS.any { ct.contains(it) } } == true) {
                 return true
             }
 
-            // 3. Если есть имя файла и это не .txt / .json (простейшая проверка расширения)
-            if (fileName != null) {
-                val ext = fileName.substringAfterLast('.', STRING_EMPTY).lowercase()
+            // 3. Проверка по расширению файла
+            val effectiveFileName = fileName ?: contentType?.substringAfter("name=\"", "")?.substringBefore("\"", "")?.takeIf { it.isNotBlank() }
+            if (effectiveFileName != null) {
+                val ext = effectiveFileName.substringAfterLast('.', "").lowercase()
                 if (ext.isNotEmpty() && ext !in EXTENSIONS_TEXT) {
                     return true
                 }
             }
 
-            // 4. И только в последнюю очередь, если метаданных нет, смотрим на байты
             return !isText(bytes)
         }
+
+        private fun isGzipSignature(b: ByteArray): Boolean =
+            b.size >= 2 && (b[0].toInt() and 0xFF == 0x1F) && (b[1].toInt() and 0xFF == 0x8B)
 
         /**
          * Эвристически определяет, является ли массив байтов текстовым контентом.

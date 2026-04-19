@@ -99,11 +99,6 @@ class HttpClientProperties(
         @field:NotNull
         var fullUrl: Boolean = true,
         /**
-         * Разрешает или запрещает логирование тела запроса для multipart/form-data.
-         */
-        @field:NotNull
-        var multipartBody: Boolean = true,
-        /**
          * Максимально допустимый размер тела сообщения в логах (в байтах).
          * Значения 0 или -1 отключают ограничение (логируется весь объем).
          */
