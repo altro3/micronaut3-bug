@@ -10,6 +10,7 @@ import org.springframework.core.ParameterizedTypeReference
 import org.springframework.core.io.Resource
 import org.springframework.http.HttpEntity
 import org.springframework.http.HttpHeaders
+import org.springframework.http.HttpMethod
 import org.springframework.http.MediaType
 import org.springframework.stereotype.Service
 import org.springframework.util.LinkedMultiValueMap
@@ -19,7 +20,7 @@ import org.springframework.util.MultiValueMap
 class ExtServiceClient(
     props: ExtServiceProperties,
     @Qualifier("extServiceHttpClient")
-    private val httpClient: DefaultHttpClient
+    val httpClient: DefaultHttpClient
 ) {
 
     private val endpoints = props.endpoints
@@ -79,6 +80,28 @@ class ExtServiceClient(
             pathVars = mapOf("id" to id),
             queryParams = mapOf("tag" to queryTag),
             headers = mapOf(HttpHeaders.CONTENT_TYPE to MediaType.MULTIPART_FORM_DATA_VALUE)
+        )
+    }
+
+    fun testGzipTransfer(request: MyDataRequest): MyDataResponse? {
+        return httpClient.sendRq(
+            // Предположим, добавили gzip в Endpoints проперти
+            path = "/v1/data/gzip",
+            method = HttpMethod.POST,
+            rqBody = request,
+            responseClass = MyDataResponse::class.java,
+            // Мы можем добавить заголовок вручную, чтобы Netty точно сжал тело запроса
+            headers = mapOf(HttpHeaders.CONTENT_ENCODING to "gzip"),
+        )
+    }
+
+    fun testPlainToGzip(request: MyDataRequest): MyDataResponse? {
+        return httpClient.sendRq(
+            path = "/v1/data/plain-to-gzip",
+            method = HttpMethod.POST,
+            rqBody = request,
+            responseClass = MyDataResponse::class.java
+            // Заголовок Content-Encoding не передаем, GzipRequestInterceptor не сработает
         )
     }
 }

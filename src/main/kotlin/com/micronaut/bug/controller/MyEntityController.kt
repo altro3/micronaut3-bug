@@ -11,6 +11,7 @@ import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.core.io.ByteArrayResource
 import org.springframework.http.HttpEntity
 import org.springframework.http.HttpHeaders
+import org.springframework.http.HttpMethod
 import org.springframework.http.HttpStatus
 import org.springframework.http.MediaType
 import org.springframework.util.LinkedMultiValueMap
@@ -189,7 +190,43 @@ class MyEntityController(
         }
         log.info { "Complex multipart test finished. Result exists: ${complexRs != null}" }
 
+        // 5. Тест Huge JSON
+        log.info { "--- Test 5: Huge JSON Truncation ---" }
+        val hugeRsBytes = extServiceClient.httpClient.sendRq(
+            path = "/v1/data/huge",
+            method = HttpMethod.GET,
+            responseClass = ByteArray::class.java // Читаем байты, Jackson не лезет
+        )
+        val hugeRs = hugeRsBytes?.let { String(it) } // Превращаем в строку сами
+        log.info { "Huge response received, actual size: ${hugeRs?.length} characters" }
+
         return "All tests executed! Check logs for details."
+    }
+
+    @PostMapping("/test-gzip")
+    fun checkGzip(): Map<String, Any> {
+        log.info { "Starting GZIP integration test (Automatic compression)..." }
+
+        // Вызываем клиент. Netty сам добавит Accept-Encoding (распаковка ответа),
+        // а наш GzipRequestInterceptor сожмет тело запроса.
+        val response = extServiceClient.testGzipTransfer(MyDataRequest(name = "Payload for auto-compression"))
+
+        return mapOf(
+            "status" to if (response?.status == "gzip_success") "OK" else "ERROR",
+            "payload" to (response ?: "null")
+        )
+    }
+
+    @PostMapping("/test-plain-to-gzip")
+    fun checkPlainToGzip(): Map<String, Any> {
+        log.info { "Starting test: Plain Request -> GZIP Response..." }
+
+        val response = extServiceClient.testPlainToGzip(MyDataRequest(name = "I am plain text"))
+
+        return mapOf(
+            "status" to (if (response?.status == "success") "OK" else "ERROR"),
+            "received_data" to (response ?: "null")
+        )
     }
 
     data class MyData(

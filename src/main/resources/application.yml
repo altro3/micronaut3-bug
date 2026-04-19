@@ -21,6 +21,9 @@ app:
           method: POST
       http:
         url: http://localhost:8081
+        compress: true
+        log:
+          pretty-print: false
 
 server:
   port: 8080

@@ -4,12 +4,16 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.databind.SerializationFeature
 import com.micronaut.bug.client.LoggingRequestInterceptor.Companion.LIMIT_TEXT_CHECK_THRESHOLD
 import io.github.oshai.kotlinlogging.KotlinLogging
+import org.springframework.http.HttpHeaders
+import org.springframework.http.HttpHeaders.CONTENT_TYPE
 import org.springframework.http.HttpRequest
 import org.springframework.http.MediaType
 import org.springframework.http.client.ClientHttpRequestExecution
 import org.springframework.http.client.ClientHttpRequestInterceptor
 import org.springframework.http.client.ClientHttpResponse
+import java.io.ByteArrayInputStream
 import java.util.UUID
+import java.util.zip.GZIPInputStream
 
 /**
  * Интерцептор для детального логирования исходящих HTTP-запросов и ответов.
@@ -27,10 +31,12 @@ class LoggingRequestInterceptor(
 
     private val log = KotlinLogging.logger {}
 
+    private val logProps = props.log
+
     /**
      * Префикс для формирования полного URI. Вычисляется один раз при создании интерцептора.
      */
-    private val basePrefix: String = if (props.logFullUrl) props.url.toString().removeSuffix(SLASH) else STRING_EMPTY
+    private val basePrefix: String = if (logProps.fullUrl) props.url.toString().removeSuffix(SLASH) else STRING_EMPTY
 
     /**
      * Основной метод перехвата запроса. Управляет замером времени и выводом данных в лог.
@@ -42,11 +48,15 @@ class LoggingRequestInterceptor(
     ): ClientHttpResponse {
         val isDebug = log.isDebugEnabled()
 
+        val skipLogging = rq.attributes[ATTR_SKIP_LOGGING] as? Boolean ?: false
+
         // Уникальный ID для связки конкретной пары запрос-ответ
         val extRqId = UUID.randomUUID().toString().replace(STRING_DASH, STRING_EMPTY)
+        // Сохраняем ID в атрибуты, чтобы GzipRequestInterceptor его увидел
+        rq.attributes[ATTR_EXT_RQ_ID] = extRqId
 
         // Данные запроса готовим лениво
-        val rqLogData by lazy { getRequestLogString(rq, body, extRqId) }
+        val rqLogData by lazy { getRequestLogString(rq, body, extRqId, skipLogging) }
 
         // 1. Включен DEBUG: логируем запрос сразу перед отправкой
         if (isDebug) {
@@ -70,26 +80,63 @@ class LoggingRequestInterceptor(
         }
 
         val duration = System.currentTimeMillis() - startTime
-        val rsBody = rs.body.readAllBytes()
+
         val isError = rs.statusCode.isError
 
-        if (isDebug) {
-            // В DEBUG всегда пишем ответ отдельно (статус ошибки будет внутри шаблона)
-            log.debug { getResponseLogString(rq, rs, rsBody, duration, extRqId) }
-        } else if (isError) {
-            // Без DEBUG логируем только ошибки: запрос и ответ одним блоком
-            log.error { "External service failure!\n$rqLogData\n${getResponseLogString(rq, rs, rsBody, duration, extRqId)}" }
+        if (isDebug || isError) {
+            // 1. Просто получаем сырые байты (или заглушку)
+            val rsBodyBytes = if (skipLogging) {
+                BODY_LOG_DISABLED.toByteArray()
+            } else {
+                rs.body.readAllBytes() // Только чтение, никакой логики внутри!
+            }
+
+            if (isDebug) {
+                // В DEBUG всегда пишем ответ отдельно (статус ошибки будет внутри шаблона)
+                log.debug { getResponseLogString(rq, rs, rsBodyBytes, duration, extRqId, skipLogging) }
+            } else {
+                // Без DEBUG логируем только ошибки: запрос и ответ одним блоком
+                log.error { "External service failure!\n$rqLogData\n${getResponseLogString(rq, rs, rsBodyBytes, duration, extRqId, skipLogging)}" }
+            }
         }
 
         return rs
     }
 
     /**
+     * Проверяет наличие заголовка Content-Encoding: gzip и распаковывает байты.
+     *
+     * @param response ответ сервера для проверки заголовков
+     * @param bytes сырые байты тела
+     * @return распакованный массив байт или оригинальный, если сжатие отсутствует
+     */
+    private fun decompressIfNeeded(response: ClientHttpResponse, bytes: ByteArray): ByteArray {
+        val isGzip = response.headers.getFirst(HttpHeaders.CONTENT_ENCODING)?.contains(ENCODING_GZIP, true) == true
+        return if (isGzip && bytes.isNotEmpty()) {
+            try {
+                GZIPInputStream(ByteArrayInputStream(bytes)).use { it.readBytes() }
+            } catch (e: Exception) {
+                log.warn { "Failed to decompress GZIP body, logging raw data. Error: ${e.message}" }
+                bytes
+            }
+        } else {
+            bytes
+        }
+    }
+
+    /**
      * Формирует текстовый блок данных исходящего запроса.
      */
-    private fun getRequestLogString(rq: HttpRequest, body: ByteArray, extRqId: String): String {
+    private fun getRequestLogString(rq: HttpRequest, body: ByteArray, extRqId: String, skipLogging: Boolean): String {
         val ct = rq.headers.contentType?.toString()
-        val bodyResult = if (isMultipart(ct)) formatMultipart(body, ct) else formatBody(body, ct)
+        // Если флаг поднят — пишем заглушку, иначе парсим тело
+        val bodyResult = if (skipLogging) {
+            BODY_LOG_DISABLED
+        } else if (isMultipart(ct)) {
+            formatMultipart(body, ct)
+        } else {
+            formatBody(body, ct)
+        }
 
         return """
             |
@@ -106,9 +153,24 @@ class LoggingRequestInterceptor(
     /**
      * Формирует текстовый блок данных входящего ответа.
      */
-    private fun getResponseLogString(rq: HttpRequest, rs: ClientHttpResponse, body: ByteArray, duration: Long, extRqId: String): String {
+    private fun getResponseLogString(rq: HttpRequest, rs: ClientHttpResponse, body: ByteArray, duration: Long, extRqId: String, skipLogging: Boolean): String {
         val ct = rs.headers.contentType?.toString()
-        val bodyResult = if (isMultipart(ct)) formatMultipart(body, ct) else formatBody(body, ct)
+        // 1. Сначала решаем: нужно ли нам вообще трогать байты (распаковывать)
+        val processedBody = if (!logProps.prettyPrint || skipLogging) {
+            body // В сыром режиме или при skipLogging оставляем как есть
+        } else {
+            // Только если включен prettyPrint — пытаемся разжать для анализа
+            decompressIfNeeded(rs, body)
+        }
+
+        // 2. Формируем строку для лога
+        val bodyResult = if (skipLogging) {
+            BODY_LOG_DISABLED
+        } else if (logProps.prettyPrint && isMultipart(ct)) {
+            formatMultipart(processedBody, ct)
+        } else {
+            formatBody(processedBody, ct) // formatBody сам проверит isText
+        }
 
         return """
             |
@@ -131,6 +193,11 @@ class LoggingRequestInterceptor(
     private fun formatMultipart(bytes: ByteArray, ct: String?): String {
         if (bytes.isEmpty()) {
             return BODY_EMPTY
+        }
+
+        // Если Pretty Print выключен — выводим Multipart как единый текстовый блок
+        if (!logProps.prettyPrint) {
+            return formatBody(bytes, ct)
         }
 
         // Пытаемся извлечь маркер границы из заголовка Content-Type
@@ -162,7 +229,7 @@ class LoggingRequestInterceptor(
                             if (v.contains(MARKER_FILENAME)) {
                                 fileName = v.substringAfter(EQUALS_FILENAME).substringBefore(STRING_QUOTE)
                             }
-                        } else if (k.equals(HEADER_CONTENT_TYPE, ignoreCase = true)) {
+                        } else if (k.equals(CONTENT_TYPE, ignoreCase = true)) {
                             partCt = v
                         }
                     }
@@ -193,24 +260,33 @@ class LoggingRequestInterceptor(
             return BODY_EMPTY
         }
 
-        // Защита от логирования бинарных данных через поиск NULL-байтов.
         if (!isText(content)) {
             return BODY_BINARY
         }
 
-        val isJson = ct?.contains(MediaType.APPLICATION_JSON_VALUE) == true || isJsonContent(content)
-        if (isJson) {
-            return runCatching {
-                val tree = prettyMapper.readTree(content)
-                prettyMapper.writeValueAsString(tree)
-            }.getOrElse { content.toString(Charsets.UTF_8) }
+        // Если Pretty Print выключен, просто переводим в UTF-8 без анализа контента
+        val resultText = if (!logProps.prettyPrint) {
+            content.toString(Charsets.UTF_8)
+        } else {
+
+            val isJson = ct?.contains(MediaType.APPLICATION_JSON_VALUE) == true || isJsonContent(content)
+            if (isJson) {
+                runCatching {
+                    val tree = prettyMapper.readTree(content)
+                    prettyMapper.writeValueAsString(tree)
+                }.getOrElse { content.toString(Charsets.UTF_8) }
+            } else {
+                content.toString(Charsets.UTF_8)
+            }
         }
 
-        val text = content.toString(Charsets.UTF_8)
-        return if (text.length > LIMIT_LOG_SIZE) {
-            text.take(LIMIT_LOG_SIZE) + SUFFIX_TRUNCATED
+        // 2. Теперь проверяем размер ИТОГОВОЙ строки (результата форматирования)
+        return if (resultText.length > logProps.limitLogSize) {
+            val head = resultText.take(logProps.truncateChunkSize)
+            val tail = resultText.takeLast(logProps.truncateChunkSize)
+            "$head\n$SUFFIX_TRUNCATED [Skipped ${resultText.length - 2 * logProps.truncateChunkSize} characters]\n$tail"
         } else {
-            text
+            resultText
         }
     }
 
@@ -239,18 +315,23 @@ class LoggingRequestInterceptor(
 
     private fun isBinaryContent(name: String, fileName: String?, contentType: String?, bytes: ByteArray): Boolean {
         // 1. Если это "всегда текстовый" тип (json, xml, plain text), то это НЕ бинарник
-        if (isAlwaysTextField(contentType)) return false
+        if (isAlwaysTextField(contentType)) {
+            return false
+        }
 
         // 2. Если в Content-Type есть признаки бинарных данных
         if (contentType?.lowercase()?.let {
                 it.contains("octet-stream") || it.contains("image/") || it.contains("pdf") || it.contains("zip")
-            } == true) return true
+            } == true) {
+            return true
+        }
 
         // 3. Если есть имя файла и это не .txt / .json (простейшая проверка расширения)
         if (fileName != null) {
-            val ext = fileName.substringAfterLast('.', "").lowercase()
-            val textExtensions = setOf("txt", "json", "xml", "html", "csv")
-            if (ext.isNotEmpty() && ext !in textExtensions) return true
+            val ext = fileName.substringAfterLast('.', STRING_EMPTY).lowercase()
+            if (ext.isNotEmpty() && ext !in EXTENSIONS_TEXT) {
+                return true
+            }
         }
 
         // 4. И только в последнюю очередь, если метаданных нет, смотрим на байты
@@ -335,6 +416,11 @@ class LoggingRequestInterceptor(
         private const val BODY_EMPTY = "[EMPTY]"
         private const val BODY_BINARY = "[BINARY DATA]"
         private const val BODY_MULTIPART_RAW = "[MULTIPART RAW]"
+        private const val BODY_LOG_DISABLED = "[BODY LOGGING DISABLED BY CLIENT]"
+
+        private val EXTENSIONS_TEXT = setOf("txt", "json", "xml", "html", "csv")
+
+        const val ENCODING_GZIP = "gzip"
 
         private const val PART_UNKNOWN = "UNKNOWN"
         private const val TEMPLATE_PART_PREFIX = "  [PART] -> Name: %s%s | %s"
@@ -349,17 +435,16 @@ class LoggingRequestInterceptor(
         private const val EQUALS_NAME = "name=\""
         private const val EQUALS_FILENAME = "filename=\""
         private const val PREFIX_DASH = "--"
-        private const val HEADER_CONTENT_TYPE = "Content-Type"
 
         private const val SUFFIX_TRUNCATED = "... [TRUNCATED]"
-        private const val LIMIT_LOG_SIZE = 8192
         private const val LIMIT_TEXT_CHECK_THRESHOLD = 512
 
         /** Байтовые константы для оптимизации производительности в циклах */
-        private const val BYTE_ZERO = 0.toByte()
         private const val BYTE_SPACE = 32.toByte()
         private const val BYTE_JSON_OBJECT = '{'.code.toByte()
         private const val BYTE_JSON_ARRAY = '['.code.toByte()
-        private const val MDC_EXT_RQ_ID = "extRqId"
+
+        const val ATTR_SKIP_LOGGING = "client.skip.body.logging"
+        const val ATTR_EXT_RQ_ID = "client.ext.request.id"
     }
 }

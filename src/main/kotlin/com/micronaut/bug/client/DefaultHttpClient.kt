@@ -5,7 +5,7 @@ import com.micronaut.bug.client.HttpClientConst.HEADER_API_KEY
 import com.micronaut.bug.client.HttpClientUtils.DEFAULT_RETRY_ON
 import com.micronaut.bug.client.HttpClientUtils.createRestClient
 import com.micronaut.bug.client.HttpClientUtils.createRetryTemplate
-import io.github.oshai.kotlinlogging.KotlinLogging
+import com.micronaut.bug.client.LoggingRequestInterceptor.Companion.ATTR_SKIP_LOGGING
 import org.springframework.core.ParameterizedTypeReference
 import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpMethod
@@ -13,14 +13,11 @@ import org.springframework.http.MediaType
 import org.springframework.http.converter.HttpMessageConverter
 import org.springframework.retry.RetryCallback
 import org.springframework.retry.support.RetryTemplate
-import org.springframework.util.StopWatch
 import org.springframework.web.client.ResponseErrorHandler
 import org.springframework.web.client.RestClient
 import org.springframework.web.client.RestClient.ResponseSpec
 
 open class DefaultHttpClient {
-
-    private val log = KotlinLogging.logger {}
 
     val restClient: RestClient
     val httpClientProperties: HttpClientProperties
@@ -125,14 +122,15 @@ open class DefaultHttpClient {
         pathVars: Map<String, *>? = null,
         queryParams: Map<String, *>? = null,
         headers: Map<String, String>? = null,
+        logBody: Boolean = true,
     ): Rs? =
         if (retryTemplate != null) {
             retryTemplate.execute(RetryCallback {
-                sendRq(endpoint.path, endpoint.method, endpoint.withApiKey, rqBody, pathVars, queryParams, headers)
+                sendRq(endpoint.path, endpoint.method, endpoint.withApiKey, rqBody, pathVars, queryParams, headers, logBody)
                     .body(responseClass)
             })
         } else {
-            sendRq(endpoint.path, endpoint.method, endpoint.withApiKey, rqBody, pathVars, queryParams, headers)
+            sendRq(endpoint.path, endpoint.method, endpoint.withApiKey, rqBody, pathVars, queryParams, headers, logBody)
                 .body(responseClass)
         }
 
@@ -143,14 +141,15 @@ open class DefaultHttpClient {
         pathVars: Map<String, *>? = null,
         queryParams: Map<String, *>? = null,
         headers: Map<String, String>? = null,
+        logBody: Boolean = true,
     ): Rs? =
         if (retryTemplate != null) {
             retryTemplate.execute(RetryCallback {
-                sendRq(endpoint.path, endpoint.method, endpoint.withApiKey, rqBody, pathVars, queryParams, headers)
+                sendRq(endpoint.path, endpoint.method, endpoint.withApiKey, rqBody, pathVars, queryParams, headers, logBody)
                     .body(responseType)
             })
         } else {
-            sendRq(endpoint.path, endpoint.method, endpoint.withApiKey, rqBody, pathVars, queryParams, headers)
+            sendRq(endpoint.path, endpoint.method, endpoint.withApiKey, rqBody, pathVars, queryParams, headers, logBody)
                 .body(responseType)
         }
 
@@ -163,14 +162,15 @@ open class DefaultHttpClient {
         pathVars: Map<String, *>? = null,
         queryParams: Map<String, *>? = null,
         headers: Map<String, String>? = null,
+        logBody: Boolean = true,
     ): Rs? =
         if (retryTemplate != null) {
             retryTemplate.execute(RetryCallback {
-                sendRq(path, method, withApiKey, rqBody, pathVars, queryParams, headers)
+                sendRq(path, method, withApiKey, rqBody, pathVars, queryParams, headers, logBody)
                     .body(responseClass)
             })
         } else {
-            sendRq(path, method, withApiKey, rqBody, pathVars, queryParams, headers)
+            sendRq(path, method, withApiKey, rqBody, pathVars, queryParams, headers, logBody)
                 .body(responseClass)
         }
 
@@ -183,14 +183,15 @@ open class DefaultHttpClient {
         pathVars: Map<String, *>? = null,
         queryParams: Map<String, *>? = null,
         headers: Map<String, String>? = null,
+        logBody: Boolean = true,
     ): Rs? =
         if (retryTemplate != null) {
             retryTemplate.execute(RetryCallback {
-                sendRq(path, method, withApiKey, rqBody, pathVars, queryParams, headers)
+                sendRq(path, method, withApiKey, rqBody, pathVars, queryParams, headers, logBody)
                     .body(responseType)
             })
         } else {
-            sendRq(path, method, withApiKey, rqBody, pathVars, queryParams, headers)
+            sendRq(path, method, withApiKey, rqBody, pathVars, queryParams, headers, logBody)
                 .body(responseType)
         }
 
@@ -200,13 +201,14 @@ open class DefaultHttpClient {
         pathVars: Map<String, *>? = null,
         queryParams: Map<String, *>? = null,
         headers: Map<String, String>? = null,
+        logBody: Boolean = true,
     ): ResponseSpec =
         if (retryTemplate != null) {
             retryTemplate.execute(RetryCallback {
-                sendRq(endpoint.path, endpoint.method, endpoint.withApiKey, rqBody, pathVars, queryParams, headers)
+                sendRq(endpoint.path, endpoint.method, endpoint.withApiKey, rqBody, pathVars, queryParams, headers, logBody)
             })
         } else {
-            sendRq(endpoint.path, endpoint.method, endpoint.withApiKey, rqBody, pathVars, queryParams, headers)
+            sendRq(endpoint.path, endpoint.method, endpoint.withApiKey, rqBody, pathVars, queryParams, headers, logBody)
         }
 
     fun sendRq(
@@ -217,9 +219,14 @@ open class DefaultHttpClient {
         pathVars: Map<String, *>? = null,
         queryParams: Map<String, *>? = null,
         headers: Map<String, String>? = null,
+        logBody: Boolean = true,
     ): ResponseSpec {
 
         val rqBuilder = restClient.method(method)
+
+        // Установка атрибута для управления логированием в интерцепторе
+        rqBuilder.attribute(ATTR_SKIP_LOGGING, !logBody)
+
         if (pathVars.isNullOrEmpty() && queryParams.isNullOrEmpty()) {
             rqBuilder.uri(path)
         } else {
