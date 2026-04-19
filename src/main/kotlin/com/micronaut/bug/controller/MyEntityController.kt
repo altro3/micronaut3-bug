@@ -250,6 +250,15 @@ class MyEntityController(
         )
     }
 
+    @GetMapping("/test-error")
+    fun testError(): String {
+        log.info { "Starting test: error..." }
+
+        extServiceClient.testError(MyDataRequest(name = "I am plain text"))
+
+        return "OK!"
+    }
+
     data class MyData(
         var name: String? = null,
         var secondName: String? = null,

@@ -104,4 +104,14 @@ class ExtServiceClient(
             // Заголовок Content-Encoding не передаем, GzipRequestInterceptor не сработает
         )
     }
+
+    fun testError(request: MyDataRequest): MyDataResponse? {
+        return httpClient.sendRq(
+            path = "/unknown",
+            method = HttpMethod.POST,
+            rqBody = request,
+            responseClass = MyDataResponse::class.java
+            // Заголовок Content-Encoding не передаем, GzipRequestInterceptor не сработает
+        )
+    }
 }
