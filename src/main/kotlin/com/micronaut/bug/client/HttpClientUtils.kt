@@ -2,9 +2,11 @@ package com.micronaut.bug.client
 
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.databind.json.JsonMapper
+import com.micronaut.bug.client.HttpClientConst.HEADER_SENDER_APP_NAME
 import io.github.oshai.kotlinlogging.KotlinLogging
 import io.netty.channel.ChannelOption
 import io.netty.handler.timeout.ReadTimeoutHandler
+import io.netty.handler.timeout.WriteTimeoutHandler
 import org.springframework.http.client.BufferingClientHttpRequestFactory
 import org.springframework.http.client.ClientHttpRequestFactory
 import org.springframework.http.client.ReactorClientHttpRequestFactory
@@ -21,8 +23,6 @@ import org.springframework.web.client.ResponseErrorHandler
 import org.springframework.web.client.RestClient
 import reactor.netty.http.client.HttpClient
 import reactor.netty.transport.ProxyProvider
-import com.micronaut.bug.client.HttpClientConst.HEADER_SENDER_APP_NAME
-import io.netty.handler.timeout.WriteTimeoutHandler
 import java.time.Duration
 import java.util.concurrent.TimeUnit
 

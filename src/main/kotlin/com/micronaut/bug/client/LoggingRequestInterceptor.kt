@@ -91,6 +91,7 @@ class LoggingRequestInterceptor(
                 rs.body.readAllBytes() // Только чтение, никакой логики внутри!
             }
 
+            // 2. Основной лог ответа
             if (isDebug) {
                 // В DEBUG всегда пишем ответ отдельно (статус ошибки будет внутри шаблона)
                 log.debug { getResponseLogString(rq, rs, rsBodyBytes, duration, extRqId, skipLogging) }
