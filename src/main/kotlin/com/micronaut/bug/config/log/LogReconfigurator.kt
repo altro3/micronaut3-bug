@@ -24,6 +24,7 @@ class LogReconfigurator(
         MdcConverter.keys = props.mdcKeys
 
         // 2. Регистрируем правило конвертации для паттерна
+        @Suppress("UNCHECKED_CAST")
         val rules = loggerContext.getObject(CoreConstants.PATTERN_RULE_REGISTRY) as? MutableMap<String, String>
             ?: mutableMapOf<String, String>().also { loggerContext.putObject(CoreConstants.PATTERN_RULE_REGISTRY, it) }
         rules[MDC_BLOCK_WORD] = MdcConverter::class.java.name

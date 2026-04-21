@@ -5,13 +5,10 @@ import com.micronaut.bug.config.SecurityContext
 import com.micronaut.bug.config.User
 import com.micronaut.bug.service.BusinessService
 import com.micronaut.bug.service.integration.extservice.ExtServiceClient
-import com.micronaut.bug.service.integration.extservice.api.MyDataRequest
-import com.micronaut.bug.service.integration.extservice.api.MyDto
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.core.io.ByteArrayResource
 import org.springframework.http.HttpEntity
 import org.springframework.http.HttpHeaders
-import org.springframework.http.HttpMethod
 import org.springframework.http.HttpStatus
 import org.springframework.http.MediaType
 import org.springframework.http.ResponseEntity
@@ -33,7 +30,6 @@ import java.util.zip.GZIPOutputStream
 class MyEntityController(
     private val businessService: BusinessService,
     private val objectMapper: ObjectMapper,
-    private val extServiceClient: ExtServiceClient,
 ) {
 
     private val log = KotlinLogging.logger {}
@@ -133,130 +129,6 @@ class MyEntityController(
         responseMap.add(PART_RESPONSE_BINARY, HttpEntity(binaryResource, binaryHeaders))
 
         return responseMap
-    }
-
-    ///////////////////////////////////// Клиент!!! //////////////////////////////////////////
-    @GetMapping("/run-all")
-    fun runAllTests(): String {
-        log.info { "Starting sequential integration tests..." }
-
-        // 1. Тест Ping (GET без тела)
-        log.info { "--- Test 1: Ping ---" }
-        extServiceClient.ping()
-
-        // 2. Тест JSON (POST JSON -> JSON)
-        log.info { "--- Test 2: Update Data (JSON) ---" }
-        val updateRs = extServiceClient.updateData(MyDataRequest(name = "Test item"))
-        log.info { "Update result: $updateRs" }
-
-        // 3. Тест Process File (POST Binary -> Binary)
-        log.info { "--- Test 3: Process File (Binary) ---" }
-
-        // Создаем реальные бинарные данные, начинающиеся с NULL-байта
-        val binaryContent = byteArrayOf(1, 2, 3, 4, 5, 0x89.toByte(), 'P'.code.toByte(), 'N'.code.toByte(), 'G'.code.toByte())
-
-        val binaryFile = object : ByteArrayResource(binaryContent) {
-            override fun getFilename() = "actual-binary-data.bin"
-        }
-
-        val fileRs = extServiceClient.processFile(binaryFile)
-
-        log.info { "Binary request sent. Received response size: ${fileRs?.size ?: 0} bytes" }
-
-        // 4. Тест Complex Multipart (Path Var + Query + Different Parts)
-        log.info { "--- Test 4: Complex Multipart ---" }
-        val complexRs = extServiceClient.sendComplexMultipart(
-            id = "RQ-777",
-            queryTag = "test-tag",
-            jsonWithCt = MyDto("key", "val"),
-            jsonNoCt = MyDto("k", "v"),
-            binaryFile = object : ByteArrayResource(byteArrayOf(1, 2, 3)) {
-                override fun getFilename() = "req.bin"
-            },
-            textFile = "hello"
-        )
-
-        if (complexRs != null) {
-            log.info { "--- Multipart Response Verification ---" }
-
-            // 1. Проверка JSON части (status)
-            val statusEntity = complexRs.getFirst("status") as? HttpEntity<ByteArray>
-            val statusJson = statusEntity?.body?.let { String(it) }
-            log.info { "Part 'status': content=$statusJson, contentType=${statusEntity?.headers?.contentType}" }
-
-            // 2. Проверка текстового файла (report)
-            val reportEntity = complexRs.getFirst("report") as? HttpEntity<ByteArray>
-            val reportText = reportEntity?.body?.let { String(it) }
-            log.info { "Part 'report': filename=summary.txt, content='$reportText'" }
-
-            // 3. Проверка бинарного файла (image)
-            val imageEntity = complexRs.getFirst("image") as? HttpEntity<ByteArray>
-            val imageBytes = imageEntity?.body
-            val isPng = imageBytes?.get(1) == 'P'.code.toByte() // Простейшая проверка сигнатуры PNG
-
-            log.info {
-                "Part 'image': size=${imageBytes?.size} bytes, " +
-                        "isActuallyBinary=${imageBytes?.contains(0.toByte())}, " +
-                        "isPng=$isPng"
-            }
-
-            // Итоговый ассерт в логи
-            if (statusJson?.contains("all_parts_received") == true && isPng) {
-                log.info { "SUCCESS: All multipart response parts correctly parsed and verified!" }
-            } else {
-                log.error { "FAILURE: Multipart response verification failed!" }
-            }
-        } else {
-            log.error { "FAILURE: Complex multipart response is null" }
-        }
-        log.info { "Complex multipart test finished. Result exists: ${complexRs != null}" }
-
-        // 5. Тест Huge JSON
-        log.info { "--- Test 5: Huge JSON Truncation ---" }
-        val hugeRsBytes = extServiceClient.httpClient.sendRq(
-            path = "/v1/data/huge",
-            method = HttpMethod.GET,
-            responseClass = ByteArray::class.java // Читаем байты, Jackson не лезет
-        )
-        val hugeRs = hugeRsBytes?.let { String(it) } // Превращаем в строку сами
-        log.info { "Huge response received, actual size: ${hugeRs?.length} characters" }
-
-        return "All tests executed! Check logs for details."
-    }
-
-    @PostMapping("/test-gzip")
-    fun checkGzip(): Map<String, Any> {
-        log.info { "Starting GZIP integration test (Automatic compression)..." }
-
-        // Вызываем клиент. Netty сам добавит Accept-Encoding (распаковка ответа),
-        // а наш GzipRequestInterceptor сожмет тело запроса.
-        val response = extServiceClient.testGzipTransfer(MyDataRequest(name = "Payload for auto-compression"))
-
-        return mapOf(
-            "status" to if (response?.status == "gzip_success") "OK" else "ERROR",
-            "payload" to (response ?: "null")
-        )
-    }
-
-    @PostMapping("/test-plain-to-gzip")
-    fun checkPlainToGzip(): Map<String, Any> {
-        log.info { "Starting test: Plain Request -> GZIP Response..." }
-
-        val response = extServiceClient.testPlainToGzip(MyDataRequest(name = "I am plain text"))
-
-        return mapOf(
-            "status" to (if (response?.status == "success") "OK" else "ERROR"),
-            "received_data" to (response ?: "null"),
-        )
-    }
-
-    @GetMapping("/test-error")
-    fun testError(): String {
-        log.info { "Starting test: error..." }
-
-        extServiceClient.testError(MyDataRequest(name = "I am plain text"))
-
-        return "OK!"
     }
 
     data class MyData(

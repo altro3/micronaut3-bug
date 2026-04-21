@@ -114,4 +114,13 @@ class ExtServiceClient(
             // Заголовок Content-Encoding не передаем, GzipRequestInterceptor не сработает
         )
     }
+
+    fun testHugeData(data: ByteArray): ByteArray? {
+        return httpClient.sendRq(
+            path = "/v1/data/huge-proxy",
+            method = HttpMethod.POST,
+            rqBody = data,
+            responseClass = ByteArray::class.java,
+        )
+    }
 }

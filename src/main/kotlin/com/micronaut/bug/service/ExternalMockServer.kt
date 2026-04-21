@@ -152,6 +152,19 @@ class ExternalMockServer {
                     .withBody(convertToGzip("""{"status":"success","info":"received plain, sent gzip"}"""))
                 )
         )
+
+        val hugeSize = 5 * 1024 * 1024 // 5MB
+        val hugeByteArray = ByteArray(hugeSize) { 0x41.toByte() } // Заполним буквой 'A'
+
+        wireMockServer.stubFor(
+            post(urlEqualTo("/v1/data/huge-proxy"))
+                .willReturn(aResponse()
+                    .withStatus(200)
+                    .withHeader("Content-Type", "text/plain")
+                    // WireMock выставит Content-Length: 5242880
+                    .withBody(hugeByteArray)
+                )
+        )
     }
 
     // Вспомогательная функция для генерации GZIP тела в моке

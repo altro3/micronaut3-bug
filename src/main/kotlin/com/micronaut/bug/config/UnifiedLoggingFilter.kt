@@ -2,6 +2,7 @@ package com.micronaut.bug.config
 
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.databind.SerializationFeature
+import com.micronaut.bug.client.LoggingRequestInterceptor
 import com.micronaut.bug.config.UnifiedLoggingFilter.Companion.LIMIT_TEXT_CHECK_THRESHOLD
 import com.micronaut.bug.config.log.LogProperties
 import io.github.oshai.kotlinlogging.KotlinLogging
@@ -52,7 +53,7 @@ class UnifiedLoggingFilter(
         try {
 
             // Пропускаем Actuator-эндпоинты, если это указано в настройках
-            if (withActuator && props.skipActuator && rq.requestURI.contains(PATH_ACTUATOR)) {
+            if (withActuator && props.skipActuator && rq.requestURI.startsWith(rq.contextPath + PATH_ACTUATOR)) {
                 chain.doFilter(rq, rs)
                 return
             }
@@ -95,37 +96,53 @@ class UnifiedLoggingFilter(
     }
 
     /**
-     * Выбирает стратегию оборачивания запроса в зависимости от типа контента.
+     * Оборачивает входящий запрос для обеспечения возможности повторного чтения тела.
+     *
+     * Если размер контента превышает лимит, запрос остается оригинальным
+     * и его тело НЕ будет закешировано. Это предотвращает OutOfMemoryError при
+     * передаче больших файлов.
+     *
+     * @param rq оригинальный [HttpServletRequest].
+     * @return обернутый или оригинальный запрос.
      */
-    private fun wrapRequest(rq: HttpServletRequest): HttpServletRequest =
-        if (isMultipart(rq.contentType)) {
-            MultipartTypeWrapper(rq) // Твой враппер для Multipart
+    private fun wrapRequest(rq: HttpServletRequest): HttpServletRequest {
+        return if (isMultipart(rq.contentType)) {
+            MultipartTypeWrapper(rq)
         } else {
-            val bytes = rq.inputStream.readAllBytes()
-            CachedBodyRequestWrapper(rq, bytes) // Твой враппер для обычных тел
+            val contentLength = rq.contentLengthLong
+            // Если размер тела больше лимита логирования (например, > 1МБ),
+            // мы НЕ кэшируем его, а пробрасываем оригинальный поток.
+            if (contentLength > props.maxPayloadSize.toBytes()) {
+                rq
+            } else {
+                val bytes = rq.inputStream.readAllBytes()
+                CachedBodyRequestWrapper(rq, bytes)
+            }
         }
+    }
 
     /**
      * Формирует строковое представление входящего запроса.
      */
     private fun getRequestLogString(rq: HttpServletRequest): String {
-        val bodyResult = if (rq is CachedBodyRequestWrapper) {
-            if (rq.body.isEmpty()) {
-                BODY_EMPTY
-            } else {
-                formatBody(rq.body, rq.contentType)
+        val headers = getHeadersMap(rq)
+        val bodyResult = when (rq) {
+            is CachedBodyRequestWrapper -> {
+                if (rq.body.isEmpty()) {
+                    BODY_EMPTY
+                } else {
+                    formatBody(rq.body, rq.contentType, headers)
+                }
             }
-        } else if (rq is MultipartTypeWrapper) {
-            getMultipartBody(rq)
-        } else {
-            BODY_EMPTY
+            is MultipartTypeWrapper -> getMultipartBody(rq)
+            else -> BODY_TOO_LARGE
         }
 
         return """
             |
             |================== Service request ==================
             |URI: ${rq.method} ${getFullUri(rq)}
-            |Headers: ${getHeaders(rq)}
+            |Headers: $headers
             |Body:
             |$bodyResult
             |================== /Service request ==================
@@ -172,10 +189,12 @@ class UnifiedLoggingFilter(
      * Формирует строковое представление исходящего ответа.
      */
     private fun getResponseLogString(rq: HttpServletRequest, rs: ContentCachingResponseWrapper, duration: Long): String {
-        val statusInt = rs.status.takeIf { it != 0 } ?: 200
-        val statusMessage = runCatching {
-            HttpStatus.resolve(statusInt)?.reasonPhrase
-        }.getOrNull() ?: STRING_EMPTY
+        // Берем реальный статус. Если он 0, оставляем 0, чтобы видеть проблему.
+        val statusInt = rs.status
+
+        // Пытаемся разрешить статус через Spring HttpStatus
+        val httpStatus = HttpStatus.resolve(statusInt)
+        val statusMessage = httpStatus?.reasonPhrase ?: if (statusInt == 0) STATUS_UNDEFINED else STATUS_UNKNOWN
 
         val headers = getResponseHeaders(rs)
         val contentType = rs.contentType
@@ -210,8 +229,10 @@ class UnifiedLoggingFilter(
             PREFIX_DASH + it
         } ?: return BODY_MULTIPART_RS
 
+        val delimiter = "$STRING_NEW_LINE$PREFIX_DASH${boundary.trim()}"
+
         return runCatching {
-            String(bytes).split(boundary)
+            bytes.toString(Charsets.UTF_8).split(delimiter)
                 .filter { it.contains(MARKER_CONTENT_DISPOSITION) }
                 .joinToString(STRING_NEW_LINE) { partRaw ->
                     val lines = partRaw.trim().lines()
@@ -262,8 +283,14 @@ class UnifiedLoggingFilter(
      * Основной метод форматирования тела (JSON Pretty Print, Raw или Binary).
      */
     private fun formatBody(content: ByteArray, contentType: String?, headers: Map<String, String>? = null): String {
+        if (content.isEmpty() || content.contentEquals(BODY_EMPTY.toByteArray())) {
+            return BODY_EMPTY
+        }
+        if (content.contentEquals(BODY_TOO_LARGE.toByteArray())) {
+            return BODY_TOO_LARGE
+        }
         // Умная проверка на бинарные данные, включая GZIP и расширения
-        if (isBinaryContent(content, headers, contentType)) {
+        if (!isMultipart(contentType) && isBinaryContent(content, headers, contentType)) {
             return BODY_BINARY
         }
 
@@ -278,7 +305,9 @@ class UnifiedLoggingFilter(
             val head = resultText.take(props.truncateChunkSize)
             val tail = resultText.takeLast(props.truncateChunkSize)
             "$head\n$SUFFIX_TRUNCATED [Skipped ${resultText.length - 2 * props.truncateChunkSize} chars]\n$tail"
-        } else resultText
+        } else {
+            resultText
+        }
     }
 
     private fun formatIfJson(bytes: ByteArray, contentType: String?): String {
@@ -298,8 +327,8 @@ class UnifiedLoggingFilter(
         }
     }
 
-    private fun getHeaders(rq: HttpServletRequest): String =
-        rq.headerNames.asSequence().associateWith { rq.getHeader(it) }.toString()
+    private fun getHeadersMap(rq: HttpServletRequest): Map<String, String> =
+        rq.headerNames.asSequence().associateWith { rq.getHeader(it) }
 
     private fun getResponseHeaders(rs: HttpServletResponse): Map<String, String> =
         rs.headerNames.associateWith { rs.getHeader(it) }
@@ -381,6 +410,7 @@ class UnifiedLoggingFilter(
         private const val BODY_EMPTY = "[EMPTY]"
         private const val BODY_BINARY = "[BINARY DATA]"
         private const val BODY_MULTIPART_RS = "[MULTIPART RAW DISABLED]"
+        private const val BODY_TOO_LARGE = "[BODY TOO LARGE TO LOG]"
 
         private val COMPRESSION_ENCODINGS = setOf("gzip", "br", "deflate")
         private val EXTENSIONS_TEXT = setOf(
@@ -394,6 +424,9 @@ class UnifiedLoggingFilter(
         )
 
         private const val PART_UNKNOWN = "UNKNOWN"
+
+        private const val STATUS_UNDEFINED = "UNDEFINED"
+        private const val STATUS_UNKNOWN = "UNKNOWN"
 
         private const val TEMPLATE_PART_PREFIX = "  [PART] -> Name: %s%s | %s"
         private const val TEMPLATE_PART_FILE_INFO = "%s (File: %s, Size: %d bytes)"

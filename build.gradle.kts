@@ -86,6 +86,7 @@ tasks.test {
 
     jvmArgs(
         "-XX:MaxMetaspaceSize=512m",
+        "-XX:+EnableDynamicAgentLoading",
         "-XX:+UseG1GC",
         "-XX:+UseStringDeduplication",
         "-Dfile.encoding=UTF-8"

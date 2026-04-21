@@ -26,8 +26,6 @@ import java.util.concurrent.Semaphore;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.IntStream;
 
-import static java.lang.IO.println;
-
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.DEFINED_PORT)
 class H2cLoadIntegrationTest {
 
@@ -91,7 +89,7 @@ class H2cLoadIntegrationTest {
 
     private void calculateAndPrintStats(List<Long> latencies) {
         if (latencies.isEmpty()) {
-            println("Данных нет.");
+            System.out.println("Данных нет.");
             return;
         }
 
@@ -115,18 +113,18 @@ class H2cLoadIntegrationTest {
             .orElse(0.0) / toMs;
 
         // Используем прямой вызов println и String Templates (если включены)
-        println("\n" + "=".repeat(50));
-        println("         PERFORMANCE REPORT (JAVA 25+)         ");
-        println("=".repeat(50));
-        println(String.format("Всего запросов    : %d", size));
-        println("-".repeat(50));
-        println(String.format("Min Latency       : %.3f ms", best));
-        println(String.format("Median (P50)      : %.3f ms", p50));
-        println(String.format("Average (Trunc)   : %.3f ms", truncatedAvg));
-        println(String.format("P95 Latency       : %.3f ms", p95));
-        println(String.format("P99 Latency       : %.3f ms", p99));
-        println(String.format("Max Latency       : %.3f ms", worst));
-        println("=".repeat(50) + "\n");
+        System.out.println("\n" + "=".repeat(50));
+        System.out.println("         PERFORMANCE REPORT (JAVA 25+)         ");
+        System.out.println("=".repeat(50));
+        System.out.printf("Всего запросов    : %d%n", size);
+        System.out.println("-".repeat(50));
+        System.out.printf("Min Latency       : %.3f ms%n", best);
+        System.out.printf("Median (P50)      : %.3f ms%n", p50);
+        System.out.printf("Average (Trunc)   : %.3f ms%n", truncatedAvg);
+        System.out.printf("P95 Latency       : %.3f ms%n", p95);
+        System.out.printf("P99 Latency       : %.3f ms%n", p99);
+        System.out.printf("Max Latency       : %.3f ms%n", worst);
+        System.out.println("=".repeat(50) + "\n");
     }
 
     @TestConfiguration

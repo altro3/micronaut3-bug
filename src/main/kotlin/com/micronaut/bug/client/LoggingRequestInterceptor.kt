@@ -88,7 +88,24 @@ class LoggingRequestInterceptor(
             val rsBodyBytes = if (skipLogging) {
                 BODY_LOG_DISABLED.toByteArray()
             } else {
-                rs.body.readAllBytes() // Только чтение, никакой логики внутри!
+
+                val contentLength = rs.headers.contentLength
+                val maxAllowed = logProps.maxPayloadSize.toBytes()
+
+                // ПРЕДОХРАНИТЕЛЬ: Проверяем заголовок ДО чтения
+                if (contentLength > maxAllowed) {
+                    BODY_TOO_LARGE.toByteArray(Charsets.UTF_8)
+                } else {
+                    // Если заголовок -1 (chunked) или в рамках лимита — читаем,
+                    // но ограничиваем само чтение, чтобы не доверять заголовку на 100%
+                    val rawBytes = rs.body.readAllBytes()
+
+                    if (rawBytes.size > maxAllowed) {
+                        BODY_TOO_LARGE.toByteArray(Charsets.UTF_8)
+                    } else {
+                        rawBytes
+                    }
+                }
             }
 
             // 2. Основной лог ответа
@@ -130,13 +147,17 @@ class LoggingRequestInterceptor(
      */
     private fun getRequestLogString(rq: HttpRequest, body: ByteArray, extRqId: String, skipLogging: Boolean): String {
         val ct = rq.headers.contentType?.toString()
-        // Если флаг поднят — пишем заглушку, иначе парсим тело
+        val bodyForLog = if (body.size > logProps.maxPayloadSize.toBytes() && !skipLogging) {
+            BODY_TOO_LARGE.toByteArray(Charsets.UTF_8)
+        } else {
+            body
+        }
         val bodyResult = if (skipLogging) {
             BODY_LOG_DISABLED
-        } else if (isMultipart(ct)) {
-            formatMultipart(body, ct)
+        } else if (logProps.prettyPrint && isMultipart(ct)) {
+            formatMultipart(bodyForLog, ct)
         } else {
-            formatBody(body, ct, rq.headers.toSingleValueMap())
+            formatBody(bodyForLog, ct, rq.headers.toSingleValueMap())
         }
 
         return """
@@ -167,7 +188,7 @@ class LoggingRequestInterceptor(
         // 2. Формируем строку для лога
         val bodyResult = if (skipLogging) {
             BODY_LOG_DISABLED
-        } else if (logProps.prettyPrint && isMultipart(ct)) {
+        } else if (isMultipart(ct)) {
             formatMultipart(processedBody, ct)
         } else {
             formatBody(processedBody, ct, rs.headers.toSingleValueMap()) // formatBody сам проверит isText
@@ -213,8 +234,10 @@ class LoggingRequestInterceptor(
             PREFIX_DASH + it
         } ?: return BODY_MULTIPART_RAW
 
+        val delimiter = "$STRING_NEW_LINE$PREFIX_DASH${boundary.trim()}"
+
         return runCatching {
-            bytes.toString(Charsets.UTF_8).split(boundary)
+            bytes.toString(Charsets.UTF_8).split(delimiter)
                 .filter { it.contains(MARKER_CONTENT_DISPOSITION) }
                 .joinToString(STRING_NEW_LINE) { partRaw ->
                     val lines = partRaw.trim().lines()
@@ -276,8 +299,12 @@ class LoggingRequestInterceptor(
             return BODY_EMPTY
         }
 
+        if (content.contentEquals(BODY_TOO_LARGE.toByteArray(Charsets.UTF_8))) {
+            return BODY_TOO_LARGE
+        }
+
         // 2. Комплексная проверка на бинарные данные (наша финальная сигнатура)
-        if (isBinaryContent(content, ct, headers)) {
+        if (!isMultipart(ct) && isBinaryContent(content, ct, headers)) {
             return BODY_BINARY
         }
 
@@ -486,6 +513,7 @@ class LoggingRequestInterceptor(
         private const val BODY_BINARY = "[BINARY DATA]"
         private const val BODY_MULTIPART_RAW = "[MULTIPART RAW]"
         private const val BODY_LOG_DISABLED = "[BODY LOGGING DISABLED BY CLIENT]"
+        private const val BODY_TOO_LARGE = "[BODY TOO LARGE TO LOG]"
 
         private val COMPRESSION_ENCODINGS = setOf("gzip", "br", "deflate")
         private val EXTENSIONS_TEXT = setOf(

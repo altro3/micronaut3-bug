@@ -14,6 +14,7 @@ import jakarta.validation.constraints.NotNull
 import jakarta.validation.constraints.Positive
 import jakarta.validation.constraints.PositiveOrZero
 import org.springframework.boot.context.properties.NestedConfigurationProperty
+import org.springframework.util.unit.DataSize
 import org.springframework.validation.annotation.Validated
 import java.net.URI
 import java.time.Duration
@@ -98,6 +99,13 @@ class HttpClientProperties(
          */
         @field:NotNull
         var fullUrl: Boolean = true,
+        /**
+         * Максимальный размер тела (запроса или ответа), который мы готовы прочитать в память.
+         * Если тело больше — логируется заглушка [BODY_TOO_LARGE].
+         * По умолчанию 10MB.
+         */
+        @field:NotNull
+        var maxPayloadSize: DataSize = DataSize.ofMegabytes(15),
         /**
          * Максимально допустимый размер тела сообщения в логах (в байтах).
          * Значения 0 или -1 отключают ограничение (логируется весь объем).
