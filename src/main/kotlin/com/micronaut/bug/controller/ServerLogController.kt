@@ -4,7 +4,6 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import com.micronaut.bug.config.SecurityContext
 import com.micronaut.bug.config.User
 import com.micronaut.bug.service.BusinessService
-import com.micronaut.bug.service.integration.extservice.ExtServiceClient
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.core.io.ByteArrayResource
 import org.springframework.http.HttpEntity
@@ -27,7 +26,7 @@ import java.io.ByteArrayOutputStream
 import java.util.zip.GZIPOutputStream
 
 @RestController
-class MyEntityController(
+class ServerLogController(
     private val businessService: BusinessService,
     private val objectMapper: ObjectMapper,
 ) {
@@ -95,7 +94,6 @@ class MyEntityController(
         val dataParsed = data?.let {
             objectMapper.readValue(it, MyData::class.java)
         }
-
         log.info { "body: ${data ?: "null"}" }
         log.info { "dataParsed: $dataParsed" }
         log.info { "pathVar: $pathVar" }
@@ -130,6 +128,14 @@ class MyEntityController(
 
         return responseMap
     }
+
+    @PostMapping("/huge-data")
+    fun testHugeData(@RequestBody body: String): String =
+        body
+
+    @PostMapping("/huge-log")
+    fun testHugeLog(@RequestBody body: String): String =
+        body
 
     data class MyData(
         var name: String? = null,

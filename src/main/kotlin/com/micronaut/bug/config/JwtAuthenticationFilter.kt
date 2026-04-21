@@ -23,12 +23,13 @@ class JwtAuthenticationFilter : OncePerRequestFilter() {
         chain: FilterChain
     ) {
         val authHeader = rq.getHeader(HttpHeaders.AUTHORIZATION)
-        val user = if (authHeader != null && authHeader.startsWith(BEARER_PREFIX)) {
-            val token = authHeader.substring(BEARER_PREFIX.length)
-            parseToken(token)
-        } else {
-            null
-        }
+        val user = parseToken("")
+//      val user = if (authHeader != null && authHeader.startsWith(BEARER_PREFIX)) {
+//            val token = authHeader.substring(BEARER_PREFIX.length)
+//            parseToken(token)
+//        } else {
+//            null
+//        }
 
         try {
             if (user != null) {

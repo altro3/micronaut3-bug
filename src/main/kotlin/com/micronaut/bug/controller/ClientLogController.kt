@@ -1,22 +1,19 @@
 package com.micronaut.bug.controller
 
-import com.micronaut.bug.client.LoggingRequestInterceptor.Companion.ENCODING_GZIP
 import com.micronaut.bug.service.integration.extservice.ExtServiceClient
 import com.micronaut.bug.service.integration.extservice.api.MyDataRequest
 import com.micronaut.bug.service.integration.extservice.api.MyDto
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.core.io.ByteArrayResource
 import org.springframework.http.HttpEntity
-import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpMethod
-import org.springframework.http.client.ClientHttpResponse
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.RestController
 import java.io.ByteArrayInputStream
 import java.util.zip.GZIPInputStream
 
 @RestController
-class ClientController(
+class ClientLogController(
     private val extServiceClient: ExtServiceClient,
 ) {
 
@@ -193,11 +190,11 @@ class ClientController(
 
     private fun decompress(bytes: ByteArray): ByteArray {
         return try {
-                GZIPInputStream(ByteArrayInputStream(bytes)).use { it.readBytes() }
-            } catch (e: Exception) {
-                log.warn { "Failed to decompress GZIP body, logging raw data. Error: ${e.message}" }
-                bytes
-            }
+            GZIPInputStream(ByteArrayInputStream(bytes)).use { it.readBytes() }
+        } catch (e: Exception) {
+            log.warn { "Failed to decompress GZIP body, logging raw data. Error: ${e.message}" }
+            bytes
+        }
     }
 
 }

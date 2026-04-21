@@ -2,7 +2,6 @@ package com.micronaut.bug.config
 
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.databind.SerializationFeature
-import com.micronaut.bug.client.LoggingRequestInterceptor
 import com.micronaut.bug.config.UnifiedLoggingFilter.Companion.LIMIT_TEXT_CHECK_THRESHOLD
 import com.micronaut.bug.config.log.LogProperties
 import io.github.oshai.kotlinlogging.KotlinLogging
@@ -68,6 +67,7 @@ class UnifiedLoggingFilter(
 
             // Оборачиваем ответ для кэширования исходящего потока
             val rsWrapper = ContentCachingResponseWrapper(rs)
+            rsWrapper.bufferSize = props.maxPayloadSize.toBytes().toInt()
 
             try {
                 // Если включен обычный дебаг-логинг — печатаем запрос сразу
@@ -80,12 +80,20 @@ class UnifiedLoggingFilter(
                 val duration = System.currentTimeMillis() - startTime
                 val status = rsWrapper.status
                 val isError = status >= 400
+                val isFullBodyCached = rsWrapper.contentSize < props.maxPayloadSize.toBytes()
+
+                val rsBodyBytes = when {
+                    rsWrapper.contentSize == 0 -> BODY_EMPTY.toByteArray(Charsets.UTF_8)
+                    !isFullBodyCached -> BODY_TOO_LARGE.toByteArray(Charsets.UTF_8)
+                    else -> rsWrapper.contentAsByteArray
+                }
+
                 if (isError) {
                     // ПРИ ОШИБКЕ: логируем и запрос, и ответ на уровне ERROR
-                    log.error { "Service failure detected!\n$requestLogData\n${getResponseLogString(currentRq, rsWrapper, duration)}" }
+                    log.error { "Service failure detected!\n$requestLogData\n${getResponseLogString(currentRq, rsWrapper, rsBodyBytes, duration)}" }
                 } else if (isDebugProvider) {
                     // В штатном режиме: логируем только ответ в DEBUG
-                    log.debug { getResponseLogString(currentRq, rsWrapper, duration) }
+                    log.debug { getResponseLogString(currentRq, rsWrapper, rsBodyBytes, duration) }
                 }
                 // Важно: копируем кэшированное тело ответа обратно в реальный поток
                 rsWrapper.copyBodyToResponse()
@@ -93,6 +101,39 @@ class UnifiedLoggingFilter(
         } finally {
             MDC.clear()
         }
+    }
+
+    private fun getResponseLogString(
+        rq: HttpServletRequest,
+        rs: ContentCachingResponseWrapper,
+        body: ByteArray,
+        duration: Long
+    ): String {
+        val statusInt = rs.status
+        val httpStatus = HttpStatus.resolve(statusInt)
+        val statusMessage = httpStatus?.reasonPhrase ?: if (statusInt == 0) STATUS_UNDEFINED else STATUS_UNKNOWN
+
+        val headers = getResponseHeaders(rs)
+
+        // formatBody уже умеет обрабатывать константу BODY_TOO_LARGE
+        val bodyText = when {
+            isMultipart(rs.contentType) && !body.contentEquals(BODY_TOO_LARGE.toByteArray(Charsets.UTF_8)) ->
+                formatMultipartResponse(body, rs.contentType)
+
+            else -> formatBody(body, rs.contentType, headers)
+        }
+
+        return """
+            |
+            |================== Service response ==================
+            |URI: ${rq.method} ${getFullUri(rq)}
+            |Status: $statusInt $statusMessage
+            |Duration: ${duration}ms
+            |Headers: $headers
+            |Body:
+            |$bodyText
+            |================== /Service response ==================
+        """.trimMargin()
     }
 
     /**
@@ -134,6 +175,7 @@ class UnifiedLoggingFilter(
                     formatBody(rq.body, rq.contentType, headers)
                 }
             }
+
             is MultipartTypeWrapper -> getMultipartBody(rq)
             else -> BODY_TOO_LARGE
         }
@@ -183,38 +225,6 @@ class UnifiedLoggingFilter(
         val content = formatBody(bytes, ct, headers)
         val prefix = if (content == BODY_BINARY) BODY_BINARY else "Content: $content"
         return TEMPLATE_PART_PREFIX.format(description, headersString, prefix)
-    }
-
-    /**
-     * Формирует строковое представление исходящего ответа.
-     */
-    private fun getResponseLogString(rq: HttpServletRequest, rs: ContentCachingResponseWrapper, duration: Long): String {
-        // Берем реальный статус. Если он 0, оставляем 0, чтобы видеть проблему.
-        val statusInt = rs.status
-
-        // Пытаемся разрешить статус через Spring HttpStatus
-        val httpStatus = HttpStatus.resolve(statusInt)
-        val statusMessage = httpStatus?.reasonPhrase ?: if (statusInt == 0) STATUS_UNDEFINED else STATUS_UNKNOWN
-
-        val headers = getResponseHeaders(rs)
-        val contentType = rs.contentType
-        val bodyText = when {
-            isMultipart(contentType) -> formatMultipartResponse(rs.contentAsByteArray, contentType)
-            rs.contentAsByteArray.isEmpty() -> BODY_EMPTY
-            else -> formatBody(rs.contentAsByteArray, contentType, headers)
-        }
-
-        return """
-            |
-            |================== Service response ==================
-            |URI: ${rq.method} ${getFullUri(rq)}
-            |Status: $statusInt $statusMessage
-            |Duration: ${duration}ms
-            |Headers: $headers
-            |Body:
-            |$bodyText
-            |================== /Service response ==================
-        """.trimMargin()
     }
 
     /**
