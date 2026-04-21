@@ -158,11 +158,12 @@ class ExternalMockServer {
             post(urlEqualTo("/v1/data/plain-to-gzip"))
                 // Проверяем, что клиент НЕ прислал сжатые данные
                 .withHeader("Content-Encoding", absent())
-                .willReturn(aResponse()
-                    .withStatus(200)
-                    .withHeader("Content-Type", "application/json")
-                    .withHeader("Content-Encoding", "gzip") // Сервер сжимает ответ
-                    .withBody(convertToGzip("""{"status":"success","info":"received plain, sent gzip"}"""))
+                .willReturn(
+                    aResponse()
+                        .withStatus(200)
+                        .withHeader("Content-Type", "application/json")
+                        .withHeader("Content-Encoding", "gzip") // Сервер сжимает ответ
+                        .withBody(convertToGzip("""{"status":"success","info":"received plain, sent gzip"}"""))
                 )
         )
 
@@ -171,11 +172,12 @@ class ExternalMockServer {
 
         wireMockServer.stubFor(
             post(urlEqualTo("/v1/data/huge-proxy"))
-                .willReturn(aResponse()
-                    .withStatus(200)
-                    .withHeader("Content-Type", "text/plain")
-                    // WireMock выставит Content-Length: 5242880
-                    .withBody(hugeByteArray)
+                .willReturn(
+                    aResponse()
+                        .withStatus(200)
+                        .withHeader("Content-Type", "text/plain")
+                        // WireMock выставит Content-Length: 5242880
+                        .withBody(hugeByteArray)
                 )
         )
     }

@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.SerializationFeature
 import com.micronaut.bug.client.LoggingRequestInterceptor.Companion.LIMIT_TEXT_CHECK_THRESHOLD
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.http.HttpHeaders
+import org.springframework.http.HttpHeaders.CONTENT_DISPOSITION
 import org.springframework.http.HttpHeaders.CONTENT_TYPE
 import org.springframework.http.HttpRequest
 import org.springframework.http.MediaType
@@ -51,7 +52,7 @@ class LoggingRequestInterceptor(
         val skipLogging = rq.attributes[ATTR_SKIP_LOGGING] as? Boolean ?: false
 
         // Уникальный ID для связки конкретной пары запрос-ответ
-        val extRqId = UUID.randomUUID().toString().replace(STRING_DASH, STRING_EMPTY)
+        val extRqId = UUID.randomUUID().toString().replace(DASH, STRING_EMPTY)
         // Сохраняем ID в атрибуты, чтобы GzipRequestInterceptor его увидел
         rq.attributes[ATTR_EXT_RQ_ID] = extRqId
 
@@ -229,26 +230,26 @@ class LoggingRequestInterceptor(
             return formatBody(bytes, ct)
         }
 
-        val boundary = ct?.substringAfter(MARKER_BOUNDARY, "")
-            ?.substringBefore(";")
-            ?.replace("\"", "")
+        val boundary = ct?.substringAfter(MARKER_BOUNDARY, STRING_EMPTY)
+            ?.substringBefore(SEMICOLON)
+            ?.replace(QUOTE, STRING_EMPTY)
             ?.trim() ?: return formatBody(bytes, ct)
 
-        val delimiter = "$STRING_NEW_LINE$PREFIX_DASH${boundary.trim()}"
+        val delimiter = "$NEW_LINE$DOUBLE_DASH${boundary.trim()}"
 
         return runCatching {
             bytes.toString(Charsets.UTF_8)
                 .split(delimiter)
-                .filter { it.isNotBlank() && it != "--" && it.contains(MARKER_CONTENT_DISPOSITION) }
-                .joinToString(STRING_NEW_LINE) { partRaw ->
+                .filter { it.isNotBlank() && it != DOUBLE_DASH && it.contains(CONTENT_DISPOSITION) }
+                .joinToString(NEW_LINE) { partRaw ->
                     val lines = partRaw.trim().lines()
                     val headerLines = lines.takeWhile { it.isNotBlank() }
 
                     val partHeaders = headerLines.associate {
-                        it.substringBefore(STRING_COLON_SPACE) to it.substringAfter(STRING_COLON_SPACE)
+                        it.substringBefore(COLON_SPACE) to it.substringAfter(COLON_SPACE)
                     }
 
-                    val content = lines.drop(headerLines.size).dropWhile { it.isBlank() }.joinToString(STRING_NEW_LINE)
+                    val content = lines.drop(headerLines.size).dropWhile { it.isBlank() }.joinToString(NEW_LINE)
                     val contentBytes = content.toByteArray()
 
                     var name = PART_UNKNOWN
@@ -256,10 +257,10 @@ class LoggingRequestInterceptor(
                     var partCt: String? = null
 
                     partHeaders.forEach { (k, v) ->
-                        if (k.contains(MARKER_CONTENT_DISPOSITION)) {
-                            name = v.substringAfter(EQUALS_NAME, "").substringBefore(STRING_QUOTE)
+                        if (k.contains(CONTENT_DISPOSITION)) {
+                            name = v.substringAfter(EQUALS_NAME, STRING_EMPTY).substringBefore(QUOTE)
                             if (v.contains(MARKER_FILENAME)) {
-                                fileName = v.substringAfter(EQUALS_FILENAME).substringBefore(STRING_QUOTE)
+                                fileName = v.substringAfter(EQUALS_FILENAME).substringBefore(QUOTE)
                             }
                         } else if (k.equals(CONTENT_TYPE, ignoreCase = true)) {
                             partCt = v
@@ -430,7 +431,7 @@ class LoggingRequestInterceptor(
 
         return runCatching {
             ct.substringAfter(EQUALS_NAME)
-                .substringBefore(STRING_QUOTE)
+                .substringBefore(QUOTE)
                 .takeIf { it.isNotBlank() }
         }.getOrNull()
     }
@@ -504,11 +505,13 @@ class LoggingRequestInterceptor(
         private val prettyMapper = ObjectMapper().enable(SerializationFeature.INDENT_OUTPUT)
 
         private const val STRING_EMPTY = ""
-        private const val STRING_DASH = "-"
-        private const val STRING_NEW_LINE = "\n"
-        private const val STRING_COLON_SPACE = ": "
-        private const val STRING_QUOTE = "\""
+        private const val DASH = "-"
+        private const val NEW_LINE = "\n"
+        private const val COLON_SPACE = ": "
+        private const val QUOTE = "\""
         private const val SLASH = "/"
+        private const val SEMICOLON = ";"
+        private const val DOUBLE_DASH = "--"
 
         private const val BODY_EMPTY = "[EMPTY]"
         private const val BODY_BINARY = "[BINARY DATA]"
@@ -533,14 +536,12 @@ class LoggingRequestInterceptor(
         private const val TEMPLATE_PART_FILE_INFO = "%s (File: %s, Size: %d bytes)"
 
         private const val MARKER_BOUNDARY = "boundary="
-        private const val MARKER_CONTENT_DISPOSITION = "Content-Disposition"
         private const val MARKER_FILENAME = "filename="
         private const val MARKER_TEXT = "text"
         private const val MARKER_HTTP_PROTOCOL = "http"
 
         private const val EQUALS_NAME = "name=\""
         private const val EQUALS_FILENAME = "filename=\""
-        private const val PREFIX_DASH = "--"
 
         private const val SUFFIX_TRUNCATED = "... [TRUNCATED]"
         private const val LIMIT_TEXT_CHECK_THRESHOLD = 512

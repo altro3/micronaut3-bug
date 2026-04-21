@@ -3,7 +3,7 @@ app:
     pattern:
       console: "%d{HH:mm:ss.SSS} %highlight(%-5level) %magenta(%mdcBlock)[%thread] %cyan(%logger{25}) - %msg%n%throwable"
     mdc-keys: test
-    pretty-print: false
+    pretty-print: true
     max-payload-size: 4MB
   integration:
     ext-service:

@@ -2,7 +2,7 @@ package com.micronaut.bug.config
 
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.databind.SerializationFeature
-import com.micronaut.bug.config.UnifiedLoggingFilter.Companion.LIMIT_TEXT_CHECK_THRESHOLD
+import com.micronaut.bug.config.ServerLoggingFilter.Companion.LIMIT_TEXT_CHECK_THRESHOLD
 import com.micronaut.bug.config.log.LogProperties
 import io.github.oshai.kotlinlogging.KotlinLogging
 import jakarta.servlet.FilterChain
@@ -13,6 +13,8 @@ import jakarta.servlet.http.HttpServletRequestWrapper
 import jakarta.servlet.http.HttpServletResponse
 import jakarta.servlet.http.Part
 import org.slf4j.MDC
+import org.springframework.http.HttpHeaders.CONTENT_DISPOSITION
+import org.springframework.http.HttpHeaders.CONTENT_TYPE
 import org.springframework.http.HttpStatus
 import org.springframework.http.MediaType
 import org.springframework.util.ClassUtils
@@ -23,9 +25,9 @@ import java.io.ByteArrayInputStream
 import java.io.InputStreamReader
 import java.util.UUID
 
-class UnifiedLoggingFilter(
+class ServerLoggingFilter(
     objectMapper: ObjectMapper,
-    private val props: LogProperties,
+    private val logProps: LogProperties,
 ) : OncePerRequestFilter() {
 
     private val log = KotlinLogging.logger {}
@@ -52,12 +54,12 @@ class UnifiedLoggingFilter(
         try {
 
             // Пропускаем Actuator-эндпоинты, если это указано в настройках
-            if (withActuator && props.skipActuator && rq.requestURI.startsWith(rq.contextPath + PATH_ACTUATOR)) {
+            if (withActuator && logProps.skipActuator && rq.requestURI.startsWith(rq.contextPath + PATH_ACTUATOR)) {
                 chain.doFilter(rq, rs)
                 return
             }
 
-            val isDebugProvider = log.isDebugEnabled() && props.enabledControllerLogging
+            val isDebugProvider = log.isDebugEnabled() && logProps.enabledControllerLogging
 
             // Оборачиваем запрос: кэшируем тело, чтобы прочитать его для лога и оставить доступным для контроллера
             val currentRq = wrapRequest(rq)
@@ -67,7 +69,7 @@ class UnifiedLoggingFilter(
 
             // Оборачиваем ответ для кэширования исходящего потока
             val rsWrapper = ContentCachingResponseWrapper(rs)
-            rsWrapper.bufferSize = props.maxPayloadSize.toBytes().toInt()
+            rsWrapper.bufferSize = logProps.maxPayloadSize.toBytes().toInt()
 
             try {
                 // Если включен обычный дебаг-логинг — печатаем запрос сразу
@@ -80,7 +82,7 @@ class UnifiedLoggingFilter(
                 val duration = System.currentTimeMillis() - startTime
                 val status = rsWrapper.status
                 val isError = status >= 400
-                val isFullBodyCached = rsWrapper.contentSize < props.maxPayloadSize.toBytes()
+                val isFullBodyCached = rsWrapper.contentSize < logProps.maxPayloadSize.toBytes()
 
                 val rsBodyBytes = when {
                     rsWrapper.contentSize == 0 -> BODY_EMPTY.toByteArray(Charsets.UTF_8)
@@ -153,7 +155,7 @@ class UnifiedLoggingFilter(
             val contentLength = rq.contentLengthLong
             // Если размер тела больше лимита логирования (например, > 1МБ),
             // мы НЕ кэшируем его, а пробрасываем оригинальный поток.
-            if (contentLength > props.maxPayloadSize.toBytes()) {
+            if (contentLength > logProps.maxPayloadSize.toBytes()) {
                 rq
             } else {
                 val bytes = rq.inputStream.readAllBytes()
@@ -196,7 +198,7 @@ class UnifiedLoggingFilter(
      */
     private fun getMultipartBody(rq: MultipartTypeWrapper): String =
         runCatching {
-            rq.parts.joinToString(STRING_NEW_LINE) { part ->
+            rq.parts.joinToString(NEW_LINE) { part ->
                 val observedPart = part as ObservedPart
                 val bytes = observedPart.getContentBytes()
 
@@ -235,25 +237,26 @@ class UnifiedLoggingFilter(
             return BODY_EMPTY
         }
 
-        val boundary = contentType?.split(MARKER_BOUNDARY)?.getOrNull(1)?.let {
-            PREFIX_DASH + it
-        } ?: return BODY_MULTIPART_RS
+        val boundary = contentType?.substringAfter(MARKER_BOUNDARY, STRING_EMPTY)
+            ?.substringBefore(SEMICOLON)
+            ?.replace(QUOTE, STRING_EMPTY)
+            ?.trim() ?: return BODY_MULTIPART_RS
 
-        val delimiter = "$STRING_NEW_LINE$PREFIX_DASH${boundary.trim()}"
+        val delimiter = "$NEW_LINE$DOUBLE_DASH${boundary.trim()}"
 
         return runCatching {
             bytes.toString(Charsets.UTF_8).split(delimiter)
-                .filter { it.contains(MARKER_CONTENT_DISPOSITION) }
-                .joinToString(STRING_NEW_LINE) { partRaw ->
+                .filter { it.isNotBlank() && it != DOUBLE_DASH && it.contains(CONTENT_DISPOSITION) }
+                .joinToString(NEW_LINE) { partRaw ->
                     val lines = partRaw.trim().lines()
                     val headerLines = lines.takeWhile { it.isNotBlank() }
 
                     // Сбор хедеров парта из строк
                     val partHeaders = headerLines.associate {
-                        it.substringBefore(STRING_COLON_SPACE) to it.substringAfter(STRING_COLON_SPACE)
+                        it.substringBefore(COLON_SPACE) to it.substringAfter(COLON_SPACE)
                     }
 
-                    val content = lines.dropWhile { it.isNotBlank() }.drop(1).joinToString(STRING_NEW_LINE)
+                    val content = lines.dropWhile { it.isNotBlank() }.drop(1).joinToString(NEW_LINE)
 
                     var name: String? = null
                     var fileName: String? = null
@@ -262,12 +265,12 @@ class UnifiedLoggingFilter(
                     // Извлекаем метаданные из собранных хедеров
                     partHeaders.forEach { (k, v) ->
                         when {
-                            k.contains(MARKER_CONTENT_DISPOSITION) -> {
-                                name = v.substringAfter(EQUALS_NAME, "").substringBefore(STRING_QUOTE)
-                                fileName = if (v.contains(MARKER_FILENAME)) v.substringAfter(EQUALS_FILENAME).substringBefore(STRING_QUOTE) else null
+                            k.contains(CONTENT_DISPOSITION) -> {
+                                name = v.substringAfter(EQUALS_NAME, STRING_EMPTY).substringBefore(QUOTE)
+                                fileName = if (v.contains(MARKER_FILENAME)) v.substringAfter(EQUALS_FILENAME).substringBefore(QUOTE) else null
                             }
 
-                            k.equals(HEADER_CONTENT_TYPE, ignoreCase = true) -> partCt = v
+                            k.equals(CONTENT_TYPE, ignoreCase = true) -> partCt = v
                         }
                     }
 
@@ -300,21 +303,21 @@ class UnifiedLoggingFilter(
             return BODY_TOO_LARGE
         }
         // Умная проверка на бинарные данные, включая GZIP и расширения
-        if (props.prettyPrint && !isMultipart(contentType) && isBinaryContent(content, headers, contentType)) {
+        if (logProps.prettyPrint && !isMultipart(contentType) && isBinaryContent(content, headers, contentType)) {
             return BODY_BINARY
         }
 
-        val resultText = if (props.prettyPrint) {
+        val resultText = if (logProps.prettyPrint) {
             formatIfJson(content, contentType)
         } else {
             String(content, Charsets.UTF_8)
         }
 
         // Обрезка по принципу "голова...хвост"
-        return if (props.limitLogSize > 0 && resultText.length > props.limitLogSize) {
-            val head = resultText.take(props.truncateChunkSize)
-            val tail = resultText.takeLast(props.truncateChunkSize)
-            "$head\n$SUFFIX_TRUNCATED [Skipped ${resultText.length - 2 * props.truncateChunkSize} chars]\n$tail"
+        return if (logProps.limitLogSize > 0 && resultText.length > logProps.limitLogSize) {
+            val head = resultText.take(logProps.truncateChunkSize)
+            val tail = resultText.takeLast(logProps.truncateChunkSize)
+            "$head\n$SUFFIX_TRUNCATED [Skipped ${resultText.length - 2 * logProps.truncateChunkSize} chars]\n$tail"
         } else {
             resultText
         }
@@ -412,10 +415,12 @@ class UnifiedLoggingFilter(
         private const val PATH_ACTUATOR = "/actuator"
 
         private const val STRING_EMPTY = ""
-        private const val STRING_DASH = "-"
-        private const val STRING_QUOTE = "\""
-        private const val STRING_NEW_LINE = "\n"
-        private const val STRING_COLON_SPACE = ": "
+        private const val DASH = "-"
+        private const val QUOTE = "\""
+        private const val NEW_LINE = "\n"
+        private const val COLON_SPACE = ": "
+        private const val SEMICOLON = ";"
+        private const val DOUBLE_DASH = "--"
 
         private const val BODY_EMPTY = "[EMPTY]"
         private const val BODY_BINARY = "[BINARY DATA]"
@@ -444,17 +449,13 @@ class UnifiedLoggingFilter(
         private const val SUFFIX_TRUNCATED = "... [TRUNCATED]"
 
         private const val MARKER_BOUNDARY = "boundary="
-        private const val MARKER_CONTENT_DISPOSITION = "Content-Disposition"
         private const val MARKER_FILENAME = "filename="
         private const val MARKER_TEXT = "text"
 
         private const val EQUALS_NAME = "name=\""
         private const val EQUALS_FILENAME = "filename=\""
 
-        private const val PREFIX_DASH = "--"
-        private const val HEADER_CONTENT_TYPE = "Content-Type"
-
-        private const val LIMIT_TEXT_CHECK_THRESHOLD = 100
+        private const val LIMIT_TEXT_CHECK_THRESHOLD = 512
 
         private const val BYTE_JSON_OBJECT = '{'.code.toByte()
         private const val BYTE_JSON_ARRAY = '['.code.toByte()
@@ -491,9 +492,9 @@ class UnifiedLoggingFilter(
             }
 
             // 3. Проверка по расширению файла
-            val effectiveFileName = fileName ?: contentType?.substringAfter("name=\"", "")?.substringBefore("\"", "")?.takeIf { it.isNotBlank() }
+            val effectiveFileName = fileName ?: contentType?.substringAfter(EQUALS_NAME, STRING_EMPTY)?.substringBefore("\"", "")?.takeIf { it.isNotBlank() }
             if (effectiveFileName != null) {
-                val ext = effectiveFileName.substringAfterLast('.', "").lowercase()
+                val ext = effectiveFileName.substringAfterLast('.', STRING_EMPTY).lowercase()
                 if (ext.isNotEmpty() && ext !in EXTENSIONS_TEXT) {
                     return true
                 }
@@ -565,6 +566,6 @@ class UnifiedLoggingFilter(
             rq.queryString?.let { "${rq.requestURI}?$it" } ?: rq.requestURI
 
         private fun genTraceId(): String =
-            UUID.randomUUID().toString().replace(STRING_DASH, STRING_EMPTY)
+            UUID.randomUUID().toString().replace(DASH, STRING_EMPTY)
     }
 }
