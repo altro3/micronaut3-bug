@@ -1,14 +1,19 @@
 package com.micronaut.bug.controller
 
+import com.micronaut.bug.client.LoggingRequestInterceptor.Companion.ENCODING_GZIP
 import com.micronaut.bug.service.integration.extservice.ExtServiceClient
 import com.micronaut.bug.service.integration.extservice.api.MyDataRequest
 import com.micronaut.bug.service.integration.extservice.api.MyDto
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.core.io.ByteArrayResource
 import org.springframework.http.HttpEntity
+import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpMethod
+import org.springframework.http.client.ClientHttpResponse
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.RestController
+import java.io.ByteArrayInputStream
+import java.util.zip.GZIPInputStream
 
 @RestController
 class ClientController(
@@ -120,7 +125,21 @@ class ClientController(
 
         // Вызываем клиент. Netty сам добавит Accept-Encoding (распаковка ответа),
         // а наш GzipRequestInterceptor сожмет тело запроса.
-        val response = extServiceClient.testGzipTransfer(MyDataRequest(name = "Payload for auto-compression"))
+        val response = extServiceClient.testGzipTransfer(MyDataRequest(name = "Payload for manual compression"))
+
+        return mapOf(
+            "status" to "ok",
+            "payload" to String(decompress(response!!)),
+        )
+    }
+
+    @GetMapping("/gzip-auto")
+    fun testGzipAuto(): Map<String, Any> {
+        log.info { "Starting GZIP-AUTO integration test (Automatic compression)..." }
+
+        // Вызываем клиент. Netty сам добавит Accept-Encoding (распаковка ответа),
+        // а наш GzipRequestInterceptor сожмет тело запроса.
+        val response = extServiceClient.testAutoGzipTransfer(MyDataRequest(name = "Payload for auto-compression"))
 
         return mapOf(
             "status" to if (response?.status == "gzip_success") "OK" else "ERROR",
@@ -140,7 +159,7 @@ class ClientController(
         )
     }
 
-    @GetMapping("/error")
+    @GetMapping("/test-error")
     fun testError(): String {
         log.info { "Starting test: error..." }
 
@@ -171,4 +190,14 @@ class ClientController(
             "durationMs" to duration
         )
     }
+
+    private fun decompress(bytes: ByteArray): ByteArray {
+        return try {
+                GZIPInputStream(ByteArrayInputStream(bytes)).use { it.readBytes() }
+            } catch (e: Exception) {
+                log.warn { "Failed to decompress GZIP body, logging raw data. Error: ${e.message}" }
+                bytes
+            }
+    }
+
 }

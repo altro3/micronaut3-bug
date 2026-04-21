@@ -290,7 +290,7 @@ class UnifiedLoggingFilter(
             return BODY_TOO_LARGE
         }
         // Умная проверка на бинарные данные, включая GZIP и расширения
-        if (!isMultipart(contentType) && isBinaryContent(content, headers, contentType)) {
+        if (props.prettyPrint && !isMultipart(contentType) && isBinaryContent(content, headers, contentType)) {
             return BODY_BINARY
         }
 

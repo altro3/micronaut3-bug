@@ -1,5 +1,6 @@
 package com.micronaut.bug.service.integration.extservice
 
+import com.fasterxml.jackson.databind.ObjectMapper
 import com.micronaut.bug.client.DefaultHttpClient
 import com.micronaut.bug.service.integration.extservice.api.MyDataRequest
 import com.micronaut.bug.service.integration.extservice.api.MyDataResponse
@@ -15,12 +16,14 @@ import org.springframework.http.MediaType
 import org.springframework.stereotype.Service
 import org.springframework.util.LinkedMultiValueMap
 import org.springframework.util.MultiValueMap
+import java.io.ByteArrayOutputStream
 
 @Service
 class ExtServiceClient(
     props: ExtServiceProperties,
     @Qualifier("extServiceHttpClient")
-    val httpClient: DefaultHttpClient
+    val httpClient: DefaultHttpClient,
+    private val objectMapper: ObjectMapper,
 ) {
 
     private val endpoints = props.endpoints
@@ -83,7 +86,7 @@ class ExtServiceClient(
         )
     }
 
-    fun testGzipTransfer(request: MyDataRequest): MyDataResponse? {
+    fun testAutoGzipTransfer(request: MyDataRequest): MyDataResponse? {
         return httpClient.sendRq(
             // Предположим, добавили gzip в Endpoints проперти
             path = "/v1/data/gzip",
@@ -94,6 +97,20 @@ class ExtServiceClient(
             headers = mapOf(HttpHeaders.CONTENT_ENCODING to "gzip"),
         )
     }
+
+    fun testGzipTransfer(request: MyDataRequest) =
+        httpClient.sendRq(
+            // Предположим, добавили gzip в Endpoints проперти
+            path = "/v1/data/manual-gzip",
+            method = HttpMethod.POST,
+            rqBody = compress(objectMapper.writeValueAsBytes(request)),
+            responseClass = ByteArray::class.java,
+            headers = mapOf(
+                HttpHeaders.CONTENT_ENCODING to "gzip",
+                HttpHeaders.CONTENT_TYPE to MediaType.APPLICATION_OCTET_STREAM_VALUE,
+                HttpHeaders.ACCEPT to MediaType.APPLICATION_OCTET_STREAM_VALUE,
+            ),
+        )
 
     fun testPlainToGzip(request: MyDataRequest): MyDataResponse? {
         return httpClient.sendRq(
@@ -122,5 +139,16 @@ class ExtServiceClient(
             rqBody = data,
             responseClass = ByteArray::class.java,
         )
+    }
+
+    private fun compress(body: ByteArray): ByteArray {
+        val baos = ByteArrayOutputStream()
+        // Сначала полностью завершаем работу со стримом
+        java.util.zip.GZIPOutputStream(baos).use { gzip ->
+            gzip.write(body)
+            gzip.finish() // Явно завершаем формирование архива
+        }
+        // Только ПОСЛЕ закрытия/финиша берем байты
+        return baos.toByteArray()
     }
 }

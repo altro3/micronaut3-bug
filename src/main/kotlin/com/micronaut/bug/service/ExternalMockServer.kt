@@ -140,6 +140,19 @@ class ExternalMockServer {
                 )
         )
 
+        wireMockServer.stubFor(
+            post(urlEqualTo("/v1/data/manual-gzip"))
+                // Используем встроенный матчер WireMock для заголовка
+                .withHeader("Content-Encoding", containing("gzip"))
+                .willReturn(
+                    aResponse()
+                        .withStatus(200)
+                        .withHeader("Content-Type", "octet/stream")
+                        .withHeader("Content-Encoding", "gzip")
+                        .withBody(convertToGzip("""{"status":"gzip_success","message":"Data processed"}"""))
+                )
+        )
+
         // В класс ExternalMockServer, метод setupStubs()
         wireMockServer.stubFor(
             post(urlEqualTo("/v1/data/plain-to-gzip"))

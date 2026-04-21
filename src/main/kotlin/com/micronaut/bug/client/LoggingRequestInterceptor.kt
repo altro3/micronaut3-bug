@@ -229,16 +229,17 @@ class LoggingRequestInterceptor(
             return formatBody(bytes, ct)
         }
 
-        // Пытаемся извлечь маркер границы из заголовка Content-Type
-        val boundary = ct?.split(MARKER_BOUNDARY)?.getOrNull(1)?.let {
-            PREFIX_DASH + it
-        } ?: return BODY_MULTIPART_RAW
+        val boundary = ct?.substringAfter(MARKER_BOUNDARY, "")
+            ?.substringBefore(";")
+            ?.replace("\"", "")
+            ?.trim() ?: return formatBody(bytes, ct)
 
         val delimiter = "$STRING_NEW_LINE$PREFIX_DASH${boundary.trim()}"
 
         return runCatching {
-            bytes.toString(Charsets.UTF_8).split(delimiter)
-                .filter { it.contains(MARKER_CONTENT_DISPOSITION) }
+            bytes.toString(Charsets.UTF_8)
+                .split(delimiter)
+                .filter { it.isNotBlank() && it != "--" && it.contains(MARKER_CONTENT_DISPOSITION) }
                 .joinToString(STRING_NEW_LINE) { partRaw ->
                     val lines = partRaw.trim().lines()
                     val headerLines = lines.takeWhile { it.isNotBlank() }
@@ -247,7 +248,7 @@ class LoggingRequestInterceptor(
                         it.substringBefore(STRING_COLON_SPACE) to it.substringAfter(STRING_COLON_SPACE)
                     }
 
-                    val content = lines.dropWhile { it.isNotBlank() }.drop(1).joinToString(STRING_NEW_LINE)
+                    val content = lines.drop(headerLines.size).dropWhile { it.isBlank() }.joinToString(STRING_NEW_LINE)
                     val contentBytes = content.toByteArray()
 
                     var name = PART_UNKNOWN
@@ -304,7 +305,7 @@ class LoggingRequestInterceptor(
         }
 
         // 2. Комплексная проверка на бинарные данные (наша финальная сигнатура)
-        if (!isMultipart(ct) && isBinaryContent(content, ct, headers)) {
+        if (logProps.prettyPrint && !isMultipart(ct) && isBinaryContent(content, ct, headers)) {
             return BODY_BINARY
         }
 
