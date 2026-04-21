@@ -27,12 +27,15 @@ import java.util.zip.GZIPInputStream
  * - Исключает дублирование данных в логах при включенном DEBUG уровне.
  */
 class LoggingRequestInterceptor(
-    props: HttpClientProperties
+    props: HttpClientProperties,
+    objectMapper: ObjectMapper,
 ) : ClientHttpRequestInterceptor {
 
     private val log = KotlinLogging.logger {}
 
     private val logProps = props.log
+    private val prettyMapper = objectMapper.copy()
+        .enable(SerializationFeature.INDENT_OUTPUT)
 
     /**
      * Префикс для формирования полного URI. Вычисляется один раз при создании интерцептора.
@@ -502,7 +505,6 @@ class LoggingRequestInterceptor(
     }
 
     companion object {
-        private val prettyMapper = ObjectMapper().enable(SerializationFeature.INDENT_OUTPUT)
 
         private const val STRING_EMPTY = ""
         private const val DASH = "-"
