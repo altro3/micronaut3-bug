@@ -25,6 +25,10 @@ import java.io.ByteArrayInputStream
 import java.io.InputStreamReader
 import java.util.UUID
 
+/**
+ * Фильтр для детального логирования входящих HTTP-запросов и ответов на стороне сервера.
+ * Поддерживает защиту от OOM, разбор Multipart и Pretty Print для JSON.
+ */
 class ServerLoggingFilter(
     objectMapper: ObjectMapper,
     private val logProps: LogProperties,
