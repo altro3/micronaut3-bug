@@ -94,7 +94,7 @@ class ServerLoggingFilter(
                     else -> rsWrapper.contentAsByteArray
                 }
 
-                if (isError) {
+                if (isError && !isDebugProvider) {
                     // ПРИ ОШИБКЕ: логируем и запрос, и ответ на уровне ERROR
                     log.error { "Service failure detected!\n$requestLogData\n${getResponseLogString(currentRq, rsWrapper, rsBodyBytes, duration)}" }
                 } else if (isDebugProvider) {
