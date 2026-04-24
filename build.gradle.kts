@@ -1,9 +1,11 @@
+import com.google.cloud.tools.jib.gradle.JibTask
 import org.gradle.api.tasks.testing.logging.TestLogEvent
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 plugins {
     id("org.springframework.boot") version "3.5.13"
     id("io.spring.dependency-management") version "1.1.7"
+    id("com.google.cloud.tools.jib") version "3.5.3"
     kotlin("jvm") version "2.3.20"
     kotlin("plugin.spring") version "2.3.20"
     kotlin("kapt") version "2.3.20" // Добавили плагин здесь
@@ -14,7 +16,7 @@ val ver = mapOf(
     "springBoot" to "3.5.13",
 )
 
-val jreImage = "bellsoft/liberica-openjre-alpine:25.0.2"
+val jreImage = "bellsoft/liberica-openjre-alpine:21.0.11-x86_64"
 
 kotlin {
     jvmToolchain(21)
@@ -56,16 +58,16 @@ dependencies {
     testImplementation("io.projectreactor.netty:reactor-netty-http")
 }
 
-tasks.withType<KotlinCompile>().configureEach {
-    compilerOptions {
-        freeCompilerArgs.addAll("-Xjsr305=strict", "-java-parameters")
-    }
-}
-
 configurations.all {
     resolutionStrategy {
         cacheDynamicVersionsFor(0, "minutes")
         cacheChangingModulesFor(0, "minutes")
+    }
+}
+
+tasks.withType<KotlinCompile>().configureEach {
+    compilerOptions {
+        freeCompilerArgs.addAll("-Xjsr305=strict", "-java-parameters", "-Xemit-jvm-type-annotations", "-Xannotation-default-target=param-property")
     }
 }
 
@@ -91,4 +93,29 @@ tasks.test {
         "-XX:+UseStringDeduplication",
         "-Dfile.encoding=UTF-8"
     )
+}
+
+tasks.bootJar {
+    layered {
+        enabled = true
+    }
+}
+
+tasks.withType<JibTask> {
+    notCompatibleWithConfigurationCache("Jib does not support the Gradle configuration cache yet")
+}
+
+jib {
+    from { image = jreImage }
+    to {
+        image = "localhost:5000/micronaut3-bug:latest"
+    }
+    container {
+        jvmFlags = listOf(
+            "-XX:+UseG1GC",
+            "-XX:+UseStringDeduplication",
+            "-Dfile.encoding=UTF-8"
+        )
+    }
+    setAllowInsecureRegistries(true)
 }
