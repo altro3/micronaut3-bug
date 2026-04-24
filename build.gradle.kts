@@ -40,6 +40,7 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-actuator")
     implementation("org.springframework.retry:spring-retry")
     implementation("io.projectreactor.netty:reactor-netty-http")
+    implementation("com.github.loki4j:loki-logback-appender:2.0.3")
 
     // Kotlin Essential
     implementation("org.jetbrains.kotlin:kotlin-reflect")

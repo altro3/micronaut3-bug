@@ -6,16 +6,27 @@ import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.ConsoleAppender
 import ch.qos.logback.core.CoreConstants
 import ch.qos.logback.core.OutputStreamAppender
+import com.github.loki4j.client.pipeline.PipelineConfig
+import com.github.loki4j.logback.Loki4jAppender
 import org.slf4j.LoggerFactory
 import org.springframework.boot.context.event.ApplicationReadyEvent
 import org.springframework.context.event.EventListener
 import org.springframework.core.env.Environment
 
+/**
+ * Реконфигуратор логбэка, выполняющий настройку консольного вывода и
+ * динамическую регистрацию аппендера Grafana Loki.
+ */
 class LogReconfigurator(
     private val environment: Environment,
     private val props: LogProperties
 ) {
 
+    /**
+     * Основная точка входа для переконфигурации после полной готовности приложения.
+     * Выполняет настройку кастомных конвертеров, обновление паттернов консоли
+     * и инициализацию Loki-аппендера.
+     */
     @EventListener(ApplicationReadyEvent::class)
     fun reconfigureLogback() {
         val loggerContext = LoggerFactory.getILoggerFactory() as? LoggerContext ?: return
@@ -47,6 +58,64 @@ class LogReconfigurator(
                 }
             }
         }
+
+        // 3. Добавляем Loki, если включен
+        if (props.loki.enabled) {
+            setupLokiAppender(loggerContext)
+        }
+    }
+
+    /**
+     * Программная инициализация Loki4jAppender.
+     * Настраивает отправку логов в бинарном формате Protobuf с учетом
+     * ограничений по размеру батча для предотвращения OOM при тяжелых логах.
+     *
+     * @param loggerContext Контекст исполнения Logback.
+     */
+    private fun setupLokiAppender(loggerContext: LoggerContext) {
+        val lokiProps = props.loki
+        val appName = environment.getProperty("spring.application.name") ?: "unknown-app"
+        val rootLogger = loggerContext.getLogger(org.slf4j.Logger.ROOT_LOGGER_NAME)
+
+        // Проверяем, не добавлен ли уже аппендер (защита от повторной инициализации)
+        if (rootLogger.getAppender(LOKI_APPENDER_NAME) != null) {
+            return
+        }
+
+        val appender = PipelineConfig.builder()
+            .build()apply {
+            context = loggerContext
+            name = LOKI_APPENDER_NAME
+
+            httpConfig.url = lokiProps.url.toString()
+                ?: throw IllegalStateException("Loki URL is required when Loki logging is enabled")
+
+            // Настройки батчинга под тяжелые логи
+            batchSize = lokiProps.batchSize
+            batchMaxBytes = lokiProps.batchMaxBytes.toBytes().toInt()
+
+            // 2. Настраиваем формат через DefaultLoki4jEncoder
+            encoder = com.github.loki4j.logback.DefaultLoki4jEncoder().apply {
+                context = loggerContext
+
+                // Настройка лейблов (используем внутренний объект LabelCfg)
+                label = com.github.loki4j.logback.AbstractLoki4jEncoder.LabelCfg().apply {
+                    val mdcLabels = lokiProps.labelKeys.joinToString(",") { "$it=%mdc{$it:-none}" }
+                    pattern = "app=$appName,level=%level,$mdcLabels"
+                }
+
+                // Настройка сообщения через JsonLayout
+                message = com.github.loki4j.logback.JsonLayout().apply {
+                    context = loggerContext
+                    setIncludeMdc(true)
+                    setIncludeContext(true)
+                    start() // В 2.x Layout нужно стартовать вручную!
+                }
+            }
+        }
+
+        appender.start()
+        rootLogger.addAppender(appender)
     }
 
     companion object {
@@ -58,5 +127,7 @@ class LogReconfigurator(
 
         // Дефолтный паттерн: Дата Уровень [MDC] [Поток] Логгер - Сообщение
         private const val DEFAULT_PATTERN = "%d{HH:mm:ss.SSS} %highlight(%-5level) %magenta(%$MDC_BLOCK_WORD) [%thread] %cyan(%logger{25}) - %msg%n%throwable"
+
+        private const val LOKI_APPENDER_NAME = "LOKI"
     }
 }
