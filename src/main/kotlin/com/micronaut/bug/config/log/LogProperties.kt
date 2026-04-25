@@ -11,6 +11,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties
 import org.springframework.core.Ordered
 import org.springframework.util.unit.DataSize
 import java.net.URI
+import java.time.Duration
 
 /**
  * Настройки логирования входящих (контроллеры) и исходящих (клиенты) HTTP-запросов.
@@ -86,16 +87,78 @@ class LogProperties(
          * Размер батча (количество логов) перед отправкой.
          */
         @field:Positive
-        var batchSize: Int = 50,
+        var batchSize: Int = 200,
         /**
          * Максимальный объем памяти (DataSize) для накопления батча перед отправкой.
          * Дополнительная защита от OOM при тяжелых логах.
          */
         var batchMaxBytes: DataSize = DataSize.ofMegabytes(4),
         /**
+         * Интервал времени, по истечении которого неполный батч будет принудительно отправлен.
+         */
+        var batchTimeout: Duration = Duration.ofSeconds(60),
+        /**
+         * Флаг использования статических меток. Оптимизирует производительность, если набор меток не меняется.
+         */
+        var staticLabels: Boolean = false,
+        /**
+         * Максимальный размер оперативной памяти, выделяемый под очередь отправки при недоступности сервера.
+         */
+        var sendQueueMaxBytes: DataSize = DataSize.ofMegabytes(40),
+        /**
+         * Максимальное количество попыток повторной отправки при сетевых сбоях.
+         */
+        @field:Positive
+        var maxRetries: Int = 2,
+        /**
+         * Минимальная задержка перед повторной попыткой отправки.
+         */
+        var minRetryBackoff: Duration = Duration.ofMillis(500),
+        /**
+         * Максимальная задержка перед повторной попыткой отправки.
+         */
+        var maxRetryBackoff: Duration = Duration.ofSeconds(60),
+        /**
+         * Случайное отклонение (jitter) для времени повторной попытки.
+         */
+        var maxRetryJitter: Duration = Duration.ofMillis(500),
+        /**
+         * Если true, пакеты будут отбрасываться при получении ошибки 429 (Rate Limited) от Loki.
+         */
+        var dropRateLimitedBatches: Boolean = false,
+        /**
+         * Таймаут проверки состояния внутренних очередей приложения.
+         */
+        var internalQueuesCheckTimeout: Duration = Duration.ofMillis(25),
+        /**
+         * Включает использование Direct Buffers для снижения нагрузки на Garbage Collector.
+         */
+        var useDirectBuffers: Boolean = true,
+        /**
+         * Если true, приложение попытается отправить все оставшиеся в очереди логи перед завершением процесса.
+         */
+        var drainOnStop: Boolean = true,
+        /**
+         * Включает экспорт внутренних метрик Loki4j для мониторинга производительности аппендера.
+         */
+        var metricsEnabled: Boolean = false,
+        /**
          * Список ключей из MDC, которые станут индексируемыми метками (labels) в Loki.
          * Пример: ["x-req-id", "targetId"]
          */
-        var labelKeys: List<String> = listOf(X_REQ_ID, TARGET_ID)
+        var labels: List<String> = listOf(X_REQ_ID, TARGET_ID),
+        /**
+         * Время ожидания установки соединения с сервером Loki.
+         */
+        var connectionTimeout: Duration = Duration.ofSeconds(5),
+        /**
+         * Максимальное время ожидания ответа от Loki на запрос отправки логов.
+         */
+        var requestTimeout: Duration = Duration.ofSeconds(5),
+        /**
+         * Время бездействия потока отправки, после которого он будет завершен.
+         * Используется в JavaHttpConfig для управления ресурсами.
+         */
+        var threadExpirationTimeout: Duration = Duration.ofMinutes(5),
     )
 }

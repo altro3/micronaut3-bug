@@ -6,6 +6,7 @@ import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.ConsoleAppender
 import ch.qos.logback.core.CoreConstants
 import ch.qos.logback.core.OutputStreamAppender
+import com.github.loki4j.client.http.HttpConfig
 import com.github.loki4j.client.pipeline.PipelineConfig
 import com.github.loki4j.logback.Loki4jAppender
 import org.slf4j.LoggerFactory
@@ -83,36 +84,42 @@ class LogReconfigurator(
         }
 
         val appender = PipelineConfig.builder()
-            .build()apply {
-            context = loggerContext
-            name = LOKI_APPENDER_NAME
-
-            httpConfig.url = lokiProps.url.toString()
-                ?: throw IllegalStateException("Loki URL is required when Loki logging is enabled")
-
-            // Настройки батчинга под тяжелые логи
-            batchSize = lokiProps.batchSize
-            batchMaxBytes = lokiProps.batchMaxBytes.toBytes().toInt()
-
-            // 2. Настраиваем формат через DefaultLoki4jEncoder
-            encoder = com.github.loki4j.logback.DefaultLoki4jEncoder().apply {
-                context = loggerContext
-
-                // Настройка лейблов (используем внутренний объект LabelCfg)
-                label = com.github.loki4j.logback.AbstractLoki4jEncoder.LabelCfg().apply {
-                    val mdcLabels = lokiProps.labelKeys.joinToString(",") { "$it=%mdc{$it:-none}" }
-                    pattern = "app=$appName,level=%level,$mdcLabels"
-                }
-
-                // Настройка сообщения через JsonLayout
-                message = com.github.loki4j.logback.JsonLayout().apply {
-                    context = loggerContext
-                    setIncludeMdc(true)
-                    setIncludeContext(true)
-                    start() // В 2.x Layout нужно стартовать вручную!
-                }
-            }
-        }
+            .setName(LOKI_APPENDER_NAME)
+            .setBatchMaxItems(lokiProps.batchSize)
+            .setBatchMaxBytes(lokiProps.batchMaxBytes.toBytes().toInt())
+            .setHttpConfig(PipelineConfig.java(lokiProps.threadExpirationTimeout.toMillis())
+                .setConnectionTimeoutMs(lokiProps.connectionTimeout.toMillis())
+                .setRequestTimeoutMs(lokiProps.requestTimeout.toMillis())
+                .setPushUrl(lokiProps.url.toString())
+            )
+            .setWriter(PipelineConfig.protobuf)
+            .build()
+        //apply {
+//            context = loggerContext
+//            name = LOKI_APPENDER_NAME
+//
+//            httpConfig.url = lokiProps.url.toString()
+//                ?: throw IllegalStateException("Loki URL is required when Loki logging is enabled")
+//
+//            // 2. Настраиваем формат через DefaultLoki4jEncoder
+//            encoder = com.github.loki4j.logback.DefaultLoki4jEncoder().apply {
+//                context = loggerContext
+//
+//                // Настройка лейблов (используем внутренний объект LabelCfg)
+//                label = com.github.loki4j.logback.AbstractLoki4jEncoder.LabelCfg().apply {
+//                    val mdcLabels = lokiProps.labelKeys.joinToString(",") { "$it=%mdc{$it:-none}" }
+//                    pattern = "app=$appName,level=%level,$mdcLabels"
+//                }
+//
+//                // Настройка сообщения через JsonLayout
+//                message = com.github.loki4j.logback.JsonLayout().apply {
+//                    context = loggerContext
+//                    setIncludeMdc(true)
+//                    setIncludeContext(true)
+//                    start() // В 2.x Layout нужно стартовать вручную!
+//                }
+//            }
+//        }
 
         appender.start()
         rootLogger.addAppender(appender)
