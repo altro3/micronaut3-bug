@@ -3,6 +3,7 @@ package com.micronaut.bug.client
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.databind.SerializationFeature
 import com.micronaut.bug.client.LoggingRequestInterceptor.Companion.LIMIT_TEXT_CHECK_THRESHOLD
+import com.micronaut.bug.util.TraceIdGenerator
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.jboss.logging.MDC
 import org.springframework.http.HttpHeaders
@@ -14,7 +15,6 @@ import org.springframework.http.client.ClientHttpRequestExecution
 import org.springframework.http.client.ClientHttpRequestInterceptor
 import org.springframework.http.client.ClientHttpResponse
 import java.io.ByteArrayInputStream
-import java.util.UUID
 import java.util.zip.GZIPInputStream
 
 /**
@@ -56,7 +56,7 @@ class LoggingRequestInterceptor(
         val skipLogging = rq.attributes[ATTR_SKIP_LOGGING] as? Boolean ?: false
 
         // Уникальный ID для связки конкретной пары запрос-ответ
-        val extRqId = UUID.randomUUID().toString().replace(DASH, STRING_EMPTY)
+        val extRqId = TraceIdGenerator.generate()
         MDC.put(MDC_EXT_RQ_ID, extRqId)
         try {
             // Сохраняем ID в атрибуты, чтобы GzipRequestInterceptor его увидел
@@ -512,7 +512,6 @@ class LoggingRequestInterceptor(
     companion object {
 
         private const val STRING_EMPTY = ""
-        private const val DASH = "-"
         private const val NEW_LINE = "\n"
         private const val COLON_SPACE = ": "
         private const val QUOTE = "\""

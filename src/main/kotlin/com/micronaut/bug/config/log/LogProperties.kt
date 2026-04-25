@@ -34,7 +34,7 @@ class LogProperties(
      * Если тело больше — кэширование не производится, логируется заглушка.
      */
     @field:Positive
-    var maxPayloadSize: DataSize = DataSize.ofMegabytes(15), // 15MB по умолчанию
+    var maxPayloadSize: DataSize = DataSize.ofMegabytes(15),
     /**
      * Максимально допустимый размер тела сообщения в логах (в байтах).
      * Значения 0 или -1 отключают ограничение (логируется весь объем).

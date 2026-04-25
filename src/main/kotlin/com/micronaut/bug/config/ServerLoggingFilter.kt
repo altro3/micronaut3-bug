@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.databind.SerializationFeature
 import com.micronaut.bug.config.ServerLoggingFilter.Companion.LIMIT_TEXT_CHECK_THRESHOLD
 import com.micronaut.bug.config.log.LogProperties
+import com.micronaut.bug.util.TraceIdGenerator
 import io.github.oshai.kotlinlogging.KotlinLogging
 import jakarta.servlet.FilterChain
 import jakarta.servlet.ReadListener
@@ -23,7 +24,6 @@ import org.springframework.web.util.ContentCachingResponseWrapper
 import java.io.BufferedReader
 import java.io.ByteArrayInputStream
 import java.io.InputStreamReader
-import java.util.UUID
 
 /**
  * Фильтр для детального логирования входящих HTTP-запросов и ответов на стороне сервера.
@@ -419,7 +419,6 @@ class ServerLoggingFilter(
         private const val PATH_ACTUATOR = "/actuator"
 
         private const val STRING_EMPTY = ""
-        private const val DASH = "-"
         private const val QUOTE = "\""
         private const val NEW_LINE = "\n"
         private const val COLON_SPACE = ": "
@@ -570,6 +569,6 @@ class ServerLoggingFilter(
             rq.queryString?.let { "${rq.requestURI}?$it" } ?: rq.requestURI
 
         private fun genTraceId(): String =
-            UUID.randomUUID().toString().replace(DASH, STRING_EMPTY)
+            TraceIdGenerator.generate()
     }
 }
