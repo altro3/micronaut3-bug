@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.databind.SerializationFeature
 import com.micronaut.bug.client.LoggingRequestInterceptor.Companion.LIMIT_TEXT_CHECK_THRESHOLD
 import io.github.oshai.kotlinlogging.KotlinLogging
+import org.jboss.logging.MDC
 import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpHeaders.CONTENT_DISPOSITION
 import org.springframework.http.HttpHeaders.CONTENT_TYPE
@@ -56,73 +57,77 @@ class LoggingRequestInterceptor(
 
         // Уникальный ID для связки конкретной пары запрос-ответ
         val extRqId = UUID.randomUUID().toString().replace(DASH, STRING_EMPTY)
-        // Сохраняем ID в атрибуты, чтобы GzipRequestInterceptor его увидел
-        rq.attributes[ATTR_EXT_RQ_ID] = extRqId
-
-        // Данные запроса готовим лениво
-        val rqLogData by lazy { getRequestLogString(rq, body, extRqId, skipLogging) }
-
-        // 1. Включен DEBUG: логируем запрос сразу перед отправкой
-        if (isDebug) {
-            log.debug { rqLogData }
-        }
-
-        val startTime = System.currentTimeMillis()
-        val rs: ClientHttpResponse
+        MDC.put(MDC_EXT_RQ_ID, extRqId)
         try {
-            rs = execution.execute(rq, body)
-        } catch (e: Exception) {
-            val duration = System.currentTimeMillis() - startTime
+            // Сохраняем ID в атрибуты, чтобы GzipRequestInterceptor его увидел
+            rq.attributes[ATTR_EXT_RQ_ID] = extRqId
+
+            // Данные запроса готовим лениво
+            val rqLogData by lazy { getRequestLogString(rq, body, extRqId, skipLogging) }
+
+            // 1. Включен DEBUG: логируем запрос сразу перед отправкой
             if (isDebug) {
-                // В DEBUG запрос уже есть в логах, пишем только ID и ошибку
-                log.error(e) { "External call failed! [extRqId: $extRqId, duration: ${duration}ms]" }
-            } else {
-                // Без DEBUG выводим всё вместе: и данные запроса, и ошибку
-                log.error(e) { "External call failed! [extRqId: $extRqId, duration: ${duration}ms]\n$rqLogData" }
+                log.debug { rqLogData }
             }
-            throw e
-        }
 
-        val duration = System.currentTimeMillis() - startTime
-
-        val isError = rs.statusCode.isError
-
-        if (isDebug || isError) {
-            // 1. Просто получаем сырые байты (или заглушку)
-            val rsBodyBytes = if (skipLogging) {
-                BODY_LOG_DISABLED.toByteArray()
-            } else {
-
-                val contentLength = rs.headers.contentLength
-                val maxAllowed = logProps.maxPayloadSize.toBytes()
-
-                // ПРЕДОХРАНИТЕЛЬ: Проверяем заголовок ДО чтения
-                if (contentLength > maxAllowed) {
-                    BODY_TOO_LARGE.toByteArray(Charsets.UTF_8)
+            val startTime = System.currentTimeMillis()
+            val rs: ClientHttpResponse
+            try {
+                rs = execution.execute(rq, body)
+            } catch (e: Exception) {
+                val duration = System.currentTimeMillis() - startTime
+                if (isDebug) {
+                    // В DEBUG запрос уже есть в логах, пишем только ID и ошибку
+                    log.error(e) { "External call failed! [extRqId: $extRqId, duration: ${duration}ms]" }
                 } else {
-                    // Если заголовок -1 (chunked) или в рамках лимита — читаем,
-                    // но ограничиваем само чтение, чтобы не доверять заголовку на 100%
-                    val rawBytes = rs.body.readAllBytes()
+                    // Без DEBUG выводим всё вместе: и данные запроса, и ошибку
+                    log.error(e) { "External call failed! [extRqId: $extRqId, duration: ${duration}ms]\n$rqLogData" }
+                }
+                throw e
+            }
 
-                    if (rawBytes.size > maxAllowed) {
+            val duration = System.currentTimeMillis() - startTime
+
+            val isError = rs.statusCode.isError
+
+            if (isDebug || isError) {
+                // 1. Просто получаем сырые байты (или заглушку)
+                val rsBodyBytes = if (skipLogging) {
+                    BODY_LOG_DISABLED.toByteArray()
+                } else {
+
+                    val contentLength = rs.headers.contentLength
+                    val maxAllowed = logProps.maxPayloadSize.toBytes()
+
+                    // ПРЕДОХРАНИТЕЛЬ: Проверяем заголовок ДО чтения
+                    if (contentLength > maxAllowed) {
                         BODY_TOO_LARGE.toByteArray(Charsets.UTF_8)
                     } else {
-                        rawBytes
+                        // Если заголовок -1 (chunked) или в рамках лимита — читаем,
+                        // но ограничиваем само чтение, чтобы не доверять заголовку на 100%
+                        val rawBytes = rs.body.readAllBytes()
+
+                        if (rawBytes.size > maxAllowed) {
+                            BODY_TOO_LARGE.toByteArray(Charsets.UTF_8)
+                        } else {
+                            rawBytes
+                        }
                     }
                 }
-            }
 
-            // 2. Основной лог ответа
-            if (isDebug) {
-                // В DEBUG всегда пишем ответ отдельно (статус ошибки будет внутри шаблона)
-                log.debug { getResponseLogString(rq, rs, rsBodyBytes, duration, extRqId, skipLogging) }
-            } else {
-                // Без DEBUG логируем только ошибки: запрос и ответ одним блоком
-                log.error { "External service failure!\n$rqLogData\n${getResponseLogString(rq, rs, rsBodyBytes, duration, extRqId, skipLogging)}" }
+                // 2. Основной лог ответа
+                if (isDebug) {
+                    // В DEBUG всегда пишем ответ отдельно (статус ошибки будет внутри шаблона)
+                    log.debug { getResponseLogString(rq, rs, rsBodyBytes, duration, extRqId, skipLogging) }
+                } else {
+                    // Без DEBUG логируем только ошибки: запрос и ответ одним блоком
+                    log.error { "External service failure!\n$rqLogData\n${getResponseLogString(rq, rs, rsBodyBytes, duration, extRqId, skipLogging)}" }
+                }
             }
+            return rs
+        } finally {
+            MDC.remove(MDC_EXT_RQ_ID)
         }
-
-        return rs
     }
 
     /**
@@ -555,5 +560,6 @@ class LoggingRequestInterceptor(
 
         const val ATTR_SKIP_LOGGING = "client.skip.body.logging"
         const val ATTR_EXT_RQ_ID = "client.ext.request.id"
+        const val MDC_EXT_RQ_ID = "extRqId"
     }
 }

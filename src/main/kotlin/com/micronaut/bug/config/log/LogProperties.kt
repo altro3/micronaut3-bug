@@ -86,9 +86,9 @@ class LogProperties(
         /**
          * Паттерн для формирования структурированных метаданных (Structured Metadata).
          * Позволяет передавать высококардинальные данные (traceId, userId) без раздувания индекса Loki.
-         * Пример: "rqId=%mdc{x-req-id},targetId=%mdc{targetId}"
+         * Пример: "rqId=%mdc{x-req-id}\ntargetId=%mdc{targetId}\nextRqId=%mdc{extRqId}"
          */
-        var structuredMetadata: String? = "rqId=%mdc{x-req-id}\ntargetId=%mdc{targetId}",
+        var structuredMetadata: String? = "rqId=%mdc{x-req-id}\ntargetId=%mdc{targetId}\nextRqId=%mdc{extRqId}",
         /**
          * Добавляет специальные маркеры чтения в поток логов.
          */
