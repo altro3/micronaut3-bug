@@ -41,6 +41,8 @@ dependencies {
     implementation("org.springframework.retry:spring-retry")
     implementation("io.projectreactor.netty:reactor-netty-http")
     implementation("com.github.loki4j:loki-logback-appender:2.0.3")
+    implementation("com.github.loki4j:loki-protobuf:0.0.2_pb4.33.0")
+    implementation("com.google.protobuf:protobuf-java:4.34.1")
 
     // Kotlin Essential
     implementation("org.jetbrains.kotlin:kotlin-reflect")

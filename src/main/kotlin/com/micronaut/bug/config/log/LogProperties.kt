@@ -1,10 +1,7 @@
 package com.micronaut.bug.config.log
 
-import com.micronaut.bug.config.log.MdcConverter.Companion.TARGET_ID
-import com.micronaut.bug.config.log.MdcConverter.Companion.X_REQ_ID
 import jakarta.validation.Valid
 import jakarta.validation.constraints.Min
-import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.NotNull
 import jakarta.validation.constraints.Positive
 import org.springframework.boot.context.properties.ConfigurationProperties
@@ -73,24 +70,40 @@ class LogProperties(
         /**
          * Включает отправку логов напрямую в Loki через loki-logback-appender.
          */
-        var enabled: Boolean = false,
+        var enabled: Boolean = true,
         /**
          * URL эндпоинта Loki для пуша логов (Protobuf/HTTP).
          */
-        var url: URI = URI.create("http://localhost"),
+        var url: URI = URI.create("http://localhost:3100/loki/api/v1/push"),
         /**
-         * Имя приложения для метки 'app' в Loki.
+         * Включает расширенное логирование внутренней работы аппендера.
          */
-        @field:NotBlank
-        var appName: String = "my-service",
+        var verbose: Boolean = false,
+        /**
+         * Включает использование бинарного Protobuf API для отправки логов.
+         */
+        var useProtobufApi: Boolean = true,
+        /**
+         * Паттерн для формирования структурированных метаданных (Structured Metadata).
+         * Позволяет передавать высококардинальные данные (traceId, userId) без раздувания индекса Loki.
+         * Пример: "rqId=%mdc{x-req-id},targetId=%mdc{targetId}"
+         */
+        var structuredMetadata: String? = "rqId=%mdc{x-req-id}\ntargetId=%mdc{targetId}",
+        /**
+         * Добавляет специальные маркеры чтения в поток логов.
+         */
+        var readMarkers: Boolean = false,
+        /**
+         * Включает сбор и экспорт внутренних метрик производительности.
+         */
+        var metricsEnabled: Boolean = false,
         /**
          * Размер батча (количество логов) перед отправкой.
          */
         @field:Positive
         var batchSize: Int = 200,
         /**
-         * Максимальный объем памяти (DataSize) для накопления батча перед отправкой.
-         * Дополнительная защита от OOM при тяжелых логах.
+         * Максимальный объем памяти для накопления батча перед отправкой.
          */
         var batchMaxBytes: DataSize = DataSize.ofMegabytes(4),
         /**
@@ -98,15 +111,11 @@ class LogProperties(
          */
         var batchTimeout: Duration = Duration.ofSeconds(60),
         /**
-         * Флаг использования статических меток. Оптимизирует производительность, если набор меток не меняется.
-         */
-        var staticLabels: Boolean = false,
-        /**
-         * Максимальный размер оперативной памяти, выделяемый под очередь отправки при недоступности сервера.
+         * Максимальный размер очереди отправки в байтах.
          */
         var sendQueueMaxBytes: DataSize = DataSize.ofMegabytes(40),
         /**
-         * Максимальное количество попыток повторной отправки при сетевых сбоях.
+         * Количество попыток повторной отправки при сетевых сбоях.
          */
         @field:Positive
         var maxRetries: Int = 2,
@@ -119,46 +128,40 @@ class LogProperties(
          */
         var maxRetryBackoff: Duration = Duration.ofSeconds(60),
         /**
-         * Случайное отклонение (jitter) для времени повторной попытки.
+         * Случайное отклонение для времени повторной попытки.
          */
         var maxRetryJitter: Duration = Duration.ofMillis(500),
         /**
-         * Если true, пакеты будут отбрасываться при получении ошибки 429 (Rate Limited) от Loki.
-         */
-        var dropRateLimitedBatches: Boolean = false,
-        /**
-         * Таймаут проверки состояния внутренних очередей приложения.
-         */
-        var internalQueuesCheckTimeout: Duration = Duration.ofMillis(25),
-        /**
-         * Включает использование Direct Buffers для снижения нагрузки на Garbage Collector.
-         */
-        var useDirectBuffers: Boolean = true,
-        /**
-         * Если true, приложение попытается отправить все оставшиеся в очереди логи перед завершением процесса.
-         */
-        var drainOnStop: Boolean = true,
-        /**
-         * Включает экспорт внутренних метрик Loki4j для мониторинга производительности аппендера.
-         */
-        var metricsEnabled: Boolean = false,
-        /**
-         * Список ключей из MDC, которые станут индексируемыми метками (labels) в Loki.
-         * Пример: ["x-req-id", "targetId"]
-         */
-        var labels: List<String> = listOf(X_REQ_ID, TARGET_ID),
-        /**
-         * Время ожидания установки соединения с сервером Loki.
+         * Таймаут на установку соединения с сервером.
          */
         var connectionTimeout: Duration = Duration.ofSeconds(5),
         /**
-         * Максимальное время ожидания ответа от Loki на запрос отправки логов.
+         * Таймаут на выполнение HTTP-запроса на пуш логов.
          */
         var requestTimeout: Duration = Duration.ofSeconds(5),
         /**
          * Время бездействия потока отправки, после которого он будет завершен.
-         * Используется в JavaHttpConfig для управления ресурсами.
          */
         var threadExpirationTimeout: Duration = Duration.ofMinutes(5),
+        /**
+         * Если true, пакеты будут отбрасываться при получении ошибки 429.
+         */
+        var dropRateLimitedBatches: Boolean = false,
+        /**
+         * Интервал проверки состояния внутренних очередей.
+         */
+        var internalQueuesCheckTimeout: Duration = Duration.ofMillis(25),
+        /**
+         * Использовать ли Direct Buffers для снижения нагрузки на GC.
+         */
+        var useDirectBuffers: Boolean = true,
+        /**
+         * Отправить ли остатки логов из очереди при выключении приложения.
+         */
+        var drainOnStop: Boolean = true,
+        /**
+         * Флаг использования статических меток для оптимизации.
+         */
+        var staticLabels: Boolean = true,
     )
 }

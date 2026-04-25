@@ -6,9 +6,11 @@ import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.ConsoleAppender
 import ch.qos.logback.core.CoreConstants
 import ch.qos.logback.core.OutputStreamAppender
-import com.github.loki4j.client.http.HttpConfig
 import com.github.loki4j.client.pipeline.PipelineConfig
+import com.github.loki4j.logback.JavaHttpSender
+import com.github.loki4j.logback.JsonLayout
 import com.github.loki4j.logback.Loki4jAppender
+import com.github.loki4j.logback.PipelineConfigAppenderBase
 import org.slf4j.LoggerFactory
 import org.springframework.boot.context.event.ApplicationReadyEvent
 import org.springframework.context.event.EventListener
@@ -76,6 +78,7 @@ class LogReconfigurator(
     private fun setupLokiAppender(loggerContext: LoggerContext) {
         val lokiProps = props.loki
         val appName = environment.getProperty("spring.application.name") ?: "unknown-app"
+        val nodeName = environment.getProperty("app.node.name") ?: "unknown-node"
         val rootLogger = loggerContext.getLogger(org.slf4j.Logger.ROOT_LOGGER_NAME)
 
         // Проверяем, не добавлен ли уже аппендер (защита от повторной инициализации)
@@ -83,45 +86,45 @@ class LogReconfigurator(
             return
         }
 
-        val appender = PipelineConfig.builder()
-            .setName(LOKI_APPENDER_NAME)
-            .setBatchMaxItems(lokiProps.batchSize)
-            .setBatchMaxBytes(lokiProps.batchMaxBytes.toBytes().toInt())
-            .setHttpConfig(PipelineConfig.java(lokiProps.threadExpirationTimeout.toMillis())
-                .setConnectionTimeoutMs(lokiProps.connectionTimeout.toMillis())
-                .setRequestTimeoutMs(lokiProps.requestTimeout.toMillis())
-                .setPushUrl(lokiProps.url.toString())
-            )
-            .setWriter(PipelineConfig.protobuf)
-            .build()
-        //apply {
-//            context = loggerContext
-//            name = LOKI_APPENDER_NAME
-//
-//            httpConfig.url = lokiProps.url.toString()
-//                ?: throw IllegalStateException("Loki URL is required when Loki logging is enabled")
-//
-//            // 2. Настраиваем формат через DefaultLoki4jEncoder
-//            encoder = com.github.loki4j.logback.DefaultLoki4jEncoder().apply {
-//                context = loggerContext
-//
-//                // Настройка лейблов (используем внутренний объект LabelCfg)
-//                label = com.github.loki4j.logback.AbstractLoki4jEncoder.LabelCfg().apply {
-//                    val mdcLabels = lokiProps.labelKeys.joinToString(",") { "$it=%mdc{$it:-none}" }
-//                    pattern = "app=$appName,level=%level,$mdcLabels"
-//                }
-//
-//                // Настройка сообщения через JsonLayout
-//                message = com.github.loki4j.logback.JsonLayout().apply {
-//                    context = loggerContext
-//                    setIncludeMdc(true)
-//                    setIncludeContext(true)
-//                    start() // В 2.x Layout нужно стартовать вручную!
-//                }
-//            }
-//        }
+        val appender = Loki4jAppender().apply {
+            name = LOKI_APPENDER_NAME
+            context = loggerContext
+            setLabels("app=$appName\nlevel=%level\nnode=$nodeName")
+            setMessage(JsonLayout().apply {
+                context = loggerContext
+                start()
+            })
+            setReadMarkers(lokiProps.readMarkers)
+            setVerbose(lokiProps.verbose)
+            setStructuredMetadata(lokiProps.structuredMetadata)
+            setMetricsEnabled(lokiProps.metricsEnabled)
+            setHttp(PipelineConfigAppenderBase.HttpCfg().apply {
+                setUrl(lokiProps.url.toString())
+                setConnectionTimeoutMs(lokiProps.connectionTimeout.toMillis())
+                setRequestTimeoutMs(lokiProps.requestTimeout.toMillis())
+                setMaxRetries(lokiProps.maxRetries)
+                setMinRetryBackoffMs(lokiProps.minRetryBackoff.toMillis())
+                setMaxRetryBackoffMs(lokiProps.maxRetryBackoff.toMillis())
+                setMaxRetryJitterMs(lokiProps.maxRetryJitter.toMillis().toInt())
+                setDropRateLimitedBatches(lokiProps.dropRateLimitedBatches)
+                setUseProtobufApi(lokiProps.useProtobufApi)
+                setSender(JavaHttpSender().apply {
+                    setInnerThreadsExpirationMs(lokiProps.threadExpirationTimeout.toMillis())
+                })
+            })
+            setBatch(PipelineConfigAppenderBase.BatchCfg().apply {
+                setMaxItems(lokiProps.batchSize)
+                setMaxBytes(lokiProps.batchMaxBytes.toBytes().toInt())
+                setTimeoutMs(lokiProps.batchTimeout.toMillis())
+                setSendQueueMaxBytes(lokiProps.sendQueueMaxBytes.toBytes())
+                setInternalQueuesCheckTimeoutMs(lokiProps.internalQueuesCheckTimeout.toMillis())
+                setDrainOnStop(lokiProps.drainOnStop)
+                setUseDirectBuffers(lokiProps.useDirectBuffers)
+                setStaticLabels(lokiProps.staticLabels)
+            })
+            start()
+        }
 
-        appender.start()
         rootLogger.addAppender(appender)
     }
 

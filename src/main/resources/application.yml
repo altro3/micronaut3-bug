@@ -1,4 +1,6 @@
 app:
+  node:
+    name: ift2
   log:
     pattern:
       console: "%d{HH:mm:ss.SSS} %highlight(%-5level) %magenta(%mdcBlock)[%thread] %cyan(%logger{25}) - %msg%n%throwable"
