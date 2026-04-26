@@ -3,6 +3,11 @@ app:
     enabled: true
   node:
     name: ift2
+  trace:
+    tempo:
+      enabled: true
+      url: "http://localhost:4318/v1/traces"
+      connect-timeout: 2s
   log:
     pattern:
       console: "%d{HH:mm:ss.SSS} %highlight(%-5level) %magenta(%mdcBlock)[%thread] %cyan(%logger{25}) - %msg%n%throwable"

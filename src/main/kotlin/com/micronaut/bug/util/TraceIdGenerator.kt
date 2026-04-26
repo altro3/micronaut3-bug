@@ -1,5 +1,6 @@
 package com.micronaut.bug.util
 
+import com.google.protobuf.ByteString
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.ThreadLocalRandom
 
@@ -34,6 +35,19 @@ object TraceIdGenerator {
         return String(buffer, StandardCharsets.ISO_8859_1)
     }
 
+    /**
+     * Генерирует 16-символьный hex-ID (64 бита) для Span ID.
+     * Соответствует стандарту W3C Trace Context и OpenTelemetry.
+     */
+    fun generateSpanId(): String {
+        val random = ThreadLocalRandom.current()
+        val buffer = ByteArray(16)
+
+        fill(random.nextLong(), buffer, 0)
+
+        return String(buffer, StandardCharsets.ISO_8859_1)
+    }
+
     private fun fill(value: Long, target: ByteArray, offset: Int) {
         // Развернутая запись: за одну операцию берем 8 бит и пишем 2 символа
         writePair(target, offset + 0, value ushr 56)
@@ -53,4 +67,29 @@ object TraceIdGenerator {
         target[offset] = HEX_TABLE[idx]
         target[offset + 1] = HEX_TABLE[idx + 1]
     }
+
+    /**
+     * Быстро конвертирует HEX-строку обратно в ByteString для отправки в Tempo.
+     * Исключает использование тяжелого HexFormat и лишние проверки.
+     *
+     * @param hex 32-символьная (для traceId) или 16-символьная (для spanId) HEX-строка
+     * @return ByteString для Protobuf билдера
+     */
+    fun toByteString(hex: String): ByteString {
+        val len = hex.length
+        val result = ByteArray(len / 2)
+        for (i in result.indices) {
+            val h = decodeDigit(hex[i * 2])
+            val l = decodeDigit(hex[i * 2 + 1])
+            result[i] = ((h shl 4) or l).toByte()
+        }
+        return ByteString.copyFrom(result)
+    }
+
+    private fun decodeDigit(c: Char): Int =
+        when (c) {
+            in '0'..'9' -> c - '0'
+            in 'a'..'f' -> c - 'a' + 10
+            else -> throw IllegalArgumentException("Invalid hex character: $c")
+        }
 }

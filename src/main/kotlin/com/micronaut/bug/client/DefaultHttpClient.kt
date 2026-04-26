@@ -256,7 +256,7 @@ open class DefaultHttpClient {
         }
 
         // Уникальный ID для связки конкретной пары запрос-ответ
-        val extRqId = TraceIdGenerator.generate()
+        val extRqId = TraceIdGenerator.generateSpanId()
         rqBuilder.attribute(ATTR_EXT_RQ_ID, extRqId)
 
         if (httpClientProperties.type == INTERNAL) {

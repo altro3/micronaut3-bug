@@ -5,6 +5,12 @@ import com.fasterxml.jackson.databind.SerializationFeature
 import com.micronaut.bug.client.HttpClientConst.HEADER_EXT_RQ_ID
 import com.micronaut.bug.config.ServerLoggingFilter.Companion.LIMIT_TEXT_CHECK_THRESHOLD
 import com.micronaut.bug.config.log.LogProperties
+import com.micronaut.bug.config.trace.TempoExporter
+import com.micronaut.bug.config.trace.TempoExporter.Companion.ATTR_CLIENT_ID
+import com.micronaut.bug.config.trace.TempoExporter.Companion.ATTR_HTTP_METHOD
+import com.micronaut.bug.config.trace.TempoExporter.Companion.ATTR_HTTP_URL
+import com.micronaut.bug.config.trace.TempoExporter.Companion.ATTR_RQ_HEADERS
+import com.micronaut.bug.config.trace.TempoExporter.Companion.ATTR_RS_HEADERS
 import com.micronaut.bug.util.TraceIdGenerator
 import io.github.oshai.kotlinlogging.KotlinLogging
 import jakarta.servlet.FilterChain
@@ -34,6 +40,7 @@ class ServerLoggingFilter(
     objectMapper: ObjectMapper,
     private val logProps: LogProperties,
     private val appName: String,
+    private val tempoExporter: TempoExporter?,
 ) : OncePerRequestFilter() {
 
     private val log = KotlinLogging.logger {}
@@ -52,16 +59,18 @@ class ServerLoggingFilter(
         chain: FilterChain,
     ) {
         // Извлекаем или генерируем ID запроса для сквозной трассировки в MDC
-        val rqId = rq.getHeader(HEADER_X_RQ_ID)?.takeIf { it.isNotBlank() } ?: genTraceId()
+        val rqId = rq.getHeader(HEADER_X_RQ_ID)?.takeIf { it.isNotBlank() } ?: TraceIdGenerator.generate()
         MDC.put(MDC_RQ_ID, rqId)
+        val parentId = rq.getHeader(HEADER_EXT_RQ_ID)?.takeIf { it.isNotBlank() }
         val sender = rq.getHeader(HEADER_X_SENDER) ?: "USER"
         MDC.put(MDC_CLIENT, sender)
         MDC.put(MDC_SERVER, appName)
         MDC.put(MDC_PARENT_ID, rq.getHeader(HEADER_EXT_RQ_ID)?.takeIf { it.isNotBlank() })
-        val extRqId = genTraceId()
+        val extRqId = TraceIdGenerator.generateSpanId()
         MDC.put(MDC_EXT_RQ_ID, extRqId)
 
-        val startTime = System.currentTimeMillis()
+        val startEpochNanos = System.currentTimeMillis() * 1_000_000
+        val startTimeNano = System.nanoTime()
 
         try {
 
@@ -91,7 +100,7 @@ class ServerLoggingFilter(
 
                 chain.doFilter(currentRq, rsWrapper)
             } finally {
-                val duration = System.currentTimeMillis() - startTime
+                val duration = System.nanoTime() - startTimeNano
                 val status = rsWrapper.status
                 val isError = status >= 400
                 val isFullBodyCached = rsWrapper.contentSize < logProps.maxPayloadSize.toBytes()
@@ -114,6 +123,23 @@ class ServerLoggingFilter(
                 }
                 // Важно: копируем кэшированное тело ответа обратно в реальный поток
                 rsWrapper.copyBodyToResponse()
+
+                tempoExporter?.sendTrace(
+                    traceIdHex = rqId,
+                    spanIdHex = extRqId,
+                    parentIdHex = parentId,
+                    name = "${rq.method} ${rq.requestURI}",
+                    startEpochNanos = startEpochNanos,
+                    durationNanos = duration,
+                    statusCode = HttpStatus.resolve(rs.status),
+                    attrs = mapOf(
+                        ATTR_HTTP_METHOD to rq.method,
+                        ATTR_HTTP_URL to getFullUri(rq),
+                        ATTR_RQ_HEADERS to getHeadersMap(rq).toString(),
+                        ATTR_RS_HEADERS to getResponseHeaders(rsWrapper).toString(),
+                        ATTR_CLIENT_ID to sender,
+                    ),
+                )
             }
         } finally {
             MDC.clear()
@@ -145,7 +171,7 @@ class ServerLoggingFilter(
             |================== Service response ==================
             |URI: ${rq.method} ${getFullUri(rq)}
             |Status: $statusInt $statusMessage
-            |Duration: ${duration}ms
+            |Duration: ${duration / 1000}ms
             |Headers: $headers
             |Body:
             |$bodyText
@@ -585,8 +611,5 @@ class ServerLoggingFilter(
 
         private fun getFullUri(rq: HttpServletRequest): String =
             rq.queryString?.let { "${rq.requestURI}?$it" } ?: rq.requestURI
-
-        private fun genTraceId(): String =
-            TraceIdGenerator.generate()
     }
 }

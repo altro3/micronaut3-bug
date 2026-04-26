@@ -8,13 +8,22 @@ import com.micronaut.bug.config.ServerLoggingFilter.Companion.MDC_CLIENT
 import com.micronaut.bug.config.ServerLoggingFilter.Companion.MDC_DURATION
 import com.micronaut.bug.config.ServerLoggingFilter.Companion.MDC_EXT_RQ_ID
 import com.micronaut.bug.config.ServerLoggingFilter.Companion.MDC_PARENT_ID
+import com.micronaut.bug.config.ServerLoggingFilter.Companion.MDC_RQ_ID
 import com.micronaut.bug.config.ServerLoggingFilter.Companion.MDC_SERVER
+import com.micronaut.bug.config.trace.TempoExporter
+import com.micronaut.bug.config.trace.TempoExporter.Companion.ATTR_CLIENT_ID
+import com.micronaut.bug.config.trace.TempoExporter.Companion.ATTR_HTTP_METHOD
+import com.micronaut.bug.config.trace.TempoExporter.Companion.ATTR_HTTP_URL
+import com.micronaut.bug.config.trace.TempoExporter.Companion.ATTR_RQ_HEADERS
+import com.micronaut.bug.config.trace.TempoExporter.Companion.ATTR_RS_HEADERS
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.slf4j.MDC
 import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpHeaders.CONTENT_DISPOSITION
 import org.springframework.http.HttpHeaders.CONTENT_TYPE
 import org.springframework.http.HttpRequest
+import org.springframework.http.HttpStatus.INTERNAL_SERVER_ERROR
+import org.springframework.http.HttpStatusCode
 import org.springframework.http.MediaType
 import org.springframework.http.client.ClientHttpRequestExecution
 import org.springframework.http.client.ClientHttpRequestInterceptor
@@ -36,6 +45,7 @@ class LoggingRequestInterceptor(
     props: HttpClientProperties,
     objectMapper: ObjectMapper,
     private val selfServiceName: String,
+    private val tempoExporter: TempoExporter? = null,
 ) : ClientHttpRequestInterceptor {
 
     private val log = KotlinLogging.logger {}
@@ -69,6 +79,7 @@ class LoggingRequestInterceptor(
             MDC.put(MDC_TYPE, EXTERNAL.name)
         }
 
+        val rqId = MDC.get(MDC_RQ_ID)
         val originalExtRqId = MDC.get(MDC_EXT_RQ_ID)
         val originalParentId = MDC.get(MDC_PARENT_ID)
         // Достаём ID из атрибутов, чтобы GzipRequestInterceptor его увидел
@@ -85,12 +96,25 @@ class LoggingRequestInterceptor(
                 log.debug { rqLogData }
             }
 
-            val startTime = System.currentTimeMillis()
+            val startEpochNanos = System.currentTimeMillis() * 1_000_000
+            val startTimeNano = System.nanoTime()
+
             val rs: ClientHttpResponse
             try {
                 rs = execution.execute(rq, body)
             } catch (e: Exception) {
-                val duration = System.currentTimeMillis() - startTime
+                val duration = System.nanoTime() - startEpochNanos
+
+                reportToTempo(
+                    traceId = rqId,
+                    spanId = extRqId,
+                    parentId = originalParentId,
+                    rq = rq,
+                    rs = null,
+                    startNanos = startEpochNanos,
+                    durationNanos = duration,
+                    statusCode = INTERNAL_SERVER_ERROR,
+                )
                 MDC.put(MDC_DURATION, duration.toString())
                 if (isDebug) {
                     // В DEBUG запрос уже есть в логах, пишем только ID и ошибку
@@ -102,7 +126,17 @@ class LoggingRequestInterceptor(
                 throw e
             }
 
-            val duration = System.currentTimeMillis() - startTime
+            val duration = System.nanoTime() - startTimeNano
+            reportToTempo(
+                traceId = rqId,
+                spanId = extRqId,
+                parentId = originalParentId,
+                rq = rq,
+                rs = rs,
+                startNanos = startEpochNanos,
+                durationNanos = duration,
+                statusCode = rs.statusCode,
+            )
 
             val isError = rs.statusCode.isError
 
@@ -146,6 +180,42 @@ class LoggingRequestInterceptor(
             MDC.put(MDC_PARENT_ID, originalParentId)
             MDC.remove(MDC_DURATION)
         }
+    }
+
+    private fun reportToTempo(
+        traceId: String,
+        spanId: String,
+        parentId: String?,
+        rq: HttpRequest,
+        rs: ClientHttpResponse?,
+        startNanos: Long,
+        durationNanos: Long,
+        statusCode: HttpStatusCode
+    ) {
+
+        val tempoAttrs = mutableMapOf(
+            ATTR_HTTP_METHOD to rq.method.name(),
+            ATTR_HTTP_URL to rq.uri.toString(),
+            ATTR_RQ_HEADERS to rq.headers.toString(),
+            ATTR_CLIENT_ID to selfServiceName,
+        )
+
+        // Если ответ получен — добавляем его заголовки
+        rs?.let {
+            tempoAttrs[ATTR_RS_HEADERS] = it.headers.toString()
+        }
+
+        tempoExporter?.sendTrace(
+            traceIdHex = traceId,
+            spanIdHex = spanId,
+            parentIdHex = parentId,
+            // Добавляем префикс CLIENT, чтобы в Графане сразу видеть, что это внешний вызов
+            name = "CLIENT: ${rq.method} ${rq.uri.host}${rq.uri.path}",
+            startEpochNanos = startNanos,
+            durationNanos = durationNanos,
+            statusCode = statusCode,
+            attrs = tempoAttrs,
+        )
     }
 
     /**
@@ -227,7 +297,7 @@ class LoggingRequestInterceptor(
             |URI: ${rq.method} ${getFullUri(rq)}
             |ExtRqId: $extRqId
             |Status: ${rs.statusCode} (${rs.statusText})
-            |Duration: ${duration}ms
+            |Duration: ${duration / 1000}ms
             |Headers: ${rs.headers}
             |Body:
             |$bodyResult

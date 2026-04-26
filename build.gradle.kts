@@ -50,10 +50,9 @@ dependencies {
     implementation("io.github.oshai:kotlin-logging-jvm:8.0.01")
 
     // Tracing & Logs
-    implementation("io.micrometer:micrometer-tracing")
-    implementation("io.micrometer:context-propagation")
     implementation("ch.qos.logback:logback-classic")
     implementation("org.wiremock:wiremock-standalone:3.13.2")
+    implementation("io.opentelemetry.proto:opentelemetry-proto:1.10.0-alpha")
 
     // Testing
     testImplementation("org.springframework.boot:spring-boot-starter-test")
