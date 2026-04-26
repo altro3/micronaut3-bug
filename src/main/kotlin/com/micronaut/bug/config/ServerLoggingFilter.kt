@@ -2,6 +2,7 @@ package com.micronaut.bug.config
 
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.databind.SerializationFeature
+import com.micronaut.bug.client.HttpClientConst.HEADER_EXT_RQ_ID
 import com.micronaut.bug.config.ServerLoggingFilter.Companion.LIMIT_TEXT_CHECK_THRESHOLD
 import com.micronaut.bug.config.log.LogProperties
 import com.micronaut.bug.util.TraceIdGenerator
@@ -32,6 +33,7 @@ import java.io.InputStreamReader
 class ServerLoggingFilter(
     objectMapper: ObjectMapper,
     private val logProps: LogProperties,
+    private val appName: String,
 ) : OncePerRequestFilter() {
 
     private val log = KotlinLogging.logger {}
@@ -50,8 +52,12 @@ class ServerLoggingFilter(
         chain: FilterChain,
     ) {
         // Извлекаем или генерируем ID запроса для сквозной трассировки в MDC
-        val rqId = rq.getHeader(X_REQ_ID)?.takeIf { it.isNotBlank() } ?: genTraceId()
-        MDC.put(X_REQ_ID, rqId)
+        val rqId = rq.getHeader(HEADER_X_REQ_ID)?.takeIf { it.isNotBlank() } ?: genTraceId()
+        MDC.put(MDC_RQ_ID, rqId)
+        val sender = rq.getHeader(HEADER_X_SENDER) ?: "USER"
+        MDC.put(MDC_CLIENT, sender)
+        MDC.put(MDC_SERVER, appName)
+        rq.getHeader(HEADER_EXT_RQ_ID)?.let { MDC.put(MDC_EXT_RQ_ID, it) }
 
         val startTime = System.currentTimeMillis()
 
@@ -414,7 +420,12 @@ class ServerLoggingFilter(
     }
 
     companion object {
-        const val X_REQ_ID = "x-req-id"
+        const val HEADER_X_REQ_ID = "x-req-id"
+        const val HEADER_X_SENDER = "x-sender"
+        const val MDC_RQ_ID = "rqId"
+        const val MDC_CLIENT = "client"
+        const val MDC_SERVER = "server"
+        const val MDC_EXT_RQ_ID = "extRqId"
 
         private const val PATH_ACTUATOR = "/actuator"
 

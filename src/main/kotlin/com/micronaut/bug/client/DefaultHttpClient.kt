@@ -2,12 +2,18 @@ package com.micronaut.bug.client
 
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.micronaut.bug.client.HttpClientConst.HEADER_API_KEY
+import com.micronaut.bug.client.HttpClientConst.HEADER_EXT_RQ_ID
+import com.micronaut.bug.client.HttpClientProperties.ClientType.INTERNAL
 import com.micronaut.bug.client.HttpClientUtils.DEFAULT_RETRY_ON
 import com.micronaut.bug.client.HttpClientUtils.createRestClient
 import com.micronaut.bug.client.HttpClientUtils.createRetryTemplate
+import com.micronaut.bug.client.LoggingRequestInterceptor.Companion.ATTR_EXT_RQ_ID
 import com.micronaut.bug.client.LoggingRequestInterceptor.Companion.ATTR_SKIP_LOGGING
+import com.micronaut.bug.client.LoggingRequestInterceptor.Companion.MDC_NEW_EXT_RQ_ID
+import com.micronaut.bug.util.TraceIdGenerator
+import org.jboss.logging.MDC
 import org.springframework.core.ParameterizedTypeReference
-import org.springframework.http.HttpHeaders
+import org.springframework.http.HttpHeaders.CONTENT_TYPE
 import org.springframework.http.HttpMethod
 import org.springframework.http.MediaType
 import org.springframework.http.converter.HttpMessageConverter
@@ -246,13 +252,21 @@ open class DefaultHttpClient {
 
         if (rqBody != null) {
             rqBuilder.body(rqBody)
-            if (headers == null || !headers.containsKey(HttpHeaders.CONTENT_TYPE)) {
-                rqBuilder.header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
+            if (headers == null || !headers.containsKey(CONTENT_TYPE)) {
+                rqBuilder.header(CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
             }
         }
 
-        if (httpClientProperties.type == HttpClientProperties.ClientType.INTERNAL && httpClientProperties.apiKey != null && withApiKey) {
-            rqBuilder.header(HEADER_API_KEY, httpClientProperties.apiKey)
+        // Уникальный ID для связки конкретной пары запрос-ответ
+        val extRqId = TraceIdGenerator.generate()
+        MDC.put(MDC_NEW_EXT_RQ_ID, extRqId)
+        rqBuilder.attribute(ATTR_EXT_RQ_ID, extRqId)
+
+        if (httpClientProperties.type == INTERNAL) {
+            if (httpClientProperties.apiKey != null && withApiKey) {
+                rqBuilder.header(HEADER_API_KEY, httpClientProperties.apiKey)
+            }
+            rqBuilder.header(HEADER_EXT_RQ_ID, extRqId)
         }
 
         return rqBuilder.retrieve()

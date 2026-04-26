@@ -14,7 +14,8 @@ class ExtServiceConfig {
     @Bean
     fun extServiceHttpClient(
         props: ExtServiceProperties,
-        @Value("\${spring.application.name}") appName: String,
+        @Value("\${spring.application.name}")
+        appName: String,
         objectMapper: ObjectMapper
     ) = DefaultHttpClient(
         senderAppName = appName,

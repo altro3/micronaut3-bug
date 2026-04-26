@@ -2,7 +2,7 @@ package com.micronaut.bug.client
 
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.databind.json.JsonMapper
-import com.micronaut.bug.client.HttpClientConst.HEADER_SENDER_APP_NAME
+import com.micronaut.bug.client.HttpClientConst.HEADER_SENDER
 import io.github.oshai.kotlinlogging.KotlinLogging
 import io.netty.channel.ChannelOption
 import io.netty.handler.timeout.ReadTimeoutHandler
@@ -89,7 +89,7 @@ object HttpClientUtils {
             builder.requestInterceptor(TracingForwardingInterceptor())
         }
 
-        builder.defaultHeader(HEADER_SENDER_APP_NAME, senderAppName)
+        builder.defaultHeader(HEADER_SENDER, senderAppName)
 
         return builder.build()
     }

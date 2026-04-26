@@ -2,6 +2,7 @@ package com.micronaut.bug.config.log
 
 import ch.qos.logback.classic.pattern.ClassicConverter
 import ch.qos.logback.classic.spi.ILoggingEvent
+import com.micronaut.bug.config.ServerLoggingFilter.Companion.MDC_RQ_ID
 
 class MdcConverter : ClassicConverter() {
 
@@ -12,8 +13,8 @@ class MdcConverter : ClassicConverter() {
         }
 
         val customKeys = keys // Читаем volatile один раз
-        val rqId = mdc[X_REQ_ID]
-        val targetId = mdc[TARGET_ID]
+        val rqId = mdc[MDC_RQ_ID]
+        val targetId = mdc[MDC_TARGET_ID]
 
         // Если все основные и кастомные ключи пусты — выходим
         if (rqId == null && targetId == null && customKeys.isEmpty()) {
@@ -41,7 +42,7 @@ class MdcConverter : ClassicConverter() {
         for (i in 0 until size) {
             val key = customKeys[i]
             // Пропускаем уже обработанные системные ключи
-            if (key == X_REQ_ID || key == TARGET_ID) {
+            if (key == MDC_RQ_ID || key == MDC_TARGET_ID) {
                 continue
             }
 
@@ -57,8 +58,7 @@ class MdcConverter : ClassicConverter() {
     }
 
     companion object {
-        const val X_REQ_ID = "x-req-id"
-        const val TARGET_ID = "targetId"
+        const val MDC_TARGET_ID = "targetId"
 
         @Volatile
         var keys: List<String> = emptyList()

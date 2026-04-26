@@ -3,7 +3,6 @@ package com.micronaut.bug.client
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.databind.SerializationFeature
 import com.micronaut.bug.client.LoggingRequestInterceptor.Companion.LIMIT_TEXT_CHECK_THRESHOLD
-import com.micronaut.bug.util.TraceIdGenerator
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.jboss.logging.MDC
 import org.springframework.http.HttpHeaders
@@ -55,12 +54,9 @@ class LoggingRequestInterceptor(
 
         val skipLogging = rq.attributes[ATTR_SKIP_LOGGING] as? Boolean ?: false
 
-        // Уникальный ID для связки конкретной пары запрос-ответ
-        val extRqId = TraceIdGenerator.generate()
-        MDC.put(MDC_EXT_RQ_ID, extRqId)
         try {
-            // Сохраняем ID в атрибуты, чтобы GzipRequestInterceptor его увидел
-            rq.attributes[ATTR_EXT_RQ_ID] = extRqId
+            // Достаём ID из атрибутов, чтобы GzipRequestInterceptor его увидел
+            val extRqId = rq.attributes.getValue(ATTR_EXT_RQ_ID).toString()
 
             // Данные запроса готовим лениво
             val rqLogData by lazy { getRequestLogString(rq, body, extRqId, skipLogging) }
@@ -126,7 +122,7 @@ class LoggingRequestInterceptor(
             }
             return rs
         } finally {
-            MDC.remove(MDC_EXT_RQ_ID)
+            MDC.remove(MDC_NEW_EXT_RQ_ID)
         }
     }
 
@@ -559,6 +555,6 @@ class LoggingRequestInterceptor(
 
         const val ATTR_SKIP_LOGGING = "client.skip.body.logging"
         const val ATTR_EXT_RQ_ID = "client.ext.request.id"
-        const val MDC_EXT_RQ_ID = "extRqId"
+        const val MDC_NEW_EXT_RQ_ID = "newExtRqId"
     }
 }

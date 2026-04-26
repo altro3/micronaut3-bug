@@ -2,6 +2,7 @@ package com.micronaut.bug.config.log
 
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.micronaut.bug.config.ServerLoggingFilter
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.boot.web.servlet.FilterRegistrationBean
 import org.springframework.context.annotation.Bean
@@ -19,10 +20,12 @@ class LogAutoConfig {
     @Bean
     fun unifiedLoggingFilterRegistration(
         objectMapper: ObjectMapper,
-        props: LogProperties
+        props: LogProperties,
+        @Value("\${spring.application.name}")
+        appName: String,
     ): FilterRegistrationBean<ServerLoggingFilter> {
         val registration = FilterRegistrationBean<ServerLoggingFilter>()
-        registration.filter = ServerLoggingFilter(objectMapper, props)
+        registration.filter = ServerLoggingFilter(objectMapper, props, appName)
         registration.order = props.order
         return registration
     }
