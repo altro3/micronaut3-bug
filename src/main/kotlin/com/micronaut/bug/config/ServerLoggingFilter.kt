@@ -57,10 +57,9 @@ class ServerLoggingFilter(
         val sender = rq.getHeader(HEADER_X_SENDER) ?: "USER"
         MDC.put(MDC_CLIENT, sender)
         MDC.put(MDC_SERVER, appName)
-        val extRqId = rq.getHeader(HEADER_EXT_RQ_ID)
-        if (extRqId != null) {
-            MDC.put(MDC_EXT_RQ_ID, extRqId)
-        }
+        MDC.put(MDC_PARENT_ID, rq.getHeader(HEADER_EXT_RQ_ID)?.takeIf { it.isNotBlank() })
+        val extRqId = genTraceId()
+        MDC.put(MDC_EXT_RQ_ID, extRqId)
 
         val startTime = System.currentTimeMillis()
 
@@ -103,12 +102,15 @@ class ServerLoggingFilter(
                     else -> rsWrapper.contentAsByteArray
                 }
 
+                MDC.put(MDC_DURATION, duration.toString())
                 if (isError && !isDebugProvider) {
                     // ПРИ ОШИБКЕ: логируем и запрос, и ответ на уровне ERROR
                     log.error { "Service failure detected!\n$requestLogData\n${getResponseLogString(currentRq, rsWrapper, rsBodyBytes, duration)}" }
                 } else if (isDebugProvider) {
                     // В штатном режиме: логируем только ответ в DEBUG
                     log.debug { getResponseLogString(currentRq, rsWrapper, rsBodyBytes, duration) }
+                } else {
+                    log.info { "Service response success: ${currentRq.method} ${currentRq.requestURI} [${rsWrapper.status}]" }
                 }
                 // Важно: копируем кэшированное тело ответа обратно в реальный поток
                 rsWrapper.copyBodyToResponse()
@@ -429,6 +431,8 @@ class ServerLoggingFilter(
         const val MDC_CLIENT = "client"
         const val MDC_SERVER = "server"
         const val MDC_EXT_RQ_ID = "extRqId"
+        const val MDC_PARENT_ID = "parentId"
+        const val MDC_DURATION = "duration"
 
         private const val PATH_ACTUATOR = "/actuator"
 

@@ -88,7 +88,7 @@ class LogProperties(
          * Позволяет передавать высококардинальные данные (traceId, userId) без раздувания индекса Loki.
          * Пример: "rqId=%mdc{rqId}\ntargetId=%mdc{targetId}\nextRqId=%mdc{extRqId}\nserver=%mdc{server}\nclient=%mdc{client}"
          */
-        var structuredMetadata: String? = "rqId=%mdc{rqId}\ntargetId=%mdc{targetId}\nextRqId=%mdc{extRqId}\nserver=%mdc{server}\nclient=%mdc{client}",
+        var structuredMetadata: String? = "rqId=%mdc{rqId}\ntargetId=%mdc{targetId}\nextRqId=%mdc{extRqId}\nparentId=%mdc{parentId}\nserver=%mdc{server}\nclient=%mdc{client}\nduration=%mdc{duration}",
         /**
          * Добавляет специальные маркеры чтения в поток логов.
          */

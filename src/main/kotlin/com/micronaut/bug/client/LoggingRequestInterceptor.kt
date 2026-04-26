@@ -5,6 +5,9 @@ import com.fasterxml.jackson.databind.SerializationFeature
 import com.micronaut.bug.client.HttpClientProperties.ClientType.EXTERNAL
 import com.micronaut.bug.client.LoggingRequestInterceptor.Companion.LIMIT_TEXT_CHECK_THRESHOLD
 import com.micronaut.bug.config.ServerLoggingFilter.Companion.MDC_CLIENT
+import com.micronaut.bug.config.ServerLoggingFilter.Companion.MDC_DURATION
+import com.micronaut.bug.config.ServerLoggingFilter.Companion.MDC_EXT_RQ_ID
+import com.micronaut.bug.config.ServerLoggingFilter.Companion.MDC_PARENT_ID
 import com.micronaut.bug.config.ServerLoggingFilter.Companion.MDC_SERVER
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.slf4j.MDC
@@ -66,10 +69,14 @@ class LoggingRequestInterceptor(
             MDC.put(MDC_TYPE, EXTERNAL.name)
         }
 
-        try {
-            // Достаём ID из атрибутов, чтобы GzipRequestInterceptor его увидел
-            val extRqId = rq.attributes.getValue(ATTR_EXT_RQ_ID).toString()
+        val originalExtRqId = MDC.get(MDC_EXT_RQ_ID)
+        val originalParentId = MDC.get(MDC_PARENT_ID)
+        // Достаём ID из атрибутов, чтобы GzipRequestInterceptor его увидел
+        val extRqId = rq.attributes.getValue(ATTR_EXT_RQ_ID).toString()
+        MDC.put(MDC_EXT_RQ_ID, extRqId)
+        MDC.put(MDC_PARENT_ID, originalExtRqId)
 
+        try {
             // Данные запроса готовим лениво
             val rqLogData by lazy { getRequestLogString(rq, body, extRqId, skipLogging) }
 
@@ -84,6 +91,7 @@ class LoggingRequestInterceptor(
                 rs = execution.execute(rq, body)
             } catch (e: Exception) {
                 val duration = System.currentTimeMillis() - startTime
+                MDC.put(MDC_DURATION, duration.toString())
                 if (isDebug) {
                     // В DEBUG запрос уже есть в логах, пишем только ID и ошибку
                     log.error(e) { "External call failed! [extRqId: $extRqId, duration: ${duration}ms]" }
@@ -134,7 +142,9 @@ class LoggingRequestInterceptor(
             }
             return rs
         } finally {
-            MDC.remove(MDC_NEW_EXT_RQ_ID)
+            MDC.put(MDC_EXT_RQ_ID, originalExtRqId)
+            MDC.put(MDC_PARENT_ID, originalParentId)
+            MDC.remove(MDC_DURATION)
         }
     }
 

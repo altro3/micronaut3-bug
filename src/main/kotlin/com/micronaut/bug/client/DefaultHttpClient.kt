@@ -9,9 +9,7 @@ import com.micronaut.bug.client.HttpClientUtils.createRestClient
 import com.micronaut.bug.client.HttpClientUtils.createRetryTemplate
 import com.micronaut.bug.client.LoggingRequestInterceptor.Companion.ATTR_EXT_RQ_ID
 import com.micronaut.bug.client.LoggingRequestInterceptor.Companion.ATTR_SKIP_LOGGING
-import com.micronaut.bug.client.LoggingRequestInterceptor.Companion.MDC_NEW_EXT_RQ_ID
 import com.micronaut.bug.util.TraceIdGenerator
-import org.jboss.logging.MDC
 import org.springframework.core.ParameterizedTypeReference
 import org.springframework.http.HttpHeaders.CONTENT_TYPE
 import org.springframework.http.HttpMethod
@@ -259,7 +257,6 @@ open class DefaultHttpClient {
 
         // Уникальный ID для связки конкретной пары запрос-ответ
         val extRqId = TraceIdGenerator.generate()
-        MDC.put(MDC_NEW_EXT_RQ_ID, extRqId)
         rqBuilder.attribute(ATTR_EXT_RQ_ID, extRqId)
 
         if (httpClientProperties.type == INTERNAL) {
