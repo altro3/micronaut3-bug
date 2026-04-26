@@ -1,10 +1,11 @@
 package com.micronaut.bug.config
 
+import com.micronaut.bug.config.ServerLoggingFilter.Companion.MDC_RQ_ID
+import com.micronaut.bug.config.log.MdcConverter.Companion.MDC_TARGET_ID
 import io.micrometer.context.ContextRegistry
 import org.slf4j.MDC
-import org.springframework.context.annotation.Configuration
 
-@Configuration
+//@Configuration
 class ObservationConfig {
 
     init {
@@ -12,23 +13,18 @@ class ObservationConfig {
 
         // Регистрируем кастомный ключ x-req-id
         registry.registerThreadLocalAccessor(
-            X_REQ_ID,
-            { MDC.get(X_REQ_ID) },
-            { value -> MDC.put(X_REQ_ID, value) },
-            { MDC.remove(X_REQ_ID) }
+            MDC_RQ_ID,
+            { MDC.get(MDC_RQ_ID) },
+            { value -> MDC.put(MDC_RQ_ID, value) },
+            { MDC.remove(MDC_RQ_ID) }
         )
 
         // Регистрируем кастомный ключ targetId
         registry.registerThreadLocalAccessor(
-            TARGET_ID,
-            { MDC.get(TARGET_ID) },
-            { value -> MDC.put(TARGET_ID, value) },
-            { MDC.remove(TARGET_ID) }
+            MDC_TARGET_ID,
+            { MDC.get(MDC_TARGET_ID) },
+            { value -> MDC.put(MDC_TARGET_ID, value) },
+            { MDC.remove(MDC_TARGET_ID) }
         )
-    }
-
-    companion object {
-        const val X_REQ_ID = "x-req-id"
-        const val TARGET_ID = "targetId"
     }
 }

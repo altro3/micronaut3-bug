@@ -52,12 +52,15 @@ class ServerLoggingFilter(
         chain: FilterChain,
     ) {
         // Извлекаем или генерируем ID запроса для сквозной трассировки в MDC
-        val rqId = rq.getHeader(HEADER_X_REQ_ID)?.takeIf { it.isNotBlank() } ?: genTraceId()
+        val rqId = rq.getHeader(HEADER_X_RQ_ID)?.takeIf { it.isNotBlank() } ?: genTraceId()
         MDC.put(MDC_RQ_ID, rqId)
         val sender = rq.getHeader(HEADER_X_SENDER) ?: "USER"
         MDC.put(MDC_CLIENT, sender)
         MDC.put(MDC_SERVER, appName)
-        rq.getHeader(HEADER_EXT_RQ_ID)?.let { MDC.put(MDC_EXT_RQ_ID, it) }
+        val extRqId = rq.getHeader(HEADER_EXT_RQ_ID)
+        if (extRqId != null) {
+            MDC.put(MDC_EXT_RQ_ID, extRqId)
+        }
 
         val startTime = System.currentTimeMillis()
 
@@ -420,7 +423,7 @@ class ServerLoggingFilter(
     }
 
     companion object {
-        const val HEADER_X_REQ_ID = "x-req-id"
+        const val HEADER_X_RQ_ID = "x-rq-id"
         const val HEADER_X_SENDER = "x-sender"
         const val MDC_RQ_ID = "rqId"
         const val MDC_CLIENT = "client"

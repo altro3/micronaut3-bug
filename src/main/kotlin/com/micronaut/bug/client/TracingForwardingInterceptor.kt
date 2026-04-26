@@ -1,5 +1,6 @@
 package com.micronaut.bug.client
 
+import com.micronaut.bug.config.ServerLoggingFilter.Companion.MDC_RQ_ID
 import org.slf4j.MDC
 import org.springframework.http.HttpRequest
 import org.springframework.http.client.ClientHttpRequestExecution
@@ -29,11 +30,11 @@ class TracingForwardingInterceptor : ClientHttpRequestInterceptor {
         execution: ClientHttpRequestExecution
     ): ClientHttpResponse {
         // Пытаемся получить Trace ID, который был сгенерирован или получен серверным фильтром
-        val traceId = MDC.get(X_REQ_ID)
+        val traceId = MDC.get(MDC_RQ_ID)
 
         // Если идентификатор найден, обогащаем им заголовки внешнего вызова
         if (!traceId.isNullOrBlank()) {
-            request.headers.set(X_REQ_ID, traceId)
+            request.headers.set(HEADER_X_RQ_ID, traceId)
         }
 
         return execution.execute(request, body)
@@ -43,6 +44,6 @@ class TracingForwardingInterceptor : ClientHttpRequestInterceptor {
         /**
          * Стандартный заголовок для передачи идентификатора запроса между микросервисами
          */
-        private const val X_REQ_ID = "x-req-id"
+        private const val HEADER_X_RQ_ID = "x-rq-id"
     }
 }
