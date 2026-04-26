@@ -72,7 +72,7 @@ object HttpClientUtils {
             // Без него интерцептор логирования "съест" данные, и клиент получит пустое тело.
             // Добавляем наш интерцептор
             builder.requestFactory(BufferingClientHttpRequestFactory(requestFactory))
-                .requestInterceptor(LoggingRequestInterceptor(clientProps, objectMapper))
+                .requestInterceptor(LoggingRequestInterceptor(clientProps, objectMapper, senderAppName))
 
             // 2. Регистрация GZIP-интерцептора
             // Эта логика независима от логирования. Если сжатие включено в конфиге,

@@ -1,4 +1,6 @@
 app:
+  mock:
+    enabled: true
   node:
     name: ift2
   log:
@@ -16,7 +18,6 @@ app:
         ping:
           path: /health/check
           method: GET
-          with-api-key: false
         process-file:
           path: /v1/files/upload
           method: POST
@@ -27,11 +28,21 @@ app:
           path: /v2/complex-process/{id}
           method: POST
       http:
+        service-name: ext-service
         url: http://localhost:8081
+        type: external
         compress: true
         log:
           pretty-print: true
           max-payload-size: 4MB
+    internal-service:
+      endpoints:
+        ping:
+          path: /internal/ping
+          method: GET
+      http:
+        service-name: internal-service
+        url: http://localhost:9080
 
 server:
   port: 8080

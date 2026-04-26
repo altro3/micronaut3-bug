@@ -12,10 +12,12 @@ import com.github.tomakehurst.wiremock.core.Options
 import com.github.tomakehurst.wiremock.core.WireMockConfiguration.wireMockConfig
 import jakarta.annotation.PostConstruct
 import jakarta.annotation.PreDestroy
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBooleanProperty
 import org.springframework.stereotype.Service
 import java.io.ByteArrayOutputStream
 import java.util.zip.GZIPOutputStream
 
+@ConditionalOnBooleanProperty("app.mock.enabled")
 @Service
 class ExternalMockServer {
 

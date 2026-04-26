@@ -2,9 +2,12 @@ package com.micronaut.bug.client
 
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.databind.SerializationFeature
+import com.micronaut.bug.client.HttpClientProperties.ClientType.EXTERNAL
 import com.micronaut.bug.client.LoggingRequestInterceptor.Companion.LIMIT_TEXT_CHECK_THRESHOLD
+import com.micronaut.bug.config.ServerLoggingFilter.Companion.MDC_CLIENT
+import com.micronaut.bug.config.ServerLoggingFilter.Companion.MDC_SERVER
 import io.github.oshai.kotlinlogging.KotlinLogging
-import org.jboss.logging.MDC
+import org.slf4j.MDC
 import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpHeaders.CONTENT_DISPOSITION
 import org.springframework.http.HttpHeaders.CONTENT_TYPE
@@ -29,11 +32,14 @@ import java.util.zip.GZIPInputStream
 class LoggingRequestInterceptor(
     props: HttpClientProperties,
     objectMapper: ObjectMapper,
+    private val selfServiceName: String,
 ) : ClientHttpRequestInterceptor {
 
     private val log = KotlinLogging.logger {}
 
     private val logProps = props.log
+    private val serviceName = props.serviceName
+    private val isExternal = props.type == EXTERNAL
     private val prettyMapper = objectMapper.copy()
         .enable(SerializationFeature.INDENT_OUTPUT)
 
@@ -53,6 +59,12 @@ class LoggingRequestInterceptor(
         val isDebug = log.isDebugEnabled()
 
         val skipLogging = rq.attributes[ATTR_SKIP_LOGGING] as? Boolean ?: false
+
+        if (isExternal) {
+            MDC.put(MDC_CLIENT, selfServiceName)
+            MDC.put(MDC_SERVER, serviceName)
+            MDC.put(MDC_TYPE, EXTERNAL.name)
+        }
 
         try {
             // Достаём ID из атрибутов, чтобы GzipRequestInterceptor его увидел
@@ -556,5 +568,6 @@ class LoggingRequestInterceptor(
         const val ATTR_SKIP_LOGGING = "client.skip.body.logging"
         const val ATTR_EXT_RQ_ID = "client.ext.request.id"
         const val MDC_NEW_EXT_RQ_ID = "newExtRqId"
+        const val MDC_TYPE = "type"
     }
 }
