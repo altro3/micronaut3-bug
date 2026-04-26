@@ -6,7 +6,7 @@ import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.ConsoleAppender
 import ch.qos.logback.core.CoreConstants
 import ch.qos.logback.core.OutputStreamAppender
-import com.github.loki4j.client.pipeline.PipelineConfig
+import ch.qos.logback.core.util.StatusPrinter2
 import com.github.loki4j.logback.JavaHttpSender
 import com.github.loki4j.logback.JsonLayout
 import com.github.loki4j.logback.Loki4jAppender
@@ -89,7 +89,7 @@ class LogReconfigurator(
         val appender = Loki4jAppender().apply {
             name = LOKI_APPENDER_NAME
             context = loggerContext
-            setLabels("app=$appName\nlevel=%level\nnode=$nodeName")
+            setLabels("app=$appName\nnode=$nodeName")
             setMessage(JsonLayout().apply {
                 context = loggerContext
                 start()

@@ -1,11 +1,13 @@
 version: '5.1.3'
 
 services:
-  # Хранилище логов
+  # Хранилище логов (Loki4j в приложении должен стучаться сюда на порт 3100)
   loki:
     image: grafana/loki:3.7.1
     ports:
       - "3100:3100"
+    volumes:
+      - ./loki-config.yml:/etc/loki/local-config.yaml # Пробрасываем наш файл
     command: -config.file=/etc/loki/local-config.yaml
 
   # Графический интерфейс
@@ -16,15 +18,5 @@ services:
     environment:
       - GF_AUTH_ANONYMOUS_ENABLED=true
       - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
-    depends_on:
-      - loki
-
-  # Сборщик логов (читает логи из Docker и шлет в Loki)
-  alloy:
-    image: grafana/alloy:v1.16.0
-    volumes:
-      - /var/lib/docker/containers:/var/lib/docker/containers:ro
-      - ./config.alloy:/etc/alloy/config.alloy:ro
-    command: run --storage.path=/var/lib/alloy/data /etc/alloy/config.alloy
     depends_on:
       - loki

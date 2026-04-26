@@ -7,6 +7,9 @@ app:
     mdc-keys: test
     pretty-print: true
     max-payload-size: 4MB
+    loki:
+      enabled: true
+      batch-timeout: PT20S
   integration:
     ext-service:
       endpoints:
