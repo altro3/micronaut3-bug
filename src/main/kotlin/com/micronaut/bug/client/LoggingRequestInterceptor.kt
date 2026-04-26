@@ -17,6 +17,7 @@ import com.micronaut.bug.config.trace.TempoExporter.Companion.ATTR_HTTP_URL
 import com.micronaut.bug.config.trace.TempoExporter.Companion.ATTR_RQ_HEADERS
 import com.micronaut.bug.config.trace.TempoExporter.Companion.ATTR_RS_HEADERS
 import io.github.oshai.kotlinlogging.KotlinLogging
+import io.opentelemetry.proto.trace.v1.Span
 import org.slf4j.MDC
 import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpHeaders.CONTENT_DISPOSITION
@@ -195,7 +196,7 @@ class LoggingRequestInterceptor(
 
         val tempoAttrs = mutableMapOf(
             ATTR_HTTP_METHOD to rq.method.name(),
-            ATTR_HTTP_URL to rq.uri.toString(),
+            ATTR_HTTP_URL to getFullUri(rq),
             ATTR_RQ_HEADERS to rq.headers.toString(),
             ATTR_CLIENT_ID to selfServiceName,
         )
@@ -210,11 +211,12 @@ class LoggingRequestInterceptor(
             spanIdHex = spanId,
             parentIdHex = parentId,
             // Добавляем префикс CLIENT, чтобы в Графане сразу видеть, что это внешний вызов
-            name = "CLIENT: ${rq.method} ${rq.uri.host}${rq.uri.path}",
+            name = "CLIENT: ${rq.method} ${getFullUri(rq)}",
             startEpochNanos = startNanos,
             durationNanos = durationNanos,
             statusCode = statusCode,
             attrs = tempoAttrs,
+            kind = Span.SpanKind.SPAN_KIND_CLIENT,
         )
     }
 

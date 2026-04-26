@@ -3,6 +3,7 @@ package com.micronaut.bug.client
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.databind.json.JsonMapper
 import com.micronaut.bug.client.HttpClientConst.HEADER_SENDER
+import com.micronaut.bug.config.trace.TempoExporter
 import io.github.oshai.kotlinlogging.KotlinLogging
 import io.netty.channel.ChannelOption
 import io.netty.handler.timeout.ReadTimeoutHandler
@@ -47,6 +48,7 @@ object HttpClientUtils {
         objectMapper: ObjectMapper = JsonMapper.builder().build(),
         messageConverters: List<HttpMessageConverter<*>>? = null,
         errorHandler: ResponseErrorHandler? = null,
+        tempoExporter: TempoExporter? = null,
     ): RestClient {
         val requestFactory = createRequestFactory(clientProps)
         val builder = clientBuilder
@@ -72,7 +74,14 @@ object HttpClientUtils {
             // Без него интерцептор логирования "съест" данные, и клиент получит пустое тело.
             // Добавляем наш интерцептор
             builder.requestFactory(BufferingClientHttpRequestFactory(requestFactory))
-                .requestInterceptor(LoggingRequestInterceptor(clientProps, objectMapper, senderAppName))
+                .requestInterceptor(
+                    LoggingRequestInterceptor(
+                        props = clientProps,
+                        objectMapper = objectMapper,
+                        selfServiceName = senderAppName,
+                        tempoExporter = tempoExporter,
+                    )
+                )
 
             // 2. Регистрация GZIP-интерцептора
             // Эта логика независима от логирования. Если сжатие включено в конфиге,

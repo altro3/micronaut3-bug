@@ -2,6 +2,7 @@ package com.micronaut.bug.config.log
 
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.micronaut.bug.config.ServerLoggingFilter
+import com.micronaut.bug.config.trace.TempoExporter
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.boot.web.servlet.FilterRegistrationBean
@@ -23,9 +24,15 @@ class LogAutoConfig {
         props: LogProperties,
         @Value("\${spring.application.name}")
         appName: String,
+        tempoExporter: TempoExporter? = null,
     ): FilterRegistrationBean<ServerLoggingFilter> {
         val registration = FilterRegistrationBean<ServerLoggingFilter>()
-        registration.filter = ServerLoggingFilter(objectMapper, props, appName)
+        registration.filter = ServerLoggingFilter(
+            objectMapper = objectMapper,
+            logProps = props,
+            appName = appName,
+            tempoExporter = tempoExporter,
+        )
         registration.order = props.order
         return registration
     }

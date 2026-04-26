@@ -56,13 +56,14 @@ class TempoExporter(
         durationNanos: Long,
         statusCode: HttpStatusCode?,
         attrs: Map<String, String>,
+        kind: Span.SpanKind = Span.SpanKind.SPAN_KIND_SERVER,
     ) {
         try {
             val spanBuilder = Span.newBuilder()
                 .setTraceId(toByteString(traceIdHex))
                 .setSpanId(toByteString(spanIdHex))
                 .setName(name)
-                .setKind(Span.SpanKind.SPAN_KIND_SERVER)
+                .setKind(kind)
                 .setStartTimeUnixNano(startEpochNanos)
                 .setEndTimeUnixNano(startEpochNanos + durationNanos)
 
@@ -122,9 +123,14 @@ class TempoExporter(
                 .POST(HttpRequest.BodyPublishers.ofByteArray(rq.toByteArray()))
                 .build()
 
-            // Асинхронная отправка: результат игнорируется, ошибки не прерывают выполнение
-            httpClient.sendAsync(httpRequest, HttpResponse.BodyHandlers.discarding())
-                .exceptionally { null }
+            val response = httpClient.send(httpRequest, HttpResponse.BodyHandlers.ofString())
+
+            if (response.statusCode() !in 200..299) {
+                log.error { "Tempo returned error code: ${response.statusCode()} | body: ${response.body()}" }
+            }
+//            // Асинхронная отправка: результат игнорируется, ошибки не прерывают выполнение
+//            httpClient.sendAsync(httpRequest, HttpResponse.BodyHandlers.discarding())
+//                .exceptionally { null }
 
         } catch (e: Exception) {
             log.error { "Tempo export failed for $appName [traceId=$traceIdHex]: ${e.message}" }

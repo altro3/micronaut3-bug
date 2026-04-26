@@ -9,6 +9,7 @@ import com.micronaut.bug.client.HttpClientUtils.createRestClient
 import com.micronaut.bug.client.HttpClientUtils.createRetryTemplate
 import com.micronaut.bug.client.LoggingRequestInterceptor.Companion.ATTR_EXT_RQ_ID
 import com.micronaut.bug.client.LoggingRequestInterceptor.Companion.ATTR_SKIP_LOGGING
+import com.micronaut.bug.config.trace.TempoExporter
 import com.micronaut.bug.util.TraceIdGenerator
 import org.springframework.core.ParameterizedTypeReference
 import org.springframework.http.HttpHeaders.CONTENT_TYPE
@@ -43,11 +44,13 @@ open class DefaultHttpClient {
         httpClientProperties: HttpClientProperties,
         messageConverters: List<HttpMessageConverter<*>>? = null,
         errorHandler: ResponseErrorHandler? = null,
+        tempoExporter: TempoExporter? = null,
         restClient: RestClient = createRestClient(
             senderAppName = senderAppName,
             clientProps = httpClientProperties,
             messageConverters = messageConverters,
             errorHandler = errorHandler,
+            tempoExporter = tempoExporter,
         ),
         retryOn: List<Class<out Throwable>>? = null,
         retryTemplate: RetryTemplate? = createRetryTemplate(httpClientProperties, retryOn ?: DEFAULT_RETRY_ON),
@@ -61,6 +64,7 @@ open class DefaultHttpClient {
         senderAppName: String,
         httpClientProperties: HttpClientProperties,
         objectMapper: ObjectMapper,
+        tempoExporter: TempoExporter? = null,
         messageConverters: List<HttpMessageConverter<*>>? = null,
         errorHandler: ResponseErrorHandler? = null,
         retryOn: List<Class<out Throwable>>? = null,
@@ -73,6 +77,7 @@ open class DefaultHttpClient {
             objectMapper = objectMapper,
             messageConverters = messageConverters,
             errorHandler = errorHandler,
+            tempoExporter = tempoExporter,
         )
         this.retryTemplate = retryTemplate
     }
@@ -82,6 +87,7 @@ open class DefaultHttpClient {
         httpClientProperties: HttpClientProperties,
         restClientBuilder: RestClient.Builder,
         objectMapper: ObjectMapper,
+        tempoExporter: TempoExporter? = null,
         messageConverters: List<HttpMessageConverter<*>>? = null,
         errorHandler: ResponseErrorHandler? = null,
         retryOn: List<Class<out Throwable>>? = null,
@@ -95,6 +101,7 @@ open class DefaultHttpClient {
             objectMapper = objectMapper,
             messageConverters = messageConverters,
             errorHandler = errorHandler,
+            tempoExporter = tempoExporter,
         )
         this.retryTemplate = retryTemplate
     }
@@ -103,6 +110,7 @@ open class DefaultHttpClient {
         senderAppName: String,
         httpClientProperties: HttpClientProperties,
         restClientBuilder: RestClient.Builder,
+        tempoExporter: TempoExporter? = null,
         messageConverters: List<HttpMessageConverter<*>>? = null,
         errorHandler: ResponseErrorHandler? = null,
         retryOn: List<Class<out Throwable>>? = null,
@@ -115,6 +123,7 @@ open class DefaultHttpClient {
             clientBuilder = restClientBuilder,
             messageConverters = messageConverters,
             errorHandler = errorHandler,
+            tempoExporter = tempoExporter,
         )
         this.retryTemplate = retryTemplate
     }
