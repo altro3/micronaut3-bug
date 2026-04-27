@@ -23,6 +23,13 @@ storage:
     wal:
       path: /var/tempo/wal
 
+overrides:
+  defaults:
+    ingestion:
+      max_traces_per_user: 10000
+    metrics_generator:
+      processors: [service-graphs, span-metrics] # Для крутых графиков в Grafana
+
 # Чтобы заработал /api/v2/search/recent
 querier: {}
 

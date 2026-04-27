@@ -30,6 +30,7 @@ import org.springframework.http.client.ClientHttpRequestExecution
 import org.springframework.http.client.ClientHttpRequestInterceptor
 import org.springframework.http.client.ClientHttpResponse
 import java.io.ByteArrayInputStream
+import java.time.Instant
 import java.util.zip.GZIPInputStream
 
 /**
@@ -96,8 +97,8 @@ class LoggingRequestInterceptor(
             if (isDebug) {
                 log.debug { rqLogData }
             }
-
-            val startEpochNanos = System.currentTimeMillis() * 1_000_000
+            val startInstant = Instant.now()
+            val startEpochNanos = startInstant.epochSecond * 1_000_000_000L + startInstant.nano
             val startTimeNano = System.nanoTime()
 
             val rs: ClientHttpResponse
@@ -109,7 +110,7 @@ class LoggingRequestInterceptor(
                 reportToTempo(
                     traceId = rqId,
                     spanId = extRqId,
-                    parentId = originalParentId,
+                    parentId = originalExtRqId,
                     rq = rq,
                     rs = null,
                     startNanos = startEpochNanos,
@@ -131,7 +132,7 @@ class LoggingRequestInterceptor(
             reportToTempo(
                 traceId = rqId,
                 spanId = extRqId,
-                parentId = originalParentId,
+                parentId = originalExtRqId,
                 rq = rq,
                 rs = rs,
                 startNanos = startEpochNanos,

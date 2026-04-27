@@ -31,6 +31,7 @@ import org.springframework.web.util.ContentCachingResponseWrapper
 import java.io.BufferedReader
 import java.io.ByteArrayInputStream
 import java.io.InputStreamReader
+import java.time.Instant
 
 /**
  * Фильтр для детального логирования входящих HTTP-запросов и ответов на стороне сервера.
@@ -58,6 +59,11 @@ class ServerLoggingFilter(
         rs: HttpServletResponse,
         chain: FilterChain,
     ) {
+// Точное время старта в наносекундах для Tempo
+        val startInstant = Instant.now()
+        val startEpochNanos = startInstant.epochSecond * 1_000_000_000L + startInstant.nano
+        val startTimeNano = System.nanoTime()
+
         // Извлекаем или генерируем ID запроса для сквозной трассировки в MDC
         val rqId = rq.getHeader(HEADER_X_RQ_ID)?.takeIf { it.isNotBlank() } ?: TraceIdGenerator.generate()
         MDC.put(MDC_RQ_ID, rqId)
@@ -68,9 +74,6 @@ class ServerLoggingFilter(
         MDC.put(MDC_PARENT_ID, rq.getHeader(HEADER_EXT_RQ_ID)?.takeIf { it.isNotBlank() })
         val extRqId = TraceIdGenerator.generateSpanId()
         MDC.put(MDC_EXT_RQ_ID, extRqId)
-
-        val startEpochNanos = System.currentTimeMillis() * 1_000_000
-        val startTimeNano = System.nanoTime()
 
         try {
 

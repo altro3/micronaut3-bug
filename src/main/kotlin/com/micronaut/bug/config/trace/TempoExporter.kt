@@ -4,6 +4,7 @@ import com.micronaut.bug.util.TraceIdGenerator.toByteString
 import io.github.oshai.kotlinlogging.KotlinLogging
 import io.opentelemetry.proto.collector.trace.v1.ExportTraceServiceRequest
 import io.opentelemetry.proto.common.v1.AnyValue
+import io.opentelemetry.proto.common.v1.InstrumentationScope
 import io.opentelemetry.proto.common.v1.KeyValue
 import io.opentelemetry.proto.resource.v1.Resource
 import io.opentelemetry.proto.trace.v1.ResourceSpans
@@ -111,6 +112,9 @@ class TempoExporter(
                         .addScopeSpans(
                             ScopeSpans.newBuilder()
                                 .addSpans(spanBuilder.build())
+                                .setScope(InstrumentationScope.newBuilder()
+                                    .setName(appName)
+                                    .build())
                                 .build()
                         )
                         .build()
@@ -128,7 +132,15 @@ class TempoExporter(
             if (response.statusCode() !in 200..299) {
                 log.error { "Tempo returned error code: ${response.statusCode()} | body: ${response.body()}" }
             }
-//            // Асинхронная отправка: результат игнорируется, ошибки не прерывают выполнение
+
+            if (response.statusCode() !in 200..299) {
+                log.error { "Tempo rejection: code=${response.statusCode()} body=${response.body()}" }
+            } else {
+                // Если трейсы всё еще не видны, проверим размер и факт отправки
+                log.info { "Trace sent successfully: traceId=$traceIdHex, bytes=${rq.serializedSize}" }
+            }
+
+            // Асинхронная отправка: результат игнорируется, ошибки не прерывают выполнение
 //            httpClient.sendAsync(httpRequest, HttpResponse.BodyHandlers.discarding())
 //                .exceptionally { null }
 
