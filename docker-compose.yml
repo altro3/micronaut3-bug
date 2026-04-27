@@ -14,12 +14,15 @@ services:
   tempo:
     image: grafana/tempo:2.10.5
     command: [ "-config.file=/etc/tempo.yaml" ]
+    environment:
+      - TEMPO_ADVERTISE_ADDRESS=tempo
     volumes:
       - ./tempo-config.yml:/etc/tempo.yaml
     ports:
       - "3200:3200"   # Tempo UI/API
       - "4317:4317"   # OTLP gRPC (для экспорта)
       - "4318:4318"   # OTLP HTTP (наш случай для приложения)
+      - "9095:9095" # Добавь этот порт для внутреннего общения
     depends_on:
       - loki
 
@@ -33,3 +36,18 @@ services:
       - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
     depends_on:
       - loki
+
+  # Хранилище метрик (нужно для работы вкладки Traces и отрисовки графиков на основе трейсов)
+  prometheus:
+    image: prom/prometheus:v3.11.2
+    container_name: prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --enable-feature=remote-write-receiver
+      - --enable-feature=exemplar-storage
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+    depends_on:
+      - tempo

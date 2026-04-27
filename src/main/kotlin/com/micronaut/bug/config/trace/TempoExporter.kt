@@ -112,9 +112,11 @@ class TempoExporter(
                         .addScopeSpans(
                             ScopeSpans.newBuilder()
                                 .addSpans(spanBuilder.build())
-                                .setScope(InstrumentationScope.newBuilder()
-                                    .setName(appName)
-                                    .build())
+                                .setScope(
+                                    InstrumentationScope.newBuilder()
+                                        .setName(appName)
+                                        .build()
+                                )
                                 .build()
                         )
                         .build()
@@ -127,22 +129,21 @@ class TempoExporter(
                 .POST(HttpRequest.BodyPublishers.ofByteArray(rq.toByteArray()))
                 .build()
 
-            val response = httpClient.send(httpRequest, HttpResponse.BodyHandlers.ofString())
-
-            if (response.statusCode() !in 200..299) {
-                log.error { "Tempo returned error code: ${response.statusCode()} | body: ${response.body()}" }
-            }
-
-            if (response.statusCode() !in 200..299) {
-                log.error { "Tempo rejection: code=${response.statusCode()} body=${response.body()}" }
-            } else {
-                // Если трейсы всё еще не видны, проверим размер и факт отправки
-                log.info { "Trace sent successfully: traceId=$traceIdHex, bytes=${rq.serializedSize}" }
-            }
-
-            // Асинхронная отправка: результат игнорируется, ошибки не прерывают выполнение
-//            httpClient.sendAsync(httpRequest, HttpResponse.BodyHandlers.discarding())
-//                .exceptionally { null }
+            httpClient.sendAsync(httpRequest, HttpResponse.BodyHandlers.ofString())
+                .whenComplete { rs: HttpResponse<String>?, ex: Throwable? ->
+                    if (ex != null) {
+                        // Ошибки сети (таймауты, DNS и т.д.)
+                        log.warn { "Tempo export failed for $appName [traceId=$traceIdHex]: ${ex.message}" }
+                    } else {
+                        // Проверка статус-кода ответа
+                        if (rs?.statusCode() !in 200..299) {
+                            log.warn { "Tempo rejection: code=${rs?.statusCode()} body=${rs?.body()}" }
+                        } else {
+                            // Успех (теперь в логе будет пометка, что это фоновая отправка)
+                            log.debug { "Trace sent successfully (async): traceId=$traceIdHex, bytes=${rq.serializedSize}" }
+                        }
+                    }
+                }
 
         } catch (e: Exception) {
             log.error { "Tempo export failed for $appName [traceId=$traceIdHex]: ${e.message}" }
