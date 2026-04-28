@@ -2,16 +2,8 @@ package com.micronaut.bug.config
 
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.databind.SerializationFeature
-import com.micronaut.bug.client.HttpClientConst.HEADER_EXT_RQ_ID
 import com.micronaut.bug.config.ServerLoggingFilter.Companion.LIMIT_TEXT_CHECK_THRESHOLD
 import com.micronaut.bug.config.log.LogProperties
-import com.micronaut.bug.config.trace.TempoExporter
-import com.micronaut.bug.config.trace.TempoExporter.Companion.ATTR_CLIENT_ID
-import com.micronaut.bug.config.trace.TempoExporter.Companion.ATTR_HTTP_METHOD
-import com.micronaut.bug.config.trace.TempoExporter.Companion.ATTR_HTTP_URL
-import com.micronaut.bug.config.trace.TempoExporter.Companion.ATTR_RQ_HEADERS
-import com.micronaut.bug.config.trace.TempoExporter.Companion.ATTR_RS_HEADERS
-import com.micronaut.bug.config.trace.TraceIdGenerator
 import io.github.oshai.kotlinlogging.KotlinLogging
 import jakarta.servlet.FilterChain
 import jakarta.servlet.ReadListener
@@ -20,7 +12,6 @@ import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletRequestWrapper
 import jakarta.servlet.http.HttpServletResponse
 import jakarta.servlet.http.Part
-import org.slf4j.MDC
 import org.springframework.http.HttpHeaders.CONTENT_DISPOSITION
 import org.springframework.http.HttpHeaders.CONTENT_TYPE
 import org.springframework.http.HttpStatus
@@ -31,7 +22,6 @@ import org.springframework.web.util.ContentCachingResponseWrapper
 import java.io.BufferedReader
 import java.io.ByteArrayInputStream
 import java.io.InputStreamReader
-import java.time.Instant
 
 /**
  * Фильтр для детального логирования входящих HTTP-запросов и ответов на стороне сервера.
@@ -40,8 +30,6 @@ import java.time.Instant
 class ServerLoggingFilter(
     objectMapper: ObjectMapper,
     private val logProps: LogProperties,
-    private val appName: String,
-    private val tempoExporter: TempoExporter?,
 ) : OncePerRequestFilter() {
 
     private val log = KotlinLogging.logger {}
@@ -60,92 +48,56 @@ class ServerLoggingFilter(
         chain: FilterChain,
     ) {
 // Точное время старта в наносекундах для Tempo
-        val startInstant = Instant.now()
-        val startEpochNanos = startInstant.epochSecond * 1_000_000_000L + startInstant.nano
         val startTimeNano = System.nanoTime()
 
-        // Извлекаем или генерируем ID запроса для сквозной трассировки в MDC
-        val rqId = rq.getHeader(HEADER_X_RQ_ID)?.takeIf { it.isNotBlank() } ?: TraceIdGenerator.generate()
-        MDC.put(MDC_RQ_ID, rqId)
-        val parentId = rq.getHeader(HEADER_EXT_RQ_ID)?.takeIf { it.isNotBlank() }
-        val sender = rq.getHeader(HEADER_X_SENDER) ?: "USER"
-        MDC.put(MDC_CLIENT, sender)
-        MDC.put(MDC_SERVER, appName)
-        MDC.put(MDC_PARENT_ID, rq.getHeader(HEADER_EXT_RQ_ID)?.takeIf { it.isNotBlank() })
-        val extRqId = TraceIdGenerator.generateSpanId()
-        MDC.put(MDC_EXT_RQ_ID, extRqId)
+        // Пропускаем Actuator-эндпоинты, если это указано в настройках
+        if (withActuator && logProps.skipActuator && rq.requestURI.startsWith(rq.contextPath + PATH_ACTUATOR)) {
+            chain.doFilter(rq, rs)
+            return
+        }
+
+        val isDebugProvider = log.isDebugEnabled() && logProps.enabledControllerLogging
+
+        // Оборачиваем запрос: кэшируем тело, чтобы прочитать его для лога и оставить доступным для контроллера
+        val currentRq = wrapRequest(rq)
+
+        // Сразу формируем строку запроса, но не печатаем её
+        val requestLogData by lazy { getRequestLogString(currentRq) }
+
+        // Оборачиваем ответ для кэширования исходящего потока
+        val rsWrapper = ContentCachingResponseWrapper(rs)
+        rsWrapper.bufferSize = logProps.maxPayloadSize.toBytes().toInt()
 
         try {
-
-            // Пропускаем Actuator-эндпоинты, если это указано в настройках
-            if (withActuator && logProps.skipActuator && rq.requestURI.startsWith(rq.contextPath + PATH_ACTUATOR)) {
-                chain.doFilter(rq, rs)
-                return
+            // Если включен обычный дебаг-логинг — печатаем запрос сразу
+            if (isDebugProvider) {
+                log.debug { requestLogData }
             }
 
-            val isDebugProvider = log.isDebugEnabled() && logProps.enabledControllerLogging
-
-            // Оборачиваем запрос: кэшируем тело, чтобы прочитать его для лога и оставить доступным для контроллера
-            val currentRq = wrapRequest(rq)
-
-            // Сразу формируем строку запроса, но не печатаем её
-            val requestLogData by lazy { getRequestLogString(currentRq) }
-
-            // Оборачиваем ответ для кэширования исходящего потока
-            val rsWrapper = ContentCachingResponseWrapper(rs)
-            rsWrapper.bufferSize = logProps.maxPayloadSize.toBytes().toInt()
-
-            try {
-                // Если включен обычный дебаг-логинг — печатаем запрос сразу
-                if (isDebugProvider) {
-                    log.debug { requestLogData }
-                }
-
-                chain.doFilter(currentRq, rsWrapper)
-            } finally {
-                val duration = System.nanoTime() - startTimeNano
-                val status = rsWrapper.status
-                val isError = status >= 400
-                val isFullBodyCached = rsWrapper.contentSize < logProps.maxPayloadSize.toBytes()
-
-                val rsBodyBytes = when {
-                    rsWrapper.contentSize == 0 -> BODY_EMPTY.toByteArray(Charsets.UTF_8)
-                    !isFullBodyCached -> BODY_TOO_LARGE.toByteArray(Charsets.UTF_8)
-                    else -> rsWrapper.contentAsByteArray
-                }
-
-                MDC.put(MDC_DURATION, duration.toString())
-                if (isError && !isDebugProvider) {
-                    // ПРИ ОШИБКЕ: логируем и запрос, и ответ на уровне ERROR
-                    log.error { "Service failure detected!\n$requestLogData\n${getResponseLogString(currentRq, rsWrapper, rsBodyBytes, duration)}" }
-                } else if (isDebugProvider) {
-                    // В штатном режиме: логируем только ответ в DEBUG
-                    log.debug { getResponseLogString(currentRq, rsWrapper, rsBodyBytes, duration) }
-                } else {
-                    log.info { "Service response success: ${currentRq.method} ${currentRq.requestURI} [${rsWrapper.status}]" }
-                }
-                // Важно: копируем кэшированное тело ответа обратно в реальный поток
-                rsWrapper.copyBodyToResponse()
-
-                tempoExporter?.sendTrace(
-                    traceIdHex = rqId,
-                    spanIdHex = extRqId,
-                    parentIdHex = parentId,
-                    name = "${rq.method} ${rq.requestURI}",
-                    startEpochNanos = startEpochNanos,
-                    durationNanos = duration,
-                    statusCode = HttpStatus.resolve(rs.status),
-                    attrs = mapOf(
-                        ATTR_HTTP_METHOD to rq.method,
-                        ATTR_HTTP_URL to getFullUri(rq),
-                        ATTR_RQ_HEADERS to getHeadersMap(rq).toString(),
-                        ATTR_RS_HEADERS to getResponseHeaders(rsWrapper).toString(),
-                        ATTR_CLIENT_ID to sender,
-                    ),
-                )
-            }
+            chain.doFilter(currentRq, rsWrapper)
         } finally {
-            MDC.clear()
+            val duration = System.nanoTime() - startTimeNano
+            val status = rsWrapper.status
+            val isError = status >= 400
+            val isFullBodyCached = rsWrapper.contentSize < logProps.maxPayloadSize.toBytes()
+
+            val rsBodyBytes = when {
+                rsWrapper.contentSize == 0 -> BODY_EMPTY.toByteArray(Charsets.UTF_8)
+                !isFullBodyCached -> BODY_TOO_LARGE.toByteArray(Charsets.UTF_8)
+                else -> rsWrapper.contentAsByteArray
+            }
+
+            if (isError && !isDebugProvider) {
+                // ПРИ ОШИБКЕ: логируем и запрос, и ответ на уровне ERROR
+                log.error { "Service failure detected!\n$requestLogData\n${getResponseLogString(currentRq, rsWrapper, rsBodyBytes, duration)}" }
+            } else if (isDebugProvider) {
+                // В штатном режиме: логируем только ответ в DEBUG
+                log.debug { getResponseLogString(currentRq, rsWrapper, rsBodyBytes, duration) }
+            } else {
+                log.info { "Service response success: ${currentRq.method} ${currentRq.requestURI} [${rsWrapper.status}]" }
+            }
+            // Важно: копируем кэшированное тело ответа обратно в реальный поток
+            rsWrapper.copyBodyToResponse()
         }
     }
 
@@ -454,14 +406,6 @@ class ServerLoggingFilter(
     }
 
     companion object {
-        const val HEADER_X_RQ_ID = "x-rq-id"
-        const val HEADER_X_SENDER = "x-sender"
-        const val MDC_RQ_ID = "rqId"
-        const val MDC_CLIENT = "client"
-        const val MDC_SERVER = "server"
-        const val MDC_EXT_RQ_ID = "extRqId"
-        const val MDC_PARENT_ID = "parentId"
-        const val MDC_DURATION = "duration"
 
         private const val PATH_ACTUATOR = "/actuator"
 

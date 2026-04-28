@@ -2,15 +2,12 @@ package com.micronaut.bug.client
 
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.micronaut.bug.client.HttpClientConst.HEADER_API_KEY
-import com.micronaut.bug.client.HttpClientConst.HEADER_EXT_RQ_ID
 import com.micronaut.bug.client.HttpClientProperties.ClientType.INTERNAL
 import com.micronaut.bug.client.HttpClientUtils.DEFAULT_RETRY_ON
 import com.micronaut.bug.client.HttpClientUtils.createRestClient
 import com.micronaut.bug.client.HttpClientUtils.createRetryTemplate
-import com.micronaut.bug.client.LoggingRequestInterceptor.Companion.ATTR_EXT_RQ_ID
 import com.micronaut.bug.client.LoggingRequestInterceptor.Companion.ATTR_SKIP_LOGGING
-import com.micronaut.bug.config.trace.TempoExporter
-import com.micronaut.bug.config.trace.TraceIdGenerator
+import com.micronaut.bug.config.trace.NanoTracer
 import org.springframework.core.ParameterizedTypeReference
 import org.springframework.http.HttpHeaders.CONTENT_TYPE
 import org.springframework.http.HttpMethod
@@ -44,13 +41,13 @@ open class DefaultHttpClient {
         httpClientProperties: HttpClientProperties,
         messageConverters: List<HttpMessageConverter<*>>? = null,
         errorHandler: ResponseErrorHandler? = null,
-        tempoExporter: TempoExporter? = null,
+        tracer: NanoTracer? = null,
         restClient: RestClient = createRestClient(
             senderAppName = senderAppName,
             clientProps = httpClientProperties,
             messageConverters = messageConverters,
             errorHandler = errorHandler,
-            tempoExporter = tempoExporter,
+            tracer = tracer,
         ),
         retryOn: List<Class<out Throwable>>? = null,
         retryTemplate: RetryTemplate? = createRetryTemplate(httpClientProperties, retryOn ?: DEFAULT_RETRY_ON),
@@ -64,7 +61,7 @@ open class DefaultHttpClient {
         senderAppName: String,
         httpClientProperties: HttpClientProperties,
         objectMapper: ObjectMapper,
-        tempoExporter: TempoExporter? = null,
+        tracer: NanoTracer? = null,
         messageConverters: List<HttpMessageConverter<*>>? = null,
         errorHandler: ResponseErrorHandler? = null,
         retryOn: List<Class<out Throwable>>? = null,
@@ -77,7 +74,7 @@ open class DefaultHttpClient {
             objectMapper = objectMapper,
             messageConverters = messageConverters,
             errorHandler = errorHandler,
-            tempoExporter = tempoExporter,
+            tracer = tracer,
         )
         this.retryTemplate = retryTemplate
     }
@@ -87,7 +84,7 @@ open class DefaultHttpClient {
         httpClientProperties: HttpClientProperties,
         restClientBuilder: RestClient.Builder,
         objectMapper: ObjectMapper,
-        tempoExporter: TempoExporter? = null,
+        tracer: NanoTracer? = null,
         messageConverters: List<HttpMessageConverter<*>>? = null,
         errorHandler: ResponseErrorHandler? = null,
         retryOn: List<Class<out Throwable>>? = null,
@@ -101,7 +98,7 @@ open class DefaultHttpClient {
             objectMapper = objectMapper,
             messageConverters = messageConverters,
             errorHandler = errorHandler,
-            tempoExporter = tempoExporter,
+            tracer = tracer,
         )
         this.retryTemplate = retryTemplate
     }
@@ -110,7 +107,7 @@ open class DefaultHttpClient {
         senderAppName: String,
         httpClientProperties: HttpClientProperties,
         restClientBuilder: RestClient.Builder,
-        tempoExporter: TempoExporter? = null,
+        tracer: NanoTracer? = null,
         messageConverters: List<HttpMessageConverter<*>>? = null,
         errorHandler: ResponseErrorHandler? = null,
         retryOn: List<Class<out Throwable>>? = null,
@@ -123,7 +120,7 @@ open class DefaultHttpClient {
             clientBuilder = restClientBuilder,
             messageConverters = messageConverters,
             errorHandler = errorHandler,
-            tempoExporter = tempoExporter,
+            tracer = tracer,
         )
         this.retryTemplate = retryTemplate
     }
@@ -264,15 +261,10 @@ open class DefaultHttpClient {
             }
         }
 
-        // Уникальный ID для связки конкретной пары запрос-ответ
-        val extRqId = TraceIdGenerator.generateSpanId()
-        rqBuilder.attribute(ATTR_EXT_RQ_ID, extRqId)
-
         if (httpClientProperties.type == INTERNAL) {
             if (httpClientProperties.apiKey != null && withApiKey) {
                 rqBuilder.header(HEADER_API_KEY, httpClientProperties.apiKey)
             }
-            rqBuilder.header(HEADER_EXT_RQ_ID, extRqId)
         }
 
         return rqBuilder.retrieve()

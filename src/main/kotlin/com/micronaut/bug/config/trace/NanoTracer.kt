@@ -1,7 +1,10 @@
 package com.micronaut.bug.config.trace
 
+import com.micronaut.bug.config.trace.TempoExporter.Companion.ATTR_ERROR_MESSAGE
+import com.micronaut.bug.config.trace.TempoExporter.Companion.ATTR_ERROR_TYPE
 import com.micronaut.bug.config.trace.TraceIdGenerator.generate
 import com.micronaut.bug.config.trace.TraceIdGenerator.generateSpanId
+import io.opentelemetry.proto.trace.v1.Span.SpanKind
 import io.opentelemetry.proto.trace.v1.Status.StatusCode
 import kotlinx.coroutines.withContext
 import org.slf4j.MDC
@@ -24,13 +27,19 @@ class NanoTracer(
     internal fun getCurrentEpochNanos(): Long = System.nanoTime() + clockOffsetNanos
 
     /**
-     * Стартует новый трейс (корневой спан). Генерирует новый traceId.
+     * Стартует точку входа в сервис.
+     * @param remoteTraceId - ID всей цепочки (из X-Request-ID).
+     * @param remoteParentId - ID спана вызывающей стороны (из X-Ext-Rq-ID).
      */
-    fun startTrace(name: String): TraceContext {
+    fun startTrace(
+        name: String,
+        remoteTraceId: String? = null,
+        remoteParentId: String? = null
+    ): TraceContext {
         val ctx = TraceContext(
-            traceId = generate(), // Новый трейс
+            traceId = remoteTraceId ?: generate(),
             spanId = generateSpanId(),
-            parentId = null,
+            parentId = remoteParentId, // Если он пришел, мы станем вложенным трейсом
             name = name,
             startEpochNanos = getCurrentEpochNanos()
         )
@@ -64,7 +73,8 @@ class NanoTracer(
     fun stop(
         ctx: TraceContext,
         status: StatusCode = StatusCode.STATUS_CODE_OK,
-        attrs: Map<String, Any> = emptyMap()
+        kind: SpanKind = SpanKind.SPAN_KIND_SERVER,
+        attrs: Map<String, Any> = emptyMap(),
     ) {
         val endNs = getCurrentEpochNanos()
         val stack = internalStack.get()
@@ -80,7 +90,8 @@ class NanoTracer(
             startEpochNanos = ctx.startEpochNanos,
             endEpochNanos = endNs,
             status = status,
-            attrs = attrs
+            kind = kind,
+            attrs = attrs,
         )
         syncMdc()
     }
@@ -91,7 +102,8 @@ class NanoTracer(
      */
     suspend inline fun <T> trace(
         name: String,
-        crossinline block: suspend (TraceReport) -> T
+        kind: SpanKind = SpanKind.SPAN_KIND_INTERNAL,
+        crossinline block: suspend (TraceReport) -> T,
     ): T {
         val ctx = startSpan(name)
         val report = TraceReport()
@@ -103,11 +115,16 @@ class NanoTracer(
             }
         } catch (e: Exception) {
             report.status = StatusCode.STATUS_CODE_ERROR
-            report.attrs["error.message"] = e.message ?: e.javaClass.simpleName
-            report.attrs["error.type"] = e.javaClass.name
+            report.attrs[ATTR_ERROR_MESSAGE] = e.message ?: e.javaClass.simpleName
+            report.attrs[ATTR_ERROR_TYPE] = e.javaClass.name
             throw e
         } finally {
-            stop(ctx, report.status, report.attrs)
+            stop(
+                ctx = ctx,
+                status = report.status,
+                kind = kind,
+                attrs = report.attrs,
+            )
         }
     }
 
@@ -124,11 +141,11 @@ class NanoTracer(
     internal fun syncMdc() {
         val current = internalStack.get().firstOrNull()
         if (current != null) {
-            MDC.put("traceId", current.traceId)
-            MDC.put("spanId", current.spanId)
+            MDC.put(MDC_RQ_ID, current.traceId)
+            MDC.put(MDC_EXT_RQ_ID, current.spanId)
         } else {
-            MDC.remove("traceId")
-            MDC.remove("spanId")
+            MDC.remove(MDC_RQ_ID)
+            MDC.remove(MDC_EXT_RQ_ID)
         }
     }
 
@@ -145,7 +162,18 @@ class NanoTracer(
          */
         fun error(message: String?) {
             status = StatusCode.STATUS_CODE_ERROR
-            message?.let { attrs["error.message"] = it }
+            message?.let { attrs[ATTR_ERROR_MESSAGE] = it }
         }
+    }
+
+    companion object {
+
+        const val MDC_RQ_ID = "rqId"
+        const val MDC_EXT_RQ_ID = "extRqId"
+        const val MDC_CLIENT = "client"
+
+        const val HEADER_X_RQ_ID = "x-rq-id"
+        const val HEADER_EXT_RQ_ID = "x-ext-rq-id"
+        const val HEADER_X_SENDER = "x-sender"
     }
 }

@@ -2,8 +2,7 @@ package com.micronaut.bug.client
 
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.databind.json.JsonMapper
-import com.micronaut.bug.client.HttpClientConst.HEADER_SENDER
-import com.micronaut.bug.config.trace.TempoExporter
+import com.micronaut.bug.config.trace.NanoTracer
 import io.github.oshai.kotlinlogging.KotlinLogging
 import io.netty.channel.ChannelOption
 import io.netty.handler.timeout.ReadTimeoutHandler
@@ -48,7 +47,7 @@ object HttpClientUtils {
         objectMapper: ObjectMapper = JsonMapper.builder().build(),
         messageConverters: List<HttpMessageConverter<*>>? = null,
         errorHandler: ResponseErrorHandler? = null,
-        tempoExporter: TempoExporter? = null,
+        tracer: NanoTracer? = null,
     ): RestClient {
         val requestFactory = createRequestFactory(clientProps)
         val builder = clientBuilder
@@ -79,7 +78,6 @@ object HttpClientUtils {
                         props = clientProps,
                         objectMapper = objectMapper,
                         selfServiceName = senderAppName,
-                        tempoExporter = tempoExporter,
                     )
                 )
 
@@ -94,11 +92,15 @@ object HttpClientUtils {
             builder.requestFactory(requestFactory)
         }
 
-        if (clientProps.tracing) {
-            builder.requestInterceptor(TracingForwardingInterceptor())
+        if (tracer != null && clientProps.tracing) {
+            builder.requestInterceptor(
+                NanoTraceClientInterceptor(
+                    tracer = tracer,
+                    selfServiceName = senderAppName,
+                    httpClientProps = clientProps,
+                )
+            )
         }
-
-        builder.defaultHeader(HEADER_SENDER, senderAppName)
 
         return builder.build()
     }

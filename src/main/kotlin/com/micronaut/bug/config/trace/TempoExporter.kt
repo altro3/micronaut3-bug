@@ -204,21 +204,28 @@ class TempoExporter(
     }
 
     /**
-     * Вычитывает все оставшиеся спаны из канала и отправляет их одним (или несколькими) батчами.
+     * Очистка очереди перед завершением работы.
+     * Выгребает все доступные спаны и отправляет их батчами.
      */
     private fun flushRemaining() {
-        val remaining = mutableListOf<Span>()
         // tryReceive выгребает всё, что есть в буфере в данный момент
-        while (true) {
-            val s = channel.tryReceive().getOrNull() ?: break
-            remaining.add(s)
-            if (remaining.size >= properties.batchSize) {
-                sendBatch(ArrayList(remaining), async = false)
-                remaining.clear()
+        val batch = mutableListOf<Span>()
+
+        // Генерируем последовательность из элементов канала, пока они не кончатся
+        generateSequence { channel.tryReceive().getOrNull() }
+            .forEach { span ->
+                batch.add(span)
+
+                // Если набрали полный батч — отправляем и чистим список
+                if (batch.size >= properties.batchSize) {
+                    sendBatch(batch, async = false)
+                    batch.clear()
+                }
             }
-        }
-        if (remaining.isNotEmpty()) {
-            sendBatch(remaining, async = false)
+
+        // Отправляем остатки, если они есть
+        if (batch.isNotEmpty()) {
+            sendBatch(batch, async = false)
         }
     }
 
@@ -255,5 +262,7 @@ class TempoExporter(
         const val ATTR_RQ_HEADERS = "rq.headers"
         const val ATTR_RS_HEADERS = "rs.headers"
         const val ATTR_CLIENT_ID = "client.id"
+        const val ATTR_ERROR_MESSAGE = "error.message"
+        const val ATTR_ERROR_TYPE = "error.type"
     }
 }
