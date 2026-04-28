@@ -35,19 +35,25 @@ import kotlin.coroutines.cancellation.CancellationException
 import kotlin.time.Duration.Companion.milliseconds
 
 /**
- * Высокопроизводительный экспортер трейсов, отправляющий данные в Tempo
- * напрямую по протоколу OTLP Protobuf через HTTP.
+ * Высокопроизводительный пакетный экспортер трейсов для Grafana Tempo.
  *
- * @property appName Имя текущего сервиса (из spring.application.name).
- * @property properties Настройки подключения (URL, таймауты).
+ * Осуществляет отправку данных напрямую по протоколу OTLP (OpenTelemetry Line Protocol)
+ * в формате Protobuf через HTTP. Для минимизации нагрузки на сеть и CPU спаны
+ * накапливаются во внутренней очереди [Channel] и отправляются группами (батчами).
+ *
+ * @property appName Имя текущего сервиса для идентификации ресурса в системе трассировки.
+ * @property httpClient Клиент для выполнения HTTP-запросов к API Tempo.
+ * @param traceProps Глобальные настройки трейсинга, из которых извлекаются [ExporterProperties].
  */
 class TempoExporter(
     private val appName: String,
-    private val properties: TraceProperties,
     private val httpClient: HttpClient,
+    traceProps: TraceProperties,
 ) {
 
     private val log = KotlinLogging.logger {}
+
+    private val exporterProps = traceProps.exporter
 
     // Канал для накопления спанов. Capacity ограничивает память при перегрузке.
     private val channel = Channel<Span>(10000)
@@ -66,6 +72,13 @@ class TempoExporter(
 
     @PostConstruct
     fun start() {
+
+        // Если экспорт выключен, воркер даже не заведется
+        if (!exporterProps.enabled) {
+            log.info { "Tempo batch exporter is disabled by configuration" }
+            return
+        }
+
         exportScope.launch {
             log.info { "Starting Tempo batch exporter for $appName" }
             while (isActive) {
@@ -77,8 +90,8 @@ class TempoExporter(
                     batch.add(first)
 
                     // Накапливаем остальные в течение окна времени из пропертей
-                    withTimeoutOrNull(properties.flushInterval.toMillis().milliseconds) {
-                        while (batch.size < properties.batchSize) {
+                    withTimeoutOrNull(exporterProps.flushInterval.toMillis().milliseconds) {
+                        while (batch.size < exporterProps.batchSize) {
                             batch.add(channel.receive())
                         }
                     }
@@ -90,8 +103,8 @@ class TempoExporter(
                         log.info { "Export loop stopped gracefully" }
                         throw e
                     }
-                    log.error(e) { "Error in Tempo export loop. Retrying in ${properties.retryInterval}..." }
-                    delay(properties.retryInterval.toMillis().milliseconds) // Пауза при ошибке, чтобы не спамить в цикле
+                    log.error(e) { "Error in Tempo export loop. Retrying in ${exporterProps.retryInterval}..." }
+                    delay(exporterProps.retryInterval.toMillis().milliseconds) // Пауза при ошибке, чтобы не спамить в цикле
                 }
             }
         }
@@ -111,6 +124,12 @@ class TempoExporter(
         kind: Span.SpanKind = Span.SpanKind.SPAN_KIND_UNSPECIFIED,
         attrs: Map<String, Any?> = emptyMap(),
     ) {
+
+        // Если экспорт выключен, выходим сразу, не собирая билдеры
+        if (!exporterProps.enabled) {
+            return
+        }
+
         val spanBuilder = Span.newBuilder()
             .setTraceId(toByteString(traceIdHex))
             .setSpanId(toByteString(spanIdHex))
@@ -153,9 +172,9 @@ class TempoExporter(
             .build()
 
         val httpRequest = HttpRequest.newBuilder()
-            .uri(properties.url)
+            .uri(exporterProps.url)
             .header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_PROTOBUF_VALUE)
-            .timeout(properties.connectTimeout)
+            .timeout(exporterProps.requestTimeout)
             .POST(HttpRequest.BodyPublishers.ofByteArray(rq.toByteArray()))
             .build()
 
@@ -182,6 +201,12 @@ class TempoExporter(
 
     @PreDestroy
     fun stop() {
+
+        // Если экспорт не был включен, нам нечего останавливать и очищать
+        if (!exporterProps.enabled) {
+            return
+        }
+
         log.info { "Shutting down Tempo exporter: closing channel..." }
 
         // 1. Запрещаем новые поступления в канал
@@ -191,7 +216,7 @@ class TempoExporter(
         runBlocking {
             val job = exportScope.coroutineContext[Job]
             // Ожидаем завершения цикла вычитки
-            withTimeoutOrNull(5000.milliseconds) {
+            withTimeoutOrNull(exporterProps.shutdownTimeout.toMillis().milliseconds) {
                 // Пытаемся вычитать всё через flushRemaining вручную для надежности
                 flushRemaining()
                 job?.children?.forEach { it.join() }
@@ -217,7 +242,7 @@ class TempoExporter(
                 batch.add(span)
 
                 // Если набрали полный батч — отправляем и чистим список
-                if (batch.size >= properties.batchSize) {
+                if (batch.size >= exporterProps.batchSize) {
                     sendBatch(batch, async = false)
                     batch.clear()
                 }

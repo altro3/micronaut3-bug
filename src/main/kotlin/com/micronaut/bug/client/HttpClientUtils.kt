@@ -68,6 +68,16 @@ object HttpClientUtils {
             builder.defaultStatusHandler(errorHandler)
         }
 
+        if (tracer != null && clientProps.tracing) {
+            builder.requestInterceptor(
+                NanoTraceClientInterceptor(
+                    tracer = tracer,
+                    selfServiceName = senderAppName,
+                    httpClientProps = clientProps,
+                )
+            )
+        }
+
         if (clientProps.log.enabled) {
             // ВАЖНО: BufferingClientHttpRequestFactory позволяет перечитывать InputStream тела.
             // Без него интерцептор логирования "съест" данные, и клиент получит пустое тело.
@@ -90,16 +100,6 @@ object HttpClientUtils {
 
         } else {
             builder.requestFactory(requestFactory)
-        }
-
-        if (tracer != null && clientProps.tracing) {
-            builder.requestInterceptor(
-                NanoTraceClientInterceptor(
-                    tracer = tracer,
-                    selfServiceName = senderAppName,
-                    httpClientProps = clientProps,
-                )
-            )
         }
 
         return builder.build()

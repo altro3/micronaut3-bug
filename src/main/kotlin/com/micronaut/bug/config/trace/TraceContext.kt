@@ -6,7 +6,7 @@ package com.micronaut.bug.config.trace
 data class TraceContext(
     val traceId: String,
     val spanId: String,
-    val parentId: String?,
+    val parentId: String? = null,
     val name: String,
     val startEpochNanos: Long,
 )

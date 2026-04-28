@@ -1,45 +1,61 @@
 package com.micronaut.bug.config.trace.config
 
 import org.springframework.boot.context.properties.ConfigurationProperties
+import org.springframework.boot.context.properties.NestedConfigurationProperty
 import java.net.URI
 import java.time.Duration
 
-@ConfigurationProperties(prefix = "app.trace.tempo")
-data class TraceProperties(
+@ConfigurationProperties("app.trace")
+class TraceProperties(
     /**
-     * Включить/выключить экспорт в Tempo.
+     * Глобальный флаг включения трейсинга в приложении.
+     * Если false — NanoTracer не будет генерировать спаны и MDC.
      */
-    val enabled: Boolean = false,
+    val enabled: Boolean = true,
+
     /**
-     * URL эндпоинта Tempo (OTLP HTTP Protobuf).
+     * Настройки пакетного экспортера в Grafana Tempo.
      */
-    val url: URI = URI.create("http://localhost:4318/v1/traces"),
-    /**
-     * Таймаут на установку соединения.
-     */
-    val connectTimeout: Duration = Duration.ofSeconds(2),
-    /**
-     * Максимальное количество спанов в одном батче.
-     * Оптимально: 512. Большие значения экономят трафик, но увеличивают потребление памяти.
-     */
-    val batchSize: Int = 512,
-    /**
-     * Интервал принудительной отправки батча, даже если он не заполнился до [batchSize].
-     * Определяет задержку появления трейсов в интерфейсе Grafana.
-     */
-    val flushInterval: Duration = Duration.ofSeconds(2),
-    /**
-     * Максимальный размер внутренней очереди спанов.
-     * При переполнении новые спаны будут отбрасываться для защиты приложения от OutOfMemory.
-     */
-    val queueCapacity: Int = 10000,
-    /**
-     * Время ожидания завершения отправки оставшихся в очереди спанов при выключении приложения.
-     */
-    val shutdownTimeout: Duration = Duration.ofSeconds(5),
-    /**
-     * Пауза перед следующей попыткой после возникновения ошибки в цикле экспорта.
-     * Предотвращает "спам" в логи и излишнюю нагрузку при недоступности Tempo.
-     */
-    val retryInterval: Duration = Duration.ofSeconds(1),
-)
+    @NestedConfigurationProperty
+    val exporter: ExporterProperties = ExporterProperties()
+) {
+
+    class ExporterProperties(
+        /**
+         * Включить/выключить отправку данных в Tempo.
+         */
+        val enabled: Boolean = true,
+        /**
+         * URL эндпоинта Tempo (OTLP HTTP Protobuf).
+         */
+        val url: URI = URI.create("http://localhost:4318/v1/traces"),
+        /**
+         * Таймаут на установку соединения.
+         */
+        val connectTimeout: Duration = Duration.ofSeconds(2),
+        /**
+         * Таймаут на запрос.
+         */
+        val requestTimeout: Duration = Duration.ofSeconds(2),
+        /**
+         * Максимальное количество спанов в одном батче.
+         */
+        val batchSize: Int = 512,
+        /**
+         * Интервал принудительной отправки батча.
+         */
+        val flushInterval: Duration = Duration.ofSeconds(2),
+        /**
+         * Максимальный размер внутренней очереди (защита от OOM).
+         */
+        val queueCapacity: Int = 10000,
+        /**
+         * Время на очистку очереди при выключении (Graceful Shutdown).
+         */
+        val shutdownTimeout: Duration = Duration.ofSeconds(5),
+        /**
+         * Пауза при ошибках в цикле экспорта (Backoff).
+         */
+        val retryInterval: Duration = Duration.ofSeconds(1)
+    )
+}

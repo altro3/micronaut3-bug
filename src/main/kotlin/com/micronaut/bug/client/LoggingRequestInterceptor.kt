@@ -4,27 +4,15 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.databind.SerializationFeature
 import com.micronaut.bug.client.HttpClientProperties.ClientType.EXTERNAL
 import com.micronaut.bug.client.LoggingRequestInterceptor.Companion.LIMIT_TEXT_CHECK_THRESHOLD
-import com.micronaut.bug.config.ServerLoggingFilter.Companion.MDC_CLIENT
-import com.micronaut.bug.config.ServerLoggingFilter.Companion.MDC_DURATION
-import com.micronaut.bug.config.ServerLoggingFilter.Companion.MDC_EXT_RQ_ID
-import com.micronaut.bug.config.ServerLoggingFilter.Companion.MDC_PARENT_ID
-import com.micronaut.bug.config.ServerLoggingFilter.Companion.MDC_RQ_ID
-import com.micronaut.bug.config.ServerLoggingFilter.Companion.MDC_SERVER
-import com.micronaut.bug.config.trace.TempoExporter
-import com.micronaut.bug.config.trace.TempoExporter.Companion.ATTR_CLIENT_ID
-import com.micronaut.bug.config.trace.TempoExporter.Companion.ATTR_HTTP_METHOD
-import com.micronaut.bug.config.trace.TempoExporter.Companion.ATTR_HTTP_URL
-import com.micronaut.bug.config.trace.TempoExporter.Companion.ATTR_RQ_HEADERS
-import com.micronaut.bug.config.trace.TempoExporter.Companion.ATTR_RS_HEADERS
+import com.micronaut.bug.config.trace.NanoTracer.Companion.MDC_CLIENT
+import com.micronaut.bug.config.trace.NanoTracer.Companion.MDC_EXT_RQ_ID
+import com.micronaut.bug.config.trace.TraceIdGenerator.generateSpanId
 import io.github.oshai.kotlinlogging.KotlinLogging
-import io.opentelemetry.proto.trace.v1.Span
 import org.slf4j.MDC
 import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpHeaders.CONTENT_DISPOSITION
 import org.springframework.http.HttpHeaders.CONTENT_TYPE
 import org.springframework.http.HttpRequest
-import org.springframework.http.HttpStatus.INTERNAL_SERVER_ERROR
-import org.springframework.http.HttpStatusCode
 import org.springframework.http.MediaType
 import org.springframework.http.client.ClientHttpRequestExecution
 import org.springframework.http.client.ClientHttpRequestInterceptor
@@ -47,13 +35,11 @@ class LoggingRequestInterceptor(
     props: HttpClientProperties,
     objectMapper: ObjectMapper,
     private val selfServiceName: String,
-    private val tempoExporter: TempoExporter? = null,
 ) : ClientHttpRequestInterceptor {
 
     private val log = KotlinLogging.logger {}
 
     private val logProps = props.log
-    private val serviceName = props.serviceName
     private val isExternal = props.type == EXTERNAL
     private val prettyMapper = objectMapper.copy()
         .enable(SerializationFeature.INDENT_OUTPUT)
@@ -74,22 +60,16 @@ class LoggingRequestInterceptor(
         val isDebug = log.isDebugEnabled()
 
         val skipLogging = rq.attributes[ATTR_SKIP_LOGGING] as? Boolean ?: false
-
-        if (isExternal) {
-            MDC.put(MDC_CLIENT, selfServiceName)
-            MDC.put(MDC_SERVER, serviceName)
-            MDC.put(MDC_TYPE, EXTERNAL.name)
-        }
-
-        val rqId = MDC.get(MDC_RQ_ID)
-        val originalExtRqId = MDC.get(MDC_EXT_RQ_ID)
-        val originalParentId = MDC.get(MDC_PARENT_ID)
-        // Достаём ID из атрибутов, чтобы GzipRequestInterceptor его увидел
-        val extRqId = rq.attributes.getValue(ATTR_EXT_RQ_ID).toString()
-        MDC.put(MDC_EXT_RQ_ID, extRqId)
-        MDC.put(MDC_PARENT_ID, originalExtRqId)
+        val extRqId = MDC.get(MDC_EXT_RQ_ID) ?: generateSpanId()
+        rq.attributes[ATTR_EXT_RQ_ID] = extRqId
 
         try {
+
+            if (isExternal) {
+                MDC.put(MDC_TARGET, selfServiceName)
+                MDC.put(MDC_TYPE, EXTERNAL.name)
+            }
+
             // Данные запроса готовим лениво
             val rqLogData by lazy { getRequestLogString(rq, body, extRqId, skipLogging) }
 
@@ -97,27 +77,14 @@ class LoggingRequestInterceptor(
             if (isDebug) {
                 log.debug { rqLogData }
             }
-            val startInstant = Instant.now()
-            val startEpochNanos = startInstant.epochSecond * 1_000_000_000L + startInstant.nano
             val startTimeNano = System.nanoTime()
 
             val rs: ClientHttpResponse
             try {
                 rs = execution.execute(rq, body)
             } catch (e: Exception) {
-                val duration = System.nanoTime() - startEpochNanos
+                val duration = System.nanoTime() - startTimeNano
 
-                reportToTempo(
-                    traceId = rqId,
-                    spanId = extRqId,
-                    parentId = originalExtRqId,
-                    rq = rq,
-                    rs = null,
-                    startNanos = startEpochNanos,
-                    durationNanos = duration,
-                    statusCode = INTERNAL_SERVER_ERROR,
-                )
-                MDC.put(MDC_DURATION, duration.toString())
                 if (isDebug) {
                     // В DEBUG запрос уже есть в логах, пишем только ID и ошибку
                     log.error(e) { "External call failed! [extRqId: $extRqId, duration: ${duration}ms]" }
@@ -129,17 +96,6 @@ class LoggingRequestInterceptor(
             }
 
             val duration = System.nanoTime() - startTimeNano
-            reportToTempo(
-                traceId = rqId,
-                spanId = extRqId,
-                parentId = originalExtRqId,
-                rq = rq,
-                rs = rs,
-                startNanos = startEpochNanos,
-                durationNanos = duration,
-                statusCode = rs.statusCode,
-            )
-
             val isError = rs.statusCode.isError
 
             if (isDebug || isError) {
@@ -153,14 +109,14 @@ class LoggingRequestInterceptor(
 
                     // ПРЕДОХРАНИТЕЛЬ: Проверяем заголовок ДО чтения
                     if (contentLength > maxAllowed) {
-                        BODY_TOO_LARGE.toByteArray(Charsets.UTF_8)
+                        BODY_TOO_LARGE.toByteArray()
                     } else {
                         // Если заголовок -1 (chunked) или в рамках лимита — читаем,
                         // но ограничиваем само чтение, чтобы не доверять заголовку на 100%
                         val rawBytes = rs.body.readAllBytes()
 
                         if (rawBytes.size > maxAllowed) {
-                            BODY_TOO_LARGE.toByteArray(Charsets.UTF_8)
+                            BODY_TOO_LARGE.toByteArray()
                         } else {
                             rawBytes
                         }
@@ -178,47 +134,9 @@ class LoggingRequestInterceptor(
             }
             return rs
         } finally {
-            MDC.put(MDC_EXT_RQ_ID, originalExtRqId)
-            MDC.put(MDC_PARENT_ID, originalParentId)
-            MDC.remove(MDC_DURATION)
+            MDC.remove(MDC_CLIENT)
+            MDC.remove(MDC_TYPE)
         }
-    }
-
-    private fun reportToTempo(
-        traceId: String,
-        spanId: String,
-        parentId: String?,
-        rq: HttpRequest,
-        rs: ClientHttpResponse?,
-        startNanos: Long,
-        durationNanos: Long,
-        statusCode: HttpStatusCode
-    ) {
-
-        val tempoAttrs = mutableMapOf(
-            ATTR_HTTP_METHOD to rq.method.name(),
-            ATTR_HTTP_URL to getFullUri(rq),
-            ATTR_RQ_HEADERS to rq.headers.toString(),
-            ATTR_CLIENT_ID to selfServiceName,
-        )
-
-        // Если ответ получен — добавляем его заголовки
-        rs?.let {
-            tempoAttrs[ATTR_RS_HEADERS] = it.headers.toString()
-        }
-
-        tempoExporter?.sendTrace(
-            traceIdHex = traceId,
-            spanIdHex = spanId,
-            parentIdHex = parentId,
-            // Добавляем префикс CLIENT, чтобы в Графане сразу видеть, что это внешний вызов
-            name = "CLIENT: ${rq.method} ${getFullUri(rq)}",
-            startEpochNanos = startNanos,
-            durationNanos = durationNanos,
-            statusCode = statusCode,
-            attrs = tempoAttrs,
-            kind = Span.SpanKind.SPAN_KIND_CLIENT,
-        )
     }
 
     /**
@@ -650,7 +568,8 @@ class LoggingRequestInterceptor(
 
         const val ATTR_SKIP_LOGGING = "client.skip.body.logging"
         const val ATTR_EXT_RQ_ID = "client.ext.request.id"
-        const val MDC_NEW_EXT_RQ_ID = "newExtRqId"
+
         const val MDC_TYPE = "type"
+        const val MDC_TARGET = "target"
     }
 }

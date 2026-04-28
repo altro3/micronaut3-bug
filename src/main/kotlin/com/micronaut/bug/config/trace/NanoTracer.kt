@@ -20,7 +20,7 @@ class NanoTracer(
 
     private val clockOffsetNanos: Long by lazy {
         val now = Instant.now()
-        (now.epochSecond * 1_000_000_000L + now.nano) - System.nanoTime()
+        (now.epochSecond * NANOS_PER_SECOND + now.nano) - System.nanoTime()
     }
 
     @PublishedApi
@@ -157,6 +157,7 @@ class NanoTracer(
         var status: StatusCode = StatusCode.STATUS_CODE_OK,
         val attrs: MutableMap<String, Any> = mutableMapOf()
     ) {
+
         /**
          * Удобный метод для быстрой пометки спана как ошибочного.
          */
@@ -175,5 +176,10 @@ class NanoTracer(
         const val HEADER_X_RQ_ID = "x-rq-id"
         const val HEADER_EXT_RQ_ID = "x-ext-rq-id"
         const val HEADER_X_SENDER = "x-sender"
+
+        /**
+         * Количество наносекунд в одной секунде
+         */
+        private const val NANOS_PER_SECOND = 1_000_000_000L
     }
 }
