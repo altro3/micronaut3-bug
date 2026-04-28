@@ -56,7 +56,7 @@ server:
 
 spring:
   application:
-    name: spring-log
+    name: service1
   servlet:
     multipart:
       enabled: true

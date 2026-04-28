@@ -2,6 +2,7 @@ package com.micronaut.bug.client
 
 import com.micronaut.bug.client.HttpClientProperties.ClientType
 import com.micronaut.bug.client.LoggingRequestInterceptor.Companion.SLASH
+import com.micronaut.bug.config.trace.NanoTraceFilter.Companion.METHODS_WITHOUT_BODY
 import com.micronaut.bug.config.trace.NanoTracer
 import com.micronaut.bug.config.trace.NanoTracer.Companion.HEADER_EXT_RQ_ID
 import com.micronaut.bug.config.trace.NanoTracer.Companion.HEADER_TRACEPARENT
@@ -17,6 +18,7 @@ import com.micronaut.bug.config.trace.TempoExporter.Companion.ATTR_HTTP_RESPONSE
 import com.micronaut.bug.config.trace.TempoExporter.Companion.ATTR_SERVER_ADDRESS
 import com.micronaut.bug.config.trace.TempoExporter.Companion.ATTR_SERVER_PORT
 import com.micronaut.bug.config.trace.TempoExporter.Companion.ATTR_URL_FULL
+import com.micronaut.bug.config.trace.TempoExporter.Companion.OTEL_MAPPED_HEADERS
 import com.micronaut.bug.config.trace.TempoExporter.Companion.PREFIX_HTTP_REQUEST_HEADER
 import com.micronaut.bug.config.trace.TempoExporter.Companion.PREFIX_HTTP_RESPONSE_HEADER
 import io.opentelemetry.proto.trace.v1.Span
@@ -92,9 +94,11 @@ class NanoTraceClientInterceptor(
                     put(ATTR_SERVER_PORT, port.toLong())
 
                     // Размеры
-                    val reqSize = body.size.toLong()
-                    if (reqSize > 0) {
-                        put(ATTR_HTTP_REQUEST_BODY_SIZE, reqSize)
+                    if (rq.method.name() !in METHODS_WITHOUT_BODY) {
+                        val reqSize = body.size.toLong()
+                        if (reqSize > 0) {
+                            put(ATTR_HTTP_REQUEST_BODY_SIZE, reqSize)
+                        }
                     }
 
                     rs.headers.contentLength.takeIf { it != -1L }?.let {
@@ -131,16 +135,20 @@ class NanoTraceClientInterceptor(
     }
 
     private fun getRequestHeadersAttrs(rq: HttpRequest): Map<String, List<String>> =
-        rq.headers.keys.associate { name ->
-            val key = "${PREFIX_HTTP_REQUEST_HEADER}${name.lowercase()}"
-            key to (rq.headers[name] ?: emptyList())
-        }
+        rq.headers.keys
+            .filter { it !in OTEL_MAPPED_HEADERS }
+            .associate { name ->
+                val key = "${PREFIX_HTTP_REQUEST_HEADER}${name.lowercase()}"
+                key to (rq.headers[name] ?: emptyList())
+            }
 
     private fun getResponseHeadersAttrs(rs: ClientHttpResponse): Map<String, List<String>> =
-        rs.headers.keys.associate { name ->
-            val key = "${PREFIX_HTTP_RESPONSE_HEADER}${name.lowercase()}"
-            key to (rs.headers[name] ?: emptyList())
-        }
+        rs.headers.keys
+            .filter { it !in OTEL_MAPPED_HEADERS }
+            .associate { name ->
+                val key = "${PREFIX_HTTP_RESPONSE_HEADER}${name.lowercase()}"
+                key to (rs.headers[name] ?: emptyList())
+            }
 
     /**
      * Формирует путь запроса с Query-параметрами для детального анализа в трейсинге.

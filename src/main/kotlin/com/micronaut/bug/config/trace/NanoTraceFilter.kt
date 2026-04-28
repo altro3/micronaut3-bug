@@ -20,6 +20,7 @@ import com.micronaut.bug.config.trace.TempoExporter.Companion.ATTR_URL_PATH
 import com.micronaut.bug.config.trace.TempoExporter.Companion.ATTR_URL_QUERY
 import com.micronaut.bug.config.trace.TempoExporter.Companion.ATTR_URL_SCHEME
 import com.micronaut.bug.config.trace.TempoExporter.Companion.ATTR_USER_AGENT_ORIGINAL
+import com.micronaut.bug.config.trace.TempoExporter.Companion.OTEL_MAPPED_HEADERS
 import com.micronaut.bug.config.trace.TempoExporter.Companion.PREFIX_HTTP_REQUEST_HEADER
 import com.micronaut.bug.config.trace.TempoExporter.Companion.PREFIX_HTTP_RESPONSE_HEADER
 import io.opentelemetry.proto.trace.v1.Status
@@ -80,9 +81,12 @@ class NanoTraceFilter(
 
                 put(ATTR_HTTP_REQUEST_METHOD, rq.method)
                 rq.getHeader(USER_AGENT)?.let { put(ATTR_USER_AGENT_ORIGINAL, it) }
-                val reqSize = rq.contentLength.toLong()
-                if (reqSize != -1L) {
-                    put(ATTR_HTTP_REQUEST_BODY_SIZE, reqSize)
+
+                if (rq.method !in METHODS_WITHOUT_BODY) {
+                    val reqSize = rq.contentLength.toLong()
+                    if (reqSize != -1L) {
+                        put(ATTR_HTTP_REQUEST_BODY_SIZE, reqSize)
+                    }
                 }
 
                 // В HttpServletResponse размер можно вытащить через Content-Length
@@ -120,6 +124,7 @@ class NanoTraceFilter(
 
     private fun getRequestHeadersAttrs(rq: HttpServletRequest): Map<String, List<String>> =
         rq.headerNames.asSequence()
+            .filter { it !in OTEL_MAPPED_HEADERS }
             .associate { name ->
                 val normalizedName = name.lowercase()
                 val key = "${PREFIX_HTTP_REQUEST_HEADER}$normalizedName"
@@ -127,10 +132,12 @@ class NanoTraceFilter(
             }
 
     private fun getResponseHeadersAttrs(rs: HttpServletResponse): Map<String, List<String>> =
-        rs.headerNames.associate { name ->
-            val key = "${PREFIX_HTTP_RESPONSE_HEADER}${name.lowercase()}"
-            key to rs.getHeaders(name).toList()
-        }
+        rs.headerNames.asSequence()
+            .filter { it !in OTEL_MAPPED_HEADERS }
+            .associate { name ->
+                val key = "${PREFIX_HTTP_RESPONSE_HEADER}${name.lowercase()}"
+                key to rs.getHeaders(name).toList()
+            }
 
     companion object {
 
@@ -140,6 +147,8 @@ class NanoTraceFilter(
         private const val ERROR_STATUS_THRESHOLD = 400
 
         const val HEADER_API_KEY = "api-key"
+
+        val METHODS_WITHOUT_BODY = setOf("GET", "HEAD", "OPTIONS", "DELETE", "TRACE")
 
         /**
          * Список для маскировки чувствительных заголовков в формате OTel (string[]).

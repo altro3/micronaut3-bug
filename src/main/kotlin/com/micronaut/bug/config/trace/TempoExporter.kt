@@ -98,12 +98,16 @@ class TempoExporter(
                     }
 
                     sendBatch(batch)
-                } catch (e: Exception) {
+                } catch (_: ClosedReceiveChannelException) {
+                    // Канал закрыт, данных больше не будет.
+                    // Просто выходим из цикла, чтобы корутина завершилась мирно.
+                    log.info { "Worker: channel closed, finishing loop" }
+                    break
+                } catch (_: CancellationException) {
                     // Корректно завершаем корутину, если пришел сигнал отмены или канал закрыт
-                    if (e is CancellationException || e is ClosedReceiveChannelException) {
-                        log.info { "Export loop stopped gracefully" }
-                        throw e
-                    }
+                    log.info { "Export loop stopped gracefully" }
+                    break
+                } catch (e: Exception) {
                     log.error(e) { "Error in Tempo export loop. Retrying in ${exporterProps.retryInterval}..." }
                     delay(exporterProps.retryInterval.toMillis().milliseconds) // Пауза при ошибке, чтобы не спамить в цикле
                 }
@@ -283,6 +287,13 @@ class TempoExporter(
 
     companion object {
 
+        val OTEL_MAPPED_HEADERS = setOf(
+            HttpHeaders.CONTENT_LENGTH.lowercase(),
+            HttpHeaders.CONTENT_TYPE.lowercase(),
+            HttpHeaders.USER_AGENT.lowercase(),
+            // Сюда можно добавить host, так как он уходит в server.address
+            HttpHeaders.HOST.lowercase()
+        )
         /**
          * Стандартные ключи атрибутов OpenTelemetry
          */
@@ -298,10 +309,6 @@ class TempoExporter(
         // Sizes (в байтах)
         const val ATTR_HTTP_REQUEST_BODY_SIZE = "http.request.body.size"
         const val ATTR_HTTP_RESPONSE_BODY_SIZE = "http.response.body.size"
-
-        // Network & Protocol
-        const val ATTR_NETWORK_PROTOCOL_NAME = "network.protocol.name"
-        const val ATTR_NETWORK_PROTOCOL_VERSION = "network.protocol.version"
 
         const val ATTR_URL_FULL = "url.full"
         const val ATTR_URL_SCHEME = "url.scheme"
@@ -326,9 +333,6 @@ class TempoExporter(
         /**
          * Кастомные ключи для логгинг-фильтров
          */
-        const val ATTR_RQ_HEADERS = "rq.headers"
-        const val ATTR_RS_HEADERS = "rs.headers"
-        const val ATTR_CLIENT_ID = "client.id"
         const val ATTR_ERROR_MESSAGE = "error.message"
         const val ATTR_ERROR_TYPE = "error.type"
     }

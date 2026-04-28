@@ -7,6 +7,7 @@ import com.micronaut.bug.client.HttpClientUtils.DEFAULT_RETRY_ON
 import com.micronaut.bug.client.HttpClientUtils.createRestClient
 import com.micronaut.bug.client.HttpClientUtils.createRetryTemplate
 import com.micronaut.bug.client.LoggingRequestInterceptor.Companion.ATTR_SKIP_LOGGING
+import com.micronaut.bug.config.trace.NanoTraceFilter.Companion.METHODS_WITHOUT_BODY
 import com.micronaut.bug.config.trace.NanoTracer
 import org.springframework.core.ParameterizedTypeReference
 import org.springframework.http.HttpHeaders.CONTENT_TYPE
@@ -256,7 +257,7 @@ open class DefaultHttpClient {
 
         if (rqBody != null) {
             rqBuilder.body(rqBody)
-            if (headers == null || !headers.containsKey(CONTENT_TYPE)) {
+            if (method.name() !in METHODS_WITHOUT_BODY && (headers == null || !headers.containsKey(CONTENT_TYPE))) {
                 rqBuilder.header(CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
             }
         }
