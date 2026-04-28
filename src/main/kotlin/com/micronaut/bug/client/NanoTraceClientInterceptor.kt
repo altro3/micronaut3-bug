@@ -1,13 +1,13 @@
 package com.micronaut.bug.client
 
-import com.micronaut.bug.client.HttpClientProperties.ClientType
+import com.micronaut.bug.client.HttpClientProperties.ClientType.INTERNAL
 import com.micronaut.bug.client.LoggingRequestInterceptor.Companion.SLASH
 import com.micronaut.bug.config.trace.NanoTraceFilter.Companion.METHODS_WITHOUT_BODY
 import com.micronaut.bug.config.trace.NanoTracer
-import com.micronaut.bug.config.trace.NanoTracer.Companion.HEADER_EXT_RQ_ID
 import com.micronaut.bug.config.trace.NanoTracer.Companion.HEADER_TRACEPARENT
-import com.micronaut.bug.config.trace.NanoTracer.Companion.HEADER_X_RQ_ID
 import com.micronaut.bug.config.trace.NanoTracer.Companion.HEADER_X_SENDER
+import com.micronaut.bug.config.trace.NanoTracer.Companion.MDC_CLIENT
+import com.micronaut.bug.config.trace.NanoTracer.Companion.MDC_SERVER
 import com.micronaut.bug.config.trace.TempoExporter.Companion.ATTR_EXCEPTION_MESSAGE
 import com.micronaut.bug.config.trace.TempoExporter.Companion.ATTR_EXCEPTION_STACKTRACE
 import com.micronaut.bug.config.trace.TempoExporter.Companion.ATTR_EXCEPTION_TYPE
@@ -23,6 +23,7 @@ import com.micronaut.bug.config.trace.TempoExporter.Companion.PREFIX_HTTP_REQUES
 import com.micronaut.bug.config.trace.TempoExporter.Companion.PREFIX_HTTP_RESPONSE_HEADER
 import io.opentelemetry.proto.trace.v1.Span
 import io.opentelemetry.proto.trace.v1.Status.StatusCode
+import org.slf4j.MDC
 import org.springframework.http.HttpRequest
 import org.springframework.http.client.ClientHttpRequestExecution
 import org.springframework.http.client.ClientHttpRequestInterceptor
@@ -52,25 +53,30 @@ class NanoTraceClientInterceptor(
 
     override fun intercept(rq: HttpRequest, body: ByteArray, execution: ClientHttpRequestExecution): ClientHttpResponse {
 
-        val fullUri = getFullUri(rq)
+        val urlFull = if (rq.uri.isAbsolute) rq.uri.toString() else "$basePrefix${getFullUri(rq)}"
+
         // 1. Стартуем дочерний спан. Имя в формате "CLIENT: METHOD /path" для наглядности в UI Grafana.
-        val ctx = tracer.startSpan(name = "${rq.method} ${rq.uri.path}")
+        val ctx = tracer.startSpan(name = "${rq.method} $urlFull")
 
         tracer.getTraceParent()?.let {
             rq.headers.set(HEADER_TRACEPARENT, it)
         }
 
-        // Legacy поддержка для внутренних сервисов
-        if (props.type == ClientType.INTERNAL) {
-            rq.headers.set(HEADER_X_RQ_ID, ctx.traceId)
-            rq.headers.set(HEADER_EXT_RQ_ID, ctx.spanId)
-            // Sender тоже важен внутри сети
+        // Sender тоже важен внутри сети
+        if (props.type == INTERNAL) {
             rq.headers.set(HEADER_X_SENDER, selfServiceName)
         }
+
+        val originalClient = MDC.get(MDC_CLIENT)
+        val originalServer = MDC.get(MDC_SERVER)
+
 
         return try {
             val rs = execution.execute(rq, body)
             val isError = rs.statusCode.isError
+
+            MDC.put(MDC_CLIENT, selfServiceName)
+            MDC.put(MDC_SERVER, props.serviceName)
 
             // Фиксация успешного (или логического ошибочного, например 4xx/5xx) результата
             tracer.stop(
@@ -79,10 +85,7 @@ class NanoTraceClientInterceptor(
                 kind = Span.SpanKind.SPAN_KIND_CLIENT,
                 attrs = buildMap {
                     put(ATTR_HTTP_REQUEST_METHOD, rq.method.name())
-
-                    val urlFull = if (rq.uri.isAbsolute) rq.uri.toString() else "$basePrefix${getFullUri(rq)}"
                     put(ATTR_URL_FULL, urlFull)
-
                     put(ATTR_HTTP_RESPONSE_STATUS_CODE, rs.statusCode.value().toLong())
 
                     // 2. SERVER ADDRESS: Берем хост из URI запроса, если его нет — из пропертей
@@ -92,6 +95,11 @@ class NanoTraceClientInterceptor(
                         ?: props.url.port.takeIf { it != -1 }
                         ?: if (urlFull.startsWith("https")) 443 else 80
                     put(ATTR_SERVER_PORT, port.toLong())
+
+                    put("client", selfServiceName) // Имя нашего сервиса (например, "service1")
+                    put("server", props.serviceName.toString()) // Имя цели (например, "service2")
+
+                    props.serviceName?.let { put("peer.service", it) }
 
                     // Размеры
                     if (rq.method.name() !in METHODS_WITHOUT_BODY) {
@@ -124,6 +132,8 @@ class NanoTraceClientInterceptor(
                 attrs = buildMap {
                     put(ATTR_HTTP_REQUEST_METHOD, rq.method.name())
                     put(ATTR_URL_FULL, rq.uri.toString())
+                    put("client", selfServiceName) // Имя нашего сервиса (например, "service1")
+                    put("server", props.serviceName.toString()) // Имя цели (например, "service2")
                     put(ATTR_EXCEPTION_TYPE, e.javaClass.name)
                     put(ATTR_EXCEPTION_MESSAGE, e.message ?: e.javaClass.simpleName)
                     put(ATTR_EXCEPTION_STACKTRACE, e.stackTraceToString())
@@ -131,12 +141,15 @@ class NanoTraceClientInterceptor(
                 }
             )
             throw e
+        } finally {
+            MDC.put(MDC_CLIENT, originalClient)
+            MDC.put(MDC_SERVER, originalServer)
         }
     }
 
     private fun getRequestHeadersAttrs(rq: HttpRequest): Map<String, List<String>> =
         rq.headers.keys
-            .filter { it !in OTEL_MAPPED_HEADERS }
+            .filter { it.lowercase() !in OTEL_MAPPED_HEADERS }
             .associate { name ->
                 val key = "${PREFIX_HTTP_REQUEST_HEADER}${name.lowercase()}"
                 key to (rq.headers[name] ?: emptyList())
@@ -144,7 +157,7 @@ class NanoTraceClientInterceptor(
 
     private fun getResponseHeadersAttrs(rs: ClientHttpResponse): Map<String, List<String>> =
         rs.headers.keys
-            .filter { it !in OTEL_MAPPED_HEADERS }
+            .filter { it.lowercase() !in OTEL_MAPPED_HEADERS }
             .associate { name ->
                 val key = "${PREFIX_HTTP_RESPONSE_HEADER}${name.lowercase()}"
                 key to (rs.headers[name] ?: emptyList())

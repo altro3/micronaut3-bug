@@ -6,7 +6,7 @@ import jakarta.validation.Valid
 import org.springframework.boot.context.properties.ConfigurationProperties
 import org.springframework.boot.context.properties.NestedConfigurationProperty
 
-@ConfigurationProperties("app.integration.internal-service")
+@ConfigurationProperties("app.integration.service2")
 class InternalServiceProperties(
     @NestedConfigurationProperty
     val http: HttpClientProperties = HttpClientProperties(),

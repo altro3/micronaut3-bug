@@ -192,10 +192,9 @@ class NanoTracer(
         const val MDC_RQ_ID = "rqId"
         const val MDC_EXT_RQ_ID = "extRqId"
         const val MDC_CLIENT = "client"
+        const val MDC_SERVER = "server"
 
         // Стандартные заголовки (Legacy)
-        const val HEADER_X_RQ_ID = "x-rq-id"
-        const val HEADER_EXT_RQ_ID = "x-ext-rq-id"
         const val HEADER_X_SENDER = "x-sender"
 
         // W3C Trace Context (Стандарт OTel)

@@ -42,13 +42,13 @@ app:
         log:
           pretty-print: true
           max-payload-size: 4MB
-    internal-service:
+    service2:
       endpoints:
         ping:
           path: /internal/ping
           method: GET
       http:
-        service-name: internal-service
+        service-name: service2
         url: http://localhost:9080
 
 server:

@@ -36,14 +36,15 @@ services:
       - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
     depends_on:
       - loki
-
+    volumes:
+      - grafana-storage:/var/lib/grafana # <--- Сохранит все твои настройки и дашборды
   # Хранилище метрик (нужно для работы вкладки Traces и отрисовки графиков на основе трейсов)
   prometheus:
     image: prom/prometheus:v3.11.2
     container_name: prometheus
     command:
       - --config.file=/etc/prometheus/prometheus.yml
-      - --enable-feature=remote-write-receiver
+      - --web.enable-remote-write-receiver
       - --enable-feature=exemplar-storage
     ports:
       - "9090:9090"
@@ -51,3 +52,6 @@ services:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml
     depends_on:
       - tempo
+#      - --enable-feature=remote-write-receiver
+volumes:
+  grafana-storage:

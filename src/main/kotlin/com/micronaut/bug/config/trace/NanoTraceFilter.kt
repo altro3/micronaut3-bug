@@ -1,9 +1,9 @@
 package com.micronaut.bug.config.trace
 
-import com.micronaut.bug.config.trace.NanoTracer.Companion.HEADER_EXT_RQ_ID
 import com.micronaut.bug.config.trace.NanoTracer.Companion.HEADER_TRACEPARENT
-import com.micronaut.bug.config.trace.NanoTracer.Companion.HEADER_X_RQ_ID
 import com.micronaut.bug.config.trace.NanoTracer.Companion.HEADER_X_SENDER
+import com.micronaut.bug.config.trace.NanoTracer.Companion.MDC_CLIENT
+import com.micronaut.bug.config.trace.NanoTracer.Companion.MDC_SERVER
 import com.micronaut.bug.config.trace.NanoTracer.Companion.TRACEPARENT_DELIMITER
 import com.micronaut.bug.config.trace.NanoTracer.Companion.TRACEPARENT_PREFIX
 import com.micronaut.bug.config.trace.TempoExporter.Companion.ATTR_CLIENT_ADDRESS
@@ -34,6 +34,7 @@ import org.springframework.web.filter.OncePerRequestFilter
 
 class NanoTraceFilter(
     private val tracer: NanoTracer,
+    private val selfServiceName: String,
 ) : OncePerRequestFilter() {
 
     override fun doFilterInternal(rq: HttpServletRequest, rs: HttpServletResponse, chain: FilterChain) {
@@ -49,10 +50,6 @@ class NanoTraceFilter(
                 traceId = parts[1]
                 parentId = parts[2]
             }
-        } else {
-            // legacy поддержка или генерация нового
-            traceId = rq.getHeader(HEADER_X_RQ_ID)
-            parentId = rq.getHeader(HEADER_EXT_RQ_ID)?.takeIf { it.isNotBlank() } // ID спана соседа
         }
 
         val sender = rq.getHeader(HEADER_X_SENDER) ?: DEFAULT_SENDER
@@ -64,7 +61,8 @@ class NanoTraceFilter(
             remoteParentId = parentId,
         )
 
-        MDC.put(NanoTracer.MDC_CLIENT, sender)
+        MDC.put(MDC_CLIENT, sender)
+        MDC.put(MDC_SERVER, selfServiceName)
 
         try {
             chain.doFilter(rq, rs)
@@ -94,6 +92,9 @@ class NanoTraceFilter(
                     ?.toLongOrNull()
                     ?.let { put(ATTR_HTTP_RESPONSE_BODY_SIZE, it) }
 
+                put("client", sender)
+                put("server", selfServiceName)
+
                 put(ATTR_SERVER_ADDRESS, rq.serverName)
                 put(ATTR_SERVER_PORT, rq.serverPort.toLong())
                 put(ATTR_CLIENT_ADDRESS, rq.remoteAddr)
@@ -118,13 +119,13 @@ class NanoTraceFilter(
     }
 
 
-    // Хелперы для извлечения данных (можно вынести в утилиты)
+    // Хелперы для извлечения данных
     private fun getFullUri(rq: HttpServletRequest): String =
         rq.requestURL.let { if (rq.queryString != null) it.append(QUERY_MARKER).append(rq.queryString) else it }.toString()
 
     private fun getRequestHeadersAttrs(rq: HttpServletRequest): Map<String, List<String>> =
         rq.headerNames.asSequence()
-            .filter { it !in OTEL_MAPPED_HEADERS }
+            .filter { it.lowercase() !in OTEL_MAPPED_HEADERS }
             .associate { name ->
                 val normalizedName = name.lowercase()
                 val key = "${PREFIX_HTTP_REQUEST_HEADER}$normalizedName"
@@ -133,7 +134,7 @@ class NanoTraceFilter(
 
     private fun getResponseHeadersAttrs(rs: HttpServletResponse): Map<String, List<String>> =
         rs.headerNames.asSequence()
-            .filter { it !in OTEL_MAPPED_HEADERS }
+            .filter { it.lowercase() !in OTEL_MAPPED_HEADERS }
             .associate { name ->
                 val key = "${PREFIX_HTTP_RESPONSE_HEADER}${name.lowercase()}"
                 key to rs.getHeaders(name).toList()

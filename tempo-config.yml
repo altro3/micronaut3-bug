@@ -25,8 +25,6 @@ storage:
       path: /var/tempo/traces
     wal:
       path: /var/tempo/wal
-    block:
-      version: vParquet3
 
 metrics_generator:
   registry:
@@ -34,10 +32,10 @@ metrics_generator:
       source: tempo
   processor:
     local_blocks:
-      filter_server_spans: true
+      filter_server_spans: false
       flush_to_storage: true
     service_graphs:
-      enable_client_server_prefix: true
+      enable_client_server_prefix: false
       enable_messaging_system_latency_histogram: true
   traces_storage:
     path: /tmp/tempo/generator/traces
@@ -52,7 +50,7 @@ overrides:
     ingestion:
       max_traces_per_user: 10000
     metrics_generator:
-      processors: [service-graphs, span-metrics, local-blocks] # Для крутых графиков в Grafana
+      processors: [service-graphs, span-metrics, local-blocks]
 
 # Чтобы заработал /api/v2/search/recent
 querier: {}

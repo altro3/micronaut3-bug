@@ -45,7 +45,9 @@ class TraceAutoConfig {
     @Bean
     fun nanoTraceFilterRegistration(
         tracer: NanoTracer,
-    ) = FilterRegistrationBean(NanoTraceFilter(tracer)).apply {
+        @Value("\${spring.application.name}")
+        appName: String,
+    ) = FilterRegistrationBean(NanoTraceFilter(tracer, appName)).apply {
         // Трейсинг ВСЕГДА идет первым
         order = Ordered.HIGHEST_PRECEDENCE
     }
