@@ -274,6 +274,7 @@ class TempoExporter(
                 }
                 valueBuilder.setArrayValue(arrayBuilder)
             }
+
             else -> valueBuilder.setStringValue(v.toString())
         }
 
@@ -293,6 +294,7 @@ class TempoExporter(
 
         // HTTP Request
         const val ATTR_HTTP_REQUEST_METHOD = "http.request.method"
+
         // Sizes (в байтах)
         const val ATTR_HTTP_REQUEST_BODY_SIZE = "http.request.body.size"
         const val ATTR_HTTP_RESPONSE_BODY_SIZE = "http.response.body.size"
@@ -320,6 +322,7 @@ class TempoExporter(
         const val ATTR_INTERNAL_SENDER = "app.client.id"
         const val PREFIX_HTTP_REQUEST_HEADER = "http.request.header."
         const val PREFIX_HTTP_RESPONSE_HEADER = "http.response.header."
+
         /**
          * Кастомные ключи для логгинг-фильтров
          */
