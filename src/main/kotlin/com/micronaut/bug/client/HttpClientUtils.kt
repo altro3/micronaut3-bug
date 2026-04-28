@@ -73,7 +73,7 @@ object HttpClientUtils {
                 NanoTraceClientInterceptor(
                     tracer = tracer,
                     selfServiceName = senderAppName,
-                    httpClientProps = clientProps,
+                    props = clientProps,
                 )
             )
         }
