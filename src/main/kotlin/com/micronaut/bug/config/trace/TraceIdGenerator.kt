@@ -1,4 +1,4 @@
-package com.micronaut.bug.util
+package com.micronaut.bug.config.trace
 
 import com.google.protobuf.ByteString
 import java.nio.charset.StandardCharsets
@@ -30,7 +30,7 @@ object TraceIdGenerator {
         fill(hi, buffer, 0)
         fill(lo, buffer, 16)
 
-        // Конструктор через ISO_8859_1 в Java 21+ создает компактную 
+        // Конструктор через ISO_8859_1 в Java 21+ создает компактную
         // строку (Latin-1) без валидации и лишних проверок.
         return String(buffer, StandardCharsets.ISO_8859_1)
     }

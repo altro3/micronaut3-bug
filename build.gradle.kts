@@ -40,19 +40,22 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-actuator")
     implementation("org.springframework.retry:spring-retry")
     implementation("io.projectreactor.netty:reactor-netty-http")
-    implementation("com.github.loki4j:loki-logback-appender:2.0.3")
-    implementation("com.github.loki4j:loki-protobuf:0.0.2_pb4.33.0")
-    implementation("com.google.protobuf:protobuf-java:4.34.1")
 
     // Kotlin Essential
     implementation("org.jetbrains.kotlin:kotlin-reflect")
     implementation("com.fasterxml.jackson.module:jackson-module-kotlin")
-    implementation("io.github.oshai:kotlin-logging-jvm:8.0.01")
 
     // Tracing & Logs
     implementation("ch.qos.logback:logback-classic")
-    implementation("org.wiremock:wiremock-standalone:3.13.2")
+    implementation("io.github.oshai:kotlin-logging-jvm:8.0.01")
+    implementation("com.github.loki4j:loki-logback-appender:2.0.3")
+    implementation("com.github.loki4j:loki-protobuf:0.0.2_pb4.33.0")
+    implementation("com.google.protobuf:protobuf-java:4.34.1")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core-jvm:1.10.2")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-slf4j:1.10.2")
     implementation("io.opentelemetry.proto:opentelemetry-proto:1.10.0-alpha")
+
+    implementation("org.wiremock:wiremock-standalone:3.13.2")
 
     // Testing
     testImplementation("org.springframework.boot:spring-boot-starter-test")

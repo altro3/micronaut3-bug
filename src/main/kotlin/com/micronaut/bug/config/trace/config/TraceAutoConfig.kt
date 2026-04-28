@@ -1,5 +1,6 @@
-package com.micronaut.bug.config.trace
+package com.micronaut.bug.config.trace.config
 
+import com.micronaut.bug.config.trace.TempoExporter
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBooleanProperty

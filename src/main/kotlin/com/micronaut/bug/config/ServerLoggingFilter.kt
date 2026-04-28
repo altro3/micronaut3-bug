@@ -11,7 +11,7 @@ import com.micronaut.bug.config.trace.TempoExporter.Companion.ATTR_HTTP_METHOD
 import com.micronaut.bug.config.trace.TempoExporter.Companion.ATTR_HTTP_URL
 import com.micronaut.bug.config.trace.TempoExporter.Companion.ATTR_RQ_HEADERS
 import com.micronaut.bug.config.trace.TempoExporter.Companion.ATTR_RS_HEADERS
-import com.micronaut.bug.util.TraceIdGenerator
+import com.micronaut.bug.config.trace.TraceIdGenerator
 import io.github.oshai.kotlinlogging.KotlinLogging
 import jakarta.servlet.FilterChain
 import jakarta.servlet.ReadListener

@@ -10,7 +10,7 @@ import com.micronaut.bug.client.HttpClientUtils.createRetryTemplate
 import com.micronaut.bug.client.LoggingRequestInterceptor.Companion.ATTR_EXT_RQ_ID
 import com.micronaut.bug.client.LoggingRequestInterceptor.Companion.ATTR_SKIP_LOGGING
 import com.micronaut.bug.config.trace.TempoExporter
-import com.micronaut.bug.util.TraceIdGenerator
+import com.micronaut.bug.config.trace.TraceIdGenerator
 import org.springframework.core.ParameterizedTypeReference
 import org.springframework.http.HttpHeaders.CONTENT_TYPE
 import org.springframework.http.HttpMethod

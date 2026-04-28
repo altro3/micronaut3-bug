@@ -1,6 +1,6 @@
 package com.micronaut.bug.controller
 
-import com.micronaut.bug.util.TraceIdGenerator
+import com.micronaut.bug.config.trace.TraceIdGenerator
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.DisplayName

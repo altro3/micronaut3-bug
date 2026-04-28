@@ -36,6 +36,9 @@ metrics_generator:
     local_blocks:
       filter_server_spans: true
       flush_to_storage: true
+    service_graphs:
+      enable_client_server_prefix: true
+      enable_messaging_system_latency_histogram: true
   traces_storage:
     path: /tmp/tempo/generator/traces
   storage:
