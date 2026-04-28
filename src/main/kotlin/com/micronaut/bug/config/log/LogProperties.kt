@@ -19,12 +19,12 @@ class LogProperties(
     /**
      * Включает или выключает логирование на уровне контроллеров (ServerLoggingFilter).
      */
-    var enabledControllerLogging: Boolean = true,
+    var enabled: Boolean = true,
     /**
      * Порядок выполнения фильтра в цепочке Spring Security / Servlet Filter.
      * По умолчанию имеет наивысший приоритет.
      */
-    var order: Int = Ordered.HIGHEST_PRECEDENCE,
+    var order: Int = Ordered.HIGHEST_PRECEDENCE + 1,
     /**
      * Если true, запросы к Spring Boot Actuator (/actuator) не будут логироваться.
      */
@@ -86,9 +86,9 @@ class LogProperties(
         /**
          * Паттерн для формирования структурированных метаданных (Structured Metadata).
          * Позволяет передавать высококардинальные данные (traceId, userId) без раздувания индекса Loki.
-         * Пример: "rqId=%mdc{rqId}\ntargetId=%mdc{targetId}\nextRqId=%mdc{extRqId}\nserver=%mdc{server}\nclient=%mdc{client}"
+         * Пример: "traceId=%mdc{rqId}\spanId=%mdc{extRqId}\ntargetId=%mdc{targetId}\nclient=%mdc{client}\ntarget=%mdc{target}"
          */
-        var structuredMetadata: String? = "rqId=%mdc{rqId}\ntargetId=%mdc{targetId}\nextRqId=%mdc{extRqId}\nparentId=%mdc{parentId}\nserver=%mdc{server}\nclient=%mdc{client}\nduration=%mdc{duration}",
+        var structuredMetadata: String? = "traceId=%mdc{rqId}\nspanId=%mdc{extRqId}\ntargetId=%mdc{targetId}\nclient=%mdc{client}\ntarget=%mdc{target}",
         /**
          * Добавляет специальные маркеры чтения в поток логов.
          */

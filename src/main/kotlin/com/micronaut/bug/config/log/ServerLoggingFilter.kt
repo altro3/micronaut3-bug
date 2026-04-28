@@ -1,9 +1,8 @@
-package com.micronaut.bug.config
+package com.micronaut.bug.config.log
 
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.databind.SerializationFeature
-import com.micronaut.bug.config.ServerLoggingFilter.Companion.LIMIT_TEXT_CHECK_THRESHOLD
-import com.micronaut.bug.config.log.LogProperties
+import com.micronaut.bug.config.log.ServerLoggingFilter.Companion.LIMIT_TEXT_CHECK_THRESHOLD
 import io.github.oshai.kotlinlogging.KotlinLogging
 import jakarta.servlet.FilterChain
 import jakarta.servlet.ReadListener
@@ -12,8 +11,7 @@ import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletRequestWrapper
 import jakarta.servlet.http.HttpServletResponse
 import jakarta.servlet.http.Part
-import org.springframework.http.HttpHeaders.CONTENT_DISPOSITION
-import org.springframework.http.HttpHeaders.CONTENT_TYPE
+import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpStatus
 import org.springframework.http.MediaType
 import org.springframework.util.ClassUtils
@@ -56,7 +54,7 @@ class ServerLoggingFilter(
             return
         }
 
-        val isDebugProvider = log.isDebugEnabled() && logProps.enabledControllerLogging
+        val isDebugProvider = log.isDebugEnabled() && logProps.enabled
 
         // Оборачиваем запрос: кэшируем тело, чтобы прочитать его для лога и оставить доступным для контроллера
         val currentRq = wrapRequest(rq)
@@ -242,7 +240,7 @@ class ServerLoggingFilter(
 
         return runCatching {
             bytes.toString(Charsets.UTF_8).split(delimiter)
-                .filter { it.isNotBlank() && it != DOUBLE_DASH && it.contains(CONTENT_DISPOSITION) }
+                .filter { it.isNotBlank() && it != DOUBLE_DASH && it.contains(HttpHeaders.CONTENT_DISPOSITION) }
                 .joinToString(NEW_LINE) { partRaw ->
                     val lines = partRaw.trim().lines()
                     val headerLines = lines.takeWhile { it.isNotBlank() }
@@ -261,12 +259,12 @@ class ServerLoggingFilter(
                     // Извлекаем метаданные из собранных хедеров
                     partHeaders.forEach { (k, v) ->
                         when {
-                            k.contains(CONTENT_DISPOSITION) -> {
+                            k.contains(HttpHeaders.CONTENT_DISPOSITION) -> {
                                 name = v.substringAfter(EQUALS_NAME, STRING_EMPTY).substringBefore(QUOTE)
                                 fileName = if (v.contains(MARKER_FILENAME)) v.substringAfter(EQUALS_FILENAME).substringBefore(QUOTE) else null
                             }
 
-                            k.equals(CONTENT_TYPE, ignoreCase = true) -> partCt = v
+                            k.equals(HttpHeaders.CONTENT_TYPE, ignoreCase = true) -> partCt = v
                         }
                     }
 
@@ -471,7 +469,7 @@ class ServerLoggingFilter(
          */
         private fun isBinaryContent(bytes: ByteArray, headers: Map<String, String>? = null, contentType: String? = null, fileName: String? = null): Boolean {
             // 1. Проверка на сжатие (защита от кракозябр)
-            val encoding = headers?.get(org.springframework.http.HttpHeaders.CONTENT_ENCODING)
+            val encoding = headers?.get(HttpHeaders.CONTENT_ENCODING)
             if (!encoding.isNullOrEmpty() && COMPRESSION_ENCODINGS.any { encoding.contains(it, ignoreCase = true) } || isGzipSignature(bytes)) {
                 return true
             }

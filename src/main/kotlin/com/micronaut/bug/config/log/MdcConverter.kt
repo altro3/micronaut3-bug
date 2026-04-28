@@ -2,7 +2,6 @@ package com.micronaut.bug.config.log
 
 import ch.qos.logback.classic.pattern.ClassicConverter
 import ch.qos.logback.classic.spi.ILoggingEvent
-import com.micronaut.bug.config.ServerLoggingFilter.Companion.MDC_RQ_ID
 
 class MdcConverter : ClassicConverter() {
 
@@ -59,6 +58,7 @@ class MdcConverter : ClassicConverter() {
 
     companion object {
         const val MDC_TARGET_ID = "targetId"
+        const val MDC_RQ_ID = "rqId"
 
         @Volatile
         var keys: List<String> = emptyList()

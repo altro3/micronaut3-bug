@@ -1,6 +1,5 @@
 package com.micronaut.bug.config.trace
 
-import com.micronaut.bug.client.HttpClientConst
 import com.micronaut.bug.config.trace.NanoTracer.Companion.HEADER_EXT_RQ_ID
 import com.micronaut.bug.config.trace.NanoTracer.Companion.HEADER_X_RQ_ID
 import com.micronaut.bug.config.trace.NanoTracer.Companion.HEADER_X_SENDER
@@ -80,11 +79,13 @@ class NanoTraceFilter(
         private const val MASK = "***"
         private const val ERROR_STATUS_THRESHOLD = 400
 
+        const val HEADER_API_KEY = "api-key"
+
         private val SENSITIVE_HEADERS = setOf(
             HttpHeaders.AUTHORIZATION,
             HttpHeaders.COOKIE,
             HttpHeaders.SET_COOKIE,
-            HttpClientConst.HEADER_API_KEY,
+            HEADER_API_KEY,
         )
     }
 }
