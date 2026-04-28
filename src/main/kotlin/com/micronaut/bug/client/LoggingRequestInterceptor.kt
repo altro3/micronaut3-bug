@@ -524,7 +524,7 @@ class LoggingRequestInterceptor(
         private const val NEW_LINE = "\n"
         private const val COLON_SPACE = ": "
         private const val QUOTE = "\""
-        private const val SLASH = "/"
+        const val SLASH = "/"
         private const val SEMICOLON = ";"
         private const val DOUBLE_DASH = "--"
 

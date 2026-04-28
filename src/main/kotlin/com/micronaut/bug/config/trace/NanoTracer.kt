@@ -1,7 +1,9 @@
 package com.micronaut.bug.config.trace
 
 import com.micronaut.bug.config.trace.TempoExporter.Companion.ATTR_ERROR_MESSAGE
-import com.micronaut.bug.config.trace.TempoExporter.Companion.ATTR_ERROR_TYPE
+import com.micronaut.bug.config.trace.TempoExporter.Companion.ATTR_EXCEPTION_MESSAGE
+import com.micronaut.bug.config.trace.TempoExporter.Companion.ATTR_EXCEPTION_STACKTRACE
+import com.micronaut.bug.config.trace.TempoExporter.Companion.ATTR_EXCEPTION_TYPE
 import com.micronaut.bug.config.trace.TraceIdGenerator.generate
 import com.micronaut.bug.config.trace.TraceIdGenerator.generateSpanId
 import io.opentelemetry.proto.trace.v1.Span.SpanKind
@@ -25,6 +27,23 @@ class NanoTracer(
 
     @PublishedApi
     internal fun getCurrentEpochNanos(): Long = System.nanoTime() + clockOffsetNanos
+
+    /**
+     * Формирует значение заголовка 'traceparent' согласно стандарту W3C Trace Context.
+     * Используется для проброса контекста (propagation) в исходящие HTTP-запросы.
+     *
+     * Формат: 00-{traceId}-{spanId}-{flags}
+     * - 00: версия протокола.
+     * - traceId: 32-символьный hex-идентификатор всей цепочки.
+     * - spanId: 16-символьный hex-идентификатор текущего сегмента (спана).
+     * - 01: флаги (в данном случае 'sampled', означающий обязательную запись трейса).
+     *
+     * @return Строка заголовка или null, если контекст трейсинга отсутствует.
+     */
+    fun getTraceParent(): String? {
+        val current = internalStack.get().firstOrNull() ?: return null
+        return "$TRACEPARENT_PREFIX${current.traceId}-${current.spanId}-01"
+    }
 
     /**
      * Стартует точку входа в сервис.
@@ -115,8 +134,9 @@ class NanoTracer(
             }
         } catch (e: Exception) {
             report.status = StatusCode.STATUS_CODE_ERROR
-            report.attrs[ATTR_ERROR_MESSAGE] = e.message ?: e.javaClass.simpleName
-            report.attrs[ATTR_ERROR_TYPE] = e.javaClass.name
+            report.attrs[ATTR_EXCEPTION_TYPE] = e.javaClass.name
+            report.attrs[ATTR_EXCEPTION_MESSAGE] = e.message ?: e.javaClass.simpleName
+            report.attrs[ATTR_EXCEPTION_STACKTRACE] = e.stackTraceToString()
             throw e
         } finally {
             stop(
@@ -173,9 +193,15 @@ class NanoTracer(
         const val MDC_EXT_RQ_ID = "extRqId"
         const val MDC_CLIENT = "client"
 
+        // Стандартные заголовки (Legacy)
         const val HEADER_X_RQ_ID = "x-rq-id"
         const val HEADER_EXT_RQ_ID = "x-ext-rq-id"
         const val HEADER_X_SENDER = "x-sender"
+
+        // W3C Trace Context (Стандарт OTel)
+        const val HEADER_TRACEPARENT = "traceparent"
+        const val TRACEPARENT_PREFIX = "00-"
+        const val TRACEPARENT_DELIMITER = "-"
 
         /**
          * Количество наносекунд в одной секунде
