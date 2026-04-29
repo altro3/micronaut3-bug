@@ -4,45 +4,61 @@ import org.slf4j.MDC
 import org.springframework.core.task.TaskDecorator
 
 /**
- * Декоратор для задач [org.springframework.core.task.TaskExecutor], обеспечивающий
- * перенос контекста трассировки между потоками.
+ * Декоратор для задач [org.springframework.core.task.TaskExecutor] и [org.springframework.scheduling.TaskScheduler],
+ * обеспечивающий перенос или инициализацию контекста трассировки между потоками.
  *
- * В Spring Framework выполнение задач с аннотацией `@Async` или через пул потоков
- * происходит в отдельном потоке, где ThreadLocal переменные родителя (включая MDC и стек спанов)
- * отсутствуют. Данный декоратор делает "снимок" состояния NanoTracer и MDC в момент
- * постановки задачи в очередь и восстанавливает их непосредственно перед выполнением в целевом потоке.
+ * В Spring Framework выполнение задач с аннотациями `@Async` или `@Scheduled` происходит в отдельных
+ * потоках пула, где стандартные ThreadLocal переменные родителя (включая MDC и стек спанов) отсутствуют.
+ * Данный декоратор решает эту проблему, управляя жизненным циклом [com.micronaut.bug.config.trace.TraceContext].
+ *
+ * ### Сценарии использования:
+ * 1. **Асинхронные задачи (@Async):**
+ *    Декоратор делает "снимок" состояния родительского потока и восстанавливает его в дочернем.
+ *    В Grafana Tempo это отображается как дочерний спан (Child Span), связанный с основным запросом.
+ *
+ * 2. **Планировщик (@Scheduled):**
+ *    Поскольку у фоновых задач нет родительского HTTP-запроса, декоратор обнаруживает пустой контекст
+ *    и автоматически инициирует новый корневой трейс (Root Trace). Это позволяет мониторить
+ *    производительность шедулеров и искать их логи по уникальному `rqId`.
  *
  * ### Механика работы:
- * 1. В родительском потоке выполняется [decorate]: создаются копии стека и MDC.
- * 2. В дочернем потоке (внутри созданного Runnable):
- *    - Сохраняется старое состояние потока (на случай переиспользования в пуле).
- *    - Устанавливается скопированный контекст.
- *    - Выполняется бизнес-логика.
- *    - **Важно:** В блоке `finally` происходит полная очистка контекста для предотвращения "утечки"
- *      данных в следующие задачи этого же потока.
+ * 1. В момент постановки задачи в очередь выполняется [decorate] (в родительском потоке): создается снимок стека.
+ * 2. Перед выполнением задачи (в дочернем потоке):
+ *    - Восстанавливается снимок или создается новый корневой контекст.
+ *    - Открывается новый спан через `tracer.startSpan`.
+ *    - В блоке `finally` спан закрывается, а поток полностью очищается для предотвращения "утечки"
+ *      данных между задачами в пуле.
  *
- * ### Пример настройки в конфигурации:
+ * ### Пример настройки для @Async и @Scheduled:
  * ```kotlin
+ * // Для @Async
  * @Bean
- * fun taskExecutor(tracer: NanoTracer): Executor {
- *     val executor = ThreadPoolTaskExecutor()
- *     executor.corePoolSize = 5
- *     executor.setTaskDecorator(TracingTaskDecorator(tracer)) // Регистрация декоратора
- *     executor.initialize()
- *     return executor
- * }
+ * fun taskExecutor(tracer: NanoTracer, props: TraceProperties): Executor =
+ *     ThreadPoolTaskExecutor().apply {
+ *         setTaskDecorator(TracingTaskDecorator(tracer, props))
+ *         initialize()
+ *     }
+ *
+ * // Для @Scheduled
+ * @Bean
+ * fun taskScheduler(tracer: NanoTracer, props: TraceProperties): TaskScheduler =
+ *     ThreadPoolTaskScheduler().apply {
+ *         setTaskDecorator(TracingTaskDecorator(tracer, props))
+ *         initialize()
+ *     }
  * ```
  *
- * ### Пример использования:
+ * ### Пример логирования в @Scheduled:
  * ```kotlin
- * @Async
- * fun processInBackground() {
- *     // Здесь MDC.get("rqId") вернет тот же ID, что был в контроллере
- *     log.info { "Задание выполняется в другом потоке, но с тем же traceId" }
+ * @Scheduled(fixedRate = 10000)
+ * fun heartBeat() {
+ *     // В каждой итерации будет новый rqId в консоли и новый трейс в Tempo
+ *     log.info { "System heart beat" }
  * }
  * ```
  *
- * @property tracer Экземпляр [NanoTracer], содержащий ThreadLocal стек контекстов.
+ * @property tracer Экземпляр [NanoTracer] для управления стеком контекстов.
+ * @property traceProps Настройки трейсинга для проверки флага включения (enabled).
  */
 class TracingTaskDecorator(
     private val tracer: NanoTracer? = null,
