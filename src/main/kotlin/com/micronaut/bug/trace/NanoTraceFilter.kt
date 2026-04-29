@@ -1,31 +1,31 @@
 package com.micronaut.bug.trace
 
+import com.micronaut.bug.trace.NanoTracer.Companion.ATTR_CLIENT
+import com.micronaut.bug.trace.NanoTracer.Companion.ATTR_CLIENT_ADDRESS
+import com.micronaut.bug.trace.NanoTracer.Companion.ATTR_EXCEPTION_MESSAGE
+import com.micronaut.bug.trace.NanoTracer.Companion.ATTR_HTTP_REQUEST_BODY_SIZE
+import com.micronaut.bug.trace.NanoTracer.Companion.ATTR_HTTP_REQUEST_METHOD
+import com.micronaut.bug.trace.NanoTracer.Companion.ATTR_HTTP_RESPONSE_BODY_SIZE
+import com.micronaut.bug.trace.NanoTracer.Companion.ATTR_HTTP_RESPONSE_STATUS_CODE
+import com.micronaut.bug.trace.NanoTracer.Companion.ATTR_SERVER
+import com.micronaut.bug.trace.NanoTracer.Companion.ATTR_SERVER_ADDRESS
+import com.micronaut.bug.trace.NanoTracer.Companion.ATTR_SERVER_PORT
+import com.micronaut.bug.trace.NanoTracer.Companion.ATTR_URL_FULL
+import com.micronaut.bug.trace.NanoTracer.Companion.ATTR_URL_PATH
+import com.micronaut.bug.trace.NanoTracer.Companion.ATTR_URL_QUERY
+import com.micronaut.bug.trace.NanoTracer.Companion.ATTR_URL_SCHEME
+import com.micronaut.bug.trace.NanoTracer.Companion.ATTR_USER_AGENT_ORIGINAL
 import com.micronaut.bug.trace.NanoTracer.Companion.HEADER_BAGGAGE
 import com.micronaut.bug.trace.NanoTracer.Companion.HEADER_TRACEPARENT
 import com.micronaut.bug.trace.NanoTracer.Companion.HEADER_X_SENDER
 import com.micronaut.bug.trace.NanoTracer.Companion.MDC_CLIENT
 import com.micronaut.bug.trace.NanoTracer.Companion.MDC_SERVER
+import com.micronaut.bug.trace.NanoTracer.Companion.OTEL_MAPPED_HEADERS
+import com.micronaut.bug.trace.NanoTracer.Companion.PREFIX_HTTP_REQUEST_HEADER
+import com.micronaut.bug.trace.NanoTracer.Companion.PREFIX_HTTP_RESPONSE_HEADER
 import com.micronaut.bug.trace.NanoTracer.Companion.TRACEPARENT_DELIMITER
 import com.micronaut.bug.trace.NanoTracer.Companion.TRACEPARENT_PREFIX
 import com.micronaut.bug.trace.NanoTracer.Companion.parseBaggage
-import com.micronaut.bug.trace.TempoExporter.Companion.ATTR_CLIENT
-import com.micronaut.bug.trace.TempoExporter.Companion.ATTR_CLIENT_ADDRESS
-import com.micronaut.bug.trace.TempoExporter.Companion.ATTR_EXCEPTION_MESSAGE
-import com.micronaut.bug.trace.TempoExporter.Companion.ATTR_HTTP_REQUEST_BODY_SIZE
-import com.micronaut.bug.trace.TempoExporter.Companion.ATTR_HTTP_REQUEST_METHOD
-import com.micronaut.bug.trace.TempoExporter.Companion.ATTR_HTTP_RESPONSE_BODY_SIZE
-import com.micronaut.bug.trace.TempoExporter.Companion.ATTR_HTTP_RESPONSE_STATUS_CODE
-import com.micronaut.bug.trace.TempoExporter.Companion.ATTR_SERVER
-import com.micronaut.bug.trace.TempoExporter.Companion.ATTR_SERVER_ADDRESS
-import com.micronaut.bug.trace.TempoExporter.Companion.ATTR_SERVER_PORT
-import com.micronaut.bug.trace.TempoExporter.Companion.ATTR_URL_FULL
-import com.micronaut.bug.trace.TempoExporter.Companion.ATTR_URL_PATH
-import com.micronaut.bug.trace.TempoExporter.Companion.ATTR_URL_QUERY
-import com.micronaut.bug.trace.TempoExporter.Companion.ATTR_URL_SCHEME
-import com.micronaut.bug.trace.TempoExporter.Companion.ATTR_USER_AGENT_ORIGINAL
-import com.micronaut.bug.trace.TempoExporter.Companion.OTEL_MAPPED_HEADERS
-import com.micronaut.bug.trace.TempoExporter.Companion.PREFIX_HTTP_REQUEST_HEADER
-import com.micronaut.bug.trace.TempoExporter.Companion.PREFIX_HTTP_RESPONSE_HEADER
 import com.micronaut.bug.trace.config.TraceProperties
 import io.opentelemetry.proto.trace.v1.Status
 import jakarta.servlet.FilterChain
@@ -61,24 +61,27 @@ class NanoTraceFilter(
         val sender = rq.getHeader(HEADER_X_SENDER) ?: DEFAULT_SENDER
 
         val baggage = mutableMapOf<String, String>()
-        // 1. Читаем стандартный багаж (если пришел)
+        // Читаем стандартный багаж (если пришел)
         rq.getHeader(HEADER_BAGGAGE)?.let {
             baggage.putAll(parseBaggage(it))
         }
 
-        // 2. Читаем заголовки для проброски из конфига
+        // Читаем заголовки для проброски из конфига
         val propagationHeaders = traceProps.propagationHeaders
             .associateWith { rq.getHeader(it) }
             .filterValues { it != null }
             .mapKeys { it.key.lowercase() }
 
-        // 2. Стартуем трейс, учитывая родителя
+        val traceState = rq.getHeader(NanoTracer.HEADER_TRACESTATE)
+
+        // Стартуем трейс, учитывая родителя
         val ctx = tracer.startTrace(
             name = "${rq.method} ${rq.requestURI}",
             remoteTraceId = traceId,
             remoteParentId = parentId,
             baggage = baggage,
             propagationHeaders = propagationHeaders,
+            traceState = traceState,
         )
 
         MDC.put(MDC_CLIENT, sender)

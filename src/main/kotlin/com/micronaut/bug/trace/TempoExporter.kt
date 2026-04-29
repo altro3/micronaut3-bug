@@ -1,5 +1,6 @@
 package com.micronaut.bug.trace
 
+import com.micronaut.bug.trace.NanoTracer.Companion.ATTR_SERVICE_NAME
 import com.micronaut.bug.trace.TraceIdGenerator.toByteString
 import com.micronaut.bug.trace.config.TraceProperties
 import io.github.oshai.kotlinlogging.KotlinLogging
@@ -283,59 +284,5 @@ class TempoExporter(
         }
 
         return builder.setValue(valueBuilder.build()).build()
-    }
-
-    companion object {
-
-        val OTEL_MAPPED_HEADERS = setOf(
-            HttpHeaders.CONTENT_LENGTH.lowercase(),
-            HttpHeaders.CONTENT_TYPE.lowercase(),
-            HttpHeaders.USER_AGENT.lowercase(),
-            // Сюда можно добавить host, так как он уходит в server.address
-            HttpHeaders.HOST.lowercase(),
-        )
-
-        /**
-         * Стандартные ключи атрибутов OpenTelemetry
-         */
-        // Resource (Service)
-        const val ATTR_SERVICE_NAME = "service.name"
-
-        const val ATTR_SERVER_ADDRESS = "server.address"
-        const val ATTR_SERVER_PORT = "server.port"
-        const val ATTR_CLIENT_ADDRESS = "client.address"
-
-        // HTTP Request
-        const val ATTR_HTTP_REQUEST_METHOD = "http.request.method"
-        const val ATTR_HTTP_REQUEST_BODY_SIZE = "http.request.body.size"
-        const val PREFIX_HTTP_REQUEST_HEADER = "http.request.header."
-
-        const val ATTR_URL_FULL = "url.full"
-        const val ATTR_URL_SCHEME = "url.scheme"
-        const val ATTR_URL_PATH = "url.path"
-        const val ATTR_URL_QUERY = "url.query"
-        const val ATTR_USER_AGENT_ORIGINAL = "user_agent.original"
-
-        // HTTP Response
-        const val ATTR_HTTP_RESPONSE_STATUS_CODE = "http.response.status_code"
-        const val ATTR_HTTP_RESPONSE_BODY_SIZE = "http.response.body.size"
-        const val PREFIX_HTTP_RESPONSE_HEADER = "http.response.header."
-
-        // Exceptions
-        const val ATTR_EXCEPTION_TYPE = "exception.type"
-        const val ATTR_EXCEPTION_MESSAGE = "exception.message"
-        const val ATTR_EXCEPTION_STACKTRACE = "exception.stacktrace"
-
-        const val ATTR_CLIENT = "client"
-        const val ATTR_SERVER = "server"
-        const val ATTR_PEER_SERVICE = "peer.service"
-
-        /**
-         * Кастомные ключи для логгинг-фильтров
-         */
-        const val ATTR_ERROR_MESSAGE = "error.message"
-        const val ATTR_ERROR_TYPE = "error.type"
-        const val PREFIX_BAGGAGE = "baggage."
-        const val PREFIX_PROPAGATION = "prop."
     }
 }

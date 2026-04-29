@@ -1,17 +1,15 @@
 package com.micronaut.bug.trace
 
-import com.micronaut.bug.trace.TempoExporter.Companion.ATTR_ERROR_MESSAGE
-import com.micronaut.bug.trace.TempoExporter.Companion.ATTR_EXCEPTION_MESSAGE
-import com.micronaut.bug.trace.TempoExporter.Companion.ATTR_EXCEPTION_STACKTRACE
-import com.micronaut.bug.trace.TempoExporter.Companion.ATTR_EXCEPTION_TYPE
-import com.micronaut.bug.trace.TempoExporter.Companion.PREFIX_BAGGAGE
-import com.micronaut.bug.trace.TempoExporter.Companion.PREFIX_PROPAGATION
 import com.micronaut.bug.trace.TraceIdGenerator.generate
 import com.micronaut.bug.trace.TraceIdGenerator.generateSpanId
 import io.opentelemetry.proto.trace.v1.Span.SpanKind
 import io.opentelemetry.proto.trace.v1.Status.StatusCode
 import kotlinx.coroutines.withContext
 import org.slf4j.MDC
+import org.springframework.http.HttpHeaders.CONTENT_LENGTH
+import org.springframework.http.HttpHeaders.CONTENT_TYPE
+import org.springframework.http.HttpHeaders.HOST
+import org.springframework.http.HttpHeaders.USER_AGENT
 import java.time.Instant
 import java.util.Deque
 
@@ -61,6 +59,7 @@ class NanoTracer(
      * @param remoteParentId ID родительского спана из внешней системы.
      * @param baggage Набор данных, полученный из стандартного W3C-заголовка "baggage".
      * @param propagationHeaders Заголовки, которые необходимо пробрасывать "как есть" во все клиенты.
+     * @param traceState Сырая строка из заголовка "tracestate" для обеспечения совместимости.
      * @return Созданный и помещенный в стек [TraceContext].
      */
     fun startTrace(
@@ -69,8 +68,9 @@ class NanoTracer(
         remoteParentId: String? = null,
         baggage: Map<String, String> = emptyMap(),
         propagationHeaders: Map<String, String> = emptyMap(),
-    ): TraceContext {
-        val ctx = TraceContext(
+        traceState: String? = null,
+    ) = pushAndSync(
+        TraceContext(
             traceId = remoteTraceId ?: generate(),
             spanId = generateSpanId(),
             parentId = remoteParentId, // Если он пришел, мы станем вложенным трейсом
@@ -78,16 +78,17 @@ class NanoTracer(
             startEpochNanos = getCurrentEpochNanos(),
             baggage = baggage,
             propagationHeaders = propagationHeaders,
+            traceState = traceState,
         )
-        return pushAndSync(ctx)
-    }
+    )
 
     /**
      * Создает и активирует дочерний спан, наследуя контекст от текущего активного спана.
      * Если активный контекст отсутствует, метод автоматически создает корневой трейс.
      *
-     * Наследует [TraceContext.baggage] и [TraceContext.propagationHeaders], обеспечивая
-     * сквозную передачу метаданных по всей цепочке вызовов внутри сервиса и за его пределы.
+     * Наследует [TraceContext.baggage], [TraceContext.propagationHeaders] и
+     * [TraceContext.traceState] от родителя. Если родитель отсутствует в текущем
+     * потоке, инициализирует новый трейс.
      *
      * @param name Имя вложенной операции (например, "SERVICE: processOrder" или "CLIENT: callPaymentApi").
      * @return Новый [TraceContext], ставший вершиной стека в текущем потоке.
@@ -98,16 +99,18 @@ class NanoTracer(
             return startTrace(name)
         }
 
-        val ctx = TraceContext(
-            traceId = parent.traceId, // Наследуем traceId
-            spanId = generateSpanId(),
-            parentId = parent.spanId,
-            name = name,
-            startEpochNanos = getCurrentEpochNanos(),
-            baggage = parent.baggage,
-            propagationHeaders = parent.propagationHeaders,
+        return pushAndSync(
+            TraceContext(
+                traceId = parent.traceId, // Наследуем traceId
+                spanId = generateSpanId(),
+                parentId = parent.spanId,
+                name = name,
+                startEpochNanos = getCurrentEpochNanos(),
+                baggage = parent.baggage,
+                propagationHeaders = parent.propagationHeaders,
+                traceState = parent.traceState,
+            )
         )
-        return pushAndSync(ctx)
     }
 
     /**
@@ -144,7 +147,7 @@ class NanoTracer(
             endEpochNanos = endNs,
             status = status,
             kind = kind,
-            attrs = finalAttrs ,
+            attrs = finalAttrs,
         )
         syncMdc()
     }
@@ -234,8 +237,64 @@ class NanoTracer(
         // W3C Trace Context (Стандарт OTel)
         const val HEADER_TRACEPARENT = "traceparent"
         const val HEADER_BAGGAGE = "baggage"
+        const val HEADER_TRACESTATE = "tracestate"
         const val TRACEPARENT_PREFIX = "00-"
         const val TRACEPARENT_DELIMITER = "-"
+
+        val OTEL_MAPPED_HEADERS = setOf(
+            CONTENT_LENGTH.lowercase(),
+            CONTENT_TYPE.lowercase(),
+            USER_AGENT.lowercase(),
+            // Сюда можно добавить host, так как он уходит в server.address
+            HOST.lowercase(),
+            // Добавляем сюда заголовки трейсинга, чтобы они не попадали в атрибуты
+            HEADER_TRACEPARENT.lowercase(),
+            HEADER_TRACESTATE.lowercase(),
+            HEADER_BAGGAGE.lowercase(), // Багаж мы и так пишем отдельно с префиксом "baggage."
+        )
+
+        /**
+         * Стандартные ключи атрибутов OpenTelemetry
+         */
+        // Resource (Service)
+        const val ATTR_SERVICE_NAME = "service.name"
+
+        const val ATTR_SERVER_ADDRESS = "server.address"
+        const val ATTR_SERVER_PORT = "server.port"
+        const val ATTR_CLIENT_ADDRESS = "client.address"
+
+        // HTTP Request
+        const val ATTR_HTTP_REQUEST_METHOD = "http.request.method"
+        const val ATTR_HTTP_REQUEST_BODY_SIZE = "http.request.body.size"
+        const val PREFIX_HTTP_REQUEST_HEADER = "http.request.header."
+
+        const val ATTR_URL_FULL = "url.full"
+        const val ATTR_URL_SCHEME = "url.scheme"
+        const val ATTR_URL_PATH = "url.path"
+        const val ATTR_URL_QUERY = "url.query"
+        const val ATTR_USER_AGENT_ORIGINAL = "user_agent.original"
+
+        // HTTP Response
+        const val ATTR_HTTP_RESPONSE_STATUS_CODE = "http.response.status_code"
+        const val ATTR_HTTP_RESPONSE_BODY_SIZE = "http.response.body.size"
+        const val PREFIX_HTTP_RESPONSE_HEADER = "http.response.header."
+
+        // Exceptions
+        const val ATTR_EXCEPTION_TYPE = "exception.type"
+        const val ATTR_EXCEPTION_MESSAGE = "exception.message"
+        const val ATTR_EXCEPTION_STACKTRACE = "exception.stacktrace"
+
+        const val ATTR_CLIENT = "client"
+        const val ATTR_SERVER = "server"
+        const val ATTR_PEER_SERVICE = "peer.service"
+
+        /**
+         * Кастомные ключи для логгинг-фильтров
+         */
+        const val ATTR_ERROR_MESSAGE = "error.message"
+        const val ATTR_ERROR_TYPE = "error.type"
+        const val PREFIX_BAGGAGE = "baggage."
+        const val PREFIX_PROPAGATION = "prop."
 
         /**
          * Количество наносекунд в одной секунде

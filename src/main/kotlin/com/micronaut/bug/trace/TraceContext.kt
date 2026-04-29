@@ -20,6 +20,10 @@ package com.micronaut.bug.trace
  * @property propagationHeaders Набор пользовательских заголовков, которые должны пробрасываться
  * в неизменном виде ("как есть") во все исходящие HTTP-запросы. Ключи хранятся в нижнем
  * регистре для обеспечения регистронезависимого сравнения.
+ *
+ * @property traceState Вендор-специфичные данные согласно W3C Trace Context.
+ * Хранятся как непрозрачная (opaque) строка и передаются без изменений для обеспечения
+ * совместимости между различными вендорами трассировки.
  */
 data class TraceContext(
     val traceId: String,
@@ -29,4 +33,5 @@ data class TraceContext(
     val startEpochNanos: Long,
     val baggage: Map<String, String> = emptyMap(),
     val propagationHeaders: Map<String, String> = emptyMap(),
+    val traceState: String? = null,
 )
