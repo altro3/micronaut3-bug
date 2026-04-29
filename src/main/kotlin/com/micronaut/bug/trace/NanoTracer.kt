@@ -117,15 +117,19 @@ class NanoTracer(
     }
 
     /**
-     * Завершает операцию, удаляет контекст из стека и отправляет данные в Tempo.
-     * Автоматически добавляет [TraceContext.baggage] и [TraceContext.propagationHeaders]
-     * в атрибуты спана для обеспечения возможности поиска в UI Grafana.
+     * Завершает операцию и отправляет данные в экспортер.
+     *
+     * @param ctx контекст завершаемого спана.
+     * @param status статус завершения (OK/ERROR).
+     * @param attrs дополнительные метаданные.
+     * @param forceExport если true — игнорирует [sampleRate] и всегда отправляет спан (для ошибок и тормозов).
      */
     fun stop(
         ctx: TraceContext,
         status: StatusCode = StatusCode.STATUS_CODE_OK,
         kind: SpanKind = SpanKind.SPAN_KIND_SERVER,
         attrs: Map<String, Any> = emptyMap(),
+        forceExport: Boolean = false,
     ) {
 
         val stack = internalStack.get()
@@ -134,26 +138,28 @@ class NanoTracer(
         // 1. Проверяем, является ли спан ошибочным
         val isError = ctx.error != null || status == StatusCode.STATUS_CODE_ERROR
 
-        // 2. Решаем, нужно ли сэмплировать (пропускать) этот трейс
-        // Если это не ошибка И мы не попали в процент вероятности — выходим сразу
-        if (!isError && ThreadLocalRandom.current().nextDouble() >= traceProps.sampleRate) {
+        // Решение об экспорте:
+        // 1. Либо это принудительный экспорт (ошибка, медленный запрос)
+        // 2. Либо попали в рандом по sampleRate
+        if (!isError && !forceExport && ThreadLocalRandom.current().nextDouble() >= traceProps.sampleRate) {
             syncMdc()
             return
         }
 
         // Объединяем пользовательские атрибуты с метаданными контекста
         val finalAttrs = attrs.toMutableMap().apply {
+
+            // Если в контексте зафиксирована ошибка, вытаскиваем её данные
+            ctx.error?.let {
+                put(ATTR_EXCEPTION_TYPE, it.javaClass.name)
+                put(ATTR_EXCEPTION_MESSAGE, it.message ?: it.javaClass.simpleName)
+                put(ATTR_EXCEPTION_STACKTRACE, it.stackTraceToString())
+            }
+
             // Добавляем багаж (W3C) с префиксом
             ctx.baggage.forEach { (k, v) -> put("$PREFIX_BAGGAGE$k", v) }
             // Добавляем заголовки проброса с префиксом
             ctx.propagationHeaders.forEach { (k, v) -> put("$PREFIX_PROPAGATION$k", v) }
-        }
-
-        // Если в контексте зафиксирована ошибка, вытаскиваем её данные
-        ctx.error?.let {
-            finalAttrs[ATTR_EXCEPTION_TYPE] = it.javaClass.name
-            finalAttrs[ATTR_EXCEPTION_MESSAGE] = it.message ?: it.javaClass.simpleName
-            finalAttrs[ATTR_EXCEPTION_STACKTRACE] = it.stackTraceToString()
         }
 
         exporter.enqueue(
@@ -323,6 +329,11 @@ class NanoTracer(
         const val ATTR_ERROR_TYPE = "error.type"
         const val PREFIX_BAGGAGE = "baggage."
         const val PREFIX_PROPAGATION = "prop."
+        /**
+         * Флаг аномально медленного запроса.
+         * Позволяет быстро отфильтровать трейсы с задержкой выше установленного порога.
+         */
+        const val ATTR_HTTP_SLOW_REQUEST = "http.slow_request"
 
         /**
          * Количество наносекунд в одной секунде

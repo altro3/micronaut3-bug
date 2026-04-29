@@ -124,6 +124,10 @@ class HttpClientProperties(
          */
         @field:NotNull
         var prettyPrint: Boolean = true,
+        /**
+         * Индивидуальный порог медленного ответа для конкретного внешнего сервиса.
+         */
+        var slowThreshold: Duration = Duration.ofSeconds(10),
     )
 
     class RetryBackoffProperties(

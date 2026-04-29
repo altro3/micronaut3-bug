@@ -7,6 +7,7 @@ import com.micronaut.bug.trace.NanoTracer.Companion.ATTR_HTTP_REQUEST_BODY_SIZE
 import com.micronaut.bug.trace.NanoTracer.Companion.ATTR_HTTP_REQUEST_METHOD
 import com.micronaut.bug.trace.NanoTracer.Companion.ATTR_HTTP_RESPONSE_BODY_SIZE
 import com.micronaut.bug.trace.NanoTracer.Companion.ATTR_HTTP_RESPONSE_STATUS_CODE
+import com.micronaut.bug.trace.NanoTracer.Companion.ATTR_HTTP_SLOW_REQUEST
 import com.micronaut.bug.trace.NanoTracer.Companion.ATTR_SERVER
 import com.micronaut.bug.trace.NanoTracer.Companion.ATTR_SERVER_ADDRESS
 import com.micronaut.bug.trace.NanoTracer.Companion.ATTR_SERVER_PORT
@@ -27,6 +28,7 @@ import com.micronaut.bug.trace.NanoTracer.Companion.TRACEPARENT_DELIMITER
 import com.micronaut.bug.trace.NanoTracer.Companion.TRACEPARENT_PREFIX
 import com.micronaut.bug.trace.NanoTracer.Companion.parseBaggage
 import com.micronaut.bug.trace.config.TraceProperties
+import io.github.oshai.kotlinlogging.KotlinLogging
 import io.opentelemetry.proto.trace.v1.Status
 import jakarta.servlet.FilterChain
 import jakarta.servlet.http.HttpServletRequest
@@ -43,7 +45,10 @@ class NanoTraceFilter(
     private val selfServiceName: String,
 ) : OncePerRequestFilter() {
 
+    private val log = KotlinLogging.logger {}
+
     override fun doFilterInternal(rq: HttpServletRequest, rs: HttpServletResponse, chain: FilterChain) {
+        val startTimeNano = System.nanoTime()
         // 1. Извлекаем данные из заголовков
 
         val traceParent = rq.getHeader(HEADER_TRACEPARENT)
@@ -93,6 +98,14 @@ class NanoTraceFilter(
             chain.doFilter(rq, rs)
         } finally {
 
+            val durationMs = (System.nanoTime() - startTimeNano) / 1_000_000
+            val isSlow = durationMs >= traceProps.slowRequestThreshold.toMillis()
+
+            // Если запрос медленный — пишем WARN лог, чтобы сразу подсветить проблему в Loki
+            if (isSlow) {
+                log.warn { "Slow request detected: ${rq.method} ${rq.requestURI} took ${durationMs}ms" }
+            }
+
             val isError = rs.status >= ERROR_STATUS_THRESHOLD
 
             // Собираем базовые атрибуты по стандарту OTel
@@ -110,6 +123,10 @@ class NanoTraceFilter(
                     if (reqSize != -1L) {
                         put(ATTR_HTTP_REQUEST_BODY_SIZE, reqSize)
                     }
+                }
+
+                if (isSlow) {
+                    put(ATTR_HTTP_SLOW_REQUEST, true)
                 }
 
                 // В HttpServletResponse размер можно вытащить через Content-Length
@@ -137,6 +154,7 @@ class NanoTraceFilter(
                 ctx = ctx,
                 status = if (isError) Status.StatusCode.STATUS_CODE_ERROR else Status.StatusCode.STATUS_CODE_OK,
                 attrs = attrs,
+                forceExport = isSlow,
             )
             MDC.clear()
         }

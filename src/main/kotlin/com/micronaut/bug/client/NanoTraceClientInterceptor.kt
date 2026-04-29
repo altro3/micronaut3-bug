@@ -21,12 +21,14 @@ import com.micronaut.bug.trace.NanoTracer.Companion.HEADER_BAGGAGE
 import com.micronaut.bug.trace.NanoTracer.Companion.HEADER_TRACEPARENT
 import com.micronaut.bug.trace.NanoTracer.Companion.HEADER_X_SENDER
 import com.micronaut.bug.trace.NanoTracer.Companion.MDC_CLIENT
+import com.micronaut.bug.trace.NanoTracer.Companion.MDC_EXT_RQ_ID
 import com.micronaut.bug.trace.NanoTracer.Companion.MDC_SERVER
 import com.micronaut.bug.trace.NanoTracer.Companion.OTEL_MAPPED_HEADERS
 import com.micronaut.bug.trace.NanoTracer.Companion.PREFIX_BAGGAGE
 import com.micronaut.bug.trace.NanoTracer.Companion.PREFIX_HTTP_REQUEST_HEADER
 import com.micronaut.bug.trace.NanoTracer.Companion.PREFIX_HTTP_RESPONSE_HEADER
 import com.micronaut.bug.trace.NanoTracer.Companion.formatBaggage
+import io.github.oshai.kotlinlogging.KotlinLogging
 import io.opentelemetry.proto.trace.v1.Span
 import io.opentelemetry.proto.trace.v1.Status.StatusCode
 import org.slf4j.MDC
@@ -52,13 +54,15 @@ class NanoTraceClientInterceptor(
     private val props: HttpClientProperties,
 ) : ClientHttpRequestInterceptor {
 
+    private val log = KotlinLogging.logger {}
+
     /**
      * Префикс для формирования полного URI. Вычисляется один раз при создании интерцептора.
      */
     private val basePrefix: String = props.url.toString().removeSuffix(SLASH)
 
     override fun intercept(rq: HttpRequest, body: ByteArray, execution: ClientHttpRequestExecution): ClientHttpResponse {
-
+        val startTimeNano = System.nanoTime()
         val urlFull = if (rq.uri.isAbsolute) rq.uri.toString() else "$basePrefix${getFullUri(rq)}"
 
         // Стартуем дочерний спан. Имя в формате "CLIENT: METHOD /path" для наглядности в UI Grafana.
@@ -100,6 +104,15 @@ class NanoTraceClientInterceptor(
 
         return try {
             val rs = execution.execute(rq, body)
+
+            val durationMs = (System.nanoTime() - startTimeNano) / 1_000_000
+            // Берем порог из настроек конкретного клиента
+            val isSlow = durationMs >= props.log.slowThreshold.toMillis()
+
+            if (isSlow) {
+                log.warn { "Slow client response: ${rq.method} $urlFull took ${durationMs}ms (threshold: ${props.log.slowThreshold.toMillis()}ms) [extRqId: ${MDC.get(MDC_EXT_RQ_ID)}]" }
+            }
+
             val isError = rs.statusCode.isError
 
             MDC.put(MDC_CLIENT, selfServiceName)
@@ -110,6 +123,7 @@ class NanoTraceClientInterceptor(
                 ctx = ctx,
                 status = if (isError) StatusCode.STATUS_CODE_ERROR else StatusCode.STATUS_CODE_OK,
                 kind = Span.SpanKind.SPAN_KIND_CLIENT,
+                forceExport = isSlow,
                 attrs = buildMap {
                     put(ATTR_HTTP_REQUEST_METHOD, rq.method.name())
                     put(ATTR_URL_FULL, urlFull)
