@@ -1,0 +1,33 @@
+[versions]
+# Plugins
+spring = "3.5.14"
+kotlin = "2.3.21"
+coroutines = "1.10.2"
+loki-logback = "2.0.3"
+loki-protobuf = "0.0.2_pb4.33.0"
+kotlin-log = "8.0.01"
+protobuf = "4.34.1"
+otel-proto = "1.10.0-alpha"
+wiremock = "3.13.2"
+
+jib = "3.5.3"
+
+[libraries]
+kotlin-logging = { module = "io.github.oshai:kotlin-logging-jvm", version.ref = "kotlin-log" }
+loki-logback = { module = "com.github.loki4j:loki-logback-appender", version.ref = "loki-logback" }
+loki-protobuf = { module = "com.github.loki4j:loki-protobuf", version.ref = "loki-protobuf" }
+protobuf-java = { module = "com.google.protobuf:protobuf-java", version.ref = "protobuf" }
+otel-proto = { module = "io.opentelemetry.proto:opentelemetry-proto", version.ref = "otel-proto" }
+wiremock = { module = "org.wiremock:wiremock-standalone", version.ref = "wiremock" }
+
+# BOMs
+spring-boot-dependencies = { module = "org.springframework.boot:spring-boot-dependencies", version.ref = "spring" }
+kotlin = { module = "org.jetbrains.kotlin:kotlin-bom", version.ref = "kotlin" }
+coroutines = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-bom", version.ref = "coroutines" }
+
+[plugins]
+spring-boot = { id = "org.springframework.boot", version.ref = "spring" }
+jib = { id = "com.google.cloud.tools.jib", version.ref = "jib" }
+kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
+kotlin-spring = { id = "org.jetbrains.kotlin.plugin.spring", version.ref = "kotlin" }
+kotlin-kapt = { id = "org.jetbrains.kotlin.kapt", version.ref = "kotlin" }

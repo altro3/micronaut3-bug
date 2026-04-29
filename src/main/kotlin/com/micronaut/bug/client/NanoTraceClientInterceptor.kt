@@ -1,26 +1,30 @@
 package com.micronaut.bug.client
 
 import com.micronaut.bug.client.HttpClientProperties.ClientType.INTERNAL
-import com.micronaut.bug.client.LoggingRequestInterceptor.Companion.SLASH
-import com.micronaut.bug.config.trace.NanoTraceFilter.Companion.METHODS_WITHOUT_BODY
-import com.micronaut.bug.config.trace.NanoTracer
-import com.micronaut.bug.config.trace.NanoTracer.Companion.HEADER_TRACEPARENT
-import com.micronaut.bug.config.trace.NanoTracer.Companion.HEADER_X_SENDER
-import com.micronaut.bug.config.trace.NanoTracer.Companion.MDC_CLIENT
-import com.micronaut.bug.config.trace.NanoTracer.Companion.MDC_SERVER
-import com.micronaut.bug.config.trace.TempoExporter.Companion.ATTR_EXCEPTION_MESSAGE
-import com.micronaut.bug.config.trace.TempoExporter.Companion.ATTR_EXCEPTION_STACKTRACE
-import com.micronaut.bug.config.trace.TempoExporter.Companion.ATTR_EXCEPTION_TYPE
-import com.micronaut.bug.config.trace.TempoExporter.Companion.ATTR_HTTP_REQUEST_BODY_SIZE
-import com.micronaut.bug.config.trace.TempoExporter.Companion.ATTR_HTTP_REQUEST_METHOD
-import com.micronaut.bug.config.trace.TempoExporter.Companion.ATTR_HTTP_RESPONSE_BODY_SIZE
-import com.micronaut.bug.config.trace.TempoExporter.Companion.ATTR_HTTP_RESPONSE_STATUS_CODE
-import com.micronaut.bug.config.trace.TempoExporter.Companion.ATTR_SERVER_ADDRESS
-import com.micronaut.bug.config.trace.TempoExporter.Companion.ATTR_SERVER_PORT
-import com.micronaut.bug.config.trace.TempoExporter.Companion.ATTR_URL_FULL
-import com.micronaut.bug.config.trace.TempoExporter.Companion.OTEL_MAPPED_HEADERS
-import com.micronaut.bug.config.trace.TempoExporter.Companion.PREFIX_HTTP_REQUEST_HEADER
-import com.micronaut.bug.config.trace.TempoExporter.Companion.PREFIX_HTTP_RESPONSE_HEADER
+import com.micronaut.bug.client.LoggingInterceptor.Companion.SLASH
+import com.micronaut.bug.trace.NanoTraceFilter.Companion.METHODS_WITHOUT_BODY
+import com.micronaut.bug.trace.NanoTracer
+import com.micronaut.bug.trace.NanoTracer.Companion.HEADER_TRACEPARENT
+import com.micronaut.bug.trace.NanoTracer.Companion.HEADER_X_SENDER
+import com.micronaut.bug.trace.NanoTracer.Companion.MDC_CLIENT
+import com.micronaut.bug.trace.NanoTracer.Companion.MDC_SERVER
+import com.micronaut.bug.trace.TempoExporter.Companion.ATTR_CLIENT
+import com.micronaut.bug.trace.TempoExporter.Companion.ATTR_EXCEPTION_MESSAGE
+import com.micronaut.bug.trace.TempoExporter.Companion.ATTR_EXCEPTION_STACKTRACE
+import com.micronaut.bug.trace.TempoExporter.Companion.ATTR_EXCEPTION_TYPE
+import com.micronaut.bug.trace.TempoExporter.Companion.ATTR_HTTP_REQUEST_BODY_SIZE
+import com.micronaut.bug.trace.TempoExporter.Companion.ATTR_HTTP_REQUEST_METHOD
+import com.micronaut.bug.trace.TempoExporter.Companion.ATTR_HTTP_RESPONSE_BODY_SIZE
+import com.micronaut.bug.trace.TempoExporter.Companion.ATTR_HTTP_RESPONSE_STATUS_CODE
+import com.micronaut.bug.trace.TempoExporter.Companion.ATTR_PEER_SERVICE
+import com.micronaut.bug.trace.TempoExporter.Companion.ATTR_SERVER
+import com.micronaut.bug.trace.TempoExporter.Companion.ATTR_SERVER_ADDRESS
+import com.micronaut.bug.trace.TempoExporter.Companion.ATTR_SERVER_PORT
+import com.micronaut.bug.trace.TempoExporter.Companion.ATTR_URL_FULL
+import com.micronaut.bug.trace.TempoExporter.Companion.OTEL_MAPPED_HEADERS
+import com.micronaut.bug.trace.TempoExporter.Companion.PREFIX_BAGGAGE
+import com.micronaut.bug.trace.TempoExporter.Companion.PREFIX_HTTP_REQUEST_HEADER
+import com.micronaut.bug.trace.TempoExporter.Companion.PREFIX_HTTP_RESPONSE_HEADER
 import io.opentelemetry.proto.trace.v1.Span
 import io.opentelemetry.proto.trace.v1.Status.StatusCode
 import org.slf4j.MDC
@@ -62,6 +66,14 @@ class NanoTraceClientInterceptor(
             rq.headers.set(HEADER_TRACEPARENT, it)
         }
 
+        // Проброс багажа (те самые заголовки из конфига)
+        // Мы берем их из только что созданного активного контекста
+        ctx.baggage.forEach { (name, value) ->
+            if (!rq.headers.keys.any { it.equals(name, ignoreCase = true) }) {
+                rq.headers.set(name, value)
+            }
+        }
+
         // Sender тоже важен внутри сети
         if (props.type == INTERNAL) {
             rq.headers.set(HEADER_X_SENDER, selfServiceName)
@@ -69,7 +81,6 @@ class NanoTraceClientInterceptor(
 
         val originalClient = MDC.get(MDC_CLIENT)
         val originalServer = MDC.get(MDC_SERVER)
-
 
         return try {
             val rs = execution.execute(rq, body)
@@ -89,17 +100,17 @@ class NanoTraceClientInterceptor(
                     put(ATTR_HTTP_RESPONSE_STATUS_CODE, rs.statusCode.value().toLong())
 
                     // 2. SERVER ADDRESS: Берем хост из URI запроса, если его нет — из пропертей
-                    val host = rq.uri.host ?: props.url.host ?: "unknown"
+                    val host = rq.uri.host ?: props.url.host ?: HOST_UNKNOWN
                     put(ATTR_SERVER_ADDRESS, host)
                     val port = rq.uri.port.takeIf { it != -1 }
                         ?: props.url.port.takeIf { it != -1 }
-                        ?: if (urlFull.startsWith("https")) 443 else 80
+                        ?: if (urlFull.startsWith(PROTOCOL_HTTPS)) 443 else 80
                     put(ATTR_SERVER_PORT, port.toLong())
 
-                    put("client", selfServiceName) // Имя нашего сервиса (например, "service1")
-                    put("server", props.serviceName.toString()) // Имя цели (например, "service2")
+                    put(ATTR_CLIENT, selfServiceName) // Имя нашего сервиса (например, "service1")
+                    put(ATTR_SERVER, props.serviceName.toString()) // Имя цели (например, "service2")
 
-                    props.serviceName?.let { put("peer.service", it) }
+                    props.serviceName?.let { put(ATTR_PEER_SERVICE, it) }
 
                     // Размеры
                     if (rq.method.name() !in METHODS_WITHOUT_BODY) {
@@ -117,6 +128,10 @@ class NanoTraceClientInterceptor(
                         put(ATTR_EXCEPTION_MESSAGE, "HTTP ${rs.statusCode.value()}")
                     }
 
+                    ctx.baggage.forEach { (name, value) ->
+                        put("$PREFIX_BAGGAGE$name", value)
+                    }
+
                     // Заголовки (используем тот же подход string[])
                     putAll(getRequestHeadersAttrs(rq))
                     putAll(getResponseHeadersAttrs(rs))
@@ -132,8 +147,8 @@ class NanoTraceClientInterceptor(
                 attrs = buildMap {
                     put(ATTR_HTTP_REQUEST_METHOD, rq.method.name())
                     put(ATTR_URL_FULL, rq.uri.toString())
-                    put("client", selfServiceName) // Имя нашего сервиса (например, "service1")
-                    put("server", props.serviceName.toString()) // Имя цели (например, "service2")
+                    put(ATTR_CLIENT, selfServiceName) // Имя нашего сервиса (например, "service1")
+                    put(ATTR_SERVER, props.serviceName.toString()) // Имя цели (например, "service2")
                     put(ATTR_EXCEPTION_TYPE, e.javaClass.name)
                     put(ATTR_EXCEPTION_MESSAGE, e.message ?: e.javaClass.simpleName)
                     put(ATTR_EXCEPTION_STACKTRACE, e.stackTraceToString())
@@ -169,5 +184,13 @@ class NanoTraceClientInterceptor(
     private fun getFullUri(rq: HttpRequest): String {
         val uri = rq.uri
         return if (uri.query != null) "${uri.path}?${uri.query}" else uri.path
+    }
+
+    companion object {
+
+        const val PROTOCOL_HTTP = "http"
+        const val PROTOCOL_HTTPS = "https"
+
+        const val HOST_UNKNOWN = "unknown"
     }
 }

@@ -1,4 +1,4 @@
-package com.micronaut.bug.config.log
+package com.micronaut.bug.log
 
 import ch.qos.logback.classic.LoggerContext
 import ch.qos.logback.classic.encoder.PatternLayoutEncoder
@@ -10,6 +10,8 @@ import com.github.loki4j.logback.JavaHttpSender
 import com.github.loki4j.logback.JsonLayout
 import com.github.loki4j.logback.Loki4jAppender
 import com.github.loki4j.logback.PipelineConfigAppenderBase
+import com.micronaut.bug.log.config.LogProperties
+import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import org.springframework.boot.context.event.ApplicationReadyEvent
 import org.springframework.context.event.EventListener
@@ -78,7 +80,7 @@ class LogReconfigurator(
         val lokiProps = props.loki
         val appName = environment.getProperty("spring.application.name") ?: "unknown-app"
         val nodeName = environment.getProperty("app.node.name") ?: "unknown-node"
-        val rootLogger = loggerContext.getLogger(org.slf4j.Logger.ROOT_LOGGER_NAME)
+        val rootLogger = loggerContext.getLogger(Logger.ROOT_LOGGER_NAME)
 
         // Проверяем, не добавлен ли уже аппендер (защита от повторной инициализации)
         if (rootLogger.getAppender(LOKI_APPENDER_NAME) != null) {

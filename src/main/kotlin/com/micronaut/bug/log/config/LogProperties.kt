@@ -1,4 +1,4 @@
-package com.micronaut.bug.config.log
+package com.micronaut.bug.log.config
 
 import jakarta.validation.Valid
 import jakarta.validation.constraints.Min

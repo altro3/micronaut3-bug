@@ -1,4 +1,4 @@
-package com.micronaut.bug.config.trace
+package com.micronaut.bug.trace
 
 import com.google.protobuf.ByteString
 import java.nio.charset.StandardCharsets

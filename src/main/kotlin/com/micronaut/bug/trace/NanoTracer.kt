@@ -1,11 +1,11 @@
-package com.micronaut.bug.config.trace
+package com.micronaut.bug.trace
 
-import com.micronaut.bug.config.trace.TempoExporter.Companion.ATTR_ERROR_MESSAGE
-import com.micronaut.bug.config.trace.TempoExporter.Companion.ATTR_EXCEPTION_MESSAGE
-import com.micronaut.bug.config.trace.TempoExporter.Companion.ATTR_EXCEPTION_STACKTRACE
-import com.micronaut.bug.config.trace.TempoExporter.Companion.ATTR_EXCEPTION_TYPE
-import com.micronaut.bug.config.trace.TraceIdGenerator.generate
-import com.micronaut.bug.config.trace.TraceIdGenerator.generateSpanId
+import com.micronaut.bug.trace.TempoExporter.Companion.ATTR_ERROR_MESSAGE
+import com.micronaut.bug.trace.TempoExporter.Companion.ATTR_EXCEPTION_MESSAGE
+import com.micronaut.bug.trace.TempoExporter.Companion.ATTR_EXCEPTION_STACKTRACE
+import com.micronaut.bug.trace.TempoExporter.Companion.ATTR_EXCEPTION_TYPE
+import com.micronaut.bug.trace.TraceIdGenerator.generate
+import com.micronaut.bug.trace.TraceIdGenerator.generateSpanId
 import io.opentelemetry.proto.trace.v1.Span.SpanKind
 import io.opentelemetry.proto.trace.v1.Status.StatusCode
 import kotlinx.coroutines.withContext
@@ -27,6 +27,11 @@ class NanoTracer(
 
     @PublishedApi
     internal fun getCurrentEpochNanos(): Long = System.nanoTime() + clockOffsetNanos
+
+    /**
+     * Возвращает текущий активный контекст (верхушка стека).
+     */
+    fun currentContext(): TraceContext? = internalStack.get().firstOrNull()
 
     /**
      * Формирует значение заголовка 'traceparent' согласно стандарту W3C Trace Context.
@@ -53,14 +58,16 @@ class NanoTracer(
     fun startTrace(
         name: String,
         remoteTraceId: String? = null,
-        remoteParentId: String? = null
+        remoteParentId: String? = null,
+        baggage: Map<String, String> = emptyMap(),
     ): TraceContext {
         val ctx = TraceContext(
             traceId = remoteTraceId ?: generate(),
             spanId = generateSpanId(),
             parentId = remoteParentId, // Если он пришел, мы станем вложенным трейсом
             name = name,
-            startEpochNanos = getCurrentEpochNanos()
+            startEpochNanos = getCurrentEpochNanos(),
+            baggage = baggage,
         )
         return pushAndSync(ctx)
     }
@@ -69,9 +76,7 @@ class NanoTracer(
      * Стартует вложенный спан. Если в стеке ничего нет, ведет себя как startTrace.
      */
     fun startSpan(name: String): TraceContext {
-        val stack = internalStack.get()
-        val parent = stack.firstOrNull()
-
+        val parent = currentContext()
         if (parent == null) {
             return startTrace(name)
         }
@@ -81,7 +86,8 @@ class NanoTracer(
             spanId = generateSpanId(),
             parentId = parent.spanId,
             name = name,
-            startEpochNanos = getCurrentEpochNanos()
+            startEpochNanos = getCurrentEpochNanos(),
+            baggage = parent.baggage // НАСЛЕДОВАНИЕ: передаем багаж дальше
         )
         return pushAndSync(ctx)
     }

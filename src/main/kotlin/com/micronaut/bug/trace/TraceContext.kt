@@ -1,4 +1,4 @@
-package com.micronaut.bug.config.trace
+package com.micronaut.bug.trace
 
 /**
  * Контекст спана, хранящий идентификаторы и время начала.
@@ -9,4 +9,5 @@ data class TraceContext(
     val parentId: String? = null,
     val name: String,
     val startEpochNanos: Long,
+    val baggage: Map<String, String> = emptyMap()
 )

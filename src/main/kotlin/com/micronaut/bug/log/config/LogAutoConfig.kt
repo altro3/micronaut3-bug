@@ -1,6 +1,8 @@
-package com.micronaut.bug.config.log
+package com.micronaut.bug.log.config
 
 import com.fasterxml.jackson.databind.ObjectMapper
+import com.micronaut.bug.log.LogReconfigurator
+import com.micronaut.bug.log.ServerLoggingFilter
 import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.boot.web.servlet.FilterRegistrationBean
 import org.springframework.context.annotation.Bean

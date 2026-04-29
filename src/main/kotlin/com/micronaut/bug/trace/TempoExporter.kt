@@ -1,7 +1,7 @@
-package com.micronaut.bug.config.trace
+package com.micronaut.bug.trace
 
-import com.micronaut.bug.config.trace.TraceIdGenerator.toByteString
-import com.micronaut.bug.config.trace.config.TraceProperties
+import com.micronaut.bug.trace.TraceIdGenerator.toByteString
+import com.micronaut.bug.trace.config.TraceProperties
 import io.github.oshai.kotlinlogging.KotlinLogging
 import io.opentelemetry.proto.collector.trace.v1.ExportTraceServiceRequest
 import io.opentelemetry.proto.common.v1.AnyValue
@@ -57,7 +57,7 @@ class TempoExporter(
     private val exporterProps = traceProps.exporter
 
     // Канал для накопления спанов. Capacity ограничивает память при перегрузке.
-    private val channel = Channel<Span>(10000)
+    private val channel = Channel<Span>(exporterProps.queueCapacity)
 
     // Отдельный Scope для фоновой работы экспортера
     private val exportScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -292,8 +292,9 @@ class TempoExporter(
             HttpHeaders.CONTENT_TYPE.lowercase(),
             HttpHeaders.USER_AGENT.lowercase(),
             // Сюда можно добавить host, так как он уходит в server.address
-            HttpHeaders.HOST.lowercase()
+            HttpHeaders.HOST.lowercase(),
         )
+
         /**
          * Стандартные ключи атрибутов OpenTelemetry
          */
@@ -302,38 +303,38 @@ class TempoExporter(
 
         const val ATTR_SERVER_ADDRESS = "server.address"
         const val ATTR_SERVER_PORT = "server.port"
+        const val ATTR_CLIENT_ADDRESS = "client.address"
 
         // HTTP Request
         const val ATTR_HTTP_REQUEST_METHOD = "http.request.method"
-
-        // Sizes (в байтах)
         const val ATTR_HTTP_REQUEST_BODY_SIZE = "http.request.body.size"
-        const val ATTR_HTTP_RESPONSE_BODY_SIZE = "http.response.body.size"
+        const val PREFIX_HTTP_REQUEST_HEADER = "http.request.header."
 
         const val ATTR_URL_FULL = "url.full"
         const val ATTR_URL_SCHEME = "url.scheme"
         const val ATTR_URL_PATH = "url.path"
         const val ATTR_URL_QUERY = "url.query"
         const val ATTR_USER_AGENT_ORIGINAL = "user_agent.original"
-        const val ATTR_CLIENT_ADDRESS = "client.address"
 
         // HTTP Response
         const val ATTR_HTTP_RESPONSE_STATUS_CODE = "http.response.status_code"
+        const val ATTR_HTTP_RESPONSE_BODY_SIZE = "http.response.body.size"
+        const val PREFIX_HTTP_RESPONSE_HEADER = "http.response.header."
 
         // Exceptions
         const val ATTR_EXCEPTION_TYPE = "exception.type"
         const val ATTR_EXCEPTION_MESSAGE = "exception.message"
         const val ATTR_EXCEPTION_STACKTRACE = "exception.stacktrace"
 
-        // Custom (но в стиле OTel)
-        const val ATTR_INTERNAL_SENDER = "app.client.id"
-        const val PREFIX_HTTP_REQUEST_HEADER = "http.request.header."
-        const val PREFIX_HTTP_RESPONSE_HEADER = "http.response.header."
+        const val ATTR_CLIENT = "client"
+        const val ATTR_SERVER = "server"
+        const val ATTR_PEER_SERVICE = "peer.service"
 
         /**
          * Кастомные ключи для логгинг-фильтров
          */
         const val ATTR_ERROR_MESSAGE = "error.message"
         const val ATTR_ERROR_TYPE = "error.type"
+        const val PREFIX_BAGGAGE = "baggage."
     }
 }

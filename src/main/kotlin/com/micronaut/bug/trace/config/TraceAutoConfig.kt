@@ -1,8 +1,8 @@
-package com.micronaut.bug.config.trace.config
+package com.micronaut.bug.trace.config
 
-import com.micronaut.bug.config.trace.NanoTraceFilter
-import com.micronaut.bug.config.trace.NanoTracer
-import com.micronaut.bug.config.trace.TempoExporter
+import com.micronaut.bug.trace.NanoTraceFilter
+import com.micronaut.bug.trace.NanoTracer
+import com.micronaut.bug.trace.TempoExporter
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBooleanProperty
@@ -45,9 +45,10 @@ class TraceAutoConfig {
     @Bean
     fun nanoTraceFilterRegistration(
         tracer: NanoTracer,
+        traceProps: TraceProperties,
         @Value("\${spring.application.name}")
         appName: String,
-    ) = FilterRegistrationBean(NanoTraceFilter(tracer, appName)).apply {
+    ) = FilterRegistrationBean(NanoTraceFilter(tracer, traceProps, appName)).apply {
         // Трейсинг ВСЕГДА идет первым
         order = Ordered.HIGHEST_PRECEDENCE
     }

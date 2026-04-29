@@ -2,7 +2,7 @@ package com.micronaut.bug.client
 
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.databind.json.JsonMapper
-import com.micronaut.bug.config.trace.NanoTracer
+import com.micronaut.bug.trace.NanoTracer
 import io.github.oshai.kotlinlogging.KotlinLogging
 import io.netty.channel.ChannelOption
 import io.netty.handler.timeout.ReadTimeoutHandler
@@ -84,7 +84,7 @@ object HttpClientUtils {
             // Добавляем наш интерцептор
             builder.requestFactory(BufferingClientHttpRequestFactory(requestFactory))
                 .requestInterceptor(
-                    LoggingRequestInterceptor(
+                    LoggingInterceptor(
                         props = clientProps,
                         objectMapper = objectMapper,
                         selfServiceName = senderAppName,

@@ -1,8 +1,9 @@
-package com.micronaut.bug.config.log
+package com.micronaut.bug.log
 
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.databind.SerializationFeature
-import com.micronaut.bug.config.log.ServerLoggingFilter.Companion.LIMIT_TEXT_CHECK_THRESHOLD
+import com.micronaut.bug.log.ServerLoggingFilter.Companion.LIMIT_TEXT_CHECK_THRESHOLD
+import com.micronaut.bug.log.config.LogProperties
 import io.github.oshai.kotlinlogging.KotlinLogging
 import jakarta.servlet.FilterChain
 import jakarta.servlet.ReadListener

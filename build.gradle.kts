@@ -3,17 +3,16 @@ import org.gradle.api.tasks.testing.logging.TestLogEvent
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 plugins {
-    id("org.springframework.boot") version "3.5.13"
-    id("io.spring.dependency-management") version "1.1.7"
-    id("com.google.cloud.tools.jib") version "3.5.3"
-    kotlin("jvm") version "2.3.20"
-    kotlin("plugin.spring") version "2.3.20"
-    kotlin("kapt") version "2.3.20" // Добавили плагин здесь
+    alias(libs.plugins.spring.boot)
+    alias(libs.plugins.jib)
+    alias(libs.plugins.kotlin.jvm)
+    alias(libs.plugins.kotlin.spring)
+    alias(libs.plugins.kotlin.kapt)
 }
 
 val ver = mapOf(
-    "kotlin" to "2.3.20",
-    "springBoot" to "3.5.13",
+    "kotlin" to "2.3.21",
+    "springBoot" to "3.5.14",
 )
 
 val jreImage = "bellsoft/liberica-openjre-alpine:21.0.11-x86_64"
@@ -28,39 +27,30 @@ repositories {
 
 dependencies {
 
-    // Configuration Processor (для @ConfigurationProperties)
-    kapt("org.springframework.boot:spring-boot-configuration-processor")
+    kapt(spring.spring.springBootConfigurationProcessor)
 
-    implementation(platform("org.springframework.boot:spring-boot-dependencies:${ver["springBoot"]}"))
-    implementation("org.springframework.boot:spring-boot-starter-web")
-    implementation("org.springframework.boot:spring-boot-starter-aop")
-    implementation("org.springframework.boot:spring-boot-starter-logging")
-    implementation("org.springframework.boot:spring-boot-starter-json")
-    implementation("org.springframework.boot:spring-boot-starter-validation")
-    implementation("org.springframework.boot:spring-boot-starter-actuator")
-    implementation("org.springframework.retry:spring-retry")
-    implementation("io.projectreactor.netty:reactor-netty-http")
+    implementation(spring.spring.springBootStarterWeb)
+    implementation(spring.spring.springBootStarterLogging)
+    implementation(spring.spring.springBootStarterJson)
+    implementation(spring.spring.springBootStarterValidation)
+    implementation(spring.spring.springBootStarterActuator)
+    implementation(spring.spring.springRetry)
+    implementation(spring.projectreactor.reactorNettyHttp)
+    implementation(spring.jackson.jacksonModuleKotlin)
+    implementation(spring.jackson.jacksonModuleBlackbird)
+    implementation(spring.logback.logbackClassic)
+    implementation(coroutines.kotlinx.kotlinxCoroutinesCoreJvm)
+    implementation(coroutines.kotlinx.kotlinxCoroutinesSlf4j)
+    implementation(kot.kotlin.kotlinReflect)
+    implementation(libs.kotlin.logging)
+    implementation(libs.loki.logback)
+    implementation(libs.loki.protobuf)
+    implementation(libs.protobuf.java)
+    implementation(libs.otel.proto)
+    implementation(libs.wiremock)
 
-    // Kotlin Essential
-    implementation("org.jetbrains.kotlin:kotlin-reflect")
-    implementation("com.fasterxml.jackson.module:jackson-module-kotlin")
-
-    // Tracing & Logs
-    implementation("ch.qos.logback:logback-classic")
-    implementation("io.github.oshai:kotlin-logging-jvm:8.0.01")
-    implementation("com.github.loki4j:loki-logback-appender:2.0.3")
-    implementation("com.github.loki4j:loki-protobuf:0.0.2_pb4.33.0")
-    implementation("com.google.protobuf:protobuf-java:4.34.1")
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core-jvm:1.10.2")
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-slf4j:1.10.2")
-    implementation("io.opentelemetry.proto:opentelemetry-proto:1.10.0-alpha")
-
-    implementation("org.wiremock:wiremock-standalone:3.13.2")
-
-    // Testing
-    testImplementation("org.springframework.boot:spring-boot-starter-test")
-    testImplementation("org.jetbrains.kotlin:kotlin-test-junit5")
-    testImplementation("io.projectreactor.netty:reactor-netty-http")
+    testImplementation(spring.spring.springBootStarterTest)
+    testImplementation(kot.kotlin.kotlinTestJunit5)
 }
 
 configurations.all {

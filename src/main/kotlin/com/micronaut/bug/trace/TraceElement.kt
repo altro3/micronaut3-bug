@@ -1,4 +1,4 @@
-package com.micronaut.bug.config.trace
+package com.micronaut.bug.trace
 
 import kotlinx.coroutines.ThreadContextElement
 import kotlin.coroutines.AbstractCoroutineContextElement

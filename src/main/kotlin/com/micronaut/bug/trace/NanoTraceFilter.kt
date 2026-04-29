@@ -1,28 +1,30 @@
-package com.micronaut.bug.config.trace
+package com.micronaut.bug.trace
 
-import com.micronaut.bug.config.trace.NanoTracer.Companion.HEADER_TRACEPARENT
-import com.micronaut.bug.config.trace.NanoTracer.Companion.HEADER_X_SENDER
-import com.micronaut.bug.config.trace.NanoTracer.Companion.MDC_CLIENT
-import com.micronaut.bug.config.trace.NanoTracer.Companion.MDC_SERVER
-import com.micronaut.bug.config.trace.NanoTracer.Companion.TRACEPARENT_DELIMITER
-import com.micronaut.bug.config.trace.NanoTracer.Companion.TRACEPARENT_PREFIX
-import com.micronaut.bug.config.trace.TempoExporter.Companion.ATTR_CLIENT_ADDRESS
-import com.micronaut.bug.config.trace.TempoExporter.Companion.ATTR_EXCEPTION_MESSAGE
-import com.micronaut.bug.config.trace.TempoExporter.Companion.ATTR_HTTP_REQUEST_BODY_SIZE
-import com.micronaut.bug.config.trace.TempoExporter.Companion.ATTR_HTTP_REQUEST_METHOD
-import com.micronaut.bug.config.trace.TempoExporter.Companion.ATTR_HTTP_RESPONSE_BODY_SIZE
-import com.micronaut.bug.config.trace.TempoExporter.Companion.ATTR_HTTP_RESPONSE_STATUS_CODE
-import com.micronaut.bug.config.trace.TempoExporter.Companion.ATTR_INTERNAL_SENDER
-import com.micronaut.bug.config.trace.TempoExporter.Companion.ATTR_SERVER_ADDRESS
-import com.micronaut.bug.config.trace.TempoExporter.Companion.ATTR_SERVER_PORT
-import com.micronaut.bug.config.trace.TempoExporter.Companion.ATTR_URL_FULL
-import com.micronaut.bug.config.trace.TempoExporter.Companion.ATTR_URL_PATH
-import com.micronaut.bug.config.trace.TempoExporter.Companion.ATTR_URL_QUERY
-import com.micronaut.bug.config.trace.TempoExporter.Companion.ATTR_URL_SCHEME
-import com.micronaut.bug.config.trace.TempoExporter.Companion.ATTR_USER_AGENT_ORIGINAL
-import com.micronaut.bug.config.trace.TempoExporter.Companion.OTEL_MAPPED_HEADERS
-import com.micronaut.bug.config.trace.TempoExporter.Companion.PREFIX_HTTP_REQUEST_HEADER
-import com.micronaut.bug.config.trace.TempoExporter.Companion.PREFIX_HTTP_RESPONSE_HEADER
+import com.micronaut.bug.trace.NanoTracer.Companion.HEADER_TRACEPARENT
+import com.micronaut.bug.trace.NanoTracer.Companion.HEADER_X_SENDER
+import com.micronaut.bug.trace.NanoTracer.Companion.MDC_CLIENT
+import com.micronaut.bug.trace.NanoTracer.Companion.MDC_SERVER
+import com.micronaut.bug.trace.NanoTracer.Companion.TRACEPARENT_DELIMITER
+import com.micronaut.bug.trace.NanoTracer.Companion.TRACEPARENT_PREFIX
+import com.micronaut.bug.trace.TempoExporter.Companion.ATTR_CLIENT
+import com.micronaut.bug.trace.TempoExporter.Companion.ATTR_CLIENT_ADDRESS
+import com.micronaut.bug.trace.TempoExporter.Companion.ATTR_EXCEPTION_MESSAGE
+import com.micronaut.bug.trace.TempoExporter.Companion.ATTR_HTTP_REQUEST_BODY_SIZE
+import com.micronaut.bug.trace.TempoExporter.Companion.ATTR_HTTP_REQUEST_METHOD
+import com.micronaut.bug.trace.TempoExporter.Companion.ATTR_HTTP_RESPONSE_BODY_SIZE
+import com.micronaut.bug.trace.TempoExporter.Companion.ATTR_HTTP_RESPONSE_STATUS_CODE
+import com.micronaut.bug.trace.TempoExporter.Companion.ATTR_SERVER
+import com.micronaut.bug.trace.TempoExporter.Companion.ATTR_SERVER_ADDRESS
+import com.micronaut.bug.trace.TempoExporter.Companion.ATTR_SERVER_PORT
+import com.micronaut.bug.trace.TempoExporter.Companion.ATTR_URL_FULL
+import com.micronaut.bug.trace.TempoExporter.Companion.ATTR_URL_PATH
+import com.micronaut.bug.trace.TempoExporter.Companion.ATTR_URL_QUERY
+import com.micronaut.bug.trace.TempoExporter.Companion.ATTR_URL_SCHEME
+import com.micronaut.bug.trace.TempoExporter.Companion.ATTR_USER_AGENT_ORIGINAL
+import com.micronaut.bug.trace.TempoExporter.Companion.OTEL_MAPPED_HEADERS
+import com.micronaut.bug.trace.TempoExporter.Companion.PREFIX_HTTP_REQUEST_HEADER
+import com.micronaut.bug.trace.TempoExporter.Companion.PREFIX_HTTP_RESPONSE_HEADER
+import com.micronaut.bug.trace.config.TraceProperties
 import io.opentelemetry.proto.trace.v1.Status
 import jakarta.servlet.FilterChain
 import jakarta.servlet.http.HttpServletRequest
@@ -30,10 +32,12 @@ import jakarta.servlet.http.HttpServletResponse
 import org.slf4j.MDC
 import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpHeaders.USER_AGENT
+import org.springframework.http.HttpMethod
 import org.springframework.web.filter.OncePerRequestFilter
 
 class NanoTraceFilter(
     private val tracer: NanoTracer,
+    private val traceProps: TraceProperties,
     private val selfServiceName: String,
 ) : OncePerRequestFilter() {
 
@@ -54,11 +58,17 @@ class NanoTraceFilter(
 
         val sender = rq.getHeader(HEADER_X_SENDER) ?: DEFAULT_SENDER
 
+        val baggage = traceProps.propagation.includeHeaders
+            .associateWith { rq.getHeader(it) }
+            .filterValues { it != null }
+            .mapValues { it.value.lowercase() }
+
         // 2. Стартуем трейс, учитывая родителя
         val ctx = tracer.startTrace(
             name = "${rq.method} ${rq.requestURI}",
             remoteTraceId = traceId,
             remoteParentId = parentId,
+            baggage = baggage,
         )
 
         MDC.put(MDC_CLIENT, sender)
@@ -92,14 +102,13 @@ class NanoTraceFilter(
                     ?.toLongOrNull()
                     ?.let { put(ATTR_HTTP_RESPONSE_BODY_SIZE, it) }
 
-                put("client", sender)
-                put("server", selfServiceName)
+                put(ATTR_CLIENT, sender)
+                put(ATTR_SERVER, selfServiceName)
 
                 put(ATTR_SERVER_ADDRESS, rq.serverName)
                 put(ATTR_SERVER_PORT, rq.serverPort.toLong())
                 put(ATTR_CLIENT_ADDRESS, rq.remoteAddr)
                 put(ATTR_HTTP_RESPONSE_STATUS_CODE, rs.status.toLong())
-                put(ATTR_INTERNAL_SENDER, sender)
 
                 if (isError) {
                     put(ATTR_EXCEPTION_MESSAGE, "HTTP ${rs.status}")
@@ -149,7 +158,13 @@ class NanoTraceFilter(
 
         const val HEADER_API_KEY = "api-key"
 
-        val METHODS_WITHOUT_BODY = setOf("GET", "HEAD", "OPTIONS", "DELETE", "TRACE")
+        val METHODS_WITHOUT_BODY = setOf(
+            HttpMethod.GET.name(),
+            HttpMethod.HEAD.name(),
+            HttpMethod.OPTIONS.name(),
+            HttpMethod.DELETE.name(),
+            HttpMethod.TRACE.name(),
+        )
 
         /**
          * Список для маскировки чувствительных заголовков в формате OTel (string[]).

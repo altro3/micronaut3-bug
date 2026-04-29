@@ -2,7 +2,7 @@ package com.micronaut.bug.service.integration.internalservice.config
 
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.micronaut.bug.client.DefaultHttpClient
-import com.micronaut.bug.config.trace.NanoTracer
+import com.micronaut.bug.trace.NanoTracer
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.Bean

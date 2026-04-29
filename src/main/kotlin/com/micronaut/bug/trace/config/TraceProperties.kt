@@ -1,4 +1,4 @@
-package com.micronaut.bug.config.trace.config
+package com.micronaut.bug.trace.config
 
 import org.springframework.boot.context.properties.ConfigurationProperties
 import org.springframework.boot.context.properties.NestedConfigurationProperty
@@ -13,6 +13,7 @@ class TraceProperties(
      */
     val enabled: Boolean = true,
 
+    val propagation: PropagationProperties = PropagationProperties(),
     /**
      * Настройки пакетного экспортера в Grafana Tempo.
      */
@@ -57,5 +58,12 @@ class TraceProperties(
          * Пауза при ошибках в цикле экспорта (Backoff).
          */
         val retryInterval: Duration = Duration.ofSeconds(1)
+    )
+
+    class PropagationProperties(
+        /*
+         * Список заголовков, которые мы "подхватываем" на входе и тащим по всей цепочке
+         */
+        val includeHeaders: Set<String> = setOf()
     )
 }

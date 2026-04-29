@@ -3,10 +3,10 @@ package com.micronaut.bug.client
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.databind.SerializationFeature
 import com.micronaut.bug.client.HttpClientProperties.ClientType.EXTERNAL
-import com.micronaut.bug.client.LoggingRequestInterceptor.Companion.LIMIT_TEXT_CHECK_THRESHOLD
-import com.micronaut.bug.config.trace.NanoTracer.Companion.MDC_CLIENT
-import com.micronaut.bug.config.trace.NanoTracer.Companion.MDC_EXT_RQ_ID
-import com.micronaut.bug.config.trace.TraceIdGenerator.generateSpanId
+import com.micronaut.bug.client.LoggingInterceptor.Companion.LIMIT_TEXT_CHECK_THRESHOLD
+import com.micronaut.bug.trace.NanoTracer.Companion.MDC_CLIENT
+import com.micronaut.bug.trace.NanoTracer.Companion.MDC_EXT_RQ_ID
+import com.micronaut.bug.trace.TraceIdGenerator.generateSpanId
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.slf4j.MDC
 import org.springframework.http.HttpHeaders
@@ -18,7 +18,6 @@ import org.springframework.http.client.ClientHttpRequestExecution
 import org.springframework.http.client.ClientHttpRequestInterceptor
 import org.springframework.http.client.ClientHttpResponse
 import java.io.ByteArrayInputStream
-import java.time.Instant
 import java.util.zip.GZIPInputStream
 
 /**
@@ -31,7 +30,7 @@ import java.util.zip.GZIPInputStream
  * - Эвристически определяет бинарные данные, предотвращая вывод "мусора" в логи.
  * - Исключает дублирование данных в логах при включенном DEBUG уровне.
  */
-class LoggingRequestInterceptor(
+class LoggingInterceptor(
     props: HttpClientProperties,
     objectMapper: ObjectMapper,
     private val selfServiceName: String,

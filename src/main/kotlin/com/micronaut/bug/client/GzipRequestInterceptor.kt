@@ -1,8 +1,8 @@
 package com.micronaut.bug.client
 
-import com.micronaut.bug.client.LoggingRequestInterceptor.Companion.ATTR_EXT_RQ_ID
-import com.micronaut.bug.client.LoggingRequestInterceptor.Companion.ATTR_SKIP_LOGGING
-import com.micronaut.bug.client.LoggingRequestInterceptor.Companion.ENCODING_GZIP
+import com.micronaut.bug.client.LoggingInterceptor.Companion.ATTR_EXT_RQ_ID
+import com.micronaut.bug.client.LoggingInterceptor.Companion.ATTR_SKIP_LOGGING
+import com.micronaut.bug.client.LoggingInterceptor.Companion.ENCODING_GZIP
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpRequest

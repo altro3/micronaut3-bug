@@ -1,4 +1,4 @@
-package com.micronaut.bug.config.log
+package com.micronaut.bug.log
 
 import ch.qos.logback.classic.pattern.ClassicConverter
 import ch.qos.logback.classic.spi.ILoggingEvent
