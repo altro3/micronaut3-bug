@@ -1,11 +1,13 @@
 package com.micronaut.bug.trace
 
+import com.micronaut.bug.trace.NanoTracer.Companion.HEADER_BAGGAGE
 import com.micronaut.bug.trace.NanoTracer.Companion.HEADER_TRACEPARENT
 import com.micronaut.bug.trace.NanoTracer.Companion.HEADER_X_SENDER
 import com.micronaut.bug.trace.NanoTracer.Companion.MDC_CLIENT
 import com.micronaut.bug.trace.NanoTracer.Companion.MDC_SERVER
 import com.micronaut.bug.trace.NanoTracer.Companion.TRACEPARENT_DELIMITER
 import com.micronaut.bug.trace.NanoTracer.Companion.TRACEPARENT_PREFIX
+import com.micronaut.bug.trace.NanoTracer.Companion.parseBaggage
 import com.micronaut.bug.trace.TempoExporter.Companion.ATTR_CLIENT
 import com.micronaut.bug.trace.TempoExporter.Companion.ATTR_CLIENT_ADDRESS
 import com.micronaut.bug.trace.TempoExporter.Companion.ATTR_EXCEPTION_MESSAGE
@@ -58,10 +60,17 @@ class NanoTraceFilter(
 
         val sender = rq.getHeader(HEADER_X_SENDER) ?: DEFAULT_SENDER
 
-        val baggage = traceProps.propagation.includeHeaders
+        val baggage = mutableMapOf<String, String>()
+        // 1. Читаем стандартный багаж (если пришел)
+        rq.getHeader(HEADER_BAGGAGE)?.let {
+            baggage.putAll(parseBaggage(it))
+        }
+
+        // 2. Читаем заголовки для проброски из конфига
+        val propagationHeaders = traceProps.propagationHeaders
             .associateWith { rq.getHeader(it) }
             .filterValues { it != null }
-            .mapValues { it.value.lowercase() }
+            .mapKeys { it.key.lowercase() }
 
         // 2. Стартуем трейс, учитывая родителя
         val ctx = tracer.startTrace(
@@ -69,6 +78,7 @@ class NanoTraceFilter(
             remoteTraceId = traceId,
             remoteParentId = parentId,
             baggage = baggage,
+            propagationHeaders = propagationHeaders,
         )
 
         MDC.put(MDC_CLIENT, sender)

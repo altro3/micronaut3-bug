@@ -4,10 +4,12 @@ import com.micronaut.bug.client.HttpClientProperties.ClientType.INTERNAL
 import com.micronaut.bug.client.LoggingInterceptor.Companion.SLASH
 import com.micronaut.bug.trace.NanoTraceFilter.Companion.METHODS_WITHOUT_BODY
 import com.micronaut.bug.trace.NanoTracer
+import com.micronaut.bug.trace.NanoTracer.Companion.HEADER_BAGGAGE
 import com.micronaut.bug.trace.NanoTracer.Companion.HEADER_TRACEPARENT
 import com.micronaut.bug.trace.NanoTracer.Companion.HEADER_X_SENDER
 import com.micronaut.bug.trace.NanoTracer.Companion.MDC_CLIENT
 import com.micronaut.bug.trace.NanoTracer.Companion.MDC_SERVER
+import com.micronaut.bug.trace.NanoTracer.Companion.formatBaggage
 import com.micronaut.bug.trace.TempoExporter.Companion.ATTR_CLIENT
 import com.micronaut.bug.trace.TempoExporter.Companion.ATTR_EXCEPTION_MESSAGE
 import com.micronaut.bug.trace.TempoExporter.Companion.ATTR_EXCEPTION_STACKTRACE
@@ -62,21 +64,28 @@ class NanoTraceClientInterceptor(
         // 1. Стартуем дочерний спан. Имя в формате "CLIENT: METHOD /path" для наглядности в UI Grafana.
         val ctx = tracer.startSpan(name = "${rq.method} $urlFull")
 
+        // 2. Проброс стандартного контекста трейсинга (W3C traceparent)
         tracer.getTraceParent()?.let {
             rq.headers.set(HEADER_TRACEPARENT, it)
         }
 
-        // Проброс багажа (те самые заголовки из конфига)
-        // Мы берем их из только что созданного активного контекста
-        ctx.baggage.forEach { (name, value) ->
+        // Идентификация отправителя для внутренних вызовов
+        if (props.type == INTERNAL) {
+            rq.headers.set(HEADER_X_SENDER, selfServiceName)
+        }
+
+        // 3. Проброс стандартного Baggage (W3C)
+        formatBaggage(ctx.baggage)?.let {
+            rq.headers.set(HEADER_BAGGAGE, it)
+        }
+
+        // 4. Проброс кастомных заголовков (Propagation Headers)
+        // Мы берем их из контекста и проставляем "как есть"
+        ctx.propagationHeaders.forEach { (name, value) ->
+            // Проверяем, не установил ли разработчик заголовок вручную (ignore case)
             if (!rq.headers.keys.any { it.equals(name, ignoreCase = true) }) {
                 rq.headers.set(name, value)
             }
-        }
-
-        // Sender тоже важен внутри сети
-        if (props.type == INTERNAL) {
-            rq.headers.set(HEADER_X_SENDER, selfServiceName)
         }
 
         val originalClient = MDC.get(MDC_CLIENT)

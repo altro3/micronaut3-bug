@@ -4,6 +4,8 @@ import com.micronaut.bug.trace.TempoExporter.Companion.ATTR_ERROR_MESSAGE
 import com.micronaut.bug.trace.TempoExporter.Companion.ATTR_EXCEPTION_MESSAGE
 import com.micronaut.bug.trace.TempoExporter.Companion.ATTR_EXCEPTION_STACKTRACE
 import com.micronaut.bug.trace.TempoExporter.Companion.ATTR_EXCEPTION_TYPE
+import com.micronaut.bug.trace.TempoExporter.Companion.PREFIX_BAGGAGE
+import com.micronaut.bug.trace.TempoExporter.Companion.PREFIX_PROPAGATION
 import com.micronaut.bug.trace.TraceIdGenerator.generate
 import com.micronaut.bug.trace.TraceIdGenerator.generateSpanId
 import io.opentelemetry.proto.trace.v1.Span.SpanKind
@@ -51,15 +53,22 @@ class NanoTracer(
     }
 
     /**
-     * Стартует точку входа в сервис.
-     * @param remoteTraceId - ID всей цепочки (из X-Request-ID).
-     * @param remoteParentId - ID спана вызывающей стороны (из X-Ext-Rq-ID).
+     * Формирует и активирует корневой контекст трассировки для текущего потока.
+     * Используется в точках входа (например, в [NanoTraceFilter]).
+     *
+     * @param name Имя операции (например, "POST /api/v1/data").
+     * @param remoteTraceId Внешний ID трейса (из заголовка traceparent или X-Request-ID).
+     * @param remoteParentId ID родительского спана из внешней системы.
+     * @param baggage Набор данных, полученный из стандартного W3C-заголовка "baggage".
+     * @param propagationHeaders Заголовки, которые необходимо пробрасывать "как есть" во все клиенты.
+     * @return Созданный и помещенный в стек [TraceContext].
      */
     fun startTrace(
         name: String,
         remoteTraceId: String? = null,
         remoteParentId: String? = null,
         baggage: Map<String, String> = emptyMap(),
+        propagationHeaders: Map<String, String> = emptyMap(),
     ): TraceContext {
         val ctx = TraceContext(
             traceId = remoteTraceId ?: generate(),
@@ -68,12 +77,20 @@ class NanoTracer(
             name = name,
             startEpochNanos = getCurrentEpochNanos(),
             baggage = baggage,
+            propagationHeaders = propagationHeaders,
         )
         return pushAndSync(ctx)
     }
 
     /**
-     * Стартует вложенный спан. Если в стеке ничего нет, ведет себя как startTrace.
+     * Создает и активирует дочерний спан, наследуя контекст от текущего активного спана.
+     * Если активный контекст отсутствует, метод автоматически создает корневой трейс.
+     *
+     * Наследует [TraceContext.baggage] и [TraceContext.propagationHeaders], обеспечивая
+     * сквозную передачу метаданных по всей цепочке вызовов внутри сервиса и за его пределы.
+     *
+     * @param name Имя вложенной операции (например, "SERVICE: processOrder" или "CLIENT: callPaymentApi").
+     * @return Новый [TraceContext], ставший вершиной стека в текущем потоке.
      */
     fun startSpan(name: String): TraceContext {
         val parent = currentContext()
@@ -87,13 +104,16 @@ class NanoTracer(
             parentId = parent.spanId,
             name = name,
             startEpochNanos = getCurrentEpochNanos(),
-            baggage = parent.baggage // НАСЛЕДОВАНИЕ: передаем багаж дальше
+            baggage = parent.baggage,
+            propagationHeaders = parent.propagationHeaders,
         )
         return pushAndSync(ctx)
     }
 
     /**
-     * Завершает операцию и отправляет данные в экспортер.
+     * Завершает операцию, удаляет контекст из стека и отправляет данные в Tempo.
+     * Автоматически добавляет [TraceContext.baggage] и [TraceContext.propagationHeaders]
+     * в атрибуты спана для обеспечения возможности поиска в UI Grafana.
      */
     fun stop(
         ctx: TraceContext,
@@ -107,6 +127,14 @@ class NanoTracer(
         // Удаляем именно этот контекст (даже если закрыли не в том порядке)
         stack.remove(ctx)
 
+        // Объединяем пользовательские атрибуты с метаданными контекста
+        val finalAttrs = attrs.toMutableMap().apply {
+            // Добавляем багаж (W3C) с префиксом
+            ctx.baggage.forEach { (k, v) -> put("$PREFIX_BAGGAGE$k", v) }
+            // Добавляем заголовки проброса с префиксом
+            ctx.propagationHeaders.forEach { (k, v) -> put("$PREFIX_PROPAGATION$k", v) }
+        }
+
         exporter.enqueue(
             traceIdHex = ctx.traceId,
             spanIdHex = ctx.spanId,
@@ -116,7 +144,7 @@ class NanoTracer(
             endEpochNanos = endNs,
             status = status,
             kind = kind,
-            attrs = attrs,
+            attrs = finalAttrs ,
         )
         syncMdc()
     }
@@ -205,6 +233,7 @@ class NanoTracer(
 
         // W3C Trace Context (Стандарт OTel)
         const val HEADER_TRACEPARENT = "traceparent"
+        const val HEADER_BAGGAGE = "baggage"
         const val TRACEPARENT_PREFIX = "00-"
         const val TRACEPARENT_DELIMITER = "-"
 
@@ -212,5 +241,31 @@ class NanoTracer(
          * Количество наносекунд в одной секунде
          */
         private const val NANOS_PER_SECOND = 1_000_000_000L
+
+        /**
+         * Парсит заголовок багажа согласно W3C (key=value,key2=value2)
+         */
+        fun parseBaggage(header: String?): Map<String, String> {
+            if (header.isNullOrBlank()) {
+                return emptyMap()
+            }
+            return header.split(",")
+                .map { it.substringBefore(";").trim() } // OTel поддерживает параметры после ; но нам пока не надо
+                .filter { it.contains("=") }
+                .associate {
+                    val parts = it.split("=", limit = 2)
+                    parts[0].trim().lowercase() to parts[1].trim()
+                }
+        }
+
+        /**
+         * Сериализует мапу в строку для заголовка baggage
+         */
+        fun formatBaggage(baggage: Map<String, String>): String? {
+            if (baggage.isEmpty()) {
+                return null
+            }
+            return baggage.entries.joinToString(",") { "${it.key}=${it.value}" }
+        }
     }
 }

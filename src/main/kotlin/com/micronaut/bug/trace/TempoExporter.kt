@@ -336,5 +336,6 @@ class TempoExporter(
         const val ATTR_ERROR_MESSAGE = "error.message"
         const val ATTR_ERROR_TYPE = "error.type"
         const val PREFIX_BAGGAGE = "baggage."
+        const val PREFIX_PROPAGATION = "prop."
     }
 }

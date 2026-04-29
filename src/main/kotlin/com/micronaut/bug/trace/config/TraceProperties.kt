@@ -12,13 +12,16 @@ class TraceProperties(
      * Если false — NanoTracer не будет генерировать спаны и MDC.
      */
     val enabled: Boolean = true,
-
-    val propagation: PropagationProperties = PropagationProperties(),
     /**
      * Настройки пакетного экспортера в Grafana Tempo.
      */
     @NestedConfigurationProperty
-    val exporter: ExporterProperties = ExporterProperties()
+    val exporter: ExporterProperties = ExporterProperties(),
+    /**
+     * Заголовки запроса, которые наследуются всеми дочерними спанами
+     * и пробрасываются в исходящие HTTP-вызовы (Metadata/Baggage).
+     */
+    val propagationHeaders: Set<String> = setOf(),
 ) {
 
     class ExporterProperties(
@@ -58,12 +61,5 @@ class TraceProperties(
          * Пауза при ошибках в цикле экспорта (Backoff).
          */
         val retryInterval: Duration = Duration.ofSeconds(1)
-    )
-
-    class PropagationProperties(
-        /*
-         * Список заголовков, которые мы "подхватываем" на входе и тащим по всей цепочке
-         */
-        val includeHeaders: Set<String> = setOf()
     )
 }
