@@ -1,4 +1,4 @@
-package com.micronaut.bug.controller
+package com.micronaut.bug.api
 
 import com.micronaut.bug.trace.TraceIdGenerator
 import org.junit.jupiter.api.Assertions.assertEquals

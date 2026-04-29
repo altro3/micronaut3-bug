@@ -1,4 +1,4 @@
-package com.micronaut.bug.controller
+package com.micronaut.bug.api
 
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.web.bind.annotation.GetMapping

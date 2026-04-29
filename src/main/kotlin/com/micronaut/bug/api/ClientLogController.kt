@@ -1,4 +1,4 @@
-package com.micronaut.bug.controller
+package com.micronaut.bug.api
 
 import com.micronaut.bug.service.integration.extservice.ExtServiceClient
 import com.micronaut.bug.service.integration.extservice.api.MyDataRequest

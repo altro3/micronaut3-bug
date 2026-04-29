@@ -2,6 +2,7 @@ package com.micronaut.bug.trace
 
 import com.micronaut.bug.trace.TraceIdGenerator.generate
 import com.micronaut.bug.trace.TraceIdGenerator.generateSpanId
+import com.micronaut.bug.trace.config.TraceProperties
 import io.opentelemetry.proto.trace.v1.Span.SpanKind
 import io.opentelemetry.proto.trace.v1.Status.StatusCode
 import kotlinx.coroutines.withContext
@@ -12,10 +13,12 @@ import org.springframework.http.HttpHeaders.HOST
 import org.springframework.http.HttpHeaders.USER_AGENT
 import java.time.Instant
 import java.util.Deque
+import java.util.concurrent.ThreadLocalRandom
 
 class NanoTracer(
     @PublishedApi
     internal val exporter: TempoExporter,
+    private val traceProps: TraceProperties,
 ) {
     @PublishedApi
     internal val internalStack = ThreadLocal<Deque<TraceContext>>.withInitial { ArrayDeque<TraceContext>() }
@@ -124,11 +127,19 @@ class NanoTracer(
         kind: SpanKind = SpanKind.SPAN_KIND_SERVER,
         attrs: Map<String, Any> = emptyMap(),
     ) {
-        val endNs = getCurrentEpochNanos()
-        val stack = internalStack.get()
 
+        val stack = internalStack.get()
         // Удаляем именно этот контекст (даже если закрыли не в том порядке)
         stack.remove(ctx)
+        // 1. Проверяем, является ли спан ошибочным
+        val isError = ctx.error != null || status == StatusCode.STATUS_CODE_ERROR
+
+        // 2. Решаем, нужно ли сэмплировать (пропускать) этот трейс
+        // Если это не ошибка И мы не попали в процент вероятности — выходим сразу
+        if (!isError && ThreadLocalRandom.current().nextDouble() >= traceProps.sampleRate) {
+            syncMdc()
+            return
+        }
 
         // Объединяем пользовательские атрибуты с метаданными контекста
         val finalAttrs = attrs.toMutableMap().apply {
@@ -138,13 +149,20 @@ class NanoTracer(
             ctx.propagationHeaders.forEach { (k, v) -> put("$PREFIX_PROPAGATION$k", v) }
         }
 
+        // Если в контексте зафиксирована ошибка, вытаскиваем её данные
+        ctx.error?.let {
+            finalAttrs[ATTR_EXCEPTION_TYPE] = it.javaClass.name
+            finalAttrs[ATTR_EXCEPTION_MESSAGE] = it.message ?: it.javaClass.simpleName
+            finalAttrs[ATTR_EXCEPTION_STACKTRACE] = it.stackTraceToString()
+        }
+
         exporter.enqueue(
             traceIdHex = ctx.traceId,
             spanIdHex = ctx.spanId,
             parentIdHex = ctx.parentId,
             name = ctx.name,
             startEpochNanos = ctx.startEpochNanos,
-            endEpochNanos = endNs,
+            endEpochNanos = getCurrentEpochNanos(),
             status = status,
             kind = kind,
             attrs = finalAttrs,
@@ -166,7 +184,7 @@ class NanoTracer(
 
         try {
             // Передаем ссылку на stack напрямую в TraceElement
-            return withContext(TraceElement(this, internalStack.get())) {
+            return withContext(TraceElement(internalStack.get(), this)) {
                 block(report)
             }
         } catch (e: Exception) {
@@ -183,6 +201,16 @@ class NanoTracer(
                 attrs = report.attrs,
             )
         }
+    }
+
+    /**
+     * Создает элемент контекста корутины для проброса текущего состояния трейсинга.
+     * Используется при ручном запуске корутин (launch, async).
+     */
+    fun dispatcher(): TraceElement {
+        // Делаем копию текущего стека из ThreadLocal
+        val snapshot = internalStack.get()?.let { ArrayDeque(it) } ?: ArrayDeque()
+        return TraceElement( snapshot, this)
     }
 
     private fun pushAndSync(ctx: TraceContext): TraceContext {

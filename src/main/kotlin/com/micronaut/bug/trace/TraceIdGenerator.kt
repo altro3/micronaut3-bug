@@ -1,7 +1,6 @@
 package com.micronaut.bug.trace
 
 import com.google.protobuf.ByteString
-import java.nio.charset.StandardCharsets
 import java.util.concurrent.ThreadLocalRandom
 
 object TraceIdGenerator {
@@ -32,7 +31,7 @@ object TraceIdGenerator {
 
         // Конструктор через ISO_8859_1 в Java 21+ создает компактную
         // строку (Latin-1) без валидации и лишних проверок.
-        return String(buffer, StandardCharsets.ISO_8859_1)
+        return String(buffer, Charsets.ISO_8859_1)
     }
 
     /**
@@ -45,7 +44,7 @@ object TraceIdGenerator {
 
         fill(random.nextLong(), buffer, 0)
 
-        return String(buffer, StandardCharsets.ISO_8859_1)
+        return String(buffer, Charsets.ISO_8859_1)
     }
 
     private fun fill(value: Long, target: ByteArray, offset: Int) {

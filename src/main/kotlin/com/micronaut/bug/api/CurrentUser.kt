@@ -1,4 +1,4 @@
-package com.micronaut.bug.controller
+package com.micronaut.bug.api
 
 @Target(AnnotationTarget.VALUE_PARAMETER)
 @Retention(AnnotationRetention.RUNTIME)

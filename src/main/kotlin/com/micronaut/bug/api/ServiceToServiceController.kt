@@ -1,4 +1,4 @@
-package com.micronaut.bug.controller
+package com.micronaut.bug.api
 
 import com.micronaut.bug.service.integration.internalservice.InternalServiceClient
 import org.springframework.web.bind.annotation.GetMapping

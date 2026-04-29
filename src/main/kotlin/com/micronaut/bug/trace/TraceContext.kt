@@ -34,4 +34,5 @@ data class TraceContext(
     val baggage: Map<String, String> = emptyMap(),
     val propagationHeaders: Map<String, String> = emptyMap(),
     val traceState: String? = null,
+    var error: Throwable? = null,
 )

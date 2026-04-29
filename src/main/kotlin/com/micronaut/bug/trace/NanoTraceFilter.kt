@@ -88,6 +88,8 @@ class NanoTraceFilter(
         MDC.put(MDC_SERVER, selfServiceName)
 
         try {
+            rs.setHeader(HEADER_TRACEPARENT, tracer.getTraceParent())
+
             chain.doFilter(rq, rs)
         } finally {
 

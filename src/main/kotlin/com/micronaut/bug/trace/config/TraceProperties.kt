@@ -13,6 +13,12 @@ class TraceProperties(
      */
     val enabled: Boolean = true,
     /**
+     * Вероятность экспорта успешных трейсов в Tempo.
+     * Значение от 0.0 (ничего не слать) до 1.0 (слать всё).
+     * Ошибочные трейсы всегда игнорируют этот параметр и шлются на 100%.
+     */
+    val sampleRate: Double = 1.0,
+    /**
      * Настройки пакетного экспортера в Grafana Tempo.
      */
     @NestedConfigurationProperty

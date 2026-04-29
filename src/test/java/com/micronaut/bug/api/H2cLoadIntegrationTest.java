@@ -1,7 +1,7 @@
-package com.micronaut.bug.controller;
+package com.micronaut.bug.api;
 
 import com.micronaut.bug.config.User;
-import com.micronaut.bug.controller.ServerLogController.MyData;
+import com.micronaut.bug.api.ServerLogController.MyData;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;

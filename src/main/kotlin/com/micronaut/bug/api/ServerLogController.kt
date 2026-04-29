@@ -1,4 +1,4 @@
-package com.micronaut.bug.controller
+package com.micronaut.bug.api
 
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.micronaut.bug.config.SecurityContext

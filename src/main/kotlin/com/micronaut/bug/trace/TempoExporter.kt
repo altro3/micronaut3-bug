@@ -94,7 +94,10 @@ class TempoExporter(
                     // Накапливаем остальные в течение окна времени из пропертей
                     withTimeoutOrNull(exporterProps.flushInterval.toMillis().milliseconds) {
                         while (batch.size < exporterProps.batchSize) {
-                            batch.add(channel.receive())
+                            // Используем tryReceive вместо receive, чтобы таймаут
+                            // не прервал корутину в момент извлечения данных
+                            val next = channel.tryReceive().getOrNull() ?: break
+                            batch.add(next)
                         }
                     }
 
@@ -114,6 +117,41 @@ class TempoExporter(
                 }
             }
         }
+    }
+
+    @PreDestroy
+    fun stop() {
+
+        // Если экспорт не был включен, нам нечего останавливать и очищать
+        if (!exporterProps.enabled) {
+            return
+        }
+
+        log.info { "Shutting down Tempo exporter: closing channel..." }
+
+        // 1. Запрещаем новые поступления в канал
+        channel.close()
+
+        // 2. Даем небольшое время фоновой корутине на обработку (например, 5 секунд)
+        runBlocking {
+            val job = exportScope.coroutineContext[Job]
+
+            // 1. Сначала даем воркеру штатно дочитать канал (join)
+            val finished = withTimeoutOrNull(exporterProps.shutdownTimeout.toMillis().milliseconds) {
+                job?.children?.forEach { it.join() }
+                true
+            }
+
+            // 2. И ТОЛЬКО ЕСЛИ он не успел по таймауту, вычищаем остатки сами
+            if (finished == null) {
+                log.warn { "Worker timeout, flushing remaining spans manually" }
+                flushRemaining()
+            }
+        }
+
+        // 3. Окончательно отменяем всё
+        exportScope.cancel()
+        log.info { "Tempo exporter stopped." }
     }
 
     /**
@@ -203,35 +241,6 @@ class TempoExporter(
         } else if (rs?.statusCode() !in 200..299) {
             log.warn { "Tempo rejected batch: code=${rs?.statusCode()}" }
         }
-    }
-
-    @PreDestroy
-    fun stop() {
-
-        // Если экспорт не был включен, нам нечего останавливать и очищать
-        if (!exporterProps.enabled) {
-            return
-        }
-
-        log.info { "Shutting down Tempo exporter: closing channel..." }
-
-        // 1. Запрещаем новые поступления в канал
-        channel.close()
-
-        // 2. Даем небольшое время фоновой корутине на обработку (например, 5 секунд)
-        runBlocking {
-            val job = exportScope.coroutineContext[Job]
-            // Ожидаем завершения цикла вычитки
-            withTimeoutOrNull(exporterProps.shutdownTimeout.toMillis().milliseconds) {
-                // Пытаемся вычитать всё через flushRemaining вручную для надежности
-                flushRemaining()
-                job?.children?.forEach { it.join() }
-            }
-        }
-
-        // 3. Окончательно отменяем всё
-        exportScope.cancel()
-        log.info { "Tempo exporter stopped." }
     }
 
     /**

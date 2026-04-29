@@ -9,8 +9,9 @@ import kotlin.coroutines.CoroutineContext
  * Реализует [ThreadContextElement] для синхронизации [ThreadLocal] хранилища и MDC.
  */
 class TraceElement(
+    @PublishedApi
+    internal val snapshot: ArrayDeque<TraceContext>,
     private val tracer: NanoTracer,
-    private val snapshot: ArrayDeque<TraceContext>
 ) : ThreadContextElement<ArrayDeque<TraceContext>?>, AbstractCoroutineContextElement(Key) {
 
     /**
