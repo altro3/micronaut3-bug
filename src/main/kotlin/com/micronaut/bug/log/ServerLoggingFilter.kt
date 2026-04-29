@@ -46,7 +46,7 @@ class ServerLoggingFilter(
         rs: HttpServletResponse,
         chain: FilterChain,
     ) {
-// Точное время старта в наносекундах для Tempo
+        // Точное время старта в наносекундах для Tempo
         val startTimeNano = System.nanoTime()
 
         // Пропускаем Actuator-эндпоинты, если это указано в настройках

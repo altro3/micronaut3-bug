@@ -216,7 +216,7 @@ class NanoTracer(
     fun dispatcher(): TraceElement {
         // Делаем копию текущего стека из ThreadLocal
         val snapshot = internalStack.get()?.let { ArrayDeque(it) } ?: ArrayDeque()
-        return TraceElement( snapshot, this)
+        return TraceElement(snapshot, this)
     }
 
     private fun pushAndSync(ctx: TraceContext): TraceContext {
@@ -329,6 +329,7 @@ class NanoTracer(
         const val ATTR_ERROR_TYPE = "error.type"
         const val PREFIX_BAGGAGE = "baggage."
         const val PREFIX_PROPAGATION = "prop."
+
         /**
          * Флаг аномально медленного запроса.
          * Позволяет быстро отфильтровать трейсы с задержкой выше установленного порога.

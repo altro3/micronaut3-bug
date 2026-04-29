@@ -38,8 +38,8 @@ class TraceAutoConfig {
     )
 
     @Bean
-    fun nanoTracer(tempoExporter: TempoExporter) =
-        NanoTracer(tempoExporter)
+    fun nanoTracer(tempoExporter: TempoExporter, traceProps: TraceProperties) =
+        NanoTracer(tempoExporter, traceProps)
 
     // Регистрация серверного фильтра трассировки
     @Bean
