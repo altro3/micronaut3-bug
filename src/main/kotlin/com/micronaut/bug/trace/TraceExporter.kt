@@ -1,6 +1,6 @@
 package com.micronaut.bug.trace
 
-import com.micronaut.bug.trace.NanoTracer.Companion.ATTR_NODE_NAME
+import com.micronaut.bug.trace.NanoTracer.Companion.ATTR_DEPLOYMENT_ENVIRONMENT
 import com.micronaut.bug.trace.NanoTracer.Companion.ATTR_SERVICE_NAME
 import com.micronaut.bug.trace.TraceIdGenerator.toByteString
 import com.micronaut.bug.trace.config.TraceProperties
@@ -71,7 +71,7 @@ class TraceExporter(
     private val serviceResource: Resource by lazy {
         Resource.newBuilder()
             .addAttributes(kv(ATTR_SERVICE_NAME, appName))
-            .addAttributes(kv(ATTR_NODE_NAME, nodeName))
+            .addAttributes(kv(ATTR_DEPLOYMENT_ENVIRONMENT, nodeName))
             .build()
     }
 

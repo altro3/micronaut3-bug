@@ -325,7 +325,7 @@ class NanoTracer(
          */
         // Resource (Service)
         const val ATTR_SERVICE_NAME = "service.name"
-        const val ATTR_NODE_NAME = "node.name"
+        const val ATTR_DEPLOYMENT_ENVIRONMENT = "deployment.environment"
 
         const val ATTR_SERVER_ADDRESS = "server.address"
         const val ATTR_SERVER_PORT = "server.port"

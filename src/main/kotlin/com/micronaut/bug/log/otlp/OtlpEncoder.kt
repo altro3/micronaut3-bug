@@ -27,8 +27,8 @@ class OtlpEncoder(
      * Статичные метаданные ресурса.
      */
     private val sharedResource: Resource = Resource.newBuilder()
-        .addAttributes(createKeyValue(ATTR_SERVICE_NAME, appName))
-        .addAttributes(createKeyValue(ATTR_NODE_NAME, nodeName))
+        .addAttributes(kv(ATTR_SERVICE_NAME, appName))
+        .addAttributes(kv(ATTR_DEPLOYMENT_ENVIRONMENT, nodeName))
         .build()
 
     /**
@@ -46,7 +46,7 @@ class OtlpEncoder(
                 .setSeverityText(event.level.levelStr)
                 // Используем маскирование карты для MDC (Mapped Diagnostic Context)
                 .addAllAttributes(logMasker.maskMap(event.mdcPropertyMap).map { (key, value) ->
-                    createKeyValue(key, value)
+                    kv(key, value)
                 })
                 .build()
         }
@@ -62,7 +62,7 @@ class OtlpEncoder(
             .toByteArray()
     }
 
-    private fun createKeyValue(key: String, value: String) =
+    private fun kv(key: String, value: String) =
         KeyValue.newBuilder()
             .setKey(key)
             .setValue(AnyValue.newBuilder().setStringValue(value).build())
@@ -79,8 +79,8 @@ class OtlpEncoder(
         }
 
     companion object {
-        private const val ATTR_SERVICE_NAME = "service.name"
-        private const val ATTR_NODE_NAME = "node.name"
+        const val ATTR_SERVICE_NAME = "service.name"
+        const val ATTR_DEPLOYMENT_ENVIRONMENT = "deployment.environment"
         private const val NANOS_IN_MILLI = 1_000_000L
     }
 }
