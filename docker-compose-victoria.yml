@@ -1,0 +1,71 @@
+version: '5.1.3'
+
+services:
+  # Единое хранилище (Метрики + Трейсы)
+  victoria-metrics:
+    image: victoriametrics/victoria-metrics:v1.142.0
+    container_name: victoria-metrics
+    ports:
+      - "8428:8428"
+    volumes:
+      - vm-data:/victoria-metrics-data
+    command:
+      - "--retentionPeriod=1"
+      - "--opentelemetry.enabled=true"
+    networks:
+      - vm-net
+
+  # Нативный агент приема трейсов
+  victoria-traces:
+    image: victoriametrics/vmtrace:v0.8.2
+    container_name: vmtrace
+    ports:
+      - "4317:4317"
+      - "4318:4318" # Твой NanoTracer шлет сюда
+    volumes:
+      - vmtrace-data:/vmtrace-data # <-- Добавил волюм для трейсов
+    command:
+      - "-remoteWrite.url=http://victoria-metrics:8428/api/v1/write"
+      - "-storageDataPath=/vmtrace-data" # <-- Указываем путь к волюму
+    depends_on:
+      - victoria-metrics
+    networks:
+      - vm-net
+
+  # Хранилище логов (VictoriaLogs)
+  victoria-logs:
+    image: victoriametrics/vlogs:v1.50.0
+    container_name: victoria-logs
+    ports:
+      - "9428:9428"
+    volumes:
+      - vlogs-data:/vlogs-data
+    command:
+      - "-retentionPeriod=7d"
+    networks:
+      - vm-net
+
+  # Интерфейс
+  grafana:
+    image: grafana/grafana:13.0.1
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    environment:
+      # Добавил плагин для трейсов к остальным
+      - GF_INSTALL_PLUGINS=victoriametrics-datasource,victoriametrics-logs-datasource,victoriametrics-distributed-tracing-datasource
+    depends_on:
+      - victoria-metrics
+    networks:
+      - vm-net
+    volumes:
+      - grafana-storage:/var/lib/grafana
+
+networks:
+  vm-net:
+
+volumes:
+  vm-data:
+  vlogs-data:
+  vmtrace-data:
+  grafana-storage:

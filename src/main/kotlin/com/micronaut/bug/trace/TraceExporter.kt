@@ -47,7 +47,7 @@ import kotlin.time.Duration.Companion.milliseconds
  * @property httpClient Клиент для выполнения HTTP-запросов к API Tempo.
  * @param traceProps Глобальные настройки трейсинга, из которых извлекаются [ExporterProperties].
  */
-class TempoExporter(
+class TraceExporter(
     private val appName: String,
     private val httpClient: HttpClient,
     traceProps: TraceProperties,

@@ -2,7 +2,7 @@ package com.micronaut.bug.trace.config
 
 import com.micronaut.bug.trace.NanoTraceFilter
 import com.micronaut.bug.trace.NanoTracer
-import com.micronaut.bug.trace.TempoExporter
+import com.micronaut.bug.trace.TraceExporter
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBooleanProperty
@@ -25,21 +25,21 @@ class TraceAutoConfig {
             .build()
 
     @Bean
-    fun tempoExporter(
+    fun traceExporter(
         traceProps: TraceProperties,
         @Value("\${spring.application.name}")
         appName: String,
         @Qualifier("traceHttpClient")
         httpClient: HttpClient,
-    ) = TempoExporter(
+    ) = TraceExporter(
         appName = appName,
         httpClient = httpClient,
         traceProps = traceProps,
     )
 
     @Bean
-    fun nanoTracer(tempoExporter: TempoExporter, traceProps: TraceProperties) =
-        NanoTracer(tempoExporter, traceProps)
+    fun nanoTracer(traceExporter: TraceExporter, traceProps: TraceProperties) =
+        NanoTracer(traceExporter, traceProps)
 
     // Регистрация серверного фильтра трассировки
     @Bean

@@ -17,7 +17,7 @@ import java.util.concurrent.ThreadLocalRandom
 
 class NanoTracer(
     @PublishedApi
-    internal val exporter: TempoExporter,
+    internal val exporter: TraceExporter,
     private val traceProps: TraceProperties,
 ) {
     @PublishedApi
