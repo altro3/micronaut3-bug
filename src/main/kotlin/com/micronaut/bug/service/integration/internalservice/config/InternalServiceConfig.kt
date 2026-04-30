@@ -15,7 +15,7 @@ class InternalServiceConfig {
     @Bean
     fun internalServiceHttpClient(
         props: InternalServiceProperties,
-        @Value("\${spring.application.name}")
+        @Value($$"${spring.application.name}")
         appName: String,
         objectMapper: ObjectMapper,
         nanoTracer: NanoTracer? = null,

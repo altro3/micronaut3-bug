@@ -50,7 +50,7 @@ import reactor.core.publisher.SignalType
 class NanoTraceGatewayFilter(
     private val tracer: NanoTracer,
     private val traceProps: TraceProperties,
-    @Value("\${spring.application.name}")
+    @Value($$"${spring.application.name}")
     private val selfServiceName: String,
 ) : GlobalFilter, Ordered {
 

@@ -12,11 +12,11 @@ class MdcConverter : ClassicConverter() {
         }
 
         val customKeys = keys // Читаем volatile один раз
-        val rqId = mdc[MDC_RQ_ID]
+        val traceId = mdc[MDC_TRACE_ID]
         val targetId = mdc[MDC_TARGET_ID]
 
         // Если все основные и кастомные ключи пусты — выходим
-        if (rqId == null && targetId == null && customKeys.isEmpty()) {
+        if (traceId == null && targetId == null && customKeys.isEmpty()) {
             return EMPTY_RESULT
         }
 
@@ -24,9 +24,9 @@ class MdcConverter : ClassicConverter() {
         sb.setLength(0)
         var hasContent = false
 
-        // 1. Вывод rqId
-        if (rqId != null) {
-            sb.append(PREFIX).append(LABEL_RQ).append(ASSIGN).append(rqId)
+        // 1. Вывод traceId
+        if (traceId != null) {
+            sb.append(PREFIX).append(traceId)
             hasContent = true
         }
 
@@ -41,7 +41,7 @@ class MdcConverter : ClassicConverter() {
         for (i in 0 until size) {
             val key = customKeys[i]
             // Пропускаем уже обработанные системные ключи
-            if (key == MDC_RQ_ID || key == MDC_TARGET_ID) {
+            if (key == MDC_TRACE_ID || key == MDC_TARGET_ID) {
                 continue
             }
 
@@ -58,12 +58,11 @@ class MdcConverter : ClassicConverter() {
 
     companion object {
         const val MDC_TARGET_ID = "targetId"
-        const val MDC_RQ_ID = "rqId"
+        const val MDC_TRACE_ID = "traceId"
 
         @Volatile
         var keys: List<String> = emptyList()
 
-        private const val LABEL_RQ = "rqId"
         private const val LABEL_TARGET = "targetId"
         private const val ASSIGN = "="
         private const val SEPARATOR = ", "

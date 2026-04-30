@@ -15,7 +15,7 @@ class ExtServiceConfig {
     @Bean
     fun extServiceHttpClient(
         props: ExtServiceProperties,
-        @Value("\${spring.application.name}")
+        @Value($$"${spring.application.name}")
         appName: String,
         objectMapper: ObjectMapper,
         tracer: NanoTracer? = null,

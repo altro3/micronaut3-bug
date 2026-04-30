@@ -27,12 +27,15 @@ class TraceAutoConfig {
     @Bean
     fun traceExporter(
         traceProps: TraceProperties,
-        @Value("\${spring.application.name}")
+        @Value($$"${spring.application.name}")
         appName: String,
+        @Value($$"${app.node.name}")
+        nodeName: String,
         @Qualifier("traceHttpClient")
         httpClient: HttpClient,
     ) = TraceExporter(
         appName = appName,
+        nodeName = nodeName,
         httpClient = httpClient,
         traceProps = traceProps,
     )
@@ -46,7 +49,7 @@ class TraceAutoConfig {
     fun nanoTraceFilterRegistration(
         tracer: NanoTracer,
         traceProps: TraceProperties,
-        @Value("\${spring.application.name}")
+        @Value($$"${spring.application.name}")
         appName: String,
     ) = FilterRegistrationBean(NanoTraceFilter(tracer, traceProps, appName)).apply {
         // Трейсинг ВСЕГДА идет первым
