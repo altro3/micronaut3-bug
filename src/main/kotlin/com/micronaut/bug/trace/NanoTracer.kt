@@ -116,6 +116,7 @@ class NanoTracer(
                 parentId = parent.spanId,
                 name = name,
                 startEpochNanos = getCurrentEpochNanos(),
+                sampled = parent.sampled,
                 baggage = parent.baggage,
                 propagationHeaders = parent.propagationHeaders,
                 traceState = parent.traceState,
