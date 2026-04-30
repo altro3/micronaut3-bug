@@ -2,7 +2,6 @@ package com.micronaut.bug.client
 
 import com.micronaut.bug.client.HttpClientProperties.ClientType.INTERNAL
 import com.micronaut.bug.client.LoggingInterceptor.Companion.SLASH
-import com.micronaut.bug.trace.NanoTraceFilter.Companion.METHODS_WITHOUT_BODY
 import com.micronaut.bug.trace.NanoTracer
 import com.micronaut.bug.trace.NanoTracer.Companion.ATTR_CLIENT
 import com.micronaut.bug.trace.NanoTracer.Companion.ATTR_EXCEPTION_MESSAGE
@@ -23,6 +22,7 @@ import com.micronaut.bug.trace.NanoTracer.Companion.HEADER_X_SENDER
 import com.micronaut.bug.trace.NanoTracer.Companion.MDC_CLIENT
 import com.micronaut.bug.trace.NanoTracer.Companion.MDC_EXT_RQ_ID
 import com.micronaut.bug.trace.NanoTracer.Companion.MDC_SERVER
+import com.micronaut.bug.trace.NanoTracer.Companion.METHODS_WITHOUT_BODY
 import com.micronaut.bug.trace.NanoTracer.Companion.OTEL_MAPPED_HEADERS
 import com.micronaut.bug.trace.NanoTracer.Companion.PREFIX_BAGGAGE
 import com.micronaut.bug.trace.NanoTracer.Companion.PREFIX_HTTP_REQUEST_HEADER

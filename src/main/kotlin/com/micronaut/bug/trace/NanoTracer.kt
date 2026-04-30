@@ -1,5 +1,6 @@
 package com.micronaut.bug.trace
 
+import com.micronaut.bug.trace.NanoTraceFilter.Companion.HEADER_API_KEY
 import com.micronaut.bug.trace.TraceIdGenerator.generate
 import com.micronaut.bug.trace.TraceIdGenerator.generateSpanId
 import com.micronaut.bug.trace.config.TraceProperties
@@ -7,10 +8,13 @@ import io.opentelemetry.proto.trace.v1.Span.SpanKind
 import io.opentelemetry.proto.trace.v1.Status.StatusCode
 import kotlinx.coroutines.withContext
 import org.slf4j.MDC
+import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpHeaders.CONTENT_LENGTH
 import org.springframework.http.HttpHeaders.CONTENT_TYPE
 import org.springframework.http.HttpHeaders.HOST
 import org.springframework.http.HttpHeaders.USER_AGENT
+import org.springframework.http.HttpMethod
+import reactor.util.context.ContextView
 import java.time.Instant
 import java.util.Deque
 import java.util.concurrent.ThreadLocalRandom
@@ -93,33 +97,43 @@ class NanoTracer(
     )
 
     /**
-     * Создает и активирует дочерний спан, наследуя контекст от текущего активного спана.
-     * Если активный контекст отсутствует, метод автоматически создает корневой трейс.
+     * Создает и активирует дочерний спан, обеспечивая преемственность контекста.
      *
-     * Наследует [TraceContext.baggage], [TraceContext.propagationHeaders] и
-     * [TraceContext.traceState] от родителя. Если родитель отсутствует в текущем
-     * потоке, инициализирует новый трейс.
+     * Метод поддерживает два режима работы:
+     * 1. **Реактивный (Reactor/WebFlux):** Если [parent] передан явно (например, из Reactor Context),
+     *    новый спан создается на его основе. Это критично для Gateway и WebClient.
+     * 2. **Классический (ThreadLocal):** Если [parent] не указан, метод пытается извлечь
+     *    активный контекст из текущего потока.
      *
-     * @param name Имя вложенной операции (например, "SERVICE: processOrder" или "CLIENT: callPaymentApi").
+     * В обоих случаях дочерний спан наследует флаг сэмплирования [TraceContext.sampled],
+     * [TraceContext.baggage], [TraceContext.propagationHeaders] и [TraceContext.traceState].
+     * Если родительский контекст не найден ни в одном из источников, автоматически
+     * инициируется новый корневой трейс.
+     *
+     * @param name Имя вложенной операции (например, "SERVICE: processOrder" или "CLIENT: callApi").
+     * @param parent Необязательный родительский контекст (используется в реактивных цепочках).
      * @return Новый [TraceContext], ставший вершиной стека в текущем потоке.
      */
-    fun startSpan(name: String): TraceContext {
-        val parent = currentContext()
-        if (parent == null) {
+    fun startSpan(name: String, parent: TraceContext? = null): TraceContext {
+        // Если родитель передан явно (из Reactor), берем его.
+        // Если нет — пытаемся взять из ThreadLocal стека.
+        val effectiveParent = parent ?: currentContext()
+
+        if (effectiveParent == null) {
             return startTrace(name)
         }
 
         return pushAndSync(
             TraceContext(
-                traceId = parent.traceId, // Наследуем traceId
+                traceId = effectiveParent.traceId, // Наследуем traceId
                 spanId = generateSpanId(),
-                parentId = parent.spanId,
+                parentId = effectiveParent.spanId,
                 name = name,
                 startEpochNanos = getCurrentEpochNanos(),
-                sampled = parent.sampled,
-                baggage = parent.baggage,
-                propagationHeaders = parent.propagationHeaders,
-                traceState = parent.traceState,
+                sampled = effectiveParent.sampled,
+                baggage = effectiveParent.baggage,
+                propagationHeaders = effectiveParent.propagationHeaders,
+                traceState = effectiveParent.traceState,
             )
         )
     }
@@ -360,6 +374,28 @@ class NanoTracer(
          */
         private const val NANOS_PER_SECOND = 1_000_000_000L
 
+        val METHODS_WITHOUT_BODY = setOf(
+            HttpMethod.GET.name(),
+            HttpMethod.HEAD.name(),
+            HttpMethod.OPTIONS.name(),
+            HttpMethod.DELETE.name(),
+            HttpMethod.TRACE.name(),
+        )
+
+        val SENSITIVE_HEADERS = setOf(
+            HttpHeaders.AUTHORIZATION.lowercase(),
+            HttpHeaders.COOKIE.lowercase(),
+            HttpHeaders.SET_COOKIE.lowercase(),
+            HEADER_API_KEY.lowercase(),
+        )
+
+        const val MASK = "***"
+
+        /**
+         * Список для маскировки чувствительных заголовков в формате OTel (string[]).
+         */
+        val MASKED_VALUES = listOf(MASK)
+
         /**
          * Парсит заголовок багажа согласно W3C (key=value,key2=value2)
          */
@@ -386,4 +422,19 @@ class NanoTracer(
             return baggage.entries.joinToString(",") { "${it.key}=${it.value}" }
         }
     }
+
+    /**
+     * Извлекает контекст трассировки из хранилища Project Reactor.
+     *
+     * В реактивном окружении (Spring Cloud Gateway, WebClient) стандартные механизмы
+     * на базе ThreadLocal не работают из-за постоянной смены потоков исполнения.
+     * Данный метод позволяет безопасно получить [TraceContext] из [ContextView],
+     * обеспечивая непрерывность цепочки спанов внутри реактивных операторов.
+     *
+     * @param reactorContext неизменяемое представление контекста Reactor (ContextView).
+     * @return [TraceContext], если он был ранее помещен в контекст (например, фильтром Gateway),
+     * или null, если информация о трассировке отсутствует.
+     */
+    fun currentContext(reactorContext: ContextView): TraceContext? =
+        reactorContext.getOrDefault(TraceContext::class.java, null)
 }

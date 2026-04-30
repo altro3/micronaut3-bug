@@ -19,11 +19,14 @@ import com.micronaut.bug.trace.NanoTracer.Companion.ATTR_USER_AGENT_ORIGINAL
 import com.micronaut.bug.trace.NanoTracer.Companion.HEADER_BAGGAGE
 import com.micronaut.bug.trace.NanoTracer.Companion.HEADER_TRACEPARENT
 import com.micronaut.bug.trace.NanoTracer.Companion.HEADER_X_SENDER
+import com.micronaut.bug.trace.NanoTracer.Companion.MASKED_VALUES
 import com.micronaut.bug.trace.NanoTracer.Companion.MDC_CLIENT
 import com.micronaut.bug.trace.NanoTracer.Companion.MDC_SERVER
+import com.micronaut.bug.trace.NanoTracer.Companion.METHODS_WITHOUT_BODY
 import com.micronaut.bug.trace.NanoTracer.Companion.OTEL_MAPPED_HEADERS
 import com.micronaut.bug.trace.NanoTracer.Companion.PREFIX_HTTP_REQUEST_HEADER
 import com.micronaut.bug.trace.NanoTracer.Companion.PREFIX_HTTP_RESPONSE_HEADER
+import com.micronaut.bug.trace.NanoTracer.Companion.SENSITIVE_HEADERS
 import com.micronaut.bug.trace.NanoTracer.Companion.TRACEPARENT_DELIMITER
 import com.micronaut.bug.trace.NanoTracer.Companion.TRACEPARENT_PREFIX
 import com.micronaut.bug.trace.NanoTracer.Companion.parseBaggage
@@ -36,7 +39,6 @@ import jakarta.servlet.http.HttpServletResponse
 import org.slf4j.MDC
 import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpHeaders.USER_AGENT
-import org.springframework.http.HttpMethod
 import org.springframework.web.filter.OncePerRequestFilter
 
 class NanoTraceFilter(
@@ -159,7 +161,7 @@ class NanoTraceFilter(
                 ctx = ctx,
                 status = if (isError) Status.StatusCode.STATUS_CODE_ERROR else Status.StatusCode.STATUS_CODE_OK,
                 attrs = attrs,
-                forceExport = isSlow,
+                forceExport = isSlow || isError,
             )
             MDC.clear()
         }
@@ -191,29 +193,8 @@ class NanoTraceFilter(
 
         private const val DEFAULT_SENDER = "USER"
         private const val QUERY_MARKER = "?"
-        private const val MASK = "***"
         private const val ERROR_STATUS_THRESHOLD = 400
 
         const val HEADER_API_KEY = "api-key"
-
-        val METHODS_WITHOUT_BODY = setOf(
-            HttpMethod.GET.name(),
-            HttpMethod.HEAD.name(),
-            HttpMethod.OPTIONS.name(),
-            HttpMethod.DELETE.name(),
-            HttpMethod.TRACE.name(),
-        )
-
-        /**
-         * Список для маскировки чувствительных заголовков в формате OTel (string[]).
-         */
-        private val MASKED_VALUES = listOf(MASK)
-
-        private val SENSITIVE_HEADERS = setOf(
-            HttpHeaders.AUTHORIZATION.lowercase(),
-            HttpHeaders.COOKIE.lowercase(),
-            HttpHeaders.SET_COOKIE.lowercase(),
-            HEADER_API_KEY.lowercase(),
-        )
     }
 }
