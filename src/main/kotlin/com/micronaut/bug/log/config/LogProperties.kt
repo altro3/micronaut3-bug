@@ -6,6 +6,7 @@ import jakarta.validation.constraints.NotNull
 import jakarta.validation.constraints.Positive
 import org.springframework.boot.context.properties.ConfigurationProperties
 import org.springframework.core.Ordered
+import org.springframework.http.HttpHeaders
 import org.springframework.util.unit.DataSize
 import java.net.URI
 import java.time.Duration
@@ -63,14 +64,23 @@ class LogProperties(
      * Настройки интеграции с Grafana Loki.
      */
     @field:Valid
-    var loki: LokiProperties = LokiProperties()
+    var loki: LokiProperties = LokiProperties(),
+    /**
+     * Настройки интеграции с VictoriaLogs / OpenTelemetry.
+     */
+    @field:Valid
+    var otlp: OtlpProperties = OtlpProperties(),
+    /**
+     * Настройки маскирования чувствительных данных.
+     */
+    var masking: MaskingProperties = MaskingProperties()
 ) {
 
     class LokiProperties(
         /**
          * Включает отправку логов напрямую в Loki через loki-logback-appender.
          */
-        var enabled: Boolean = true,
+        var enabled: Boolean = false,
         /**
          * URL эндпоинта Loki для пуша логов (Protobuf/HTTP).
          */
@@ -163,5 +173,99 @@ class LogProperties(
          * Флаг использования статических меток для оптимизации.
          */
         var staticLabels: Boolean = true,
+    )
+
+    /**
+     * Настройки интеграции по протоколу OpenTelemetry (OTLP).
+     */
+    class OtlpProperties(
+        /**
+         * Включает или выключает отправку логов в формате OTLP.
+         */
+        var enabled: Boolean = true,
+        /**
+         * Эндпоинт сервера для приема OTLP логов (например, VictoriaLogs или OTEL Collector).
+         * Стандартный путь обычно заканчивается на /v1/logs.
+         */
+        var url: URI = URI.create("http://localhost:9428/opentelemetry/v1/logs"),
+        /**
+         * Размер батча (количество логов) перед отправкой.
+         */
+        @field:Positive
+        var batchSize: Int = 200,
+        /**
+         * Интервал времени, по истечении которого неполный батч будет отправлен.
+         */
+        var batchTimeout: Duration = Duration.ofSeconds(5),
+        /**
+         * Таймаут на установку соединения с сервером.
+         */
+        var connectionTimeout: Duration = Duration.ofSeconds(5),
+        /**
+         * Таймаут на выполнение HTTP-запроса на пуш логов.
+         */
+        var requestTimeout: Duration = Duration.ofSeconds(5),
+        /**
+         * Использовать ли GZIP-сжатие при отправке данных (существенно экономит трафик).
+         */
+        var useGzip: Boolean = true
+    )
+
+    class MaskingProperties(
+        /**
+         * Включает маскирование.
+         */
+        var enabled: Boolean = true,
+        /**
+         * Заголовки, требующие строгой маскировки (Credentials/Sessions).
+         */
+        var sensitiveHeaders: Set<String> = setOf(
+            HttpHeaders.AUTHORIZATION,
+            HttpHeaders.PROXY_AUTHORIZATION,
+            HttpHeaders.COOKIE,
+            HttpHeaders.SET_COOKIE,
+        ),
+        /**
+         * Заголовки, требующие частичной маскировки (Косвенные ПДн).
+         */
+        var indirectHeaders: Set<String> = setOf(
+            HttpHeaders.REFERER,
+            HttpHeaders.USER_AGENT,
+            "x-forwarded-for",
+        ),
+        /**
+         * Поля для полного затирания (пароли, токены).
+         */
+        var full: Set<String> = setOf(
+            "password",
+            "secret",
+            "token",
+            "access_token",
+            "refresh_token",
+            "api_key",
+            "authorization",
+            "cvv",
+            "cvc",
+            "pin",
+            "fingerprint",
+        ),
+        /**
+         * Поля для частичного маскирования (ПДн согласно ФЗ-152).
+         */
+        var partial: Set<String> = setOf(
+            // Общие данные и документы
+            "fio", "fullname", "firstname", "lastname", "middlename",
+            "birth", "passport", "document", "snils", "inn",
+
+            // Контакты и адреса
+            "phone", "email", "mail", "address", "location", "city", "street",
+
+            // Профессия и образование
+            "education", "profession", "job", "salary", "workplace",
+        ),
+        /**
+         * Символ маски.
+         */
+        var maskChar: String = "*"
     )
 }
