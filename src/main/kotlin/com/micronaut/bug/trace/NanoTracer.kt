@@ -49,8 +49,9 @@ class NanoTracer(
      * @return Строка заголовка или null, если контекст трейсинга отсутствует.
      */
     fun getTraceParent(): String? {
-        val current = internalStack.get().firstOrNull() ?: return null
-        return "$TRACEPARENT_PREFIX${current.traceId}-${current.spanId}-01"
+        val current = currentContext() ?: return null
+        val flag = if (current.sampled) "01" else "00"
+        return "$TRACEPARENT_PREFIX${current.traceId}-${current.spanId}-$flag"
     }
 
     /**
@@ -63,12 +64,17 @@ class NanoTracer(
      * @param baggage Набор данных, полученный из стандартного W3C-заголовка "baggage".
      * @param propagationHeaders Заголовки, которые необходимо пробрасывать "как есть" во все клиенты.
      * @param traceState Сырая строка из заголовка "tracestate" для обеспечения совместимости.
+     *
+     * @param sampled Решение о записи трейса, принятое вышестоящим узлом (Istio/Gateway).
+     * Если пришло 'false', приложение будет подавлять экспорт успешных спанов этой цепочки.
+     *
      * @return Созданный и помещенный в стек [TraceContext].
      */
     fun startTrace(
         name: String,
         remoteTraceId: String? = null,
         remoteParentId: String? = null,
+        sampled: Boolean = true,
         baggage: Map<String, String> = emptyMap(),
         propagationHeaders: Map<String, String> = emptyMap(),
         traceState: String? = null,
@@ -79,6 +85,7 @@ class NanoTracer(
             parentId = remoteParentId, // Если он пришел, мы станем вложенным трейсом
             name = name,
             startEpochNanos = getCurrentEpochNanos(),
+            sampled = sampled,
             baggage = baggage,
             propagationHeaders = propagationHeaders,
             traceState = traceState,
@@ -119,6 +126,11 @@ class NanoTracer(
     /**
      * Завершает операцию и отправляет данные в экспортер.
      *
+     * Логика принятия решения об экспорте (Sampling Decision):
+     * 1. Принудительный экспорт (forceExport или ошибка) — всегда отправляем в Tempo.
+     * 2. Решение родителя (Istio) — если входной заголовок требовал 'not sampled', подавляем экспорт.
+     * 3. Собственное сэмплирование — если вышестоящих систем нет, применяем [sampleRate] из конфига.
+     *
      * @param ctx контекст завершаемого спана.
      * @param status статус завершения (OK/ERROR).
      * @param attrs дополнительные метаданные.
@@ -141,7 +153,13 @@ class NanoTracer(
         // Решение об экспорте:
         // 1. Либо это принудительный экспорт (ошибка, медленный запрос)
         // 2. Либо попали в рандом по sampleRate
-        if (!isError && !forceExport && ThreadLocalRandom.current().nextDouble() >= traceProps.sampleRate) {
+        val shouldExport = when {
+            isError || forceExport -> true // Всегда шлем ошибки и медленные
+            !ctx.sampled -> false          // Если родитель (Istio) сказал "не надо" — уважаем
+            else -> ThreadLocalRandom.current().nextDouble() < traceProps.sampleRate // Иначе наше сэмплирование
+        }
+
+        if (!shouldExport) {
             syncMdc()
             return
         }

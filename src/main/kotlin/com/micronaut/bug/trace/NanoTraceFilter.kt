@@ -54,12 +54,16 @@ class NanoTraceFilter(
         val traceParent = rq.getHeader(HEADER_TRACEPARENT)
         var traceId: String? = null
         var parentId: String? = null
+        var isSampledByParent = true
 
         if (traceParent != null && traceParent.startsWith(TRACEPARENT_PREFIX)) {
             val parts = traceParent.split(TRACEPARENT_DELIMITER)
-            if (parts.size >= 3) {
+            if (parts.size >= 4) {
                 traceId = parts[1]
                 parentId = parts[2]
+                // Проверяем флаг сэмплирования (последний бит)
+                val flags = parts[3].toIntOrNull(16) ?: 0
+                isSampledByParent = (flags and 0x01) == 1
             }
         }
 
@@ -84,6 +88,7 @@ class NanoTraceFilter(
             name = "${rq.method} ${rq.requestURI}",
             remoteTraceId = traceId,
             remoteParentId = parentId,
+            sampled = isSampledByParent,
             baggage = baggage,
             propagationHeaders = propagationHeaders,
             traceState = traceState,

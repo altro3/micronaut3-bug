@@ -24,6 +24,11 @@ package com.micronaut.bug.trace
  * @property traceState Вендор-специфичные данные согласно W3C Trace Context.
  * Хранятся как непрозрачная (opaque) строка и передаются без изменений для обеспечения
  * совместимости между различными вендорами трассировки.
+ *
+ * @property sampled Флаг сэмплирования, полученный от родительской системы (например, Istio)
+ * или вычисленный на входе. Если false — спаны этой ветки не будут экспортироваться в Tempo,
+ * чтобы снизить нагрузку на хранилище, за исключением случаев ошибок или медленных запросов.
+ *
  */
 data class TraceContext(
     val traceId: String,
@@ -35,4 +40,5 @@ data class TraceContext(
     val propagationHeaders: Map<String, String> = emptyMap(),
     val traceState: String? = null,
     var error: Throwable? = null,
+    val sampled: Boolean = true,
 )
