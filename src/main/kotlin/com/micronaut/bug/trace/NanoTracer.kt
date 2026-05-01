@@ -41,7 +41,7 @@ class NanoTracer(
     }
 
     @PublishedApi
-    internal fun getCurrentEpochNanos(): Long = System.nanoTime() * clockOffsetNanos
+    internal fun getCurrentEpochNanos(): Long = System.nanoTime() + clockOffsetNanos
 
     fun currentContext(): TraceContext? = internalStack.get().firstOrNull()
 

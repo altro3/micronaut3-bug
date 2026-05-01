@@ -7,7 +7,7 @@ app:
     enabled: true
     exporter:
       enabled: true
-      url: http://localhost:4318/v1/traces
+      url: http://localhost:10428/insert/opentelemetry/v1/traces
       connect-timeout: 2s
   log:
     enabled: true
@@ -17,8 +17,11 @@ app:
     pretty-print: true
     max-payload-size: 4MB
     loki:
-      enabled: true
+      enabled: false
       batch-timeout: PT20S
+    otlp:
+      enabled: true
+      url: http://localhost:9428/insert/opentelemetry/v1/logs
   integration:
     ext-service:
       endpoints:
@@ -69,6 +72,27 @@ spring:
     codecs:
       max-in-memory-size: 10MB
 
+management:
+  observations:
+    key-values:
+      enabled: true # Включает дефолтные теги
+  endpoints:
+    web:
+      exposure:
+        include: health, info, metrics, prometheus
+  metrics:
+    enable:
+      all: true # Принудительно включает всё
+      "http.server.requests": true # Включает конкретно HTTP запросы
+#  otlp:
+#    metrics:
+#      export:
+#        url: http://localhost:8428/opentelemetry/v1/metrics
+#        step: 10s
+#        aggregation-temporality: cumulative
+#        resource-attributes:
+#          "service.name": ${spring.application.name}
+#          "deployment.environment": ${app.node.name}
 logging:
   pattern:
     console: "%d{HH:mm:ss.SSS} %highlight(%-5level) [%thread] %cyan(%logger{25}) - %msg%n%throwable"

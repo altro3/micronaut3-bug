@@ -63,7 +63,7 @@ class NanoTraceClientInterceptor(
         val urlFull = if (rq.uri.isAbsolute) rq.uri.toString() else "$basePrefix${getFullUri(rq)}"
 
         // Стартуем дочерний спан. Имя в формате "CLIENT: METHOD /path" для наглядности в UI Grafana.
-        val ctx = tracer.startSpan(name = "${rq.method} $urlFull")
+        val ctx = tracer.startSpan(name = "$PREFIX_CLIENT_SPAN ${rq.method} $urlFull")
 
         // Проброс стандартного контекста трейсинга (W3C traceparent)
         tracer.getTraceParent()?.let {
@@ -240,6 +240,7 @@ class NanoTraceClientInterceptor(
         const val PROTOCOL_HTTP = "http"
         const val PROTOCOL_HTTPS = "https"
 
+        const val PREFIX_CLIENT_SPAN = "CLIENT:"
         const val HOST_UNKNOWN = "unknown"
     }
 }

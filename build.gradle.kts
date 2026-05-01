@@ -39,6 +39,8 @@ dependencies {
     implementation(spring.jackson.jacksonModuleKotlin)
     implementation(spring.jackson.jacksonModuleBlackbird)
     implementation(spring.logback.logbackClassic)
+//    implementation(spring.micrometer.micrometerRegistryOtlp)
+    implementation(spring.micrometer.micrometerRegistryPrometheus)
     implementation(coroutines.kotlinx.kotlinxCoroutinesCoreJvm)
     implementation(coroutines.kotlinx.kotlinxCoroutinesSlf4j)
     implementation(kot.kotlin.kotlinReflect)
