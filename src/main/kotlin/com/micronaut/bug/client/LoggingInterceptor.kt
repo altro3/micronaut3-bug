@@ -5,7 +5,7 @@ import com.fasterxml.jackson.databind.SerializationFeature
 import com.micronaut.bug.client.HttpClientProperties.ClientType.EXTERNAL
 import com.micronaut.bug.client.LoggingInterceptor.Companion.LIMIT_TEXT_CHECK_THRESHOLD
 import com.micronaut.bug.trace.NanoTracer.Companion.MDC_CLIENT
-import com.micronaut.bug.trace.NanoTracer.Companion.MDC_EXT_RQ_ID
+import com.micronaut.bug.trace.NanoTracer.Companion.MDC_SPAN_ID
 import com.micronaut.bug.trace.TraceIdGenerator.generateSpanId
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.slf4j.MDC
@@ -59,7 +59,7 @@ class LoggingInterceptor(
         val isDebug = log.isDebugEnabled()
 
         val skipLogging = rq.attributes[ATTR_SKIP_LOGGING] as? Boolean ?: false
-        val extRqId = MDC.get(MDC_EXT_RQ_ID) ?: generateSpanId()
+        val extRqId = MDC.get(MDC_SPAN_ID) ?: generateSpanId()
         rq.attributes[ATTR_EXT_RQ_ID] = extRqId
 
         try {

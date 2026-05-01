@@ -2,7 +2,7 @@ package com.micronaut.bug.trace.config
 
 import com.micronaut.bug.trace.NanoTraceFilter
 import com.micronaut.bug.trace.NanoTracer
-import com.micronaut.bug.trace.TraceExporter
+import com.micronaut.bug.trace.otlp.TraceExporter
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBooleanProperty

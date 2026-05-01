@@ -1,7 +1,7 @@
 package com.micronaut.bug.trace.reactor
 
-import com.micronaut.bug.trace.NanoTracer.Companion.MDC_EXT_RQ_ID
-import com.micronaut.bug.trace.NanoTracer.Companion.MDC_RQ_ID
+import com.micronaut.bug.trace.NanoTracer.Companion.MDC_SPAN_ID
+import com.micronaut.bug.trace.NanoTracer.Companion.MDC_TRACE_ID
 import com.micronaut.bug.trace.TraceContext
 import org.slf4j.MDC
 import reactor.core.CoreSubscriber
@@ -44,8 +44,8 @@ object ReactorMdcHook {
                 .getOrEmpty<TraceContext>(TraceContext::class.java)
                 .orElse(null)
             if (ctx != null) {
-                MDC.put(MDC_RQ_ID, ctx.traceId)
-                MDC.put(MDC_EXT_RQ_ID, ctx.spanId)
+                MDC.put(MDC_TRACE_ID, ctx.traceId)
+                MDC.put(MDC_SPAN_ID, ctx.spanId)
             }
         }
     }

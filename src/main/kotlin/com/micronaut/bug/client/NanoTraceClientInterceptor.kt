@@ -5,8 +5,6 @@ import com.micronaut.bug.client.LoggingInterceptor.Companion.SLASH
 import com.micronaut.bug.trace.NanoTracer
 import com.micronaut.bug.trace.NanoTracer.Companion.ATTR_CLIENT
 import com.micronaut.bug.trace.NanoTracer.Companion.ATTR_EXCEPTION_MESSAGE
-import com.micronaut.bug.trace.NanoTracer.Companion.ATTR_EXCEPTION_STACKTRACE
-import com.micronaut.bug.trace.NanoTracer.Companion.ATTR_EXCEPTION_TYPE
 import com.micronaut.bug.trace.NanoTracer.Companion.ATTR_HTTP_REQUEST_BODY_SIZE
 import com.micronaut.bug.trace.NanoTracer.Companion.ATTR_HTTP_REQUEST_METHOD
 import com.micronaut.bug.trace.NanoTracer.Companion.ATTR_HTTP_RESPONSE_BODY_SIZE
@@ -20,11 +18,10 @@ import com.micronaut.bug.trace.NanoTracer.Companion.HEADER_BAGGAGE
 import com.micronaut.bug.trace.NanoTracer.Companion.HEADER_TRACEPARENT
 import com.micronaut.bug.trace.NanoTracer.Companion.HEADER_X_SENDER
 import com.micronaut.bug.trace.NanoTracer.Companion.MDC_CLIENT
-import com.micronaut.bug.trace.NanoTracer.Companion.MDC_EXT_RQ_ID
 import com.micronaut.bug.trace.NanoTracer.Companion.MDC_SERVER
+import com.micronaut.bug.trace.NanoTracer.Companion.MDC_SPAN_ID
 import com.micronaut.bug.trace.NanoTracer.Companion.METHODS_WITHOUT_BODY
 import com.micronaut.bug.trace.NanoTracer.Companion.OTEL_MAPPED_HEADERS
-import com.micronaut.bug.trace.NanoTracer.Companion.PREFIX_BAGGAGE
 import com.micronaut.bug.trace.NanoTracer.Companion.PREFIX_HTTP_REQUEST_HEADER
 import com.micronaut.bug.trace.NanoTracer.Companion.PREFIX_HTTP_RESPONSE_HEADER
 import com.micronaut.bug.trace.NanoTracer.Companion.formatBaggage
@@ -92,10 +89,21 @@ class NanoTraceClientInterceptor(
 
         // Проброс кастомных заголовков (Propagation Headers)
         // Мы берем их из контекста и проставляем "как есть"
-        ctx.propagationHeaders.forEach { (name, value) ->
-            // Проверяем, не установил ли разработчик заголовок вручную (ignore case)
-            if (!rq.headers.keys.any { it.equals(name, ignoreCase = true) }) {
-                rq.headers.set(name, value)
+        if (!ctx.propagationHeaders.isNullOrEmpty()) {
+            val keys = rq.headers.keys
+            for (entry in ctx.propagationHeaders.entries) {
+                val name = entry.key
+                // Быстрая проверка без создания лямбд
+                var found = false
+                for (k in keys) {
+                    if (k.equals(name, ignoreCase = true)) {
+                        found = true
+                        break
+                    }
+                }
+                if (!found) {
+                    rq.headers.set(name, entry.value)
+                }
             }
         }
 
@@ -110,7 +118,7 @@ class NanoTraceClientInterceptor(
             val isSlow = durationMs >= props.log.slowThreshold.toMillis()
 
             if (isSlow) {
-                log.warn { "Slow client response: ${rq.method} $urlFull took ${durationMs}ms (threshold: ${props.log.slowThreshold.toMillis()}ms) [extRqId: ${MDC.get(MDC_EXT_RQ_ID)}]" }
+                log.warn { "Slow client response: ${rq.method} $urlFull took ${durationMs}ms (threshold: ${props.log.slowThreshold.toMillis()}ms) [extRqId: ${MDC.get(MDC_SPAN_ID)}]" }
             }
 
             val isError = rs.statusCode.isError
@@ -118,72 +126,68 @@ class NanoTraceClientInterceptor(
             MDC.put(MDC_CLIENT, selfServiceName)
             MDC.put(MDC_SERVER, props.serviceName)
 
+            // Собираем ТОЛЬКО кастомные атрибуты.
+            val attrs = HashMap<String, Any>(32)
+            attrs[ATTR_HTTP_REQUEST_METHOD] = rq.method.name()
+            attrs[ATTR_URL_FULL] = urlFull
+            attrs[ATTR_HTTP_RESPONSE_STATUS_CODE] = rs.statusCode.value().toLong()
+
+            val host = rq.uri.host ?: props.url.host ?: HOST_UNKNOWN
+            attrs[ATTR_SERVER_ADDRESS] = host
+            val port = rq.uri.port.takeIf { it != -1 }
+                ?: props.url.port.takeIf { it != -1 }
+                ?: if (urlFull.startsWith(PROTOCOL_HTTPS)) 443 else 80
+            attrs[ATTR_SERVER_PORT] = port.toLong()
+
+            attrs[ATTR_CLIENT] = selfServiceName
+            attrs[ATTR_SERVER] = props.serviceName.toString()
+
+            props.serviceName?.let { attrs[ATTR_PEER_SERVICE] = it }
+
+            // Размеры
+            if (rq.method.name() !in METHODS_WITHOUT_BODY) {
+                val reqSize = body.size.toLong()
+                if (reqSize > 0) {
+                    attrs[ATTR_HTTP_REQUEST_BODY_SIZE] = reqSize
+                }
+            }
+
+            rs.headers.contentLength.takeIf { it != -1L }?.let {
+                attrs[ATTR_HTTP_RESPONSE_BODY_SIZE] = it
+            }
+
+            if (isError) {
+                attrs[ATTR_EXCEPTION_MESSAGE] = "HTTP ${rs.statusCode.value()}"
+            }
+
+            // Наполняем прямо в общую мапу без создания промежуточных Map
+            fillRequestHeadersAttrs(rq, attrs)
+            fillResponseHeadersAttrs(rs, attrs)
+
             // Фиксация успешного (или логического ошибочного, например 4xx/5xx) результата
             tracer.stop(
                 ctx = ctx,
                 status = if (isError) StatusCode.STATUS_CODE_ERROR else StatusCode.STATUS_CODE_OK,
                 kind = Span.SpanKind.SPAN_KIND_CLIENT,
                 forceExport = isSlow,
-                attrs = buildMap {
-                    put(ATTR_HTTP_REQUEST_METHOD, rq.method.name())
-                    put(ATTR_URL_FULL, urlFull)
-                    put(ATTR_HTTP_RESPONSE_STATUS_CODE, rs.statusCode.value().toLong())
-
-                    // 2. SERVER ADDRESS: Берем хост из URI запроса, если его нет — из пропертей
-                    val host = rq.uri.host ?: props.url.host ?: HOST_UNKNOWN
-                    put(ATTR_SERVER_ADDRESS, host)
-                    val port = rq.uri.port.takeIf { it != -1 }
-                        ?: props.url.port.takeIf { it != -1 }
-                        ?: if (urlFull.startsWith(PROTOCOL_HTTPS)) 443 else 80
-                    put(ATTR_SERVER_PORT, port.toLong())
-
-                    put(ATTR_CLIENT, selfServiceName) // Имя нашего сервиса (например, "service1")
-                    put(ATTR_SERVER, props.serviceName.toString()) // Имя цели (например, "service2")
-
-                    props.serviceName?.let { put(ATTR_PEER_SERVICE, it) }
-
-                    // Размеры
-                    if (rq.method.name() !in METHODS_WITHOUT_BODY) {
-                        val reqSize = body.size.toLong()
-                        if (reqSize > 0) {
-                            put(ATTR_HTTP_REQUEST_BODY_SIZE, reqSize)
-                        }
-                    }
-
-                    rs.headers.contentLength.takeIf { it != -1L }?.let {
-                        put(ATTR_HTTP_RESPONSE_BODY_SIZE, it)
-                    }
-
-                    if (isError) {
-                        put(ATTR_EXCEPTION_MESSAGE, "HTTP ${rs.statusCode.value()}")
-                    }
-
-                    ctx.baggage.forEach { (name, value) ->
-                        put("$PREFIX_BAGGAGE$name", value)
-                    }
-
-                    // Заголовки (используем тот же подход string[])
-                    putAll(getRequestHeadersAttrs(rq))
-                    putAll(getResponseHeadersAttrs(rs))
-                }
+                attrs = attrs,
             )
             rs
         } catch (e: Exception) {
-            // Фиксация сетевых ошибок (Connection Refused, Timeout и т.д.)
+            val attrs = HashMap<String, Any>(8)
+            attrs[ATTR_HTTP_REQUEST_METHOD] = rq.method.name()
+            attrs[ATTR_URL_FULL] = rq.uri.toString()
+            attrs[ATTR_CLIENT] = selfServiceName
+            attrs[ATTR_SERVER] = props.serviceName.toString()
+
+            fillRequestHeadersAttrs(rq, attrs)
+
+            ctx.error = e
             tracer.stop(
                 ctx = ctx,
                 status = StatusCode.STATUS_CODE_ERROR,
                 kind = Span.SpanKind.SPAN_KIND_CLIENT,
-                attrs = buildMap {
-                    put(ATTR_HTTP_REQUEST_METHOD, rq.method.name())
-                    put(ATTR_URL_FULL, rq.uri.toString())
-                    put(ATTR_CLIENT, selfServiceName) // Имя нашего сервиса (например, "service1")
-                    put(ATTR_SERVER, props.serviceName.toString()) // Имя цели (например, "service2")
-                    put(ATTR_EXCEPTION_TYPE, e.javaClass.name)
-                    put(ATTR_EXCEPTION_MESSAGE, e.message ?: e.javaClass.simpleName)
-                    put(ATTR_EXCEPTION_STACKTRACE, e.stackTraceToString())
-                    putAll(getRequestHeadersAttrs(rq))
-                }
+                attrs = attrs,
             )
             throw e
         } finally {
@@ -192,21 +196,36 @@ class NanoTraceClientInterceptor(
         }
     }
 
-    private fun getRequestHeadersAttrs(rq: HttpRequest): Map<String, List<String>> =
-        rq.headers.keys
-            .filter { it.lowercase() !in OTEL_MAPPED_HEADERS }
-            .associate { name ->
-                val key = "${PREFIX_HTTP_REQUEST_HEADER}${name.lowercase()}"
-                key to (rq.headers[name] ?: emptyList())
+    private fun fillRequestHeadersAttrs(rq: HttpRequest, target: HashMap<String, Any>) {
+        // У Spring HttpRequest.headers — это HttpHeaders (Map<String, List<String>>)
+        val headers = rq.headers
+        for (entry in headers.entries) {
+            val name = entry.key
+            val normalizedName = name.lowercase()
+
+            if (normalizedName in OTEL_MAPPED_HEADERS) {
+                continue
             }
 
-    private fun getResponseHeadersAttrs(rs: ClientHttpResponse): Map<String, List<String>> =
-        rs.headers.keys
-            .filter { it.lowercase() !in OTEL_MAPPED_HEADERS }
-            .associate { name ->
-                val key = "${PREFIX_HTTP_RESPONSE_HEADER}${name.lowercase()}"
-                key to (rs.headers[name] ?: emptyList())
+            val key = "$PREFIX_HTTP_REQUEST_HEADER$normalizedName"
+            target[key] = entry.value
+        }
+    }
+
+    private fun fillResponseHeadersAttrs(rs: ClientHttpResponse, target: HashMap<String, Any>) {
+        val headers = rs.headers
+        for (entry in headers.entries) {
+            val name = entry.key
+            val normalizedName = name.lowercase()
+
+            if (normalizedName in OTEL_MAPPED_HEADERS) {
+                continue
             }
+
+            val key = "$PREFIX_HTTP_RESPONSE_HEADER$normalizedName"
+            target[key] = entry.value
+        }
+    }
 
     /**
      * Формирует путь запроса с Query-параметрами для детального анализа в трейсинге.

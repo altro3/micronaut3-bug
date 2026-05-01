@@ -27,7 +27,6 @@ import com.micronaut.bug.trace.NanoTracer.Companion.OTEL_MAPPED_HEADERS
 import com.micronaut.bug.trace.NanoTracer.Companion.PREFIX_HTTP_REQUEST_HEADER
 import com.micronaut.bug.trace.NanoTracer.Companion.PREFIX_HTTP_RESPONSE_HEADER
 import com.micronaut.bug.trace.NanoTracer.Companion.SENSITIVE_HEADERS
-import com.micronaut.bug.trace.NanoTracer.Companion.TRACEPARENT_DELIMITER
 import com.micronaut.bug.trace.NanoTracer.Companion.TRACEPARENT_PREFIX
 import com.micronaut.bug.trace.NanoTracer.Companion.parseBaggage
 import com.micronaut.bug.trace.config.TraceProperties
@@ -51,21 +50,26 @@ class NanoTraceFilter(
 
     override fun doFilterInternal(rq: HttpServletRequest, rs: HttpServletResponse, chain: FilterChain) {
         val startTimeNano = System.nanoTime()
-        // 1. Извлекаем данные из заголовков
 
+        // 1. Безаллокационный разбор W3C traceparent
         val traceParent = rq.getHeader(HEADER_TRACEPARENT)
         var traceId: String? = null
         var parentId: String? = null
         var isSampledByParent = true
 
         if (traceParent != null && traceParent.startsWith(TRACEPARENT_PREFIX)) {
-            val parts = traceParent.split(TRACEPARENT_DELIMITER)
-            if (parts.size >= 4) {
-                traceId = parts[1]
-                parentId = parts[2]
-                // Проверяем флаг сэмплирования (последний бит)
-                val flags = parts[3].toIntOrNull(16) ?: 0
-                isSampledByParent = (flags and 0x01) == 1
+            val firstDash = traceParent.indexOf('-', 3)
+            val secondDash = traceParent.indexOf('-', firstDash + 1)
+
+            if (firstDash != -1 && secondDash != -1) {
+                traceId = traceParent.substring(3, firstDash)
+                parentId = traceParent.substring(firstDash + 1, secondDash)
+
+                val flagsStr = traceParent.substring(secondDash + 1)
+                if (flagsStr.length >= 2) {
+                    val flags = flagsStr.toIntOrNull(16) ?: 0
+                    isSampledByParent = (flags and 0x01) == 1
+                }
             }
         }
 
@@ -73,15 +77,18 @@ class NanoTraceFilter(
 
         val baggage = mutableMapOf<String, String>()
         // Читаем стандартный багаж (если пришел)
-        rq.getHeader(HEADER_BAGGAGE)?.let {
-            baggage.putAll(parseBaggage(it))
+        rq.getHeader(HEADER_BAGGAGE)?.let { header ->
+            parseBaggage(header)?.let { baggage.putAll(it) }
         }
 
         // Читаем заголовки для проброски из конфига
-        val propagationHeaders = traceProps.propagationHeaders
-            .associateWith { rq.getHeader(it) }
-            .filterValues { it != null }
-            .mapKeys { it.key.lowercase() }
+        val propagationHeaders = HashMap<String, String>()
+        traceProps.propagationHeaders.forEach { key ->
+            val value = rq.getHeader(key)
+            if (value != null) {
+                propagationHeaders[key.lowercase()] = value
+            }
+        }
 
         val traceState = rq.getHeader(NanoTracer.HEADER_TRACESTATE)
 
@@ -101,61 +108,58 @@ class NanoTraceFilter(
 
         try {
             rs.setHeader(HEADER_TRACEPARENT, tracer.getTraceParent())
-
             chain.doFilter(rq, rs)
         } finally {
-
             val durationMs = (System.nanoTime() - startTimeNano) / 1_000_000
             val isSlow = durationMs >= traceProps.slowRequestThreshold.toMillis()
 
-            // Если запрос медленный — пишем WARN лог, чтобы сразу подсветить проблему в Loki
             if (isSlow) {
                 log.warn { "Slow request detected: ${rq.method} ${rq.requestURI} took ${durationMs}ms" }
             }
 
             val isError = rs.status >= ERROR_STATUS_THRESHOLD
 
-            // Собираем базовые атрибуты по стандарту OTel
-            val attrs = buildMap<String, Any> {
-                put(ATTR_URL_FULL, getFullUri(rq))
-                put(ATTR_URL_SCHEME, rq.scheme)
-                put(ATTR_URL_PATH, rq.requestURI)
-                rq.queryString?.let { put(ATTR_URL_QUERY, it) }
+            // 3. Прямое наполнение HashMap вместо тяжелого buildMap
+            val attrs = HashMap<String, Any>(32)
 
-                put(ATTR_HTTP_REQUEST_METHOD, rq.method)
-                rq.getHeader(USER_AGENT)?.let { put(ATTR_USER_AGENT_ORIGINAL, it) }
+            attrs[ATTR_URL_FULL] = getFullUri(rq)
+            attrs[ATTR_URL_SCHEME] = rq.scheme
+            attrs[ATTR_URL_PATH] = rq.requestURI
+            rq.queryString?.let { attrs[ATTR_URL_QUERY] = it }
 
-                if (rq.method !in METHODS_WITHOUT_BODY) {
-                    val reqSize = rq.contentLength.toLong()
-                    if (reqSize != -1L) {
-                        put(ATTR_HTTP_REQUEST_BODY_SIZE, reqSize)
-                    }
+            attrs[ATTR_HTTP_REQUEST_METHOD] = rq.method
+            rq.getHeader(USER_AGENT)?.let { attrs[ATTR_USER_AGENT_ORIGINAL] = it }
+
+            if (rq.method !in METHODS_WITHOUT_BODY) {
+                val reqSize = rq.contentLength.toLong()
+                if (reqSize != -1L) {
+                    attrs[ATTR_HTTP_REQUEST_BODY_SIZE] = reqSize
                 }
-
-                if (isSlow) {
-                    put(ATTR_HTTP_SLOW_REQUEST, true)
-                }
-
-                // В HttpServletResponse размер можно вытащить через Content-Length
-                rs.getHeader(HttpHeaders.CONTENT_LENGTH)
-                    ?.toLongOrNull()
-                    ?.let { put(ATTR_HTTP_RESPONSE_BODY_SIZE, it) }
-
-                put(ATTR_CLIENT, sender)
-                put(ATTR_SERVER, selfServiceName)
-
-                put(ATTR_SERVER_ADDRESS, rq.serverName)
-                put(ATTR_SERVER_PORT, rq.serverPort.toLong())
-                put(ATTR_CLIENT_ADDRESS, rq.remoteAddr)
-                put(ATTR_HTTP_RESPONSE_STATUS_CODE, rs.status.toLong())
-
-                if (isError) {
-                    put(ATTR_EXCEPTION_MESSAGE, "HTTP ${rs.status}")
-                }
-
-                putAll(getRequestHeadersAttrs(rq))
-                putAll(getResponseHeadersAttrs(rs))
             }
+
+            if (isSlow) {
+                attrs[ATTR_HTTP_SLOW_REQUEST] = true
+            }
+
+            rs.getHeader(HttpHeaders.CONTENT_LENGTH)
+                ?.toLongOrNull()
+                ?.let { attrs[ATTR_HTTP_RESPONSE_BODY_SIZE] = it }
+
+            attrs[ATTR_CLIENT] = sender
+            attrs[ATTR_SERVER] = selfServiceName
+
+            attrs[ATTR_SERVER_ADDRESS] = rq.serverName
+            attrs[ATTR_SERVER_PORT] = rq.serverPort.toLong()
+            attrs[ATTR_CLIENT_ADDRESS] = rq.remoteAddr
+            attrs[ATTR_HTTP_RESPONSE_STATUS_CODE] = rs.status.toLong()
+
+            if (isError) {
+                attrs[ATTR_EXCEPTION_MESSAGE] = "HTTP ${rs.status}"
+            }
+
+            // 4. Наполняем мапу напрямую без создания лишних коллекций
+            fillRequestHeadersAttrs(rq, attrs)
+            fillResponseHeadersAttrs(rs, attrs)
 
             tracer.stop(
                 ctx = ctx,
@@ -167,30 +171,50 @@ class NanoTraceFilter(
         }
     }
 
-
-    // Хелперы для извлечения данных
     private fun getFullUri(rq: HttpServletRequest): String =
         rq.requestURL.let { if (rq.queryString != null) it.append(QUERY_MARKER).append(rq.queryString) else it }.toString()
 
-    private fun getRequestHeadersAttrs(rq: HttpServletRequest): Map<String, List<String>> =
-        rq.headerNames.asSequence()
-            .filter { it.lowercase() !in OTEL_MAPPED_HEADERS }
-            .associate { name ->
-                val normalizedName = name.lowercase()
-                val key = "${PREFIX_HTTP_REQUEST_HEADER}$normalizedName"
-                key to if (normalizedName in SENSITIVE_HEADERS) MASKED_VALUES else rq.getHeaders(name).toList()
-            }
+    // 5. Потоковое наполнение атрибутов без аллокаций Sequence
+    private fun fillRequestHeadersAttrs(rq: HttpServletRequest, target: HashMap<String, Any>) {
+        val names = rq.headerNames ?: return
+        while (names.hasMoreElements()) {
+            val name = names.nextElement()
+            val normalizedName = name.lowercase()
 
-    private fun getResponseHeadersAttrs(rs: HttpServletResponse): Map<String, List<String>> =
-        rs.headerNames.asSequence()
-            .filter { it.lowercase() !in OTEL_MAPPED_HEADERS }
-            .associate { name ->
-                val key = "${PREFIX_HTTP_RESPONSE_HEADER}${name.lowercase()}"
-                key to rs.getHeaders(name).toList()
+            if (normalizedName in OTEL_MAPPED_HEADERS) continue
+
+            val key = "$PREFIX_HTTP_REQUEST_HEADER$normalizedName"
+
+            if (normalizedName in SENSITIVE_HEADERS) {
+                target[key] = MASKED_VALUES
+            } else {
+                val headersEnum = rq.getHeaders(name)
+                val valuesList = ArrayList<String>()
+                while (headersEnum.hasMoreElements()) {
+                    valuesList.add(headersEnum.nextElement())
+                }
+                target[key] = valuesList
             }
+        }
+    }
+
+    private fun fillResponseHeadersAttrs(rs: HttpServletResponse, target: HashMap<String, Any>) {
+        val names = rs.headerNames ?: return
+        for (name in names) {
+            val normalizedName = name.lowercase()
+            if (normalizedName in OTEL_MAPPED_HEADERS) continue
+
+            val key = "$PREFIX_HTTP_RESPONSE_HEADER$normalizedName"
+            val headers = rs.getHeaders(name)
+            val valuesList = ArrayList<String>(headers.size)
+            for (value in headers) {
+                valuesList.add(value)
+            }
+            target[key] = valuesList
+        }
+    }
 
     companion object {
-
         private const val DEFAULT_SENDER = "USER"
         private const val QUERY_MARKER = "?"
         private const val ERROR_STATUS_THRESHOLD = 400

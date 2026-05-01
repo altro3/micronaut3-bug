@@ -29,7 +29,7 @@ import java.util.zip.GZIPOutputStream
  */
 class OtlpAppender(
     props: LogProperties,
-    private val encoder: OtlpEncoder,
+    private val encoder: OtlpLogEncoder,
 ) : UnsynchronizedAppenderBase<ILoggingEvent>() {
 
     private val otlpProps = props.otlp

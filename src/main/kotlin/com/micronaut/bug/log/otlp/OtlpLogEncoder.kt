@@ -34,7 +34,7 @@ import java.util.concurrent.ConcurrentHashMap
  * @param nodeName Имя конкретной ноды/хоста для локализации источника логов.
  * @param logMasker Сервис маскирования данных для затирания ПДн и токенов на лету.
  */
-class OtlpEncoder(
+class OtlpLogEncoder(
     appName: String,
     nodeName: String,
     private val logMasker: LogMasker

@@ -15,7 +15,7 @@ import com.micronaut.bug.log.LogReconfigurator.LokiInitializer.setup
 import com.micronaut.bug.log.LogReconfigurator.OtlpInitializer.setup
 import com.micronaut.bug.log.config.LogProperties
 import com.micronaut.bug.log.otlp.OtlpAppender
-import com.micronaut.bug.log.otlp.OtlpEncoder
+import com.micronaut.bug.log.otlp.OtlpLogEncoder
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import org.springframework.boot.context.event.ApplicationReadyEvent
@@ -208,9 +208,9 @@ class LogReconfigurator(
                 return
             }
 
-            val otlpEncoder = OtlpEncoder(appName, nodeName, logMasker)
+            val otlpLogEncoder = OtlpLogEncoder(appName, nodeName, logMasker)
 
-            val appender = OtlpAppender(props, otlpEncoder).apply {
+            val appender = OtlpAppender(props, otlpLogEncoder).apply {
                 name = APPENDER_NAME_OTLP
                 context = loggerContext
                 start()

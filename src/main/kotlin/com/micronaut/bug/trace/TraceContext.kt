@@ -36,9 +36,10 @@ data class TraceContext(
     val parentId: String? = null,
     val name: String,
     val startEpochNanos: Long,
-    val baggage: Map<String, String> = emptyMap(),
-    val propagationHeaders: Map<String, String> = emptyMap(),
+    val baggage: Map<String, String>? = null,
+    val propagationHeaders: Map<String, String>? = null,
     val traceState: String? = null,
+    @Volatile
     var error: Throwable? = null,
     val sampled: Boolean = true,
 )
