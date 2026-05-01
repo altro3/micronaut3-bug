@@ -222,6 +222,7 @@ class OtlpAppender(
          * Константа кодировки GZIP для HTTP-заголовка.
          */
         private const val ENCODING_GZIP = "gzip"
+
         /**
          * Ожидаемый коэффициент сжатия для начальной аллокации буфера [5.3].
          */

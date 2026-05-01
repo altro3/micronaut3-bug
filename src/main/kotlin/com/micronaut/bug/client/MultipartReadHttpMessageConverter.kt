@@ -1,14 +1,13 @@
 package com.micronaut.bug.client
 
+import org.springframework.http.HttpEntity
+import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpInputMessage
 import org.springframework.http.HttpOutputMessage
 import org.springframework.http.MediaType
 import org.springframework.http.converter.AbstractHttpMessageConverter
 import org.springframework.util.LinkedMultiValueMap
 import org.springframework.util.MultiValueMap
-import org.springframework.http.HttpEntity
-import org.springframework.http.HttpHeaders
-import java.io.ByteArrayOutputStream
 
 /**
  * Профессиональная реализация конвертера для чтения multipart/form-data.

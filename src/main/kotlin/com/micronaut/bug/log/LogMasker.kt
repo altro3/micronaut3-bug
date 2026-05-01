@@ -1,5 +1,6 @@
 package com.micronaut.bug.log
 
+import com.micronaut.bug.log.LogMasker.Companion.INDIRECT_VISIBLE_LEN
 import com.micronaut.bug.log.config.LogProperties
 import java.util.regex.Pattern
 
@@ -250,12 +251,15 @@ class LogMasker(
                     fullFields.contains(key) || sensitiveHeaders.contains(key) -> {
                         sb.append(staticMask)
                     }
+
                     partialFields.contains(key) -> {
                         appendFastPartialMask(text, valStart, valEnd, sb)
                     }
+
                     indirectHeaders.contains(key) -> {
                         appendMaskIndirect(text, valStart, valEnd, sb)
                     }
+
                     else -> {
                         sb.append(text, valStart, valEnd)
                     }
@@ -289,9 +293,11 @@ class LogMasker(
                 fullFields.contains(lowerKey) || sensitiveHeaders.contains(lowerKey) -> {
                     staticMask
                 }
+
                 partialFields.contains(lowerKey) -> {
                     fastPartialMask(value)
                 }
+
                 indirectHeaders.contains(lowerKey) -> {
                     if (value.length > INDIRECT_VISIBLE_LEN) {
                         "${value.substring(0, INDIRECT_VISIBLE_LEN)}$staticMask"
@@ -299,6 +305,7 @@ class LogMasker(
                         staticMask
                     }
                 }
+
                 else -> {
                     value
                 }

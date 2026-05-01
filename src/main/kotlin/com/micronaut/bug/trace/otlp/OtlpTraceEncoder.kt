@@ -12,6 +12,7 @@ import com.micronaut.bug.trace.TraceIdGenerator
 import io.opentelemetry.proto.collector.trace.v1.ExportTraceServiceRequest
 import io.opentelemetry.proto.common.v1.AnyValue
 import io.opentelemetry.proto.common.v1.ArrayValue
+import io.opentelemetry.proto.common.v1.InstrumentationScope
 import io.opentelemetry.proto.common.v1.KeyValue
 import io.opentelemetry.proto.resource.v1.Resource
 import io.opentelemetry.proto.trace.v1.ResourceSpans
@@ -25,9 +26,13 @@ class OtlpTraceEncoder(
 ) {
 
     // Ресурс собирается один раз при старте
-    private val serviceResource: Resource = Resource.newBuilder()
+    private val serviceResource = Resource.newBuilder()
         .addAttributes(KeyValue.newBuilder().setKey(NanoTracer.ATTR_SERVICE_NAME).setValue(AnyValue.newBuilder().setStringValue(appName).build()).build())
         .addAttributes(KeyValue.newBuilder().setKey(NanoTracer.ATTR_DEPLOYMENT_ENVIRONMENT).setValue(AnyValue.newBuilder().setStringValue(nodeName).build()).build())
+        .build()
+    private val libScope = InstrumentationScope.newBuilder()
+        .setName("NanoTracer")
+        .setVersion("1.0.0")
         .build()
 
     /**
@@ -41,6 +46,7 @@ class OtlpTraceEncoder(
 
         val spanBuilder = tlSpanBuilder.get()
         val scopeSpansBuilder = ScopeSpans.newBuilder()
+            .setScope(libScope)
 
         val sb = tlStringBuilder.get()
         // ОПТИМИЗАЦИЯ: Чистый цикл без создания итераторов
@@ -90,6 +96,13 @@ class OtlpTraceEncoder(
 
             // Обрабатываем ошибку
             event.error?.let {
+
+                val eventBuilder = spanBuilder.addEventsBuilder()
+                // Стандарт требует называть это событие именно "exception"
+                eventBuilder.name = EVENT_NAME_EXCEPTION
+                // Время фиксации ошибки (в наносекундах)
+                eventBuilder.timeUnixNano = event.endEpochNanos
+
                 val typeAttr = spanBuilder.addAttributesBuilder()
                 typeAttr.key = ATTR_EXCEPTION_TYPE
                 typeAttr.valueBuilder.stringValue = it.javaClass.name
@@ -144,8 +157,12 @@ class OtlpTraceEncoder(
     companion object {
         // Билдер для переиспользования Protobuf структур
         private val tlSpanBuilder = ThreadLocal.withInitial { Span.newBuilder() }
+
         // Билдер для склейки строк без выделения мусора в Heap
         private val tlStringBuilder = ThreadLocal.withInitial { StringBuilder(64) }
         private val EMPTY_BYTE_ARRAY = ByteArray(0)
+
+        // Название события для исключений по стандарту OpenTelemetry
+        const val EVENT_NAME_EXCEPTION = "exception"
     }
 }

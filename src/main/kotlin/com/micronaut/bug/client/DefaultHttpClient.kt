@@ -7,8 +7,8 @@ import com.micronaut.bug.client.HttpClientUtils.DEFAULT_RETRY_ON
 import com.micronaut.bug.client.HttpClientUtils.createRestClient
 import com.micronaut.bug.client.HttpClientUtils.createRetryTemplate
 import com.micronaut.bug.client.LoggingInterceptor.Companion.ATTR_SKIP_LOGGING
-import com.micronaut.bug.trace.NanoTraceFilter.Companion.METHODS_WITHOUT_BODY
 import com.micronaut.bug.trace.NanoTracer
+import com.micronaut.bug.trace.NanoTracer.Companion.METHODS_WITHOUT_BODY
 import org.springframework.core.ParameterizedTypeReference
 import org.springframework.http.HttpHeaders.CONTENT_TYPE
 import org.springframework.http.HttpMethod

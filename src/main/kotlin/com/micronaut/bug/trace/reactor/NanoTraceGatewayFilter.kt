@@ -26,7 +26,6 @@ import com.micronaut.bug.trace.NanoTracer.Companion.OTEL_MAPPED_HEADERS
 import com.micronaut.bug.trace.NanoTracer.Companion.PREFIX_HTTP_REQUEST_HEADER
 import com.micronaut.bug.trace.NanoTracer.Companion.PREFIX_HTTP_RESPONSE_HEADER
 import com.micronaut.bug.trace.NanoTracer.Companion.SENSITIVE_HEADERS
-import com.micronaut.bug.trace.NanoTracer.Companion.TRACEPARENT_DELIMITER
 import com.micronaut.bug.trace.NanoTracer.Companion.TRACEPARENT_PREFIX
 import com.micronaut.bug.trace.NanoTracer.Companion.parseBaggage
 import com.micronaut.bug.trace.TraceContext
