@@ -38,6 +38,7 @@ import jakarta.servlet.http.HttpServletResponse
 import org.slf4j.MDC
 import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpHeaders.USER_AGENT
+import org.springframework.util.ClassUtils
 import org.springframework.web.filter.OncePerRequestFilter
 
 class NanoTraceFilter(
@@ -48,8 +49,16 @@ class NanoTraceFilter(
 
     private val log = KotlinLogging.logger {}
 
+    private val withActuator: Boolean = ClassUtils.isPresent("org.springframework.boot.actuate.autoconfigure.endpoint.web.WebEndpointProperties", null)
+
     override fun doFilterInternal(rq: HttpServletRequest, rs: HttpServletResponse, chain: FilterChain) {
+
         val startTimeNano = System.nanoTime()
+        // Пропускаем Actuator-эндпоинты, если это указано в настройках
+        if (withActuator && rq.requestURI.startsWith(rq.contextPath + PATH_ACTUATOR)) {
+            chain.doFilter(rq, rs)
+            return
+        }
 
         // 1. Безаллокационный разбор W3C traceparent
         val traceParent = rq.getHeader(HEADER_TRACEPARENT)
@@ -215,6 +224,9 @@ class NanoTraceFilter(
     }
 
     companion object {
+
+        private const val PATH_ACTUATOR = "/actuator"
+
         private const val DEFAULT_SENDER = "USER"
         private const val QUERY_MARKER = "?"
         private const val ERROR_STATUS_THRESHOLD = 400
