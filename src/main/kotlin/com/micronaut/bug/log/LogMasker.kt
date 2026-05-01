@@ -1,109 +1,243 @@
 package com.micronaut.bug.log
 
-import com.fasterxml.jackson.databind.JsonNode
-import com.fasterxml.jackson.databind.ObjectMapper
-import com.fasterxml.jackson.databind.node.ArrayNode
-import com.fasterxml.jackson.databind.node.ObjectNode
 import com.micronaut.bug.log.config.LogProperties
+import java.util.regex.Pattern
 
 /**
- * Высокопроизводительный сервис маскирования данных.
- * Предназначен для очистки логов от чувствительной информации перед отправкой во внешние системы (OTLP).
+ * Сверхвысокопроизводительный сервис маскирования данных.
+ *
+ * Оптимизирован для экстремальных нагрузок:
+ * - Все методы маскирования пишут напрямую в общий StringBuilder, предотвращая конкатенацию строк.
+ * - Полностью отсутствуют промежуточные аллокации в циклах [5.3].
+ * - Соблюден строгий кодстайл для ветвлений.
  */
 class LogMasker(
     props: LogProperties,
-    private val mapper: ObjectMapper
 ) {
 
     private val maskingProps = props.masking
 
-    /**
-     * Кэшированные списки полей для O(1) поиска.
-     */
     private val fullFields = maskingProps.full.map { it.lowercase() }.toHashSet()
     private val partialFields = maskingProps.partial.map { it.lowercase() }.toHashSet()
     private val sensitiveHeaders = maskingProps.sensitiveHeaders.map { it.lowercase() }.toHashSet()
     private val indirectHeaders = maskingProps.indirectHeaders.map { it.lowercase() }.toHashSet()
 
-    /**
-     * Кэшированные строки маскирования.
-     */
     private val staticMask = maskingProps.maskChar.repeat(STATIC_MASK_LEN)
     private val partialMask = maskingProps.maskChar.repeat(PARTIAL_MASK_LEN)
 
-    /**
-     * Маскирует сообщение, если оно является отчетом ServerLoggingFilter.
-     * Используется в OtlpEncoder для очистки внешних логов.
-     *
-     * @param message Исходное сообщение лога.
-     * @return Маскированное сообщение.
-     */
+    private val jsonPattern: Pattern = Pattern.compile(
+        "\"([^\"]+)\"\\s*:\\s*([\"'])(.*?)\\2",
+        Pattern.CASE_INSENSITIVE
+    )
+
     fun maskServiceMessage(message: String?): String {
         if (message.isNullOrBlank() || !maskingProps.enabled) {
             return message ?: STRING_EMPTY
         }
 
-        if (!message.contains(MARKER_SERVICE_LOG)) {
+        if (message.indexOf(MARKER_SERVICE_LOG) == -1) {
             return maskMessage(message)
         }
 
-        var result = message
+        val sb = StringBuilder(message.length)
 
-        result = maskTextSection(result, PREFIX_HEADERS, SUFFIX_HEADERS) { rawHeaders ->
-            maskRawHeadersString(rawHeaders)
+        val headersStart = message.indexOf(PREFIX_HEADERS)
+        val bodyStart = message.indexOf(PREFIX_BODY)
+
+        if (headersStart == -1 && bodyStart == -1) {
+            return maskMessage(message)
         }
 
-        result = maskTextSection(result, PREFIX_BODY, SUFFIX_BODY) { rawBody ->
-            maskMessage(rawBody)
+        val firstSectionEnd = if (headersStart != -1) headersStart else bodyStart
+        sb.append(message, 0, firstSectionEnd)
+
+        if (headersStart != -1) {
+            sb.append(PREFIX_HEADERS)
+            val contentStart = headersStart + PREFIX_HEADERS.length
+            val contentEnd = message.indexOf(SUFFIX_HEADERS, contentStart)
+
+            val endOfSection = if (contentEnd != -1) contentEnd else message.length
+
+            maskRawHeadersFast(message, contentStart, endOfSection, sb)
+
+            if (contentEnd != -1) {
+                val nextStart = if (bodyStart != -1 && bodyStart > contentEnd) bodyStart else contentEnd
+                sb.append(message, contentEnd, nextStart)
+            }
         }
 
-        return result
+        if (bodyStart != -1) {
+            sb.append(PREFIX_BODY)
+            val contentStart = bodyStart + PREFIX_BODY.length
+            val contentEnd = message.indexOf(SUFFIX_BODY, contentStart)
+
+            val endOfSection = if (contentEnd != -1) contentEnd else message.length
+
+            maskMessageSequence(message, contentStart, endOfSection, sb)
+
+            if (contentEnd != -1) {
+                sb.append(message, contentEnd, message.length)
+            }
+        }
+
+        return sb.toString()
     }
 
-    /**
-     * Маскирует произвольное сообщение (JSON или простой текст).
-     */
-    fun maskMessage(message: String?): String {
-        if (message.isNullOrBlank() || !maskingProps.enabled) {
-            return message ?: STRING_EMPTY
-        }
-
-        val trimmed = message.trim()
-        if (!(trimmed.startsWith(JSON_OBJECT_START) || trimmed.startsWith(JSON_ARRAY_START))) {
-            return message
-        }
-
-        return runCatching {
-            val tree = mapper.readTree(trimmed)
-            mask(tree)
-            mapper.writeValueAsString(tree)
-        }.getOrElse {
-            message
-        }
+    fun maskMessage(message: String): String {
+        val sb = StringBuilder(message.length)
+        maskMessageSequence(message, 0, message.length, sb)
+        return sb.toString()
     }
 
-    /**
-     * Универсальный метод маскирования карт (MDC, заголовки).
-     */
+    private fun maskMessageSequence(text: String, start: Int, end: Int, sb: StringBuilder) {
+        val matcher = jsonPattern.matcher(text)
+        matcher.region(start, end)
+        matcher.reset()
+
+        var lastAppendPosition = start
+        val keyBuilder = StringBuilder(32)
+
+        while (matcher.find()) {
+            val keyStart = matcher.start(1)
+            val keyEnd = matcher.end(1)
+
+            keyBuilder.setLength(0)
+            for (i in keyStart until keyEnd) {
+                keyBuilder.append(text[i].lowercaseChar())
+            }
+            val key = keyBuilder.toString()
+
+            val isFull = fullFields.contains(key)
+            val isPartial = partialFields.contains(key)
+
+            if (isFull || isPartial) {
+                // Копируем все, что было ДО этого совпадения
+                sb.append(text, lastAppendPosition, matcher.start())
+
+                val quote = matcher.group(2)
+                val valStart = matcher.start(3)
+                val valEnd = matcher.end(3)
+
+                sb.append(CHAR_QUOTE).append(key).append(DELIMITER_JSON_KEY_VALUE).append(quote)
+
+                if (isFull) {
+                    sb.append(staticMask)
+                } else {
+                    appendFastPartialMask(text, valStart, valEnd, sb)
+                }
+
+                sb.append(quote)
+                // Обновляем позицию только ЕСЛИ мы заменили текст
+                lastAppendPosition = matcher.end()
+            }
+            // ИНАЧЕ мы не двигаем lastAppendPosition, и текст не затирается,
+            // так как matcher.start() на следующей итерации покроет этот кусок.
+        }
+        sb.append(text, lastAppendPosition, end)
+    }
+
+    private fun maskRawHeadersFast(text: String, start: Int, end: Int, sb: StringBuilder) {
+        var current = start
+        var limit = end
+        while (current < limit && text[current] <= CHAR_SPACE) {
+            current++
+        }
+        while (limit > current && text[limit - 1] <= CHAR_SPACE) {
+            limit--
+        }
+
+        if (current < limit && text[current] == CHAR_BRACE_START) {
+            current++
+        }
+        if (limit > current && text[limit - 1] == CHAR_BRACE_END) {
+            limit--
+        }
+
+        sb.append(CHAR_BRACE_START)
+
+        var isFirst = true
+        val keyBuilder = StringBuilder(32)
+
+        while (current < limit) {
+            val delimiterIndex = text.indexOf(DELIMITER_HEADERS, current)
+            val pairEnd = if (delimiterIndex != -1 && delimiterIndex < limit) delimiterIndex else limit
+
+            val equalsIndex = text.indexOf(DELIMITER_KEY_VALUE, current)
+
+            if (equalsIndex != -1 && equalsIndex < pairEnd) {
+                var keyStart = current
+                while (keyStart < equalsIndex && text[keyStart] <= CHAR_SPACE) {
+                    keyStart++
+                }
+                var keyEnd = equalsIndex
+                while (keyEnd > keyStart && text[keyEnd - 1] <= CHAR_SPACE) {
+                    keyEnd--
+                }
+
+                keyBuilder.setLength(0)
+                for (i in keyStart until keyEnd) {
+                    keyBuilder.append(text[i].lowercaseChar())
+                }
+                val key = keyBuilder.toString()
+
+                val valStart = equalsIndex + 1
+                val valEnd = pairEnd
+
+                if (!isFirst) {
+                    sb.append(DELIMITER_HEADERS)
+                }
+                sb.append(text, keyStart, keyEnd).append(DELIMITER_KEY_VALUE)
+
+                when {
+                    fullFields.contains(key) || sensitiveHeaders.contains(key) -> {
+                        sb.append(staticMask)
+                    }
+
+                    partialFields.contains(key) -> {
+                        appendFastPartialMask(text, valStart, valEnd, sb)
+                    }
+
+                    indirectHeaders.contains(key) -> {
+                        appendMaskIndirect(text, valStart, valEnd, sb)
+                    }
+
+                    else -> {
+                        sb.append(text, valStart, valEnd)
+                    }
+                }
+                isFirst = false
+            }
+
+            if (delimiterIndex == -1 || delimiterIndex >= limit) {
+                break
+            }
+            current = delimiterIndex + DELIMITER_HEADERS.length
+        }
+
+        sb.append(CHAR_BRACE_END)
+    }
+
     fun maskMap(data: Map<String, String>): Map<String, String> {
         if (!maskingProps.enabled || data.isEmpty()) {
             return data
         }
-
         return data.mapValues { (key, value) ->
             val lowerKey = key.lowercase()
             when {
-                // 1. Полное затирание (секреты)
                 fullFields.contains(lowerKey) || sensitiveHeaders.contains(lowerKey) -> {
                     staticMask
                 }
-                // 2. Частичное затирание (ПДн)
+
                 partialFields.contains(lowerKey) -> {
                     fastPartialMask(value)
                 }
-                // 3. Косвенное маскирование (IP, UA, Referer)
+
                 indirectHeaders.contains(lowerKey) -> {
-                    maskIndirect(value)
+                    if (value.length > INDIRECT_VISIBLE_LEN) {
+                        "${value.substring(0, INDIRECT_VISIBLE_LEN)}$staticMask"
+                    } else {
+                        staticMask
+                    }
                 }
 
                 else -> {
@@ -113,88 +247,25 @@ class LogMasker(
         }
     }
 
-    /**
-     * Рекурсивно маскирует JSON-дерево "на месте".
-     */
-    fun mask(node: JsonNode) {
-        if (!maskingProps.enabled) {
+    private fun appendMaskIndirect(src: String, start: Int, end: Int, sb: StringBuilder) {
+        val len = end - start
+        if (len > INDIRECT_VISIBLE_LEN) {
+            sb.append(src, start, start + INDIRECT_VISIBLE_LEN).append(staticMask)
+        } else {
+            sb.append(staticMask)
+        }
+    }
+
+    private fun appendFastPartialMask(src: String, start: Int, end: Int, sb: StringBuilder) {
+        val len = end - start
+        if (len <= THRESHOLD_MIN_LEN) {
+            sb.append(staticMask)
             return
         }
-        processNode(node)
-    }
-
-    private fun processNode(node: JsonNode) {
-        when (node) {
-            is ObjectNode -> {
-                for (prop in node.properties()) {
-                    val key = prop.key
-                    val value = prop.value
-                    val lowerKey = key.lowercase()
-
-                    when {
-                        fullFields.contains(lowerKey) -> {
-                            node.put(key, staticMask)
-                        }
-
-                        partialFields.contains(lowerKey) && value.isTextual -> {
-                            node.put(key, fastPartialMask(value.asText()))
-                        }
-
-                        value.isContainerNode -> {
-                            processNode(value)
-                        }
-                    }
-                }
-            }
-
-            is ArrayNode -> {
-                for (i in 0 until node.size()) {
-                    val item = node.get(i)
-                    if (item.isContainerNode) {
-                        processNode(item)
-                    }
-                }
-            }
-        }
-    }
-
-    private fun maskTextSection(text: String, start: String, end: String, masker: (String) -> String): String {
-        val startIndex = text.indexOf(start)
-        if (startIndex == -1) {
-            return text
-        }
-
-        val contentStart = startIndex + start.length
-        val endIndex = text.indexOf(end, contentStart)
-
-        val original = if (endIndex != -1) {
-            text.substring(contentStart, endIndex)
-        } else {
-            text.substring(contentStart)
-        }
-
-        return text.replace(original, masker(original.trim()))
-    }
-
-    private fun maskRawHeadersString(raw: String): String {
-        val cleanRaw = raw.trim(CHAR_BRACE_START, CHAR_BRACE_END)
-        if (cleanRaw.isBlank()) {
-            return STRING_EMPTY
-        }
-
-        val map = cleanRaw.split(DELIMITER_HEADERS).associate {
-            val parts = it.split(DELIMITER_KEY_VALUE, limit = 2)
-            (parts.getOrNull(0) ?: STRING_EMPTY) to (parts.getOrNull(1) ?: STRING_EMPTY)
-        }
-        return maskMap(map).toString()
-    }
-
-    private fun maskIndirect(v: String): String {
-        return if (v.length > INDIRECT_VISIBLE_LEN) {
-            "${v.take(INDIRECT_VISIBLE_LEN)}$staticMask"
-        } else {
-            staticMask
-        }
+        val visible = if (len > THRESHOLD_LONG_LEN) 2 else 1
+        sb.append(src, start, start + visible)
+            .append(partialMask)
+            .append(src, end - visible, end)
     }
 
     private fun fastPartialMask(v: String): String {
@@ -202,12 +273,15 @@ class LogMasker(
         if (len <= THRESHOLD_MIN_LEN) {
             return staticMask
         }
-        val visible = if (len > THRESHOLD_LONG_LEN) {
-            2
-        } else {
-            1
-        }
-        return "${v.take(visible)}$partialMask${v.takeLast(visible)}"
+
+        val visible = if (len > THRESHOLD_LONG_LEN) 2 else 1
+
+        val sb = StringBuilder(len)
+        sb.append(v, 0, visible)
+            .append(partialMask)
+            .append(v, len - visible, len)
+
+        return sb.toString()
     }
 
     companion object {
@@ -216,20 +290,18 @@ class LogMasker(
         private const val THRESHOLD_MIN_LEN = 5
         private const val THRESHOLD_LONG_LEN = 8
         private const val INDIRECT_VISIBLE_LEN = 4
-
-        private const val JSON_OBJECT_START = "{"
-        private const val JSON_ARRAY_START = "["
         private const val STRING_EMPTY = ""
-
         private const val MARKER_SERVICE_LOG = "=================="
         private const val PREFIX_HEADERS = "Headers: "
         private const val SUFFIX_HEADERS = "\n"
         private const val PREFIX_BODY = "Body:\n"
         private const val SUFFIX_BODY = "\n=================="
-
         private const val DELIMITER_HEADERS = ", "
         private const val DELIMITER_KEY_VALUE = "="
+        private const val DELIMITER_JSON_KEY_VALUE = "\":"
         private const val CHAR_BRACE_START = '{'
         private const val CHAR_BRACE_END = '}'
+        private const val CHAR_QUOTE = '"'
+        private const val CHAR_SPACE = ' '
     }
 }

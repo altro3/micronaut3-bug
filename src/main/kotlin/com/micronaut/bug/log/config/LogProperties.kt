@@ -198,6 +198,17 @@ class LogProperties(
          */
         var batchTimeout: Duration = Duration.ofSeconds(5),
         /**
+         * Максимальный размер очереди в памяти.
+         * Защищает приложение от OOM при всплесках логирования.
+         */
+        @field:Positive
+        var queueCapacity: Int = 10000,
+        /**
+         * Таймаут ожидания завершения работы воркера при выключении приложения.
+         * За это время воркер попытается отправить остатки логов из очереди.
+         */
+        var stopAwaitTimeout: Duration = Duration.ofSeconds(5),
+        /**
          * Таймаут на установку соединения с сервером.
          */
         var connectionTimeout: Duration = Duration.ofSeconds(5),
@@ -266,6 +277,13 @@ class LogProperties(
         /**
          * Символ маски.
          */
-        var maskChar: String = "*"
+        var maskChar: String = "*",
+        /**
+         * Список префиксов пакетов, для которых включена маскировка заголовков.
+         * Если список пуст — маскировка применяется везде.
+         */
+        val maskedPackages: Set<String> = setOf(
+            "com.micronaut.bug",
+        ),
     )
 }

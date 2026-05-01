@@ -10,7 +10,7 @@ import org.springframework.web.bind.annotation.RestControllerAdvice
 import org.springframework.web.server.ResponseStatusException
 
 @RestControllerAdvice
-class GlobalExceptionHandler(
+class ExceptionHandler(
     private val tracer: NanoTracer
 ) {
     private val log = KotlinLogging.logger {}

@@ -14,8 +14,13 @@ import org.springframework.core.env.Environment
 class LogAutoConfig {
 
     @Bean
-    fun logbackReconfigurator(environment: Environment, logProperties: LogProperties) =
-        LogReconfigurator(environment, logProperties)
+    fun logbackReconfigurator(
+        environment: Environment,
+        logProperties: LogProperties,
+    ) = LogReconfigurator(
+        environment = environment,
+        props = logProperties,
+    )
 
     @Bean
     fun unifiedLoggingFilterRegistration(

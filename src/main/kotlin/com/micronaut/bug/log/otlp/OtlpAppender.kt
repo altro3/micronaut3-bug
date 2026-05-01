@@ -10,19 +10,10 @@ import java.io.ByteArrayOutputStream
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
-import java.util.concurrent.Executors
+import java.util.concurrent.ArrayBlockingQueue
 import java.util.concurrent.TimeUnit
 import java.util.zip.GZIPOutputStream
 
-/**
- * Профессиональная реализация Logback-аппендера для передачи логов по протоколу OTLP (Protobuf/HTTP).
- *
- * Особенности:
- * - **Batching**: Накопление логов в пачки для снижения нагрузки на сеть.
- * - **Non-blocking**: Отдельный воркер-поток (Thread Confinement) для обработки и упаковки логов.
- * - **Compression**: Поддержка GZIP-сжатия бинарного Protobuf-пейлоада.
- * - **Spring Integration**: Использование стандартных констант Spring для заголовков и типов контента.
- */
 class OtlpAppender(
     props: LogProperties,
     private val encoder: OtlpEncoder,
@@ -35,53 +26,83 @@ class OtlpAppender(
         .build()
 
     /**
-     * Список для накопления батча (доступен только воркеру).
+     * ШАГ 1: Потокобезопасная очередь ФИКСИРОВАННОГО размера.
+     * Защищает приложение от OOM при всплесках трафика.
      */
-    private val batch = mutableListOf<ILoggingEvent>()
+    private val queue = ArrayBlockingQueue<ILoggingEvent>(otlpProps.queueCapacity)
 
     /**
-     * Воркер для изоляции тяжелых операций (сериализация, сжатие) от бизнес-потоков.
+     * ШАГ 2: Единственный выделенный поток-воркер (Daemon).
      */
-    private val executor = Executors.newSingleThreadScheduledExecutor { runnable ->
-        Thread(runnable, "otlp-log-worker").apply { isDaemon = true }
+    @Volatile
+    private var workerThread: Thread? = null
+
+    @Volatile
+    private var running = false
+
+    /**
+     * Основная точка входа. Бизнес-потоки только складывают логи в очередь.
+     * Никаких аллокаций Runnable и лямбд. Метод выполняется за наносекунды.
+     */
+    override fun append(eventObject: ILoggingEvent) {
+        if (!running) {
+            return
+        }
+
+        // Пытаемся положить в очередь. Если она полна — лог отбрасывается.
+        // Это гарантирует, что логирование никогда не затормозит бизнес-логику.
+        val accepted = queue.offer(eventObject)
+        if (!accepted) {
+            // Опционально: инкремент метрики отброшенных логов
+        }
+    }
+
+    override fun start() {
+        super.start()
+        running = true
+
+        workerThread = Thread({ runWorkerLoop() }, "otlp-log-worker").apply {
+            isDaemon = true
+            start()
+        }
     }
 
     /**
-     * Основная точка входа для событий логирования.
-     * Быстро перекладывает задачу в очередь воркера.
+     * ШАГ 3: Высокопроизводительный бесконечный цикл вычерпывания логов.
      */
-    override fun append(eventObject: ILoggingEvent) {
-        executor.execute {
-            batch.add(eventObject)
-            if (batch.size >= otlpProps.batchSize) {
-                flush()
+    private fun runWorkerLoop() {
+        val batch = ArrayList<ILoggingEvent>(otlpProps.batchSize)
+        val timeoutMs = otlpProps.batchTimeout.toMillis()
+
+        while (running || !queue.isEmpty()) {
+            try {
+                val firstEvent = queue.poll(timeoutMs, TimeUnit.MILLISECONDS)
+
+                if (firstEvent != null) {
+                    batch.add(firstEvent)
+                    queue.drainTo(batch, otlpProps.batchSize - 1)
+                }
+
+                if (batch.isNotEmpty()) {
+                    flush(batch)
+                    batch.clear()
+                }
+            } catch (_: InterruptedException) {
+                // ВОССТАНАВЛИВАЕМ СТАТУС ПРЕРЫВАНИЯ!
+                // Это заставит poll() на следующей итерации мгновенно завершиться без сна.
+                Thread.currentThread().interrupt()
+
+                // Если мы выключаемся и очередь пуста — только тогда выходим
+                if (!running && queue.isEmpty()) {
+                    break
+                }
+            } catch (e: Exception) {
+                addError("Error in OTLP worker loop", e)
             }
         }
     }
 
-    /**
-     * Инициализация аппендера.
-     * Запускает периодический сброс накопленного батча по таймауту.
-     */
-    override fun start() {
-        super.start()
-        val timeoutMs = otlpProps.batchTimeout.toMillis()
-        executor.scheduleWithFixedDelay({
-            executor.execute { flush() }
-        }, timeoutMs, timeoutMs, TimeUnit.MILLISECONDS)
-    }
-
-    /**
-     * Формирует батч, выполняет его кодирование и сжатие.
-     */
-    private fun flush() {
-        if (batch.isEmpty()) {
-            return
-        }
-
-        val eventsToSend = ArrayList(batch)
-        batch.clear()
-
+    private fun flush(eventsToSend: List<ILoggingEvent>) {
         try {
             var payload = encoder.encodeBatch(eventsToSend)
 
@@ -118,16 +139,14 @@ class OtlpAppender(
             requestBuilder.header(CONTENT_ENCODING, ENCODING_GZIP)
         }
 
-        httpClient.sendAsync(requestBuilder.build(), HttpResponse.BodyHandlers.discarding())
-            .thenAccept { response ->
-                if (response.statusCode() !in 200..299) {
-                    addError("OTLP server returned error code: ${response.statusCode()}")
-                }
+        try {
+            val rs = httpClient.send(requestBuilder.build(), HttpResponse.BodyHandlers.discarding())
+            if (rs.statusCode() !in 200..299) {
+                addError("OTLP server returned error code: ${rs.statusCode()}")
             }
-            .exceptionally { ex ->
-                addError("Network error while sending logs to OTLP", ex)
-                null
-            }
+        } catch (ex: Exception) {
+            addError("Network error while sending logs to OTLP", ex)
+        }
     }
 
     /**
@@ -135,10 +154,16 @@ class OtlpAppender(
      * Дает воркеру 5 секунд на отправку последних данных.
      */
     override fun stop() {
-        executor.execute { flush() }
-        executor.shutdown()
+        running = false
+        // Прерываем poll() воркера, чтобы он начал экстренно выгребать остатки логов
+        workerThread?.interrupt()
         try {
-            if (!executor.awaitTermination(STOP_AWAIT_SECONDS, TimeUnit.SECONDS)) {
+            // Используем динамический таймаут из конфигурации
+            val stopAwaitMs = otlpProps.stopAwaitTimeout.toMillis()
+
+            workerThread?.join(stopAwaitMs)
+
+            if (workerThread?.isAlive == true) {
                 addWarn("OTLP worker termination timeout, some logs might be lost")
             }
         } catch (_: InterruptedException) {
@@ -157,10 +182,5 @@ class OtlpAppender(
          * Ожидаемый коэффициент сжатия для аллокации буфера.
          */
         private const val GZIP_ESTIMATED_RATIO = 2
-
-        /**
-         * Время ожидания завершения работы воркера.
-         */
-        private const val STOP_AWAIT_SECONDS = 5L
     }
 }
