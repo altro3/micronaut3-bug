@@ -335,11 +335,24 @@ class ServerLoggingFilter(
         }
     }
 
-    private fun getHeadersMap(rq: HttpServletRequest): Map<String, String> =
-        rq.headerNames.asSequence().associateWith { rq.getHeader(it) }
+    private fun getHeadersMap(rq: HttpServletRequest): Map<String, String> {
+        val names = rq.headerNames ?: return emptyMap()
+        val result = HashMap<String, String>()
+        while (names.hasMoreElements()) {
+            val name = names.nextElement()
+            result[name] = rq.getHeader(name)
+        }
+        return result
+    }
 
-    private fun getResponseHeaders(rs: HttpServletResponse): Map<String, String> =
-        rs.headerNames.associateWith { rs.getHeader(it) }
+    private fun getResponseHeaders(rs: HttpServletResponse): Map<String, String> {
+        val names = rs.headerNames ?: return emptyMap()
+        val result = HashMap<String, String>()
+        for (name in names) { // У HttpServletResponse это Collection<String>
+            result[name] = rs.getHeader(name)
+        }
+        return result
+    }
 
     private class CachedBodyRequestWrapper(
         rq: HttpServletRequest,
@@ -455,7 +468,9 @@ class ServerLoggingFilter(
 
         private fun isJsonContent(bytes: ByteArray): Boolean {
             // Ищем первый не пробельный символ
-            for (b in bytes) {
+            val size = bytes.size
+            for (i in 0 until size) {
+                val b = bytes[i]
                 if (b <= 32) {
                     continue
                 }
