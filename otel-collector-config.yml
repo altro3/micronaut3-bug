@@ -1,0 +1,54 @@
+receivers:
+  otlp:
+    protocols:
+      http:
+        endpoint: "0.0.0.0:4318" # Слушаем только HTTP
+
+connectors:
+  service_graph:
+    latency_histogram_buckets: [10ms, 100ms, 1s, 5s]
+    dimensions:
+      - http.method
+      - http.status_code
+
+processors:
+  batch:
+    timeout: 1s
+    send_batch_size: 1024
+
+exporters:
+  # Создаем эндпоинт, откуда Виктория будет забирать (scrape) метрики
+  prometheus:
+    endpoint: "0.0.0.0:8889"
+    add_metric_suffixes: true
+
+  # Экспортер для трейсов в VictoriaTraces
+  otlp_http/traces:
+    endpoint: "http://victoria-traces:10428/insert/opentelemetry"
+    tls:
+      insecure: true
+
+  # Экспортер для логов в VictoriaLogs
+  otlp_http/logs:
+    endpoint: "http://victoria-logs:9428/insert/opentelemetry"
+    tls:
+      insecure: true
+
+service:
+  pipelines:
+
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [service_graph, otlp_http/traces]
+
+    logs:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlp_http/logs]
+
+    # Добавляем этот технический пайплайн, чтобы "завести" экспорт метрик
+    metrics/service_graph:
+      receivers: [service_graph] # Формально, данные придут из процессора service_graph
+      processors: [batch]
+      exporters: [prometheus]

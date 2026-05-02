@@ -26,7 +26,6 @@ services:
     container_name: victoria-traces
     ports:
       - "4317:4317"
-      - "4318:4318" # Твой NanoTracer шлет сюда
       - "10428:10428" # Добавил порт для запросов Grafana
     volumes:
       - vmtrace-data:/vmtrace-data # <-- Добавил волюм для трейсов
@@ -50,6 +49,21 @@ services:
       - "-retentionPeriod=7d"
     networks:
       - vm-net
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.151.0
+    container_name: otel-collector
+    command: ["--config=/etc/otel-collector-config.yml"]
+    volumes:
+      - ./otel-collector-config.yml:/etc/otel-collector-config.yml
+    ports:
+      - "4318:4318" # Только HTTP-приемник
+      - "8889:8889" # Порт для метрик графа
+    networks:
+      - vm-net
+    depends_on:
+      - victoria-logs
+      - victoria-traces
 
   # Интерфейс
   grafana:
