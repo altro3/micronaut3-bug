@@ -17,9 +17,9 @@ import com.micronaut.bug.trace.NanoTracer.Companion.ATTR_URL_FULL
 import com.micronaut.bug.trace.NanoTracer.Companion.HEADER_BAGGAGE
 import com.micronaut.bug.trace.NanoTracer.Companion.HEADER_TRACEPARENT
 import com.micronaut.bug.trace.NanoTracer.Companion.HEADER_X_SENDER
-import com.micronaut.bug.trace.NanoTracer.Companion.MDC_CLIENT
-import com.micronaut.bug.trace.NanoTracer.Companion.MDC_SERVER
+import com.micronaut.bug.trace.NanoTracer.Companion.MDC_SOURCE
 import com.micronaut.bug.trace.NanoTracer.Companion.MDC_SPAN_ID
+import com.micronaut.bug.trace.NanoTracer.Companion.MDC_TARGET
 import com.micronaut.bug.trace.NanoTracer.Companion.METHODS_WITHOUT_BODY
 import com.micronaut.bug.trace.NanoTracer.Companion.OTEL_MAPPED_HEADERS
 import com.micronaut.bug.trace.NanoTracer.Companion.PREFIX_HTTP_REQUEST_HEADER
@@ -107,8 +107,8 @@ class NanoTraceClientInterceptor(
             }
         }
 
-        val originalClient = MDC.get(MDC_CLIENT)
-        val originalServer = MDC.get(MDC_SERVER)
+        val originalClient = MDC.get(MDC_SOURCE)
+        val originalServer = MDC.get(MDC_TARGET)
 
         return try {
             val rs = execution.execute(rq, body)
@@ -123,8 +123,8 @@ class NanoTraceClientInterceptor(
 
             val isError = rs.statusCode.isError
 
-            MDC.put(MDC_CLIENT, selfServiceName)
-            MDC.put(MDC_SERVER, props.serviceName)
+            MDC.put(MDC_SOURCE, selfServiceName)
+            MDC.put(MDC_TARGET, props.serviceName)
 
             // Собираем ТОЛЬКО кастомные атрибуты.
             val attrs = HashMap<String, Any>(32)
@@ -191,8 +191,8 @@ class NanoTraceClientInterceptor(
             )
             throw e
         } finally {
-            MDC.put(MDC_CLIENT, originalClient)
-            MDC.put(MDC_SERVER, originalServer)
+            MDC.put(MDC_SOURCE, originalClient)
+            MDC.put(MDC_TARGET, originalServer)
         }
     }
 

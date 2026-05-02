@@ -87,7 +87,6 @@ object HttpClientUtils {
                     LoggingInterceptor(
                         props = clientProps,
                         objectMapper = objectMapper,
-                        selfServiceName = senderAppName,
                     )
                 )
 

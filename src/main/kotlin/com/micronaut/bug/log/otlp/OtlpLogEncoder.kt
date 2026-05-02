@@ -131,6 +131,9 @@ class OtlpLogEncoder(
                     .setSeverityNumber(mapLevelToSeverity(event.level))
                     .setSeverityText(event.level.levelStr)
 
+                var traceId: String? = null
+                var spanId: String? = null
+
                 // ШАГ 4: Перенос MDC и связывание с трассировкой
                 val mdc = event.mdcPropertyMap
                 if (mdc != null && mdc.isNotEmpty()) {
@@ -141,6 +144,7 @@ class OtlpLogEncoder(
                         // Проверка нативного traceId
                         if (key == MDC_TRACE_ID) {
                             if (value.length == TRACE_ID_HEX_LEN) {
+                                traceId = value
                                 val bytes = parseHexToBytes(value)
                                 // Копируем ровно 16 байт из буфера, игнорируя хвосты
                                 logRecordBuilder.traceId = ByteString.copyFrom(bytes, 0, TRACE_ID_BYTES_LEN)
@@ -150,6 +154,7 @@ class OtlpLogEncoder(
                         // Проверка нативного spanId
                         if (key == MDC_SPAN_ID) {
                             if (value.length == SPAN_ID_HEX_LEN) {
+                                spanId = value
                                 val bytes = parseHexToBytes(value)
                                 // Копируем ровно 8 байт из буфера
                                 logRecordBuilder.spanId = ByteString.copyFrom(bytes, 0, SPAN_ID_BYTES_LEN)
@@ -173,6 +178,11 @@ class OtlpLogEncoder(
                         attrBuilder.key = key
                         attrBuilder.valueBuilder.stringValue = maskedValue
                     }
+                }
+                if (traceId != null && spanId != null) {
+                    val attrBuilder = logRecordBuilder.addAttributesBuilder()
+                    attrBuilder.key = ATTR_ID
+                    attrBuilder.valueBuilder.stringValue = "$traceId-$spanId"
                 }
 
                 // ШАГ 5: Запись исключений
@@ -223,14 +233,15 @@ class OtlpLogEncoder(
      * Преобразует строгий уровень логирования Logback в числовой эквивалент
      * стандарта OpenTelemetry (`SeverityNumber`).
      */
-    private fun mapLevelToSeverity(level: Level): SeverityNumber = when (level) {
-        Level.TRACE -> SeverityNumber.SEVERITY_NUMBER_TRACE
-        Level.DEBUG -> SeverityNumber.SEVERITY_NUMBER_DEBUG
-        Level.INFO -> SeverityNumber.SEVERITY_NUMBER_INFO
-        Level.WARN -> SeverityNumber.SEVERITY_NUMBER_WARN
-        Level.ERROR -> SeverityNumber.SEVERITY_NUMBER_ERROR
-        else -> SeverityNumber.SEVERITY_NUMBER_UNSPECIFIED
-    }
+    private fun mapLevelToSeverity(level: Level): SeverityNumber =
+        when (level) {
+            Level.TRACE -> SeverityNumber.SEVERITY_NUMBER_TRACE
+            Level.DEBUG -> SeverityNumber.SEVERITY_NUMBER_DEBUG
+            Level.INFO -> SeverityNumber.SEVERITY_NUMBER_INFO
+            Level.WARN -> SeverityNumber.SEVERITY_NUMBER_WARN
+            Level.ERROR -> SeverityNumber.SEVERITY_NUMBER_ERROR
+            else -> SeverityNumber.SEVERITY_NUMBER_UNSPECIFIED
+        }
 
     /**
      * Преобразует Hex-строку в массив байт без аллокаций в Heap.
@@ -261,6 +272,7 @@ class OtlpLogEncoder(
     }
 
     companion object {
+        const val ATTR_ID = "id"
         const val ATTR_SERVICE_NAME = "service.name"
         const val ATTR_DEPLOYMENT_ENVIRONMENT = "deployment.environment"
         private const val ATTR_EXCEPTION_TYPE = "exception.type"

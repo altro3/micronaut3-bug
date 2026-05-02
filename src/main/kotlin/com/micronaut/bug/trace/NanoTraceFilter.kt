@@ -20,8 +20,8 @@ import com.micronaut.bug.trace.NanoTracer.Companion.HEADER_BAGGAGE
 import com.micronaut.bug.trace.NanoTracer.Companion.HEADER_TRACEPARENT
 import com.micronaut.bug.trace.NanoTracer.Companion.HEADER_X_SENDER
 import com.micronaut.bug.trace.NanoTracer.Companion.MASKED_VALUES
-import com.micronaut.bug.trace.NanoTracer.Companion.MDC_CLIENT
-import com.micronaut.bug.trace.NanoTracer.Companion.MDC_SERVER
+import com.micronaut.bug.trace.NanoTracer.Companion.MDC_SOURCE
+import com.micronaut.bug.trace.NanoTracer.Companion.MDC_TARGET
 import com.micronaut.bug.trace.NanoTracer.Companion.METHODS_WITHOUT_BODY
 import com.micronaut.bug.trace.NanoTracer.Companion.OTEL_MAPPED_HEADERS
 import com.micronaut.bug.trace.NanoTracer.Companion.PREFIX_HTTP_REQUEST_HEADER
@@ -112,8 +112,8 @@ class NanoTraceFilter(
             traceState = traceState,
         )
 
-        MDC.put(MDC_CLIENT, sender)
-        MDC.put(MDC_SERVER, selfServiceName)
+        MDC.put(MDC_SOURCE, sender)
+        MDC.put(MDC_TARGET, selfServiceName)
 
         try {
             rs.setHeader(HEADER_TRACEPARENT, tracer.getTraceParent())

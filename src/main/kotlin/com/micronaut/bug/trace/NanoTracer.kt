@@ -245,8 +245,11 @@ class NanoTracer(
         const val MDC_TRACE_ID = "traceId"
         const val MDC_TRACE_FLAGS = "traceFlags"
         const val MDC_SPAN_ID = "spanId"
-        const val MDC_CLIENT = "client"
-        const val MDC_SERVER = "server"
+        const val MDC_SOURCE = "source"
+        const val MDC_TARGET = "target"
+        const val MDC_SUB_TITLE = "subTitle"
+        const val MDC_MAIN_STAT = "mainstat"
+        const val MDC_COLOR = "color"
 
         // Стандартные заголовки (Legacy)
         const val HEADER_X_SENDER = "x-sender"

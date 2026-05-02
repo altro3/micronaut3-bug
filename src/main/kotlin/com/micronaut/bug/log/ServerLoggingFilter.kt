@@ -4,6 +4,9 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.databind.SerializationFeature
 import com.micronaut.bug.log.ServerLoggingFilter.Companion.LIMIT_TEXT_CHECK_THRESHOLD
 import com.micronaut.bug.log.config.LogProperties
+import com.micronaut.bug.trace.NanoTracer.Companion.MDC_COLOR
+import com.micronaut.bug.trace.NanoTracer.Companion.MDC_MAIN_STAT
+import com.micronaut.bug.trace.NanoTracer.Companion.MDC_SUB_TITLE
 import io.github.oshai.kotlinlogging.KotlinLogging
 import jakarta.servlet.FilterChain
 import jakarta.servlet.ReadListener
@@ -12,6 +15,7 @@ import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletRequestWrapper
 import jakarta.servlet.http.HttpServletResponse
 import jakarta.servlet.http.Part
+import org.slf4j.MDC
 import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpStatus
 import org.springframework.http.MediaType
@@ -55,6 +59,8 @@ class ServerLoggingFilter(
             return
         }
 
+        MDC.put(MDC_SUB_TITLE, "${rq.method} ${rq.requestURI}")
+
         val isDebugProvider = log.isDebugEnabled() && logProps.enabled
 
         // Оборачиваем запрос: кэшируем тело, чтобы прочитать его для лога и оставить доступным для контроллера
@@ -76,10 +82,18 @@ class ServerLoggingFilter(
             chain.doFilter(currentRq, rsWrapper)
         } finally {
             val duration = System.nanoTime() - startTimeNano
+            val durationMs = duration / 1_000_000
+            val isSlow = durationMs >= 10_000
+
+            MDC.put(MDC_MAIN_STAT, durationMs.toString() + "ms")
             val status = rsWrapper.status
             val isError = status >= 400
             val isFullBodyCached = rsWrapper.contentSize < logProps.maxPayloadSize.toBytes()
-
+            if (isError) {
+                MDC.put(MDC_COLOR, "red")
+            } else if (isSlow) {
+                MDC.put(MDC_COLOR, "yellow")
+            }
             val rsBodyBytes = when {
                 rsWrapper.contentSize == 0 -> BODY_EMPTY.toByteArray(Charsets.UTF_8)
                 !isFullBodyCached -> BODY_TOO_LARGE.toByteArray(Charsets.UTF_8)
@@ -97,6 +111,9 @@ class ServerLoggingFilter(
             }
             // Важно: копируем кэшированное тело ответа обратно в реальный поток
             rsWrapper.copyBodyToResponse()
+
+            MDC.remove(MDC_SUB_TITLE)
+            MDC.remove(MDC_MAIN_STAT)
         }
     }
 
