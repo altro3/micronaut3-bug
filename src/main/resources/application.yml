@@ -94,7 +94,7 @@ management:
 #          "deployment.environment": ${app.node.name}
 logging:
   pattern:
-    console: "%d{MM-dd HH:mm:ss.SSS} %highlight{%level} %style{%uMDC}{magenta} [%t] %style{%logger{1.}}{cyan} : %msg%n%throwable{filters(org.springframework,sun.reflect,java.lang.reflect,org.apache.tomcat,org.apache.catalina,jdk.internal,org.aspectj,io.netty)}"
+    console: "%d{MM-dd HH:mm:ss.SSS} %highlight{%level} %style{%uMDC}{magenta} [%t] %style{%logger{1.}}{cyan} : %msg%n%uEx"
 #    console: "%d{HH:mm:ss.SSS} %highlight(%-5level) [%thread] %cyan(%logger{25}) - %msg%n%throwable"
 #    console: "%d{HH:mm:ss.SSS} %highlight{%-5level}{FATAL=red, ERROR=red, WARN=yellow, INFO=green, DEBUG=cyan, TRACE=black} [%t] %style{%logger{1.}}{cyan} - %msg%n%throwable"
   level:

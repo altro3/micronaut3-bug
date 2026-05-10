@@ -2,6 +2,7 @@ package com.micronaut.bug.log.otlp
 
 import com.google.protobuf.ByteString
 import com.micronaut.bug.log.LogMasker
+import com.micronaut.bug.log.LogUtil.renderSmartStack
 import io.opentelemetry.proto.collector.logs.v1.ExportLogsServiceRequest
 import io.opentelemetry.proto.common.v1.AnyValue
 import io.opentelemetry.proto.common.v1.InstrumentationScope
@@ -240,69 +241,7 @@ class OtlpLogEncoder(
         return target
     }
 
-    private fun renderSmartStack(proxy: ThrowableProxy, sb: StringBuilder) {
-        sb.append(proxy.name).append(COLON_SPACE).append(proxy.message).append('\n')
-        val frames = proxy.extendedStackTrace
-        var skipped = 0
-        for (frame in frames) {
-            val className = frame.className
-            if (isNoise(className)) {
-                skipped++
-                continue
-            }
-            if (skipped > 0) {
-                sb.append(SKIPPED_START).append(skipped).append(SKIPPED_END)
-                skipped = 0
-            }
-
-            sb.append(PREFIX_AT).append(className).append('.').append(frame.methodName)
-            if (frame.isNativeMethod) {
-                sb.append("(Native Method)")
-            } else {
-                frame.fileName?.let {
-                    sb.append('(').append(it).append(':').append(frame.lineNumber).append(')')
-                }
-            }
-
-            frame.location?.let {
-                sb.append(" [").append(it).append(':').append(frame.version).append(']')
-            }
-            sb.append('\n')
-        }
-        proxy.causeProxy?.let {
-            sb.append(PREFIX_CAUSED_BY);
-            renderSmartStack(it, sb)
-        }
-    }
-
-    private fun isNoise(frame: String): Boolean {
-        // Линейная проверка по списку мусорных пакетов
-        for (i in STACK_NOISE_PACKAGES.indices) {
-            if (frame.startsWith(STACK_NOISE_PACKAGES[i])) return true
-        }
-        return false
-    }
-
     companion object {
-        // Символы и префиксы
-        private const val COLON_SPACE = ": "
-        private const val PREFIX_AT = "\tat "
-        private const val PREFIX_CAUSED_BY = "Caused by: "
-        private const val SKIPPED_START = "\t... skipped "
-        private const val SKIPPED_END = " frames ...\n"
-
-        // Список пакетов для фильтрации (шум)
-        private val STACK_NOISE_PACKAGES = arrayOf(
-            "org.springframework.",
-            "java.lang.reflect.",
-            "sun.reflect.",
-            "jdk.internal.",
-            "org.apache.tomcat.",
-            "org.apache.catalina.",
-            "org.aspectj.",
-            "io.netty.",
-            "com.sun."
-        )
 
         const val ATTR_SERVICE_NAME = "service.name"
         const val ATTR_DEPLOYMENT_ENVIRONMENT = "deployment.environment"
