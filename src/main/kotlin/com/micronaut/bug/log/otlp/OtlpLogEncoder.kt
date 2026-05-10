@@ -108,9 +108,6 @@ class OtlpLogEncoder(
                     .setSeverityNumber(mapLevelToSeverity(event.level))
                     .setSeverityText(event.level.name())
 
-                var traceId: String? = null
-                var spanId: String? = null
-
                 // ШАГ 4: Перенос MDC через ReadOnlyStringMap (Garbage-Free обход) и связывание с трассировкой
                 val mdc = event.contextData
                 if (!mdc.isEmpty) {
@@ -120,7 +117,6 @@ class OtlpLogEncoder(
                         when (key) {
                             MDC_TRACE_ID -> {
                                 if (stringValue.length == TRACE_ID_HEX_LEN) {
-                                    traceId = stringValue
                                     val bytes = parseHexToBytes(stringValue, TRACE_ID_BYTES_LEN)
                                     logRecordBuilder.traceId = ByteString.copyFrom(bytes, 0, TRACE_ID_BYTES_LEN)
                                 }
@@ -128,7 +124,6 @@ class OtlpLogEncoder(
 
                             MDC_SPAN_ID -> {
                                 if (stringValue.length == SPAN_ID_HEX_LEN) {
-                                    spanId = stringValue
                                     val bytes = parseHexToBytes(stringValue, SPAN_ID_BYTES_LEN)
                                     logRecordBuilder.spanId = ByteString.copyFrom(bytes, 0, SPAN_ID_BYTES_LEN)
                                 }
@@ -145,10 +140,6 @@ class OtlpLogEncoder(
                             }
                         }
                     }
-                }
-
-                if (traceId != null && spanId != null) {
-                    addStrAttr(ATTR_ID, "$traceId-$spanId", logRecordBuilder)
                 }
 
                 // ШАГ 5: Запись исключений (ThrowableProxy в Log4j2)
@@ -313,7 +304,6 @@ class OtlpLogEncoder(
             "com.sun."
         )
 
-        const val ATTR_ID = "id"
         const val ATTR_SERVICE_NAME = "service.name"
         const val ATTR_DEPLOYMENT_ENVIRONMENT = "deployment.environment"
         private const val ATTR_EXCEPTION_TYPE = "exception.type"
