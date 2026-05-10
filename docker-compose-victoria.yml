@@ -28,7 +28,7 @@ services:
       - "4317:4317"
       - "10428:10428" # Добавил порт для запросов Grafana
     volumes:
-      - vmtrace-data:/vmtrace-data # <-- Добавил волюм для трейсов
+      - vmtrace-data:/vmtrace-data
     command:
       - "-storageDataPath=/vmtrace-data" # <-- Указываем путь к волюму
       - "--servicegraph.enableTask=true"

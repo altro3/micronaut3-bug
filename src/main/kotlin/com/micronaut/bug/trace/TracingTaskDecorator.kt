@@ -58,7 +58,6 @@ import org.springframework.core.task.TaskDecorator
  * ```
  *
  * @property tracer Экземпляр [NanoTracer] для управления стеком контекстов.
- * @property traceProps Настройки трейсинга для проверки флага включения (enabled).
  */
 class TracingTaskDecorator(
     private val tracer: NanoTracer? = null,

@@ -46,11 +46,11 @@ class TraceProperties(
          */
         val url: URI = URI.create("http://localhost:4318/v1/traces"),
         /**
-         * Таймаут на установку соединения.
+         * Тайм-аут на установку соединения.
          */
         val connectTimeout: Duration = Duration.ofSeconds(2),
         /**
-         * Таймаут на запрос.
+         * Тайм-аут на запрос.
          */
         val requestTimeout: Duration = Duration.ofSeconds(2),
         /**

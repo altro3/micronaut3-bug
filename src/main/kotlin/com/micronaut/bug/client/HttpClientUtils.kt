@@ -120,13 +120,13 @@ object HttpClientUtils {
             // Это главная защита для синхронного RestClient.
             .responseTimeout(clientProperties.readTimeout)
             .doOnConnected {
-                // 3. НИЗКОУРОВНЕВЫЕ ТАЙМАУТЫ (Netty Pipeline)
+                // 3. НИЗКОУРОВНЕВЫЕ ТАЙМ-АУТЫ (Netty Pipeline)
                 // Мы передаем наносекунды напрямую, как ты и хотел.
                 // Это защищает от "залипших" пакетов внутри уже открытого соединения.
                 it.addHandlerLast(ReadTimeoutHandler(timeoutNanos, TimeUnit.NANOSECONDS))
                 it.addHandlerLast(WriteTimeoutHandler(timeoutNanos, TimeUnit.NANOSECONDS))
             }
-            // Таймаут на установку TCP-соединения (на уровне опций сокета)
+            // Тайм-аут на установку TCP-соединения (на уровне опций сокета)
             .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, clientProperties.connectTimeout.toMillis().toInt())
 
         val proxyProps = clientProperties.proxy

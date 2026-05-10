@@ -1,8 +1,9 @@
 package com.micronaut.bug.log.otlp
 
-import ch.qos.logback.classic.spi.ILoggingEvent
-import ch.qos.logback.core.UnsynchronizedAppenderBase
 import com.micronaut.bug.log.config.LogProperties
+import org.apache.logging.log4j.core.LogEvent
+import org.apache.logging.log4j.core.appender.AbstractAppender
+import org.apache.logging.log4j.core.config.Property
 import org.springframework.http.HttpHeaders.CONTENT_ENCODING
 import org.springframework.http.HttpHeaders.CONTENT_TYPE
 import org.springframework.http.MediaType
@@ -14,78 +15,44 @@ import java.util.concurrent.ArrayBlockingQueue
 import java.util.concurrent.TimeUnit
 import java.util.zip.GZIPOutputStream
 
-/**
- * Профессиональная высокопроизводительная реализация Logback-аппендера для передачи
- * логов по протоколу OTLP (Protobuf/HTTP) на сервер OpenTelemetry (VictoriaLogs).
- *
- * Архитектура построена на паттерне Thread Confinement и Consumer (Потребитель):
- * - **Изоляция потоков:** Бизнес-потоки только складывают логи в неблокирующую очередь [5.3].
- * - **Воркер:** Единственный выделенный демон-поток занимается упаковкой и отправкой [5.3].
- * - **Backpressure (Обратное давление):** Синхронная отправка данных воркером защищает сеть от перегрузки [5.3].
- * - **Защита от OOM:** Очередь имеет жесткий фиксированный лимит, предотвращая раздувание кучи при всплесках [5.3].
- *
- * @param props Свойства логирования, из которых берутся размеры очередей, батчей и таймауты.
- * @param encoder Кодировщик для преобразования событий SLF4J в бинарный Protobuf-формат OTLP [5.3].
- */
 class OtlpAppender(
+    name: String,
     props: LogProperties,
     private val encoder: OtlpLogEncoder,
-) : UnsynchronizedAppenderBase<ILoggingEvent>() {
+) : AbstractAppender(name, null, null, true, Property.EMPTY_ARRAY) {
 
     private val otlpProps = props.otlp
 
-    /**
-     * HTTP-клиент из стандартной библиотеки Java 11+.
-     * Пул соединений переиспользуется автоматически самой JVM.
-     */
     private val httpClient = HttpClient.newBuilder()
         .connectTimeout(otlpProps.connectionTimeout)
         .build()
 
-    /**
-     * Потокобезопасная очередь фиксированного размера [5.3].
-     * Если очередь переполняется, новые логи отбрасываются (Drop-on-overflow),
-     * гарантируя, что логирование никогда не затормозит и не уронит бизнес-логику [5.3].
-     */
-    private val queue = ArrayBlockingQueue<ILoggingEvent>(otlpProps.queueCapacity)
+    private val queue = ArrayBlockingQueue<LogEvent>(otlpProps.queueCapacity)
 
-    /**
-     * Ссылка на единственный фоновый поток-воркер [5.3].
-     */
     @Volatile
     private var workerThread: Thread? = null
 
-    /**
-     * Флаг активности аппендера.
-     */
     @Volatile
     private var running = false
 
-    /**
-     * Основная точка входа для событий логирования из приложения.
-     * Быстро перекладывает задачу в очередь воркера без аллокаций лямбд и Runnable [5.3].
-     * Метод выполняется за наносекунды и не блокирует вызывающий поток.
-     *
-     * @param eventObject Событие логирования от Logback.
-     */
-    override fun append(eventObject: ILoggingEvent) {
+    override fun append(event: LogEvent) {
         if (!running) {
             return
         }
 
         // Пытаемся положить в очередь. Если она полна — метод вернет false.
-        val accepted = queue.offer(eventObject)
+        val accepted = queue.offer(event.toImmutable())
         if (!accepted) {
             // Опционально: здесь можно инкрементировать метрику отброшенных логов
         }
     }
 
-    /**
-     * Инициализация аппендера фреймворком Logback.
-     * Поднимает фоновый поток-воркер.
-     */
     override fun start() {
+        // Проверяем статус через встроенные механизмы AbstractAppender
+        if (isStarted) return
+
         super.start()
+
         running = true
 
         workerThread = Thread({ runWorkerLoop() }, "otlp-log-worker").apply {
@@ -94,14 +61,8 @@ class OtlpAppender(
         }
     }
 
-    /**
-     * Высокопроизводительный бесконечный цикл вычерпывания логов из очереди [5.3].
-     *
-     * Использует метод [ArrayBlockingQueue.drainTo] для атомарного извлечения
-     * целой пачки логов за один системный вызов, снижая конкуренцию за локи [5.3].
-     */
     private fun runWorkerLoop() {
-        val batch = ArrayList<ILoggingEvent>(otlpProps.batchSize)
+        val batch = ArrayList<LogEvent>(otlpProps.batchSize)
         val timeoutMs = otlpProps.batchTimeout.toMillis()
 
         // Воркер продолжает работать, пока приложение запущено ИЛИ пока в очереди есть логи [5.3].
@@ -132,17 +93,12 @@ class OtlpAppender(
                     break
                 }
             } catch (e: Exception) {
-                addError("Error in OTLP worker loop", e)
+                LOGGER.error("Error in OTLP worker loop", e)
             }
         }
     }
 
-    /**
-     * Формирует батч, выполняет его кодирование в Protobuf и сжатие [5.3].
-     *
-     * @param eventsToSend Список событий для отправки.
-     */
-    private fun flush(eventsToSend: List<ILoggingEvent>) {
+    private fun flush(eventsToSend: List<LogEvent>) {
         try {
             var payload = encoder.encodeBatch(eventsToSend)
 
@@ -152,26 +108,16 @@ class OtlpAppender(
 
             sendRequest(payload)
         } catch (e: Exception) {
-            addError("Critical error during OTLP batch encoding", e)
+            LOGGER.error("Critical error during OTLP batch encoding", e)
         }
     }
 
-    /**
-     * Сжимает массив байтов алгоритмом GZIP.
-     * Защищает трафик от раздувания [5.3].
-     */
     private fun compressGzip(data: ByteArray): ByteArray {
         val bos = ByteArrayOutputStream(data.size / GZIP_ESTIMATED_RATIO)
         GZIPOutputStream(bos).use { it.write(data) }
         return bos.toByteArray()
     }
 
-    /**
-     * Выполняет синхронную отправку данных на OTLP-совместимый сервер [5.3].
-     *
-     * Использование блокирующего `send` гарантирует, что воркер не создаст
-     * миллион асинхронных задач в памяти, если удаленный сервер начнет тормозить [5.3].
-     */
     private fun sendRequest(payload: ByteArray) {
         val request = HttpRequest.newBuilder()
             .uri(otlpProps.url)
@@ -186,46 +132,38 @@ class OtlpAppender(
             .build()
 
         try {
-            val response = httpClient.send(request, HttpResponse.BodyHandlers.discarding())
+            val response = httpClient.send(request, HttpResponse.BodyHandlers.ofString())
             if (response.statusCode() !in 200..299) {
-                addError("OTLP server returned error code: ${response.statusCode()}")
+                LOGGER.error("OTLP server returned error code: ${response.statusCode()}, body: ${response.body()}")
             }
         } catch (ex: Exception) {
-            addError("Network error while sending logs to OTLP", ex)
+            LOGGER.error("Network error while sending logs to OTLP", ex)
         }
     }
 
-    /**
-     * Завершение работы аппендера.
-     * Дает воркеру время на отправку последних данных из очереди [5.3].
-     */
-    override fun stop() {
+    override fun stop(timeout: Long, unit: TimeUnit): Boolean {
         running = false
         // Прерываем poll() воркера, чтобы он начал экстренно выгребать остатки логов [5.3]
         workerThread?.interrupt()
-        try {
-            val stopAwaitMs = otlpProps.stopAwaitTimeout.toMillis()
 
-            workerThread?.join(stopAwaitMs)
+        val systemMs = unit.toMillis(timeout)
+        val maxWaitMs = otlpProps.stopAwaitTimeout.toMillis()
+        val waitTime = if (systemMs > 0) minOf(systemMs, maxWaitMs) else maxWaitMs
+
+        try {
+            workerThread?.join(waitTime)
 
             if (workerThread?.isAlive == true) {
-                addWarn("OTLP worker termination timeout, some logs might be lost")
+                LOGGER.warn("OTLP worker termination timeout, some logs might be lost")
             }
         } catch (_: InterruptedException) {
             Thread.currentThread().interrupt()
         }
-        super.stop()
+        return super.stop(timeout, unit)
     }
 
     companion object {
-        /**
-         * Константа кодировки GZIP для HTTP-заголовка.
-         */
         private const val ENCODING_GZIP = "gzip"
-
-        /**
-         * Ожидаемый коэффициент сжатия для начальной аллокации буфера [5.3].
-         */
         private const val GZIP_ESTIMATED_RATIO = 2
     }
 }

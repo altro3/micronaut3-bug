@@ -1,9 +1,5 @@
 package com.micronaut.bug.log.otlp
 
-import ch.qos.logback.classic.Level
-import ch.qos.logback.classic.spi.ILoggingEvent
-import ch.qos.logback.classic.spi.IThrowableProxy
-import ch.qos.logback.classic.spi.ThrowableProxyUtil
 import com.google.protobuf.ByteString
 import com.micronaut.bug.log.LogMasker
 import io.opentelemetry.proto.collector.logs.v1.ExportLogsServiceRequest
@@ -15,56 +11,29 @@ import io.opentelemetry.proto.logs.v1.ResourceLogs
 import io.opentelemetry.proto.logs.v1.ScopeLogs
 import io.opentelemetry.proto.logs.v1.SeverityNumber
 import io.opentelemetry.proto.resource.v1.Resource
-import java.util.concurrent.ConcurrentHashMap
+import org.apache.logging.log4j.Level
+import org.apache.logging.log4j.core.LogEvent
+import org.apache.logging.log4j.core.impl.ThrowableProxy
 
-/**
- * Высокопроизводительный кодировщик логов в формат OpenTelemetry Protocol (OTLP).
- *
- * Класс спроектирован для работы в условиях экстремально высоких нагрузок (Highload).
- * Вся кодовая база вычищена от скрытых аллокаций объектов, чтобы свести к абсолютному
- * нулю давление на Garbage Collector (GC Pressure) в горячих циклах.
- *
- * **Примененные оптимизации:**
- * 1. **ThreadLocal Pooling:** Переиспользование тяжелых Protobuf-билдеров и массивов через [ThreadLocal].
- * 2. **Zero-Allocation Loops:** Полный отказ от итераторов, лямбд, `withIndex()` и свойств вроде `indices`.
- * 3. **Вложенные мутации:** Использование `addAttributesBuilder()` вместо создания иммутабельных структур [KeyValue].
- * 4. **Прямой Hex-парсинг:** Преобразование идентификаторов трассировки без промежуточных строк и массивов.
- *
- * @param appName Имя текущего сервиса для записи в метаданные ресурса OTel.
- * @param nodeName Имя конкретной ноды/хоста для локализации источника логов.
- * @param logMasker Сервис маскирования данных для затирания ПДн и токенов на лету.
- */
 class OtlpLogEncoder(
     appName: String,
     nodeName: String,
     private val logMasker: LogMasker
 ) {
-    /**
-     * Потокобезопасный кэш для предсобранных объектов Scope.
-     * Защищает кучу от дублирования одинаковых структур при миллионах логов от одних и тех же логгеров.
-     */
-    private val scopeCache = ConcurrentHashMap<String, InstrumentationScope>()
 
-    /**
-     * Статичные метаданные ресурса (сервис и окружение).
-     * Вычисляется один раз при инициализации класса для экономии тактов процессора.
-     */
+    // Массив для быстрого доступа по индексу (циклический)
+    private val scopeCache = HashMap<String, InstrumentationScope>(CACHE_SIZE)
+    private val scopeRingBuffer = arrayOfNulls<String>(CACHE_SIZE)
+
+    // Указатель для ротации (заменяем самый старый элемент)
+    private var ringPointer = 0
+
     private val sharedResource: Resource = Resource.newBuilder()
         .addAttributes(KeyValue.newBuilder().setKey(ATTR_SERVICE_NAME).setValue(AnyValue.newBuilder().setStringValue(appName).build()).build())
         .addAttributes(KeyValue.newBuilder().setKey(ATTR_DEPLOYMENT_ENVIRONMENT).setValue(AnyValue.newBuilder().setStringValue(nodeName).build()).build())
         .build()
 
-    /**
-     * Преобразует накопленный батч событий Logback в сериализованный Protobuf-пакет.
-     *
-     * Метод является критической точкой производительности. Внутри используются только
-     * классические циклы `while` и `for (i in 0 until size)`, гарантирующие отсутствие
-     * скрытого создания объектов-диапазонов (`IntRange`) или итераторов.
-     *
-     * @param events Накопленный батч событий из очереди аппендера.
-     * @return Сериализованный массив байт `ExportLogsServiceRequest`, готовый к отправке по HTTP.
-     */
-    fun encodeBatch(events: List<ILoggingEvent>): ByteArray {
+    fun encodeBatch(events: List<LogEvent>): ByteArray {
         val size = events.size
         if (size == 0) return EMPTY_BYTE_ARRAY
 
@@ -73,33 +42,41 @@ class OtlpLogEncoder(
         val resLogsBuilder = tlResourceLogsBuilder.get().clear().setResource(sharedResource)
         val logRecordBuilder = tlLogRecordBuilder.get()
 
-        val scopeNames = ArrayList<String>(8)
-        val groupedEvents = ArrayList<MutableList<ILoggingEvent>>(8)
+        val scopeNames = tlScopeNames.get().apply { clear() }
+        val indexMap = tlIndexMap.get().apply { clear() }
+        val groupedEvents = tlGroupedEvents.get().apply { clear() }
 
-        // ШАГ 1: Группировка логов по именам логгеров без использования HashMap.
-        // Линейный поиск по массиву для малых N (до 10-15 элементов) работает в разы быстрее,
-        // чем вычисление хэшей и работа со сложными структурами Map.
+        var lastFoundIndex = -1
+        var lastScopeName: String? = null
+
         for (i in 0 until size) {
             val event = events[i]
             val scopeName = event.loggerName ?: VAL_UNKNOWN_SCOPE
 
-            var foundIndex = -1
-            val scopeNamesSize = scopeNames.size
-            for (j in 0 until scopeNamesSize) {
-                if (scopeNames[j] == scopeName) {
-                    foundIndex = j
-                    break
-                }
+            @Suppress("StringReferentialEquality")
+            var foundIndex = if (scopeName === lastScopeName) {
+                lastFoundIndex
+            } else {
+                indexMap.getOrDefault(scopeName, -1)
             }
 
             if (foundIndex == -1) {
+                foundIndex = scopeNames.size
                 scopeNames.add(scopeName)
-                val newList = ArrayList<ILoggingEvent>(size)
-                newList.add(event)
-                groupedEvents.add(newList)
-            } else {
-                groupedEvents[foundIndex].add(event)
+                indexMap[scopeName] = foundIndex
+
+                // Проверяем, есть ли в пуле готовый список для этой позиции
+                if (foundIndex >= groupedEvents.size) {
+                    groupedEvents.add(ArrayList(size)) // Новая аллокация только при первом росте
+                } else {
+                    groupedEvents[foundIndex].clear() // Переиспользуем существующий
+                }
             }
+
+            groupedEvents[foundIndex].add(event)
+
+            lastFoundIndex = foundIndex
+            lastScopeName = scopeName
         }
 
         // ШАГ 2: Формирование структур ScopeLogs
@@ -108,11 +85,10 @@ class OtlpLogEncoder(
             val scopeName = scopeNames[i]
             val scopeEvents = groupedEvents[i]
 
-            val cachedScope = scopeCache.computeIfAbsent(scopeName) { name ->
-                InstrumentationScope.newBuilder().setName(name).build()
-            }
+            val cachedScope = getOrCreateScope(scopeName)
+            val scopeLogsBuilder = tlScopeLogsBuilder.get().clear()
+            scopeLogsBuilder.scope = cachedScope
 
-            val scopeLogsBuilder = ScopeLogs.newBuilder().setScope(cachedScope)
             val scopeEventsSize = scopeEvents.size
 
             // ШАГ 3: Заполнение LogRecord'ов
@@ -123,70 +99,60 @@ class OtlpLogEncoder(
                 logRecordBuilder.clear()
 
                 // Маскирование тела лога перед упаковкой
-                val maskedMessage = logMasker.maskServiceMessage(event.formattedMessage)
+                val maskedMessage = logMasker.maskServiceMessage(event.message.formattedMessage)
                 logRecordBuilder.bodyBuilder.stringValue = maskedMessage
+                val instant = event.instant
 
                 logRecordBuilder
-                    .setTimeUnixNano(event.timeStamp * NANOS_IN_MILLI)
+                    .setTimeUnixNano(instant.epochSecond * NANOS_IN_SEC + instant.nanoOfSecond)
                     .setSeverityNumber(mapLevelToSeverity(event.level))
-                    .setSeverityText(event.level.levelStr)
+                    .setSeverityText(event.level.name())
 
                 var traceId: String? = null
                 var spanId: String? = null
 
-                // ШАГ 4: Перенос MDC и связывание с трассировкой
-                val mdc = event.mdcPropertyMap
-                if (mdc != null && mdc.isNotEmpty()) {
-                    for (entry in mdc.entries) {
-                        val key = entry.key
-                        val value = entry.value ?: continue
+                // ШАГ 4: Перенос MDC через ReadOnlyStringMap (Garbage-Free обход) и связывание с трассировкой
+                val mdc = event.contextData
+                if (!mdc.isEmpty) {
+                    mdc.forEach { key: String, value: Any? ->
 
-                        // Проверка нативного traceId
-                        if (key == MDC_TRACE_ID) {
-                            if (value.length == TRACE_ID_HEX_LEN) {
-                                traceId = value
-                                val bytes = parseHexToBytes(value)
-                                // Копируем ровно 16 байт из буфера, игнорируя хвосты
-                                logRecordBuilder.traceId = ByteString.copyFrom(bytes, 0, TRACE_ID_BYTES_LEN)
+                        val stringValue = value as? String ?: return@forEach
+                        when (key) {
+                            MDC_TRACE_ID -> {
+                                if (stringValue.length == TRACE_ID_HEX_LEN) {
+                                    traceId = stringValue
+                                    val bytes = parseHexToBytes(stringValue, TRACE_ID_BYTES_LEN)
+                                    logRecordBuilder.traceId = ByteString.copyFrom(bytes, 0, TRACE_ID_BYTES_LEN)
+                                }
                             }
-                            continue
-                        }
-                        // Проверка нативного spanId
-                        if (key == MDC_SPAN_ID) {
-                            if (value.length == SPAN_ID_HEX_LEN) {
-                                spanId = value
-                                val bytes = parseHexToBytes(value)
-                                // Копируем ровно 8 байт из буфера
-                                logRecordBuilder.spanId = ByteString.copyFrom(bytes, 0, SPAN_ID_BYTES_LEN)
-                            }
-                            continue
-                        }
-                        // Проверка флагов сэмплирования
-                        if (key == MDC_TRACE_FLAGS) {
-                            if (value.length == 2) {
-                                logRecordBuilder.flags = value.toInt(16)
-                            }
-                            continue
-                        }
 
-                        // Любые кастомные MDC-ключи маскируются "на лету" и улетают в атрибуты
-                        val maskedValue = logMasker.maskMessage(value)
+                            MDC_SPAN_ID -> {
+                                if (stringValue.length == SPAN_ID_HEX_LEN) {
+                                    spanId = stringValue
+                                    val bytes = parseHexToBytes(stringValue, SPAN_ID_BYTES_LEN)
+                                    logRecordBuilder.spanId = ByteString.copyFrom(bytes, 0, SPAN_ID_BYTES_LEN)
+                                }
+                            }
 
-                        // Оптимизация: addAttributesBuilder() позволяет мутировать вложенные поля,
-                        // не создавая новые инстансы KeyValue на куче.
-                        val attrBuilder = logRecordBuilder.addAttributesBuilder()
-                        attrBuilder.key = key
-                        attrBuilder.valueBuilder.stringValue = maskedValue
+                            MDC_TRACE_FLAGS -> {
+                                if (stringValue.length == 2) {
+                                    logRecordBuilder.flags = stringValue.toInt(16)
+                                }
+                            }
+
+                            else -> {
+                                addStrAttr(key, stringValue, logRecordBuilder)
+                            }
+                        }
                     }
                 }
+
                 if (traceId != null && spanId != null) {
-                    val attrBuilder = logRecordBuilder.addAttributesBuilder()
-                    attrBuilder.key = ATTR_ID
-                    attrBuilder.valueBuilder.stringValue = "$traceId-$spanId"
+                    addStrAttr(ATTR_ID, "$traceId-$spanId", logRecordBuilder)
                 }
 
-                // ШАГ 5: Запись исключений
-                val throwableProxy = event.throwableProxy
+                // ШАГ 5: Запись исключений (ThrowableProxy в Log4j2)
+                val throwableProxy = event.thrownProxy
                 if (throwableProxy != null) {
                     fillExceptionAttributes(logRecordBuilder, throwableProxy)
                 }
@@ -197,6 +163,11 @@ class OtlpLogEncoder(
             resLogsBuilder.addScopeLogs(scopeLogsBuilder.build())
         }
 
+        // ВАЖНО: В самом конце метода, перед return, очищаем вложенные списки
+        for (i in scopeNames.indices) {
+            groupedEvents[i].clear()
+        }
+
         // ШАГ 6: Финальная сериализация в байты
         return requestBuilder
             .addResourceLogs(resLogsBuilder.build())
@@ -204,35 +175,54 @@ class OtlpLogEncoder(
             .toByteArray()
     }
 
-    /**
-     * Заполняет атрибуты ошибки в соответствии со спецификацией OpenTelemetry Semantic Conventions.
-     *
-     * Метод не использует `kv(...)` функции, а пишет данные напрямую во вложенные билдеры
-     * переданного родителя, предотвращая создание промежуточных объектов.
-     *
-     * @param builder Билдер текущей записи лога.
-     * @param proxy Ссылка на обертку исключения из Logback.
-     */
-    private fun fillExceptionAttributes(builder: LogRecord.Builder, proxy: IThrowableProxy) {
-        val attr1 = builder.addAttributesBuilder()
-        attr1.key = ATTR_EXCEPTION_TYPE
-        attr1.valueBuilder.stringValue = proxy.className
+    private fun getOrCreateScope(name: String): InstrumentationScope {
+        // 1. Пытаемся найти в кэше
+        val existing = scopeCache[name]
+        if (existing != null) return existing
 
-        proxy.message?.let {
-            val attr2 = builder.addAttributesBuilder()
-            attr2.key = ATTR_EXCEPTION_MESSAGE
-            attr2.valueBuilder.stringValue = it
+        // 2. Если кэш полон, выселяем самого старого по указателю ringPointer
+        if (scopeCache.size >= CACHE_SIZE) {
+            val oldName = scopeRingBuffer[ringPointer]
+            if (oldName != null) {
+                scopeCache.remove(oldName)
+            }
         }
 
-        val attr3 = builder.addAttributesBuilder()
-        attr3.key = ATTR_EXCEPTION_STACKTRACE
-        attr3.valueBuilder.stringValue = ThrowableProxyUtil.asString(proxy)
+        // 3. Создаем новый Scope
+        val newScope = InstrumentationScope.newBuilder().setName(name).build()
+
+        // 4. Записываем в кэш и в кольцевой буфер
+        scopeCache[name] = newScope
+        scopeRingBuffer[ringPointer] = name
+
+        // 5. Двигаем указатель по кругу
+        ringPointer = (ringPointer + 1) and CACHE_MASK
+
+        return newScope
     }
 
-    /**
-     * Преобразует строгий уровень логирования Logback в числовой эквивалент
-     * стандарта OpenTelemetry (`SeverityNumber`).
-     */
+    private fun fillExceptionAttributes(logRecordBuilder: LogRecord.Builder, proxy: ThrowableProxy) {
+        addStrAttr(ATTR_EXCEPTION_TYPE, proxy.name, logRecordBuilder)
+
+        proxy.message?.let {
+            addStrAttr(ATTR_EXCEPTION_MESSAGE, it, logRecordBuilder)
+        }
+
+        val sb = tlStringBuilder.get()
+        sb.setLength(0)
+
+        renderSmartStack(proxy, sb)
+
+        addStrAttr(ATTR_EXCEPTION_STACKTRACE, sb.toString(), logRecordBuilder)
+    }
+
+    private fun addStrAttr(key: String, value: String, logRecordBuilder: LogRecord.Builder) {
+        val kvBuilder = tlKeyValueBuilder.get().clear()
+        kvBuilder.setKey(key)
+        kvBuilder.valueBuilder.stringValue = value
+        logRecordBuilder.addAttributes(kvBuilder.build())
+    }
+
     private fun mapLevelToSeverity(level: Level): SeverityNumber =
         when (level) {
             Level.TRACE -> SeverityNumber.SEVERITY_NUMBER_TRACE
@@ -240,38 +230,89 @@ class OtlpLogEncoder(
             Level.INFO -> SeverityNumber.SEVERITY_NUMBER_INFO
             Level.WARN -> SeverityNumber.SEVERITY_NUMBER_WARN
             Level.ERROR -> SeverityNumber.SEVERITY_NUMBER_ERROR
+            Level.FATAL -> SeverityNumber.SEVERITY_NUMBER_FATAL
             else -> SeverityNumber.SEVERITY_NUMBER_UNSPECIFIED
         }
 
-    /**
-     * Преобразует Hex-строку в массив байт без аллокаций в Heap.
-     * Метод использует `ThreadLocal` буфер фиксированной длины (16 байт) для хранения
-     * промежуточного результата, защищая приложение от генерации мусорных массивов.
-     *
-     * **Важное предупреждение:** Метод возвращает прямую ссылку на переиспользуемый буфер.
-     * Результат вызова необходимо СРАЗУ же скопировать в структуру Protobuf, так как
-     * при следующем вызове данные в буфере перезапишутся!
-     *
-     * @param hex Исходная Hex-строка (обычно 32 символа для traceId и 16 для spanId).
-     * @return Ссылка на ThreadLocal массив байт.
-     */
-    private fun parseHexToBytes(hex: String): ByteArray {
-        val len = hex.length
-        val result = tlByteArrayBuffer.get()
+    private fun parseHexToBytes(hex: String, bytesLen: Int): ByteArray {
+        val target = tlByteArrayBuffer.get() // Забираем буфер прямо здесь
+        for (i in 0 until bytesLen) {
+            val h = Character.digit(hex[i * 2], 16)
+            val l = Character.digit(hex[i * 2 + 1], 16)
 
-        var i = 0
-        var j = 0
-        while (i < len) {
-            val h = hex[i].digitToInt(16)
-            val l = hex[i + 1].digitToInt(16)
-            result[j] = ((h shl 4) or l).toByte()
-            i += 2
-            j++
+            if (h == -1 || l == -1) {
+                target.fill(0, 0, bytesLen)
+                return target
+            }
+            target[i] = ((h shl 4) or l).toByte()
         }
-        return result
+        return target
+    }
+
+    private fun renderSmartStack(proxy: ThrowableProxy, sb: StringBuilder) {
+        sb.append(proxy.name).append(COLON_SPACE).append(proxy.message).append('\n')
+        val frames = proxy.extendedStackTrace
+        var skipped = 0
+        for (frame in frames) {
+            val className = frame.className
+            if (isNoise(className)) {
+                skipped++
+                continue
+            }
+            if (skipped > 0) {
+                sb.append(SKIPPED_START).append(skipped).append(SKIPPED_END)
+                skipped = 0
+            }
+
+            sb.append(PREFIX_AT).append(className).append('.').append(frame.methodName)
+            if (frame.isNativeMethod) {
+                sb.append("(Native Method)")
+            } else {
+                frame.fileName?.let {
+                    sb.append('(').append(it).append(':').append(frame.lineNumber).append(')')
+                }
+            }
+
+            frame.location?.let {
+                sb.append(" [").append(it).append(':').append(frame.version).append(']')
+            }
+            sb.append('\n')
+        }
+        proxy.causeProxy?.let {
+            sb.append(PREFIX_CAUSED_BY);
+            renderSmartStack(it, sb)
+        }
+    }
+
+    private fun isNoise(frame: String): Boolean {
+        // Линейная проверка по списку мусорных пакетов
+        for (i in STACK_NOISE_PACKAGES.indices) {
+            if (frame.startsWith(STACK_NOISE_PACKAGES[i])) return true
+        }
+        return false
     }
 
     companion object {
+        // Символы и префиксы
+        private const val COLON_SPACE = ": "
+        private const val PREFIX_AT = "\tat "
+        private const val PREFIX_CAUSED_BY = "Caused by: "
+        private const val SKIPPED_START = "\t... skipped "
+        private const val SKIPPED_END = " frames ...\n"
+
+        // Список пакетов для фильтрации (шум)
+        private val STACK_NOISE_PACKAGES = arrayOf(
+            "org.springframework.",
+            "java.lang.reflect.",
+            "sun.reflect.",
+            "jdk.internal.",
+            "org.apache.tomcat.",
+            "org.apache.catalina.",
+            "org.aspectj.",
+            "io.netty.",
+            "com.sun."
+        )
+
         const val ATTR_ID = "id"
         const val ATTR_SERVICE_NAME = "service.name"
         const val ATTR_DEPLOYMENT_ENVIRONMENT = "deployment.environment"
@@ -284,7 +325,7 @@ class OtlpLogEncoder(
         private const val MDC_SPAN_ID = "spanId"
         private const val MDC_TRACE_FLAGS = "traceFlags"
 
-        private const val NANOS_IN_MILLI = 1_000_000L
+        private const val NANOS_IN_SEC = 1_000_000_000L
 
         private const val TRACE_ID_HEX_LEN = 32
         private const val TRACE_ID_BYTES_LEN = 16
@@ -295,13 +336,22 @@ class OtlpLogEncoder(
 
         private val EMPTY_BYTE_ARRAY = ByteArray(0)
 
+        private const val CACHE_SIZE = 2048
+        private const val CACHE_MASK = CACHE_SIZE - 1
+
         // THREAD_LOCAL POOLING: Исключаем аллокации билдеров Protobuf
         private val tlRequestBuilder = ThreadLocal.withInitial { ExportLogsServiceRequest.newBuilder() }
         private val tlResourceLogsBuilder = ThreadLocal.withInitial { ResourceLogs.newBuilder() }
         private val tlLogRecordBuilder = ThreadLocal.withInitial { LogRecord.newBuilder() }
+        private val tlKeyValueBuilder = ThreadLocal.withInitial { KeyValue.newBuilder() }
+        private val tlScopeLogsBuilder = ThreadLocal.withInitial { ScopeLogs.newBuilder() }
+        private val tlScopeNames = ThreadLocal.withInitial { ArrayList<String>(16) }
+        private val tlIndexMap = ThreadLocal.withInitial { HashMap<String, Int>(16) }
+        private val tlGroupedEvents = ThreadLocal.withInitial { ArrayList<MutableList<LogEvent>>(16) }
 
         // THREAD_LOCAL POOLING: Исключаем аллокации массивов байт
         // Берем максимальный размер (16 байт для 32-символьного traceId)
         private val tlByteArrayBuffer = ThreadLocal.withInitial { ByteArray(TRACE_ID_BYTES_LEN) }
+        private val tlStringBuilder = ThreadLocal.withInitial { StringBuilder(2048) }
     }
 }

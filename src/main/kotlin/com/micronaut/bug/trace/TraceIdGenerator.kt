@@ -8,8 +8,8 @@ object TraceIdGenerator {
     private val HEX_TABLE = ByteArray(512).apply {
         val hexChars = "0123456789abcdef"
         for (i in 0 until 256) {
-            this[i * 2] = hexChars[i shr 4 and 0xF].toByte()
-            this[i * 2 + 1] = hexChars[i and 0xF].toByte()
+            this[i * 2] = hexChars[i shr 4 and 0xF].code.toByte()
+            this[i * 2 + 1] = hexChars[i and 0xF].code.toByte()
         }
     }
 
@@ -49,13 +49,13 @@ object TraceIdGenerator {
 
     private fun fill(value: Long, target: ByteArray, offset: Int) {
         // Развернутая запись: за одну операцию берем 8 бит и пишем 2 символа
-        writePair(target, offset + 0, value ushr 56)
-        writePair(target, offset + 2, value ushr 48)
-        writePair(target, offset + 4, value ushr 40)
-        writePair(target, offset + 6, value ushr 32)
-        writePair(target, offset + 8, value ushr 24)
-        writePair(target, offset + 10, value ushr 16)
-        writePair(target, offset + 12, value ushr 8)
+        writePair(target, offset + 0, value shr 56)
+        writePair(target, offset + 2, value shr 48)
+        writePair(target, offset + 4, value shr 40)
+        writePair(target, offset + 6, value shr 32)
+        writePair(target, offset + 8, value shr 24)
+        writePair(target, offset + 10, value shr 16)
+        writePair(target, offset + 12, value shr 8)
         writePair(target, offset + 14, value)
     }
 

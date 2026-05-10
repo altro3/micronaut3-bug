@@ -1,7 +1,7 @@
 package com.micronaut.bug.trace.otlp
 
-import ch.qos.logback.classic.spi.ThrowableProxy
-import ch.qos.logback.classic.spi.ThrowableProxyUtil
+//import ch.qos.logback.classic.spi.ThrowableProxy
+//import ch.qos.logback.classic.spi.ThrowableProxyUtil
 import com.micronaut.bug.trace.NanoTracer
 import com.micronaut.bug.trace.NanoTracer.Companion.ATTR_EXCEPTION_MESSAGE
 import com.micronaut.bug.trace.NanoTracer.Companion.ATTR_EXCEPTION_STACKTRACE
@@ -32,7 +32,7 @@ class OtlpTraceEncoder(
         .build()
     private val libScope = InstrumentationScope.newBuilder()
         .setName("NanoTracer")
-        .setVersion("1.0.0")
+        .setVersion("1.0")
         .build()
 
     /**
@@ -113,7 +113,7 @@ class OtlpTraceEncoder(
 
                 val stackAttr = spanBuilder.addAttributesBuilder()
                 stackAttr.key = ATTR_EXCEPTION_STACKTRACE
-                stackAttr.valueBuilder.stringValue = ThrowableProxyUtil.asString(ThrowableProxy(it))
+//                stackAttr.valueBuilder.stringValue = ThrowableProxyUtil.asString(ThrowableProxy(it))
             }
 
             scopeSpansBuilder.addSpans(spanBuilder.build())

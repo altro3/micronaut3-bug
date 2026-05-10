@@ -134,7 +134,7 @@ class TraceExporter(
                     log.info { "Export loop stopped gracefully" }
                     break
                 } catch (e: Exception) {
-                    log.error(e) { "Error in Tempo export loop. Retrying in ${exporterProps.retryInterval}..." }
+                    log.error(e) { "Error in Trace export loop. Retrying in ${exporterProps.retryInterval}..." }
                     delay(exporterProps.retryInterval.toMillis().milliseconds)
                 }
             }
@@ -171,9 +171,9 @@ class TraceExporter(
 
     private fun handleResponse(rs: HttpResponse<*>?, ex: Throwable?) {
         if (ex != null) {
-            log.warn { "Tempo batch export failed: ${ex.message}" }
+            log.warn { "Trace batch export failed: ${ex.message}" }
         } else if (rs?.statusCode() !in 200..299) {
-            log.warn { "Tempo rejected batch: code=${rs?.statusCode()}" }
+            log.warn { "Trace rejected batch: code=${rs?.statusCode()}" }
         }
     }
 

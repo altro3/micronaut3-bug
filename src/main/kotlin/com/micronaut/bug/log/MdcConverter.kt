@@ -1,59 +1,59 @@
 package com.micronaut.bug.log
 
-import ch.qos.logback.classic.pattern.ClassicConverter
-import ch.qos.logback.classic.spi.ILoggingEvent
+import org.apache.logging.log4j.core.LogEvent
+import org.apache.logging.log4j.core.config.plugins.Plugin
+import org.apache.logging.log4j.core.pattern.ConverterKeys
+import org.apache.logging.log4j.core.pattern.LogEventPatternConverter
+import org.apache.logging.log4j.util.ReadOnlyStringMap
 
-class MdcConverter : ClassicConverter() {
+@Plugin(name = "MdcConverter", category = "Converter")
+@ConverterKeys("uMDC")
+class MdcConverter : LogEventPatternConverter("MdcConverter", "mdc") {
 
-    override fun convert(event: ILoggingEvent): String {
-        val mdc = event.mdcPropertyMap
-        if (mdc.isEmpty()) {
-            return EMPTY_RESULT
-        }
-
+    override fun format(event: LogEvent, toAppendTo: StringBuilder) {
+        val mdc: ReadOnlyStringMap = event.contextData
         val customKeys = keys // Читаем volatile один раз
-        val traceId = mdc[MDC_TRACE_ID]
-        val targetId = mdc[MDC_TARGET_ID]
 
-        // Если все основные и кастомные ключи пусты — выходим
+        if (mdc.isEmpty) return
+
+        val traceId = mdc.getValue<String>(MDC_TRACE_ID)
+        val targetId = mdc.getValue<String>(MDC_TARGET_ID)
+
         if (traceId == null && targetId == null && customKeys.isEmpty()) {
-            return EMPTY_RESULT
+            return
         }
 
-        val sb = threadLocalStringBuilder.get()
-        sb.setLength(0)
         var hasContent = false
 
         // 1. Вывод traceId
         if (traceId != null) {
-            sb.append(PREFIX).append(traceId)
+            toAppendTo.append(PREFIX).append(traceId)
             hasContent = true
         }
 
         // 2. Вывод targetId
         if (targetId != null) {
-            if (hasContent) sb.append(SEPARATOR) else sb.append(PREFIX)
-            sb.append(LABEL_TARGET).append(ASSIGN).append(targetId)
+            if (hasContent) toAppendTo.append(SEPARATOR) else toAppendTo.append(PREFIX)
+            toAppendTo.append(LABEL_TARGET).append(ASSIGN).append(targetId)
             hasContent = true
         }
 
-        val size = customKeys.size
-        for (i in 0 until size) {
+        // 3. Вывод кастомных ключей
+        for (i in customKeys.indices) {
             val key = customKeys[i]
-            // Пропускаем уже обработанные системные ключи
-            if (key == MDC_TRACE_ID || key == MDC_TARGET_ID) {
-                continue
-            }
+            if (key == MDC_TRACE_ID || key == MDC_TARGET_ID) continue
 
-            val value = mdc[key]
+            val value = mdc.getValue<String>(key)
             if (value != null) {
-                if (hasContent) sb.append(SEPARATOR) else sb.append(PREFIX)
-                sb.append(key).append(ASSIGN).append(value)
+                if (hasContent) toAppendTo.append(SEPARATOR) else toAppendTo.append(PREFIX)
+                toAppendTo.append(key).append(ASSIGN).append(value)
                 hasContent = true
             }
         }
 
-        return if (hasContent) sb.append(POSTFIX).toString() else EMPTY_RESULT
+        if (hasContent) {
+            toAppendTo.append(POSTFIX).append(SPACE)
+        }
     }
 
     companion object {
@@ -64,15 +64,14 @@ class MdcConverter : ClassicConverter() {
         var keys: List<String> = emptyList()
 
         private const val LABEL_TARGET = "targetId"
-        private const val ASSIGN = "="
+        private const val ASSIGN = '='
         private const val SEPARATOR = ", "
-        private const val PREFIX = "["
-        private const val POSTFIX = "] "
-        private const val EMPTY_RESULT = ""
-        private const val ESTIMATED_SIZE = 128
+        private const val PREFIX = '['
+        private const val POSTFIX = ']'
+        private const val SPACE = ' '
 
-        private val threadLocalStringBuilder = object : ThreadLocal<StringBuilder>() {
-            override fun initialValue() = StringBuilder(ESTIMATED_SIZE)
-        }
+        @Suppress("unused")
+        @JvmStatic
+        fun newInstance(options: Array<String>?): MdcConverter = MdcConverter()
     }
 }

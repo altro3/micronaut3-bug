@@ -439,7 +439,7 @@ class LoggingInterceptor(
             return true
         }
 
-        // 4. ФАЙЛ: Проверка по расширению
+        // 4. ФАЙЛ: Проверка по расширению.
         // Берем либо переданный fileName, либо пытаемся вытащить его из Content-Type
         val effectiveFileName = fileName ?: extractFileNameFromContentType(contentType)
         if (effectiveFileName != null) {
@@ -525,7 +525,7 @@ class LoggingInterceptor(
     }
 
     /**
-     * Быстрая проверка первых значащих байтов на соответствие JSON ( { или [ ).
+     * Быстрая проверка первых значащих байтов на соответствие JSON ( `{` или `[` ).
      */
     private fun isJsonContent(bytes: ByteArray): Boolean {
         for (b in bytes) {

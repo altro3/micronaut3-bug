@@ -8,12 +8,8 @@ plugins {
     alias(libs.plugins.kotlin.jvm)
     alias(libs.plugins.kotlin.spring)
     alias(libs.plugins.kotlin.kapt)
+    alias(libs.plugins.jmh)
 }
-
-val ver = mapOf(
-    "kotlin" to "2.3.21",
-    "springBoot" to "3.5.14",
-)
 
 val jreImage = "bellsoft/liberica-openjre-alpine:21.0.11-x86_64"
 
@@ -27,10 +23,14 @@ repositories {
 
 dependencies {
 
+    kaptJmh("org.openjdk.jmh:jmh-generator-annprocess:1.37")
+    jmh("org.openjdk.jmh:jmh-core:1.37")
+
     kapt(spring.spring.springBootConfigurationProcessor)
+    kapt(spring.log4j.log4jCore)
 
     implementation(spring.spring.springBootStarterWeb)
-    implementation(spring.spring.springBootStarterLogging)
+    implementation(spring.spring.springBootStarterLog4j2)
     implementation(spring.spring.springBootStarterJson)
     implementation(spring.spring.springBootStarterValidation)
     implementation(spring.spring.springBootStarterActuator)
@@ -38,15 +38,13 @@ dependencies {
     implementation(spring.projectreactor.reactorNettyHttp)
     implementation(spring.jackson.jacksonModuleKotlin)
     implementation(spring.jackson.jacksonModuleBlackbird)
-    implementation(spring.logback.logbackClassic)
 //    implementation(spring.micrometer.micrometerRegistryOtlp)
     implementation(spring.micrometer.micrometerRegistryPrometheus)
     implementation(coroutines.kotlinx.kotlinxCoroutinesCoreJvm)
     implementation(coroutines.kotlinx.kotlinxCoroutinesSlf4j)
     implementation(kot.kotlin.kotlinReflect)
     implementation(libs.kotlin.logging)
-    implementation(libs.loki.logback)
-    implementation(libs.loki.protobuf)
+    implementation(libs.disruptor)
     implementation(libs.protobuf.java)
     implementation(libs.otel.proto)
     implementation(libs.wiremock)
@@ -56,6 +54,8 @@ dependencies {
 }
 
 configurations.all {
+
+    exclude(group = "org.springframework.boot", module = "spring-boot-starter-logging")
     resolutionStrategy {
         cacheDynamicVersionsFor(0, "minutes")
         cacheChangingModulesFor(0, "minutes")
@@ -102,6 +102,14 @@ tasks.withType<JibTask> {
     notCompatibleWithConfigurationCache("Jib does not support the Gradle configuration cache yet")
 }
 
+jmh {
+    warmupIterations = 2
+    iterations = 5
+    fork = 1
+    benchmarkMode = listOf("thrpt")
+    timeUnit = "s"
+}
+
 jib {
     from { image = jreImage }
     to {
@@ -111,6 +119,7 @@ jib {
         jvmFlags = listOf(
             "-XX:+UseG1GC",
             "-XX:+UseStringDeduplication",
+            "-XX:MaxRAMPercentage=75.0",
             "-Dfile.encoding=UTF-8"
         )
     }

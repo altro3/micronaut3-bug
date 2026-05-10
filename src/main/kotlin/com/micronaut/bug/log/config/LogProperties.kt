@@ -61,11 +61,6 @@ class LogProperties(
      */
     var mdcKeys: List<String> = emptyList(),
     /**
-     * Настройки интеграции с Grafana Loki.
-     */
-    @field:Valid
-    var loki: LokiProperties = LokiProperties(),
-    /**
      * Настройки интеграции с VictoriaLogs / OpenTelemetry.
      */
     @field:Valid
@@ -75,105 +70,6 @@ class LogProperties(
      */
     var masking: MaskingProperties = MaskingProperties()
 ) {
-
-    class LokiProperties(
-        /**
-         * Включает отправку логов напрямую в Loki через loki-logback-appender.
-         */
-        var enabled: Boolean = false,
-        /**
-         * URL эндпоинта Loki для пуша логов (Protobuf/HTTP).
-         */
-        var url: URI = URI.create("http://localhost:3100/loki/api/v1/push"),
-        /**
-         * Включает расширенное логирование внутренней работы аппендера.
-         */
-        var verbose: Boolean = false,
-        /**
-         * Включает использование бинарного Protobuf API для отправки логов.
-         */
-        var useProtobufApi: Boolean = true,
-        /**
-         * Паттерн для формирования структурированных метаданных (Structured Metadata).
-         * Позволяет передавать высококардинальные данные (traceId, userId) без раздувания индекса Loki.
-         * Пример: "traceId=%mdc{traceId}\spanId=%mdc{spanId}\ntargetId=%mdc{targetId}\nclient=%mdc{client}\ntarget=%mdc{target}"
-         */
-        var structuredMetadata: String? = "traceId=%mdc{traceId}\nspanId=%mdc{spanId}\ntargetId=%mdc{targetId}\nclient=%mdc{client}\ntarget=%mdc{target}",
-        /**
-         * Добавляет специальные маркеры чтения в поток логов.
-         */
-        var readMarkers: Boolean = false,
-        /**
-         * Включает сбор и экспорт внутренних метрик производительности.
-         */
-        var metricsEnabled: Boolean = false,
-        /**
-         * Размер батча (количество логов) перед отправкой.
-         */
-        @field:Positive
-        var batchSize: Int = 200,
-        /**
-         * Максимальный объем памяти для накопления батча перед отправкой.
-         */
-        var batchMaxBytes: DataSize = DataSize.ofMegabytes(4),
-        /**
-         * Интервал времени, по истечении которого неполный батч будет принудительно отправлен.
-         */
-        var batchTimeout: Duration = Duration.ofSeconds(60),
-        /**
-         * Максимальный размер очереди отправки в байтах.
-         */
-        var sendQueueMaxBytes: DataSize = DataSize.ofMegabytes(40),
-        /**
-         * Количество попыток повторной отправки при сетевых сбоях.
-         */
-        @field:Positive
-        var maxRetries: Int = 2,
-        /**
-         * Минимальная задержка перед повторной попыткой отправки.
-         */
-        var minRetryBackoff: Duration = Duration.ofMillis(500),
-        /**
-         * Максимальная задержка перед повторной попыткой отправки.
-         */
-        var maxRetryBackoff: Duration = Duration.ofSeconds(60),
-        /**
-         * Случайное отклонение для времени повторной попытки.
-         */
-        var maxRetryJitter: Duration = Duration.ofMillis(500),
-        /**
-         * Таймаут на установку соединения с сервером.
-         */
-        var connectionTimeout: Duration = Duration.ofSeconds(5),
-        /**
-         * Таймаут на выполнение HTTP-запроса на пуш логов.
-         */
-        var requestTimeout: Duration = Duration.ofSeconds(5),
-        /**
-         * Время бездействия потока отправки, после которого он будет завершен.
-         */
-        var threadExpirationTimeout: Duration = Duration.ofMinutes(5),
-        /**
-         * Если true, пакеты будут отбрасываться при получении ошибки 429.
-         */
-        var dropRateLimitedBatches: Boolean = false,
-        /**
-         * Интервал проверки состояния внутренних очередей.
-         */
-        var internalQueuesCheckTimeout: Duration = Duration.ofMillis(25),
-        /**
-         * Использовать ли Direct Buffers для снижения нагрузки на GC.
-         */
-        var useDirectBuffers: Boolean = true,
-        /**
-         * Отправить ли остатки логов из очереди при выключении приложения.
-         */
-        var drainOnStop: Boolean = true,
-        /**
-         * Флаг использования статических меток для оптимизации.
-         */
-        var staticLabels: Boolean = true,
-    )
 
     /**
      * Настройки интеграции по протоколу OpenTelemetry (OTLP).

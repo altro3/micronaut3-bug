@@ -13,16 +13,11 @@ app:
       connect-timeout: 2s
   log:
     enabled: true
-    pattern:
-      console: "%d{HH:mm:ss.SSS} %highlight(%-5level) %magenta(%mdcBlock)[%thread] %cyan(%logger{25}) - %msg%n%throwable"
     mdc-keys: test
     pretty-print: true
     max-payload-size: 4MB
-    loki:
-      enabled: false
-      batch-timeout: PT20S
     otlp:
-      enabled: true
+      enabled: false
       url: http://localhost:4318/v1/logs
       # Напрямую в викторию
       # url: http://localhost:9428/insert/opentelemetry/v1/logs
@@ -99,7 +94,9 @@ management:
 #          "deployment.environment": ${app.node.name}
 logging:
   pattern:
-    console: "%d{HH:mm:ss.SSS} %highlight(%-5level) [%thread] %cyan(%logger{25}) - %msg%n%throwable"
+    console: "%d{MM-dd HH:mm:ss.SSS} %highlight{%level} %style{%uMDC}{magenta} [%t] %style{%logger{1.}}{cyan} : %msg%n%throwable{filters(org.springframework,sun.reflect,java.lang.reflect,org.apache.tomcat,org.apache.catalina,jdk.internal,org.aspectj,io.netty)}"
+#    console: "%d{HH:mm:ss.SSS} %highlight(%-5level) [%thread] %cyan(%logger{25}) - %msg%n%throwable"
+#    console: "%d{HH:mm:ss.SSS} %highlight{%-5level}{FATAL=red, ERROR=red, WARN=yellow, INFO=green, DEBUG=cyan, TRACE=black} [%t] %style{%logger{1.}}{cyan} - %msg%n%throwable"
   level:
     root: debug
     jdk: info

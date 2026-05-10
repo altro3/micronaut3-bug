@@ -70,9 +70,9 @@ class GzipRequestInterceptor : ClientHttpRequestInterceptor {
      * Сжимает массив байтов по алгоритму GZIP.
      */
     private fun compress(body: ByteArray): ByteArray {
-        val baos = ByteArrayOutputStream()
-        GZIPOutputStream(baos).use { it.write(body) }
-        return baos.toByteArray()
+        val out = ByteArrayOutputStream()
+        GZIPOutputStream(out).use { it.write(body) }
+        return out.toByteArray()
     }
 
     companion object {
