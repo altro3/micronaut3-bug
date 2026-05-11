@@ -162,7 +162,6 @@ class OtlpLogEncoder(
                     logRecordBuilder.addAttributes(keyValue(ATTR_ID, nanoTs))
                 }
 
-                // ШАГ 5: Запись исключений (ThrowableProxy в Log4j2)
                 val throwableProxy = event.thrownProxy
                 if (throwableProxy != null) {
                     fillExceptionAttributes(logRecordBuilder, throwableProxy)
