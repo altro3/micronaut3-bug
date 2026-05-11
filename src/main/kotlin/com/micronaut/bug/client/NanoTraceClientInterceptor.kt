@@ -34,17 +34,6 @@ import org.springframework.http.client.ClientHttpRequestExecution
 import org.springframework.http.client.ClientHttpRequestInterceptor
 import org.springframework.http.client.ClientHttpResponse
 
-/**
- * Инфраструктурный интерцептор для [org.springframework.web.client.RestTemplate].
- *
- * Отвечает за:
- * 1. Проброс идентификаторов сквозной трассировки (TraceId, SpanId) в заголовки исходящего запроса.
- * 2. Создание дочернего спана типа [Span.SpanKind.SPAN_KIND_CLIENT] для визуализации сетевого вызова в Tempo.
- * 3. Сбор детальных метаданных запроса и ответа (заголовки, URI, статус-коды).
- *
- * @property tracer Экземпляр [NanoTracer] для управления контекстом трейса.
- * @property selfServiceName Имя текущего сервиса для идентификации отправителя в распределенной системе.
- */
 class NanoTraceClientInterceptor(
     private val tracer: NanoTracer,
     private val selfServiceName: String,
@@ -53,9 +42,6 @@ class NanoTraceClientInterceptor(
 
     private val log = KotlinLogging.logger {}
 
-    /**
-     * Префикс для формирования полного URI. Вычисляется один раз при создании интерцептора.
-     */
     private val basePrefix: String = props.url.toString().removeSuffix(SLASH)
 
     override fun intercept(rq: HttpRequest, body: ByteArray, execution: ClientHttpRequestExecution): ClientHttpResponse {
@@ -227,9 +213,6 @@ class NanoTraceClientInterceptor(
         }
     }
 
-    /**
-     * Формирует путь запроса с Query-параметрами для детального анализа в трейсинге.
-     */
     private fun getFullUri(rq: HttpRequest): String {
         val uri = rq.uri
         return if (uri.query != null) "${uri.path}?${uri.query}" else uri.path

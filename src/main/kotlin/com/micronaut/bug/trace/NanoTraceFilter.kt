@@ -85,12 +85,10 @@ class NanoTraceFilter(
         val sender = rq.getHeader(HEADER_X_SENDER) ?: DEFAULT_SENDER
 
         val baggage = mutableMapOf<String, String>()
-        // Читаем стандартный багаж (если пришел)
         rq.getHeader(HEADER_BAGGAGE)?.let { header ->
             parseBaggage(header)?.let { baggage.putAll(it) }
         }
 
-        // Читаем заголовки для проброски из конфига
         val propagationHeaders = HashMap<String, String>()
         traceProps.propagationHeaders.forEach { key ->
             val value = rq.getHeader(key)

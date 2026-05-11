@@ -1,7 +1,5 @@
 package com.micronaut.bug.trace.otlp
 
-//import ch.qos.logback.classic.spi.ThrowableProxy
-//import ch.qos.logback.classic.spi.ThrowableProxyUtil
 import com.micronaut.bug.trace.NanoTracer
 import com.micronaut.bug.trace.NanoTracer.Companion.ATTR_EXCEPTION_MESSAGE
 import com.micronaut.bug.trace.NanoTracer.Companion.ATTR_EXCEPTION_STACKTRACE
@@ -25,7 +23,6 @@ class OtlpTraceEncoder(
     nodeName: String,
 ) {
 
-    // Ресурс собирается один раз при старте
     private val serviceResource = Resource.newBuilder()
         .addAttributes(KeyValue.newBuilder().setKey(NanoTracer.ATTR_SERVICE_NAME).setValue(AnyValue.newBuilder().setStringValue(appName).build()).build())
         .addAttributes(KeyValue.newBuilder().setKey(NanoTracer.ATTR_DEPLOYMENT_ENVIRONMENT).setValue(AnyValue.newBuilder().setStringValue(nodeName).build()).build())
@@ -35,9 +32,6 @@ class OtlpTraceEncoder(
         .setVersion("1.0")
         .build()
 
-    /**
-     * Преобразует батч легковесных событий в Protobuf-пакет в формате OTLP [5.3].
-     */
     fun encodeBatch(events: List<TraceEvent>): ByteArray {
         val size = events.size
         if (size == 0) {
@@ -83,7 +77,6 @@ class OtlpTraceEncoder(
                 }
             }
 
-            // Наполняем проброс заголовков
             if (!event.propagationHeaders.isNullOrEmpty()) {
                 for (entry in event.propagationHeaders.entries) {
                     sb.setLength(0)
@@ -94,7 +87,6 @@ class OtlpTraceEncoder(
                 }
             }
 
-            // Обрабатываем ошибку
             event.error?.let {
 
                 val eventBuilder = spanBuilder.addEventsBuilder()
@@ -113,7 +105,7 @@ class OtlpTraceEncoder(
 
                 val stackAttr = spanBuilder.addAttributesBuilder()
                 stackAttr.key = ATTR_EXCEPTION_STACKTRACE
-//                stackAttr.valueBuilder.stringValue = ThrowableProxyUtil.asString(ThrowableProxy(it))
+//                stackAttr.valueBuilder.stringValue = formatStackTrace(it)
             }
 
             scopeSpansBuilder.addSpans(spanBuilder.build())
@@ -155,14 +147,12 @@ class OtlpTraceEncoder(
     }
 
     companion object {
-        // Билдер для переиспользования Protobuf структур
+
         private val tlSpanBuilder = ThreadLocal.withInitial { Span.newBuilder() }
 
-        // Билдер для склейки строк без выделения мусора в Heap
         private val tlStringBuilder = ThreadLocal.withInitial { StringBuilder(64) }
         private val EMPTY_BYTE_ARRAY = ByteArray(0)
 
-        // Название события для исключений по стандарту OpenTelemetry
         const val EVENT_NAME_EXCEPTION = "exception"
     }
 }

@@ -3,10 +3,6 @@ package com.micronaut.bug.trace.otlp
 import io.opentelemetry.proto.trace.v1.Span
 import io.opentelemetry.proto.trace.v1.Status
 
-/**
- * Легковесный контейнер события трассировки для передачи между потоками через канал.
- * Полностью разгружает бизнес-потоки от сборки Protobuf-моделей.
- */
 data class TraceEvent(
     val traceIdHex: String,
     val spanIdHex: String,

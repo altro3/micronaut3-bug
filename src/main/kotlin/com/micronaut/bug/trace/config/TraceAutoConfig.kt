@@ -44,7 +44,6 @@ class TraceAutoConfig {
     fun nanoTracer(traceExporter: TraceExporter, traceProps: TraceProperties) =
         NanoTracer(traceExporter, traceProps)
 
-    // Регистрация серверного фильтра трассировки
     @Bean
     fun nanoTraceFilterRegistration(
         tracer: NanoTracer,

@@ -1,6 +1,6 @@
 package com.micronaut.bug.api
 
-import com.micronaut.bug.service.integration.extservice.ExtServiceClient
+import com.micronaut.bug.service.integration.extservice.ExtServiceClient2
 import com.micronaut.bug.service.integration.extservice.api.MyDataRequest
 import com.micronaut.bug.service.integration.extservice.api.MyDataResponse
 import io.github.oshai.kotlinlogging.KotlinLogging
@@ -9,7 +9,7 @@ import org.springframework.web.bind.annotation.RestController
 
 @RestController
 class InternalApiController(
-    private val extServiceClient: ExtServiceClient,
+    private val extServiceClient: ExtServiceClient2,
 ) {
 
     private val log = KotlinLogging.logger {}

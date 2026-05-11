@@ -4,9 +4,6 @@ import jakarta.validation.constraints.NotNull
 import org.springframework.http.HttpMethod
 import org.springframework.validation.annotation.Validated
 
-/**
- * Удобно использовать для описания ендпоинтов в конфигурациях.
- */
 @Validated
 class Endpoint(
     @NotNull

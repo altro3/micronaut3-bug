@@ -28,10 +28,6 @@ class NanoTracer(
     @PublishedApi
     internal val internalStack = ThreadLocal<Deque<TraceContext>>.withInitial { ArrayDeque<TraceContext>() }
 
-    /**
-     * Статическое смещение между системным временем и монотонным счетчиком наносекунд.
-     * Вычисляется один раз при создании экземпляра NanoTracer.
-     */
     private val clockOffsetNanos: Long
 
     init {
@@ -250,10 +246,8 @@ class NanoTracer(
         const val MDC_MAIN_STAT = "mainstat"
         const val MDC_COLOR = "color"
 
-        // Стандартные заголовки (Legacy)
         const val HEADER_X_SENDER = "x-sender"
 
-        // W3C Trace Context (Стандарт OTel)
         const val HEADER_TRACEPARENT = "traceparent"
         const val HEADER_BAGGAGE = "baggage"
         const val HEADER_TRACESTATE = "tracestate"
@@ -281,10 +275,6 @@ class NanoTracer(
 
         private val tlStringBuilder = ThreadLocal.withInitial { StringBuilder(64) }
 
-        /**
-         * Стандартные ключи атрибутов OpenTelemetry
-         */
-        // Resource (Service)
         const val ATTR_SERVICE_NAME = "service.name"
         const val ATTR_DEPLOYMENT_ENVIRONMENT = "deployment.environment"
 
@@ -292,7 +282,6 @@ class NanoTracer(
         const val ATTR_SERVER_PORT = "server.port"
         const val ATTR_CLIENT_ADDRESS = "client.address"
 
-        // HTTP Request
         const val ATTR_HTTP_REQUEST_METHOD = "http.request.method"
         const val ATTR_HTTP_REQUEST_BODY_SIZE = "http.request.body.size"
         const val PREFIX_HTTP_REQUEST_HEADER = "http.request.header."
@@ -303,12 +292,10 @@ class NanoTracer(
         const val ATTR_URL_QUERY = "url.query"
         const val ATTR_USER_AGENT_ORIGINAL = "user_agent.original"
 
-        // HTTP Response
         const val ATTR_HTTP_RESPONSE_STATUS_CODE = "http.response.status_code"
         const val ATTR_HTTP_RESPONSE_BODY_SIZE = "http.response.body.size"
         const val PREFIX_HTTP_RESPONSE_HEADER = "http.response.header."
 
-        // Exceptions
         const val ATTR_EXCEPTION_TYPE = "exception.type"
         const val ATTR_EXCEPTION_MESSAGE = "exception.message"
         const val ATTR_EXCEPTION_STACKTRACE = "exception.stacktrace"
@@ -317,23 +304,13 @@ class NanoTracer(
         const val ATTR_SERVER = "server"
         const val ATTR_PEER_SERVICE = "peer.service"
 
-        /**
-         * Кастомные ключи для логгинг-фильтров
-         */
         const val ATTR_ERROR_MESSAGE = "error.message"
         const val ATTR_ERROR_TYPE = "error.type"
         const val PREFIX_BAGGAGE = "baggage."
         const val PREFIX_PROPAGATION = "prop."
 
-        /**
-         * Флаг аномально медленного запроса.
-         * Позволяет быстро отфильтровать трейсы с задержкой выше установленного порога.
-         */
         const val ATTR_HTTP_SLOW_REQUEST = "http.slow_request"
 
-        /**
-         * Количество наносекунд в одной секунде
-         */
         private const val NANOS_PER_SECOND = 1_000_000_000L
 
         val METHODS_WITHOUT_BODY = setOf(
@@ -353,14 +330,8 @@ class NanoTracer(
 
         const val MASK = "***"
 
-        /**
-         * Список для маскировки чувствительных заголовков в формате OTel (string[]).
-         */
         val MASKED_VALUES = listOf(MASK)
 
-        /**
-         * Парсит заголовок багажа согласно W3C (key=value,key2=value2)
-         */
         fun parseBaggage(header: String?): Map<String, String>? {
             if (header.isNullOrBlank()) {
                 return null
@@ -393,9 +364,6 @@ class NanoTracer(
             return map
         }
 
-        /**
-         * Сериализует мапу в строку для заголовка baggage
-         */
         fun formatBaggage(baggage: Map<String, String>?): String? {
             if (baggage.isNullOrEmpty()) {
                 return null
@@ -417,18 +385,6 @@ class NanoTracer(
         }
     }
 
-    /**
-     * Извлекает контекст трассировки из хранилища Project Reactor.
-     *
-     * В реактивном окружении (Spring Cloud Gateway, WebClient) стандартные механизмы
-     * на базе ThreadLocal не работают из-за постоянной смены потоков исполнения.
-     * Данный метод позволяет безопасно получить [TraceContext] из [ContextView],
-     * обеспечивая непрерывность цепочки спанов внутри реактивных операторов.
-     *
-     * @param reactorContext неизменяемое представление контекста Reactor (ContextView).
-     * @return [TraceContext], если он был ранее помещен в контекст (например, фильтром Gateway),
-     * или null, если информация о трассировке отсутствует.
-     */
     fun currentContext(reactorContext: ContextView): TraceContext? =
         reactorContext.getOrDefault(TraceContext::class.java, null)
 }

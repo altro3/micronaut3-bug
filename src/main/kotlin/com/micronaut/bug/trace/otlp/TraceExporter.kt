@@ -26,15 +26,6 @@ import java.net.http.HttpRequest
 import java.net.http.HttpResponse
 import kotlin.time.Duration.Companion.milliseconds
 
-/**
- * Асинхронный экспортер трасс в формате OTLP (например, для Grafana Tempo).
- *
- * Особенности реализации:
- * 1. **Zero-Allocation на горячем пути:** Бизнес-потоки складывают в очередь только плоские
- *    DTO-объекты [TraceEvent]. Сборка Protobuf происходит исключительно в фоне [5.3].
- * 2. **Backpressure (Защита от OOM):** Размер очереди ограничен настройкой `queueCapacity` [5.3].
- * 3. **Smart Batching:** Спаны накапливаются в пачки по времени и количеству [5.3].
- */
 class TraceExporter(
     appName: String,
     nodeName: String,
@@ -44,19 +35,12 @@ class TraceExporter(
     private val log = KotlinLogging.logger {}
     private val exporterProps = traceProps.exporter
 
-    // Подключаем специализированный энкодер для трасс по аналогии с логами [5.3]
     private val encoder = OtlpTraceEncoder(appName, nodeName)
 
-    // Канал для накопления легких DTO. Свойства очереди защищают кучу от перегрузок [5.3].
     private val channel = Channel<TraceEvent>(exporterProps.queueCapacity)
 
-    // Изолированный Scope для фонового воркера
     private val exportScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-    /**
-     * Помещает легковесное событие трассировки в очередь.
-     * Метод вызывается из NanoTracer и исполняется МГНОВЕННО в потоке бизнес-логики [5.3].
-     */
     fun enqueue(
         traceIdHex: String,
         spanIdHex: String,
@@ -141,13 +125,6 @@ class TraceExporter(
         }
     }
 
-    /**
-     * Преобразует батч через [OtlpTraceEncoder] и пушит готовые байты на сервер по HTTP OTLP [5.3].
-     */
-    /**
-     * Преобразует батч через энкодер и БЛОКИРУЮЩЕ шлет байты на сервер по HTTP OTLP [5.3].
-     * Выполняется строго в фоновом потоке воркера.
-     */
     private fun sendBatch(events: List<TraceEvent>) {
         if (events.isEmpty()) return
 
@@ -177,10 +154,6 @@ class TraceExporter(
         }
     }
 
-    /**
-     * Очистка очереди перед завершением работы.
-     * Использует простой цикл без аллокаций итераторов [5.3].
-     */
     private fun flushRemaining() {
         val batch = ArrayList<TraceEvent>(exporterProps.batchSize)
 
