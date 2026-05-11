@@ -25,12 +25,14 @@ exporters:
   # Экспортер для трейсов в VictoriaTraces
   otlp_http/traces:
     endpoint: "http://victoria-traces:10428/insert/opentelemetry"
+    compression: gzip
     tls:
       insecure: true
 
   # Экспортер для логов в VictoriaLogs
   otlp_http/logs:
     endpoint: "http://victoria-logs:9428/insert/opentelemetry"
+    compression: gzip
     tls:
       insecure: true
 

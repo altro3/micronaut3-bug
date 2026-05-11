@@ -70,11 +70,12 @@ class LoggingInterceptor(
         val urlFull = getFullUri(rq)
 
         val oldClient = MDC.get(MDC_SOURCE)
-        val oldServer = MDC.get(NanoTracer.MDC_TARGET)
+        val oldServer = MDC.get(MDC_TARGET)
         val oldSubtitle = MDC.get(MDC_SUB_TITLE)
         val oldDuration = MDC.get(MDC_MAIN_STAT)
+        val oldColor = MDC.get(MDC_COLOR)
         MDC.put(MDC_SOURCE, oldServer)
-        MDC.put(NanoTracer.MDC_TARGET, serviceName)
+        MDC.put(MDC_TARGET, serviceName)
         MDC.put(MDC_SUB_TITLE, "$PREFIX_CLIENT_SPAN ${rq.method} $urlFull")
 
         try {
@@ -82,6 +83,7 @@ class LoggingInterceptor(
             if (isExternal) {
                 MDC.put(MDC_TYPE, EXTERNAL.name)
             }
+            MDC.put(MDC_COLOR, "green")
 
             // Данные запроса готовим лениво
             val rqLogData by lazy { getRequestLogString(rq, body, extRqId, skipLogging) }
@@ -161,6 +163,7 @@ class LoggingInterceptor(
             MDC.put(NanoTracer.MDC_TARGET, oldServer)
             MDC.put(MDC_SUB_TITLE, oldSubtitle)
             MDC.put(MDC_MAIN_STAT, oldDuration)
+            MDC.put(MDC_COLOR, oldColor)
             MDC.remove(MDC_TYPE)
         }
     }

@@ -1,5 +1,6 @@
 package com.micronaut.bug.config
 
+import com.micronaut.bug.trace.NanoTraceFilter.Companion.MDC_USER_ID
 import io.github.oshai.kotlinlogging.KotlinLogging
 import jakarta.servlet.FilterChain
 import jakarta.servlet.http.HttpServletRequest
@@ -33,12 +34,11 @@ class JwtAuthenticationFilter : OncePerRequestFilter() {
 
         try {
             if (user != null) {
-                MDC.put(TARGET_ID, user.id)
+                MDC.put(MDC_USER_ID, user.id)
                 SecurityContext.set(user)
             }
             chain.doFilter(rq, rs)
         } finally {
-            MDC.remove(TARGET_ID)
             SecurityContext.clear()
         }
     }
@@ -50,6 +50,5 @@ class JwtAuthenticationFilter : OncePerRequestFilter() {
 
     companion object {
         private const val BEARER_PREFIX = "Bearer "
-        private const val TARGET_ID = "targetId" // В оригинале было ObservationConfig.TARGET_ID
     }
 }

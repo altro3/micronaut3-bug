@@ -4,6 +4,8 @@ import com.google.protobuf.ByteString
 import com.micronaut.bug.log.LogMasker
 import com.micronaut.bug.log.LogUtil.formatStackTrace
 import com.micronaut.bug.log.config.LogProperties
+import com.micronaut.bug.trace.NanoTraceFilter.Companion.MDC_USER_ID
+import com.micronaut.bug.trace.NanoTracer.Companion.MDC_COLOR
 import io.opentelemetry.proto.collector.logs.v1.ExportLogsServiceRequest
 import io.opentelemetry.proto.common.v1.AnyValue
 import io.opentelemetry.proto.common.v1.InstrumentationScope
@@ -113,6 +115,7 @@ class OtlpLogEncoder(
                     .setSeverityText(event.level.name())
 
                 // ШАГ 4: Перенос MDC через ReadOnlyStringMap (Garbage-Free обход) и связывание с трассировкой
+                var colorFound = false
                 val mdc = event.contextData
                 if (!mdc.isEmpty) {
                     mdc.forEach { key: String, value: Any? ->
@@ -139,12 +142,24 @@ class OtlpLogEncoder(
                                 }
                             }
 
+                            MDC_COLOR -> {
+                                colorFound = true
+                                logRecordBuilder.addAttributes(keyValue(ATTR_COLOR, stringValue))
+                            }
+
+                            MDC_USER_ID -> {
+                                logRecordBuilder.addAttributes(keyValue(ATTR_USER_ID, stringValue))
+                            }
+
                             else -> {
-                                addStrAttr(key, stringValue, logRecordBuilder)
+                                logRecordBuilder.addAttributes(keyValue(key, stringValue))
                             }
                         }
                     }
-                    addLongAttr(ATTR_ID, nanoTs, logRecordBuilder)
+                    if (!colorFound) {
+                        logRecordBuilder.addAttributes(keyValue(ATTR_COLOR, "green"))
+                    }
+                    logRecordBuilder.addAttributes(keyValue(ATTR_ID, nanoTs))
                 }
 
                 // ШАГ 5: Запись исключений (ThrowableProxy в Log4j2)
@@ -198,10 +213,9 @@ class OtlpLogEncoder(
     }
 
     private fun fillExceptionAttributes(logRecordBuilder: LogRecord.Builder, proxy: ThrowableProxy) {
-        addStrAttr(ATTR_EXCEPTION_TYPE, proxy.name, logRecordBuilder)
-
+        logRecordBuilder.addAttributes(keyValue(ATTR_EXCEPTION_TYPE, proxy.name))
         proxy.message?.let {
-            addStrAttr(ATTR_EXCEPTION_MESSAGE, it, logRecordBuilder)
+            logRecordBuilder.addAttributes(keyValue(ATTR_EXCEPTION_MESSAGE, it))
         }
 
         val sb = tlStringBuilder.get()
@@ -214,21 +228,39 @@ class OtlpLogEncoder(
             rootCauseFull = props.stackTraceRootCauseFull,
         )
 
-        addStrAttr(ATTR_EXCEPTION_STACKTRACE, sb.toString(), logRecordBuilder)
+        logRecordBuilder.addAttributes(keyValue(ATTR_EXCEPTION_STACKTRACE, sb.toString()))
     }
 
-    private fun addStrAttr(key: String, value: String, logRecordBuilder: LogRecord.Builder) {
-        val kvBuilder = tlKeyValueBuilder.get().clear()
-        kvBuilder.setKey(key)
-        kvBuilder.valueBuilder.stringValue = value
-        logRecordBuilder.addAttributes(kvBuilder.build())
-    }
+    private fun keyValue(k: String, v: Any): KeyValue {
+        val vBuilder = tlValueBuilder.get().clear()
 
-    private fun addLongAttr(key: String, value: Long, logRecordBuilder: LogRecord.Builder) {
-        val kvBuilder = tlKeyValueBuilder.get().clear()
-        kvBuilder.setKey(key)
-        kvBuilder.valueBuilder.intValue = value
-        logRecordBuilder.addAttributes(kvBuilder.build())
+        when (v) {
+            is String -> vBuilder.setStringValue(v)
+            is Long -> vBuilder.setIntValue(v)
+            is Int -> vBuilder.setIntValue(v.toLong())
+            is Boolean -> vBuilder.setBoolValue(v)
+            is Double -> vBuilder.setDoubleValue(v)
+            is Float -> vBuilder.setDoubleValue(v.toDouble())
+            is Iterable<*> -> {
+                val arrayBuilder = vBuilder.arrayValueBuilder
+                val itemValBuilder = tlItemValueBuilder.get()
+                for (item in v) {
+                    if (item != null) {
+                        arrayBuilder.addValues(
+                            itemValBuilder.clear()
+                                .setStringValue(item.toString())
+                                .build()
+                        )
+                    }
+                }
+            }
+
+            else -> vBuilder.setStringValue(v.toString())
+        }
+        return tlKeyValueBuilder.get().clear()
+            .setKey(k)
+            .setValue(vBuilder)
+            .build()
     }
 
     private fun mapLevelToSeverity(level: Level): SeverityNumber =
@@ -265,6 +297,8 @@ class OtlpLogEncoder(
         private const val ATTR_EXCEPTION_MESSAGE = "exception.message"
         private const val ATTR_EXCEPTION_STACKTRACE = "exception.stacktrace"
         private const val ATTR_ID = "id"
+        private const val ATTR_USER_ID = "user.id"
+        private const val ATTR_COLOR = "color"
 
         // Ключи MDC, генерируемые механизмами трассировки
         private const val MDC_TRACE_ID = "traceId"
@@ -294,6 +328,8 @@ class OtlpLogEncoder(
         private val tlScopeNames = ThreadLocal.withInitial { ArrayList<String>(16) }
         private val tlIndexMap = ThreadLocal.withInitial { HashMap<String, Int>(16) }
         private val tlGroupedEvents = ThreadLocal.withInitial { ArrayList<MutableList<LogEvent>>(16) }
+        private val tlValueBuilder = ThreadLocal.withInitial { AnyValue.newBuilder() }
+        private val tlItemValueBuilder = ThreadLocal.withInitial { AnyValue.newBuilder() }
 
         // THREAD_LOCAL POOLING: Исключаем аллокации массивов байт
         // Берем максимальный размер (16 байт для 32-символьного traceId)

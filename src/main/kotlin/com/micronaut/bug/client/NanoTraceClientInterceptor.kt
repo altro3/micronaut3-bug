@@ -2,6 +2,9 @@ package com.micronaut.bug.client
 
 import com.micronaut.bug.client.HttpClientProperties.ClientType.INTERNAL
 import com.micronaut.bug.client.LoggingInterceptor.Companion.SLASH
+import com.micronaut.bug.trace.NanoTraceFilter.Companion.ATTR_USER_ID
+import com.micronaut.bug.trace.NanoTraceFilter.Companion.HEADER_USER_ID
+import com.micronaut.bug.trace.NanoTraceFilter.Companion.MDC_USER_ID
 import com.micronaut.bug.trace.NanoTracer
 import com.micronaut.bug.trace.NanoTracer.Companion.ATTR_CLIENT
 import com.micronaut.bug.trace.NanoTracer.Companion.ATTR_EXCEPTION_MESSAGE
@@ -65,6 +68,9 @@ class NanoTraceClientInterceptor(
         // Идентификация отправителя для внутренних вызовов
         if (props.type == INTERNAL) {
             rq.headers.set(HEADER_X_SENDER, selfServiceName)
+            MDC.get(MDC_USER_ID)?.let {
+                rq.headers.set(HEADER_USER_ID, it)
+            }
         }
 
         // Проброс стандартного Baggage (W3C)
@@ -111,6 +117,7 @@ class NanoTraceClientInterceptor(
 
             // Собираем ТОЛЬКО кастомные атрибуты.
             val attrs = HashMap<String, Any>(32)
+            MDC.get(MDC_USER_ID)?.let { attrs[ATTR_USER_ID] = it }
             attrs[ATTR_HTTP_REQUEST_METHOD] = rq.method.name()
             attrs[ATTR_URL_FULL] = urlFull
             attrs[ATTR_HTTP_RESPONSE_STATUS_CODE] = rs.statusCode.value().toLong()
@@ -157,6 +164,7 @@ class NanoTraceClientInterceptor(
             rs
         } catch (e: Exception) {
             val attrs = HashMap<String, Any>(8)
+            MDC.get(MDC_USER_ID)?.let { attrs[ATTR_USER_ID] = it }
             attrs[ATTR_HTTP_REQUEST_METHOD] = rq.method.name()
             attrs[ATTR_URL_FULL] = rq.uri.toString()
             attrs[ATTR_CLIENT] = selfServiceName

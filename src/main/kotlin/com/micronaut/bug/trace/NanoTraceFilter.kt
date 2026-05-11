@@ -60,6 +60,8 @@ class NanoTraceFilter(
             return
         }
 
+        val userId = rq.getHeader(HEADER_USER_ID)
+
         // 1. Безаллокационный разбор W3C traceparent
         val traceParent = rq.getHeader(HEADER_TRACEPARENT)
         var traceId: String? = null
@@ -110,6 +112,9 @@ class NanoTraceFilter(
             traceState = traceState,
         )
 
+        if (userId != null) {
+            MDC.put(MDC_USER_ID, userId)
+        }
         MDC.put(MDC_SOURCE, sender)
         MDC.put(MDC_TARGET, selfServiceName)
 
@@ -129,6 +134,7 @@ class NanoTraceFilter(
             // 3. Прямое наполнение HashMap вместо тяжелого buildMap
             val attrs = HashMap<String, Any>(32)
 
+            MDC.get(MDC_USER_ID)?.let { attrs[ATTR_USER_ID] = it }
             attrs[ATTR_URL_FULL] = getFullUri(rq)
             attrs[ATTR_URL_SCHEME] = rq.scheme
             attrs[ATTR_URL_PATH] = rq.requestURI
@@ -230,5 +236,9 @@ class NanoTraceFilter(
         private const val ERROR_STATUS_THRESHOLD = 400
 
         const val HEADER_API_KEY = "api-key"
+
+        const val HEADER_USER_ID = "x-user-id" // Или твой заголовок
+        const val ATTR_USER_ID = "user.id"
+        const val MDC_USER_ID = "userId"
     }
 }

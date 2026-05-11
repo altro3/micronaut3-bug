@@ -176,7 +176,7 @@ class TraceExporter(
     }
 
     private fun sendRequest(payload: ByteArray, isCompressed: Boolean) {
-        val httpRequest = HttpRequest.newBuilder()
+        val rq = HttpRequest.newBuilder()
             .uri(exporterProps.url)
             .header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_PROTOBUF_VALUE)
             .timeout(exporterProps.requestTimeout)
@@ -190,7 +190,7 @@ class TraceExporter(
 
         try {
             // Прямой синхронный вызов. Корутина на Dispatchers.IO уснет на время I/O
-            val rs = httpClient.send(httpRequest, HttpResponse.BodyHandlers.discarding())
+            val rs = httpClient.send(rq, HttpResponse.BodyHandlers.discarding())
             handleResponse(rs, null)
         } catch (ex: Exception) {
             handleResponse(null, ex)

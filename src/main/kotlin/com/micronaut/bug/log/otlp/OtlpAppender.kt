@@ -120,7 +120,7 @@ class OtlpAppender(
     }
 
     private fun sendRequest(payload: ByteArray, isCompressed: Boolean) {
-        val request = HttpRequest.newBuilder()
+        val rq = HttpRequest.newBuilder()
             .uri(otlpProps.url)
             .header(CONTENT_TYPE, MediaType.APPLICATION_PROTOBUF_VALUE)
             .timeout(otlpProps.requestTimeout)
@@ -133,9 +133,9 @@ class OtlpAppender(
             .build()
 
         try {
-            val response = httpClient.send(request, HttpResponse.BodyHandlers.ofString())
-            if (response.statusCode() !in 200..299) {
-                LOGGER.error("OTLP server returned error code: ${response.statusCode()}, body: ${response.body()}")
+            val rs = httpClient.send(rq, HttpResponse.BodyHandlers.ofString())
+            if (rs.statusCode() !in 200..299) {
+                LOGGER.error("OTLP server returned error code: ${rs.statusCode()}, body: ${rs.body()}")
             }
         } catch (ex: Exception) {
             LOGGER.error("Network error while sending logs to OTLP", ex)

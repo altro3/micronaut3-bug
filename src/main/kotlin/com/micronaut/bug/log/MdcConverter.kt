@@ -17,9 +17,9 @@ class MdcConverter : LogEventPatternConverter("MdcConverter", "mdc") {
         if (mdc.isEmpty) return
 
         val traceId = mdc.getValue<String>(MDC_TRACE_ID)
-        val targetId = mdc.getValue<String>(MDC_TARGET_ID)
+        val userId = mdc.getValue<String>(MDC_USER_ID)
 
-        if (traceId == null && targetId == null && customKeys.isEmpty()) {
+        if (traceId == null && userId == null && customKeys.isEmpty()) {
             return
         }
 
@@ -31,17 +31,17 @@ class MdcConverter : LogEventPatternConverter("MdcConverter", "mdc") {
             hasContent = true
         }
 
-        // 2. Вывод targetId
-        if (targetId != null) {
+        // 2. Вывод userId
+        if (userId != null) {
             if (hasContent) toAppendTo.append(SEPARATOR) else toAppendTo.append(PREFIX)
-            toAppendTo.append(LABEL_TARGET).append(ASSIGN).append(targetId)
+            toAppendTo.append(userId)
             hasContent = true
         }
 
         // 3. Вывод кастомных ключей
         for (i in customKeys.indices) {
             val key = customKeys[i]
-            if (key == MDC_TRACE_ID || key == MDC_TARGET_ID) continue
+            if (key == MDC_TRACE_ID || key == MDC_USER_ID) continue
 
             val value = mdc.getValue<String>(key)
             if (value != null) {
@@ -57,13 +57,12 @@ class MdcConverter : LogEventPatternConverter("MdcConverter", "mdc") {
     }
 
     companion object {
-        const val MDC_TARGET_ID = "targetId"
+        const val MDC_USER_ID = "userId"
         const val MDC_TRACE_ID = "traceId"
 
         @Volatile
         var keys: List<String> = emptyList()
 
-        private const val LABEL_TARGET = "targetId"
         private const val ASSIGN = '='
         private const val SEPARATOR = ", "
         private const val PREFIX = '['
