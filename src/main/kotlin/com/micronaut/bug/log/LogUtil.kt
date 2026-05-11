@@ -4,7 +4,7 @@ import org.apache.logging.log4j.core.impl.ThrowableProxy
 
 object LogUtil {
 
-    fun formatStackTrace(t: Throwable, sb: StringBuilder, maxLines: Int = 10, rootCauseFull: Boolean = true): String {
+    fun formatStackTrace(t: Throwable, sb: StringBuilder, maxLines: Int, rootCauseFull: Boolean = true): String {
         sb.setLength(0)
         var current: Throwable? = t
         while (current != null) {
@@ -23,7 +23,7 @@ object LogUtil {
         return sb.toString()
     }
 
-    fun formatStackTrace(proxy: ThrowableProxy, sb: StringBuilder, maxLines: Int = 10, rootCauseFull: Boolean = true): String {
+    fun formatStackTrace(proxy: ThrowableProxy, sb: StringBuilder, maxLines: Int, rootCauseFull: Boolean = true): String {
         var current: ThrowableProxy? = proxy
         while (current != null) {
             val isRoot = current.causeProxy == null
