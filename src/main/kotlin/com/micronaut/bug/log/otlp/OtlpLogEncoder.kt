@@ -105,9 +105,10 @@ class OtlpLogEncoder(
                 val maskedMessage = logMasker.maskServiceMessage(event.message.formattedMessage)
                 logRecordBuilder.bodyBuilder.stringValue = maskedMessage
                 val instant = event.instant
+                val nanoTs = instant.epochSecond * NANOS_IN_SEC + instant.nanoOfSecond
 
                 logRecordBuilder
-                    .setTimeUnixNano(instant.epochSecond * NANOS_IN_SEC + instant.nanoOfSecond)
+                    .setTimeUnixNano(nanoTs)
                     .setSeverityNumber(mapLevelToSeverity(event.level))
                     .setSeverityText(event.level.name())
 
@@ -143,6 +144,7 @@ class OtlpLogEncoder(
                             }
                         }
                     }
+                    addLongAttr(ATTR_ID, nanoTs, logRecordBuilder)
                 }
 
                 // ШАГ 5: Запись исключений (ThrowableProxy в Log4j2)
@@ -222,6 +224,13 @@ class OtlpLogEncoder(
         logRecordBuilder.addAttributes(kvBuilder.build())
     }
 
+    private fun addLongAttr(key: String, value: Long, logRecordBuilder: LogRecord.Builder) {
+        val kvBuilder = tlKeyValueBuilder.get().clear()
+        kvBuilder.setKey(key)
+        kvBuilder.valueBuilder.intValue = value
+        logRecordBuilder.addAttributes(kvBuilder.build())
+    }
+
     private fun mapLevelToSeverity(level: Level): SeverityNumber =
         when (level) {
             Level.TRACE -> SeverityNumber.SEVERITY_NUMBER_TRACE
@@ -255,6 +264,7 @@ class OtlpLogEncoder(
         private const val ATTR_EXCEPTION_TYPE = "exception.type"
         private const val ATTR_EXCEPTION_MESSAGE = "exception.message"
         private const val ATTR_EXCEPTION_STACKTRACE = "exception.stacktrace"
+        private const val ATTR_ID = "id"
 
         // Ключи MDC, генерируемые механизмами трассировки
         private const val MDC_TRACE_ID = "traceId"

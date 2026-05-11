@@ -17,7 +17,7 @@ app:
     pretty-print: true
     max-payload-size: 4MB
     otlp:
-      enabled: false
+      enabled: true
       url: http://localhost:4318/v1/logs
       # Напрямую в викторию
       # url: http://localhost:9428/insert/opentelemetry/v1/logs
