@@ -64,6 +64,8 @@ class ExceptionHandler(
         val ctx = tracer.currentContext()
         ctx?.error = ex
 
+        log.error(ex) { "Error" }
+
         return ResponseEntity
             .status(ex.statusCode)
             .body(

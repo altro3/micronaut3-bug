@@ -28,6 +28,10 @@ class LogReconfigurator(
         // 1. Настройка MDC (передаем ключи в наш Garbage-Free конвертер)
         MdcConverter.keys = props.mdcKeys
 
+        // 2. Настройка сокращения стектрейса для консоли
+        SmartExConverter.maxLines = props.stackTraceMaxLines
+        SmartExConverter.rootCauseFull = props.stackTraceRootCauseFull
+
         // 2. Добавляем OTLP (VictoriaLogs), если он включен в конфигурации И библиотека присутствует в classpath
         if (props.otlp.enabled && isOtlpPresent()) {
             setup(ctx, appName, nodeName, props, logMasker)
@@ -51,7 +55,12 @@ class LogReconfigurator(
             if (config.appenders.containsKey(APPENDER_NAME_OTLP)) return
 
             // Создаем энкодер (адаптированный под LogEvent)
-            val otlpLogEncoder = OtlpLogEncoder(appName, nodeName, logMasker)
+            val otlpLogEncoder = OtlpLogEncoder(
+                appName = appName,
+                nodeName = nodeName,
+                props = props,
+                logMasker = logMasker,
+            )
 
             val appender = OtlpAppender(
                 name = APPENDER_NAME_OTLP,

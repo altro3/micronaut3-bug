@@ -20,4 +20,11 @@ class BusinessService {
 
         return user
     }
+
+    fun someFunc() {
+
+        log.info { "Стартуем какую-то функцию" }
+
+        throw IllegalArgumentException("Что-то пошло не так")
+    }
 }

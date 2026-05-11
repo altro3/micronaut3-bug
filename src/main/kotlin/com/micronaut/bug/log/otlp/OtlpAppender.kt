@@ -102,11 +102,12 @@ class OtlpAppender(
         try {
             var payload = encoder.encodeBatch(eventsToSend)
 
-            if (otlpProps.useGzip) {
+            val shouldCompress = otlpProps.useGzip && payload.size > otlpProps.compressionThreshold.toBytes()
+            if (shouldCompress) {
                 payload = compressGzip(payload)
             }
 
-            sendRequest(payload)
+            sendRequest(payload, shouldCompress)
         } catch (e: Exception) {
             LOGGER.error("Critical error during OTLP batch encoding", e)
         }
@@ -118,14 +119,14 @@ class OtlpAppender(
         return bos.toByteArray()
     }
 
-    private fun sendRequest(payload: ByteArray) {
+    private fun sendRequest(payload: ByteArray, isCompressed: Boolean) {
         val request = HttpRequest.newBuilder()
             .uri(otlpProps.url)
             .header(CONTENT_TYPE, MediaType.APPLICATION_PROTOBUF_VALUE)
             .timeout(otlpProps.requestTimeout)
             .POST(HttpRequest.BodyPublishers.ofByteArray(payload))
             .apply {
-                if (otlpProps.useGzip) {
+                if (isCompressed) {
                     header(CONTENT_ENCODING, ENCODING_GZIP)
                 }
             }

@@ -2,7 +2,8 @@ package com.micronaut.bug.log.otlp
 
 import com.google.protobuf.ByteString
 import com.micronaut.bug.log.LogMasker
-import com.micronaut.bug.log.LogUtil.renderSmartStack
+import com.micronaut.bug.log.LogUtil.formatStackTrace
+import com.micronaut.bug.log.config.LogProperties
 import io.opentelemetry.proto.collector.logs.v1.ExportLogsServiceRequest
 import io.opentelemetry.proto.common.v1.AnyValue
 import io.opentelemetry.proto.common.v1.InstrumentationScope
@@ -19,6 +20,7 @@ import org.apache.logging.log4j.core.impl.ThrowableProxy
 class OtlpLogEncoder(
     appName: String,
     nodeName: String,
+    private val props: LogProperties,
     private val logMasker: LogMasker
 ) {
 
@@ -203,7 +205,12 @@ class OtlpLogEncoder(
         val sb = tlStringBuilder.get()
         sb.setLength(0)
 
-        renderSmartStack(proxy, sb)
+        formatStackTrace(
+            proxy = proxy,
+            sb = sb,
+            maxLines = props.stackTraceMaxLines,
+            rootCauseFull = props.stackTraceRootCauseFull,
+        )
 
         addStrAttr(ATTR_EXCEPTION_STACKTRACE, sb.toString(), logRecordBuilder)
     }
