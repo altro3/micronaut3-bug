@@ -23,4 +23,9 @@ class InternalApiController(
 
         return updateRs
     }
+
+    @GetMapping("/internal/error")
+    fun error(): MyDataResponse? {
+        throw RuntimeException("Произошла какая-то ошибка")
+    }
 }

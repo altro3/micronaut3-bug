@@ -49,6 +49,9 @@ app:
         ping:
           path: /internal/ping
           method: GET
+        error:
+          path: /internal/error
+          method: GET
       http:
         service-name: service2
         url: http://localhost:9080

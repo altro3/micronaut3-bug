@@ -16,4 +16,10 @@ class ServiceToServiceController(
         internalServiceClient.ping()
         extServiceClient.ping()
     }
+
+    @GetMapping("/service2service/error")
+    fun error() {
+        internalServiceClient.error()
+        extServiceClient.ping()
+    }
 }

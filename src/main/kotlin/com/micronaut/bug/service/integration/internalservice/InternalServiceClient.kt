@@ -18,4 +18,9 @@ class InternalServiceClient(
         httpClient.sendRq(endpoints.ping)
             .toBodilessEntity()
     }
+
+    fun error() {
+        httpClient.sendRq(endpoints.error)
+            .toBodilessEntity()
+    }
 }

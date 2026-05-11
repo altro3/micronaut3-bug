@@ -18,5 +18,7 @@ class InternalServiceProperties(
     data class Endpoints(
         @field:Valid
         val ping: Endpoint,
+        @field:Valid
+        val error: Endpoint,
     )
 }
