@@ -20,10 +20,13 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeoutOrNull
 import org.springframework.http.HttpHeaders
+import org.springframework.http.HttpHeaders.CONTENT_ENCODING
 import org.springframework.http.MediaType
+import java.io.ByteArrayOutputStream
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
+import java.util.zip.GZIPOutputStream
 import kotlin.time.Duration.Companion.milliseconds
 
 class TraceExporter(
@@ -33,12 +36,10 @@ class TraceExporter(
     traceProps: TraceProperties,
 ) {
     private val log = KotlinLogging.logger {}
+
     private val exporterProps = traceProps.exporter
-
-    private val encoder = OtlpTraceEncoder(appName, nodeName)
-
+    private val encoder = OtlpTraceEncoder(appName, nodeName, traceProps)
     private val channel = Channel<TraceEvent>(exporterProps.queueCapacity)
-
     private val exportScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     fun enqueue(
@@ -125,53 +126,6 @@ class TraceExporter(
         }
     }
 
-    private fun sendBatch(events: List<TraceEvent>) {
-        if (events.isEmpty()) return
-
-        val payload = encoder.encodeBatch(events)
-
-        val httpRequest = HttpRequest.newBuilder()
-            .uri(exporterProps.url)
-            .header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_PROTOBUF_VALUE)
-            .timeout(exporterProps.requestTimeout)
-            .POST(HttpRequest.BodyPublishers.ofByteArray(payload))
-            .build()
-
-        try {
-            // Прямой синхронный вызов. Корутина на Dispatchers.IO уснет на время I/O
-            val rs = httpClient.send(httpRequest, HttpResponse.BodyHandlers.discarding())
-            handleResponse(rs, null)
-        } catch (ex: Exception) {
-            handleResponse(null, ex)
-        }
-    }
-
-    private fun handleResponse(rs: HttpResponse<*>?, ex: Throwable?) {
-        if (ex != null) {
-            log.warn { "Trace batch export failed: ${ex.message}" }
-        } else if (rs?.statusCode() !in 200..299) {
-            log.warn { "Trace rejected batch: code=${rs?.statusCode()}" }
-        }
-    }
-
-    private fun flushRemaining() {
-        val batch = ArrayList<TraceEvent>(exporterProps.batchSize)
-
-        while (true) {
-            val event = channel.tryReceive().getOrNull() ?: break
-            batch.add(event)
-
-            if (batch.size >= exporterProps.batchSize) {
-                sendBatch(batch)
-                batch.clear()
-            }
-        }
-
-        if (batch.isNotEmpty()) {
-            sendBatch(batch)
-        }
-    }
-
     @PreDestroy
     fun stop() {
         if (!exporterProps.enabled) return
@@ -195,5 +149,87 @@ class TraceExporter(
 
         exportScope.cancel()
         log.info { "Trace exporter stopped." }
+    }
+
+    private fun compressGzip(data: ByteArray): ByteArray {
+        // Используем твой GZIP_ESTIMATED_RATIO = 2 для начальной емкости
+        val bos = ByteArrayOutputStream(data.size / GZIP_ESTIMATED_RATIO)
+        GZIPOutputStream(bos).use { it.write(data) }
+        return bos.toByteArray()
+    }
+
+    private fun sendBatch(events: List<TraceEvent>) {
+        if (events.isEmpty()) return
+
+        try {
+            var payload = encoder.encodeBatch(events)
+
+            val shouldCompress = exporterProps.useGzip && payload.size > exporterProps.compressionThreshold.toBytes()
+            if (shouldCompress) {
+                payload = compressGzip(payload)
+            }
+
+            sendRequest(payload, shouldCompress)
+        } catch (e: Exception) {
+            log.error(e) { "Critical error during Trace batch encoding" }
+        }
+    }
+
+    private fun sendRequest(payload: ByteArray, isCompressed: Boolean) {
+        val httpRequest = HttpRequest.newBuilder()
+            .uri(exporterProps.url)
+            .header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_PROTOBUF_VALUE)
+            .timeout(exporterProps.requestTimeout)
+            .POST(HttpRequest.BodyPublishers.ofByteArray(payload))
+            .apply {
+                if (isCompressed) {
+                    header(CONTENT_ENCODING, ENCODING_GZIP)
+                }
+            }
+            .build()
+
+        try {
+            // Прямой синхронный вызов. Корутина на Dispatchers.IO уснет на время I/O
+            val rs = httpClient.send(httpRequest, HttpResponse.BodyHandlers.discarding())
+            handleResponse(rs, null)
+        } catch (ex: Exception) {
+            handleResponse(null, ex)
+        }
+    }
+
+    private fun handleResponse(rs: HttpResponse<*>?, ex: Throwable?) {
+        if (ex != null) {
+            log.warn { "Trace batch export failed: ${ex.message}" }
+        } else if (rs?.statusCode() !in 200..299) {
+            log.warn { "Trace rejected batch: code=${rs?.statusCode()}" }
+        }
+    }
+
+    private fun flushRemaining() {
+        val batchSize = exporterProps.batchSize
+        val batch = ArrayList<TraceEvent>(batchSize)
+        var result = channel.tryReceive()
+
+        while (result.isSuccess) {
+            val event = result.getOrNull() ?: break
+            batch.add(event)
+
+            if (batch.size >= batchSize) {
+                sendBatch(batch)
+                batch.clear()
+            }
+
+            result = channel.tryReceive()
+        }
+
+        // Отправляем остатки, если они есть
+        if (batch.isNotEmpty()) {
+            sendBatch(batch)
+        }
+    }
+
+    companion object {
+        private const val ENCODING_GZIP = "gzip"
+        private const val GZIP_ESTIMATED_RATIO = 2
     }
 }

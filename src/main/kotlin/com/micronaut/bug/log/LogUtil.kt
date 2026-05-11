@@ -4,48 +4,54 @@ import org.apache.logging.log4j.core.impl.ThrowableProxy
 
 object LogUtil {
 
-    fun formatStackTrace(
-        proxy: ThrowableProxy,
-        sb: StringBuilder,
-        maxLines: Int = 10,
-        rootCauseFull: Boolean = true
-    ): String {
+    fun formatStackTrace(t: Throwable, sb: StringBuilder, maxLines: Int = 10, rootCauseFull: Boolean = true): String {
+        sb.setLength(0)
+        var current: Throwable? = t
+        while (current != null) {
+            val isRoot = current.cause == null
+            val isFirst = current === t
 
-        // 1. Первое исключение
-        renderProxy(proxy, sb, maxLines, isRoot = false)
-
-        // 2. Идем по цепочке Cause
-        var cause = proxy.causeProxy
-        while (cause != null) {
-            if (cause.causeProxy == null) {
-                // Последний Cause
-                sb.append("Root Cause: ")
-                val limit = if (rootCauseFull) Int.MAX_VALUE else maxLines
-                renderProxy(cause, sb, limit, isRoot = true)
+            if (isFirst || isRoot) {
+                if (isRoot && !isFirst) sb.append("Root Cause: ")
+                renderBlock(sb, maxLines, isRoot && rootCauseFull, current.javaClass.name, current.message, current.stackTrace)
             } else {
-                // Промежуточный Cause - только заголовок (согласно твоей идее)
-                sb.append("Caused by: ").append(cause.name).append(": ")
-                    .append(cause.message).append(" [intermediate skipped]\n")
+                sb.append("Caused by: ").append(current.javaClass.name).append(": ")
+                    .append(current.message ?: "").append(" [intermediate skipped]\n")
             }
-            cause = cause.causeProxy
+            current = current.cause
         }
-
         return sb.toString()
     }
 
-    private fun renderProxy(proxy: ThrowableProxy, sb: StringBuilder, limit: Int, isRoot: Boolean) {
-        sb.append(proxy.name).append(": ").append(proxy.message).append("\n")
+    fun formatStackTrace(proxy: ThrowableProxy, sb: StringBuilder, maxLines: Int = 10, rootCauseFull: Boolean = true): String {
+        var current: ThrowableProxy? = proxy
+        while (current != null) {
+            val isRoot = current.causeProxy == null
+            val isFirst = current === proxy
 
-        val extendedStackTrace = proxy.extendedStackTrace
-        val linesToShow = if (isRoot) extendedStackTrace.size else minOf(extendedStackTrace.size, limit)
+            if (isFirst || isRoot) {
+                if (isRoot && !isFirst) sb.append("Root Cause: ")
+                renderBlock(sb, maxLines, isRoot && rootCauseFull, current.name, current.message, current.extendedStackTrace)
+            } else {
+                sb.append("Caused by: ").append(current.name).append(": ")
+                    .append(current.message ?: "").append(" [intermediate skipped]\n")
+            }
+            current = current.causeProxy
+        }
+        return sb.toString()
+    }
+
+    private fun renderBlock(sb: StringBuilder, limit: Int, isFull: Boolean, name: String, message: String?, stack: Array<*>) {
+        sb.append(name).append(": ").append(message ?: "").append("\n")
+
+        val linesToShow = if (isFull) stack.size else minOf(stack.size, limit)
 
         for (i in 0 until linesToShow) {
-            sb.append("\tat ").append(extendedStackTrace[i]).append("\n")
+            sb.append("\tat ").append(stack[i]).append("\n")
         }
 
-        if (extendedStackTrace.size > linesToShow) {
-            val remaining = extendedStackTrace.size - linesToShow
-            sb.append("\t... and ").append(remaining).append(" more lines\n")
+        if (stack.size > linesToShow) {
+            sb.append("\t... and ").append(stack.size - linesToShow).append(" more lines\n")
         }
     }
 }

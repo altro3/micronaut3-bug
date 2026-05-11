@@ -2,6 +2,7 @@ package com.micronaut.bug.trace.config
 
 import org.springframework.boot.context.properties.ConfigurationProperties
 import org.springframework.boot.context.properties.NestedConfigurationProperty
+import org.springframework.util.unit.DataSize
 import java.net.URI
 import java.time.Duration
 
@@ -13,6 +14,8 @@ class TraceProperties(
     @NestedConfigurationProperty
     val exporter: ExporterProperties = ExporterProperties(),
     val propagationHeaders: Set<String> = setOf(),
+    var stackTraceMaxLines: Int = 10,
+    var stackTraceRootCauseFull: Boolean = true,
 ) {
 
     class ExporterProperties(
@@ -24,6 +27,8 @@ class TraceProperties(
         val flushInterval: Duration = Duration.ofSeconds(2),
         val queueCapacity: Int = 10000,
         val shutdownTimeout: Duration = Duration.ofSeconds(5),
-        val retryInterval: Duration = Duration.ofSeconds(1)
+        val retryInterval: Duration = Duration.ofSeconds(1),
+        var useGzip: Boolean = true,
+        var compressionThreshold: DataSize = DataSize.ofKilobytes(4),
     )
 }

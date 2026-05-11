@@ -44,7 +44,6 @@ class LogProperties(
         var connectionTimeout: Duration = Duration.ofSeconds(5),
         var requestTimeout: Duration = Duration.ofSeconds(5),
         var useGzip: Boolean = true,
-        @field:Positive
         var compressionThreshold: DataSize = DataSize.ofKilobytes(4),
     )
 

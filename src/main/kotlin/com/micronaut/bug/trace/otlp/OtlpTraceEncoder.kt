@@ -1,5 +1,6 @@
 package com.micronaut.bug.trace.otlp
 
+import com.micronaut.bug.log.LogUtil.formatStackTrace
 import com.micronaut.bug.trace.NanoTracer
 import com.micronaut.bug.trace.NanoTracer.Companion.ATTR_EXCEPTION_MESSAGE
 import com.micronaut.bug.trace.NanoTracer.Companion.ATTR_EXCEPTION_STACKTRACE
@@ -7,9 +8,9 @@ import com.micronaut.bug.trace.NanoTracer.Companion.ATTR_EXCEPTION_TYPE
 import com.micronaut.bug.trace.NanoTracer.Companion.PREFIX_BAGGAGE
 import com.micronaut.bug.trace.NanoTracer.Companion.PREFIX_PROPAGATION
 import com.micronaut.bug.trace.TraceIdGenerator
+import com.micronaut.bug.trace.config.TraceProperties
 import io.opentelemetry.proto.collector.trace.v1.ExportTraceServiceRequest
 import io.opentelemetry.proto.common.v1.AnyValue
-import io.opentelemetry.proto.common.v1.ArrayValue
 import io.opentelemetry.proto.common.v1.InstrumentationScope
 import io.opentelemetry.proto.common.v1.KeyValue
 import io.opentelemetry.proto.resource.v1.Resource
@@ -21,6 +22,7 @@ import io.opentelemetry.proto.trace.v1.Status
 class OtlpTraceEncoder(
     appName: String,
     nodeName: String,
+    private val props: TraceProperties,
 ) {
 
     private val serviceResource = Resource.newBuilder()
@@ -38,14 +40,17 @@ class OtlpTraceEncoder(
             return EMPTY_BYTE_ARRAY
         }
 
+        val scopeSpansBuilder = tlScopeSpansBuilder.get()
         val spanBuilder = tlSpanBuilder.get()
-        val scopeSpansBuilder = ScopeSpans.newBuilder()
+        val statusBuilder = tlStatusBuilder.get()
+
+        scopeSpansBuilder.clear()
             .setScope(libScope)
 
-        val sb = tlStringBuilder.get()
         // ОПТИМИЗАЦИЯ: Чистый цикл без создания итераторов
         for (i in 0 until size) {
             val event = events[i]
+
             spanBuilder.clear()
                 .setTraceId(TraceIdGenerator.toByteString(event.traceIdHex))
                 .setSpanId(TraceIdGenerator.toByteString(event.spanIdHex))
@@ -53,67 +58,44 @@ class OtlpTraceEncoder(
                 .setKind(event.kind)
                 .setStartTimeUnixNano(event.startEpochNanos)
                 .setEndTimeUnixNano(event.endEpochNanos)
-                .setStatus(Status.newBuilder().setCode(event.status))
+                .setStatus(statusBuilder.clear().setCode(event.status))
 
             if (!event.parentIdHex.isNullOrBlank()) {
                 spanBuilder.parentSpanId = TraceIdGenerator.toByteString(event.parentIdHex)
             }
 
             // Наполняем атрибуты
-            if (!event.userAttrs.isNullOrEmpty()) {
-                for (entry in event.userAttrs.entries) {
-                    fillProtobufAttr(spanBuilder.addAttributesBuilder(), entry.key, entry.value)
-                }
+            event.userAttrs?.forEach { (k, v) ->
+                spanBuilder.addAttributes(keyValue(k, v))
             }
 
             // Наполняем багаж
-            if (!event.baggage.isNullOrEmpty()) {
-                for (entry in event.baggage.entries) {
-                    sb.setLength(0)
-                    sb.append(PREFIX_BAGGAGE).append(entry.key)
-                    val attr = spanBuilder.addAttributesBuilder()
-                    attr.key = sb.toString()
-                    attr.valueBuilder.stringValue = entry.value
-                }
+            event.baggage?.forEach { (k, v) ->
+                spanBuilder.addAttributes(keyValue("$PREFIX_BAGGAGE$k", v))
             }
 
-            if (!event.propagationHeaders.isNullOrEmpty()) {
-                for (entry in event.propagationHeaders.entries) {
-                    sb.setLength(0)
-                    sb.append(PREFIX_PROPAGATION).append(entry.key)
-                    val attr = spanBuilder.addAttributesBuilder()
-                    attr.key = sb.toString()
-                    attr.valueBuilder.stringValue = entry.value
-                }
+            event.propagationHeaders?.forEach { (k, v) ->
+                spanBuilder.addAttributes(keyValue("$PREFIX_PROPAGATION$k", v))
             }
 
             event.error?.let {
-
-                val eventBuilder = spanBuilder.addEventsBuilder()
-                // Стандарт требует называть это событие именно "exception"
-                eventBuilder.name = EVENT_NAME_EXCEPTION
-                // Время фиксации ошибки (в наносекундах)
-                eventBuilder.timeUnixNano = event.endEpochNanos
-
-                val typeAttr = spanBuilder.addAttributesBuilder()
-                typeAttr.key = ATTR_EXCEPTION_TYPE
-                typeAttr.valueBuilder.stringValue = it.javaClass.name
-
-                val msgAttr = spanBuilder.addAttributesBuilder()
-                msgAttr.key = ATTR_EXCEPTION_MESSAGE
-                msgAttr.valueBuilder.stringValue = it.message ?: it.javaClass.simpleName
-
-                val stackAttr = spanBuilder.addAttributesBuilder()
-                stackAttr.key = ATTR_EXCEPTION_STACKTRACE
-//                stackAttr.valueBuilder.stringValue = formatStackTrace(it)
+                spanBuilder.addEvents(
+                    tlEventBuilder.get().clear()
+                        .setName(EVENT_NAME_EXCEPTION)
+                        .setTimeUnixNano(event.endEpochNanos)
+                        .addAttributes(keyValue(ATTR_EXCEPTION_TYPE, it.javaClass.name))
+                        .addAttributes(keyValue(ATTR_EXCEPTION_MESSAGE, it.message ?: it.javaClass.simpleName))
+                        .addAttributes(keyValue(ATTR_EXCEPTION_STACKTRACE, formatStackTrace(it, tlStringBuilder.get(), props.stackTraceMaxLines, props.stackTraceRootCauseFull)))
+                )
             }
 
             scopeSpansBuilder.addSpans(spanBuilder.build())
         }
 
-        return ExportTraceServiceRequest.newBuilder()
+        return tlRequestBuilder.get().clear()
             .addResourceSpans(
-                ResourceSpans.newBuilder()
+                tlResSpansBuilder.get()
+                    .clear()
                     .setResource(serviceResource)
                     .addScopeSpans(scopeSpansBuilder.build())
                     .build()
@@ -122,35 +104,51 @@ class OtlpTraceEncoder(
             .toByteArray()
     }
 
-    private fun fillProtobufAttr(attrBuilder: KeyValue.Builder, k: String, v: Any) {
-        attrBuilder.key = k
-        val valueBuilder = attrBuilder.valueBuilder
+    private fun keyValue(k: String, v: Any): KeyValue {
+        val vBuilder = tlValueBuilder.get().clear()
+
         when (v) {
-            is String -> valueBuilder.stringValue = v
-            is Long -> valueBuilder.intValue = v
-            is Int -> valueBuilder.intValue = v.toLong()
-            is Boolean -> valueBuilder.boolValue = v
-            is Double -> valueBuilder.doubleValue = v
-            is Float -> valueBuilder.doubleValue = v.toDouble()
+            is String -> vBuilder.setStringValue(v)
+            is Long -> vBuilder.setIntValue(v)
+            is Int -> vBuilder.setIntValue(v.toLong())
+            is Boolean -> vBuilder.setBoolValue(v)
+            is Double -> vBuilder.setDoubleValue(v)
+            is Float -> vBuilder.setDoubleValue(v.toDouble())
             is Iterable<*> -> {
-                val arrayBuilder = ArrayValue.newBuilder()
-                v.forEach { item ->
+                val arrayBuilder = vBuilder.arrayValueBuilder
+                val itemValBuilder = tlItemValueBuilder.get()
+                for (item in v) {
                     if (item != null) {
-                        arrayBuilder.addValues(AnyValue.newBuilder().setStringValue(item.toString()).build())
+                        arrayBuilder.addValues(
+                            itemValBuilder.clear()
+                                .setStringValue(item.toString())
+                                .build()
+                        )
                     }
                 }
-                valueBuilder.setArrayValue(arrayBuilder)
             }
 
-            else -> valueBuilder.stringValue = v.toString()
+            else -> vBuilder.setStringValue(v.toString())
         }
+        return tlKeyValueBuilder.get().clear()
+            .setKey(k)
+            .setValue(vBuilder)
+            .build()
     }
 
     companion object {
 
+        private val tlRequestBuilder = ThreadLocal.withInitial { ExportTraceServiceRequest.newBuilder() }
+        private val tlResSpansBuilder = ThreadLocal.withInitial { ResourceSpans.newBuilder() }
+        private val tlScopeSpansBuilder = ThreadLocal.withInitial { ScopeSpans.newBuilder() }
         private val tlSpanBuilder = ThreadLocal.withInitial { Span.newBuilder() }
+        private val tlEventBuilder = ThreadLocal.withInitial { Span.Event.newBuilder() }
+        private val tlStatusBuilder = ThreadLocal.withInitial { Status.newBuilder() }
+        private val tlValueBuilder = ThreadLocal.withInitial { AnyValue.newBuilder() }
+        private val tlKeyValueBuilder = ThreadLocal.withInitial { KeyValue.newBuilder() }
+        private val tlItemValueBuilder = ThreadLocal.withInitial { AnyValue.newBuilder() }
 
-        private val tlStringBuilder = ThreadLocal.withInitial { StringBuilder(64) }
+        private val tlStringBuilder = ThreadLocal.withInitial { StringBuilder(2048) }
         private val EMPTY_BYTE_ARRAY = ByteArray(0)
 
         const val EVENT_NAME_EXCEPTION = "exception"

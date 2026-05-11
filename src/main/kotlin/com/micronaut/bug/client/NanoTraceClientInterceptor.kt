@@ -46,7 +46,13 @@ class NanoTraceClientInterceptor(
 
     override fun intercept(rq: HttpRequest, body: ByteArray, execution: ClientHttpRequestExecution): ClientHttpResponse {
         val startTimeNano = System.nanoTime()
-        val urlFull = if (rq.uri.isAbsolute) rq.uri.toString() else "$basePrefix${getFullUri(rq)}"
+        val urlFull = if (rq.uri.isAbsolute) {
+            rq.uri.toString()
+        } else {
+            // basePrefix уже без слэша в конце (мы сделали removeSuffix(SLASH))
+            val path = getFullUri(rq)
+            if (path.startsWith(SLASH)) "$basePrefix$path" else "$basePrefix/$path"
+        }
 
         // Стартуем дочерний спан. Имя в формате "CLIENT: METHOD /path" для наглядности в UI Grafana.
         val ctx = tracer.startSpan(name = "$PREFIX_CLIENT_SPAN ${rq.method} $urlFull")
@@ -76,19 +82,10 @@ class NanoTraceClientInterceptor(
         // Проброс кастомных заголовков (Propagation Headers)
         // Мы берем их из контекста и проставляем "как есть"
         if (!ctx.propagationHeaders.isNullOrEmpty()) {
-            val keys = rq.headers.keys
-            for (entry in ctx.propagationHeaders.entries) {
-                val name = entry.key
-                // Быстрая проверка без создания лямбд
-                var found = false
-                for (k in keys) {
-                    if (k.equals(name, ignoreCase = true)) {
-                        found = true
-                        break
-                    }
-                }
-                if (!found) {
-                    rq.headers.set(name, entry.value)
+            val headers = rq.headers
+            ctx.propagationHeaders.forEach { (key, value) ->
+                if (!headers.containsKey(key)) {
+                    headers.set(key, value)
                 }
             }
         }
@@ -127,8 +124,7 @@ class NanoTraceClientInterceptor(
 
             attrs[ATTR_CLIENT] = selfServiceName
             attrs[ATTR_SERVER] = props.serviceName.toString()
-
-            props.serviceName?.let { attrs[ATTR_PEER_SERVICE] = it }
+            attrs[ATTR_PEER_SERVICE] = props.serviceName ?: host
 
             // Размеры
             if (rq.method.name() !in METHODS_WITHOUT_BODY) {
@@ -183,33 +179,20 @@ class NanoTraceClientInterceptor(
     }
 
     private fun fillRequestHeadersAttrs(rq: HttpRequest, target: HashMap<String, Any>) {
-        // У Spring HttpRequest.headers — это HttpHeaders (Map<String, List<String>>)
-        val headers = rq.headers
-        for (entry in headers.entries) {
-            val name = entry.key
+        rq.headers.forEach { (name, values) ->
             val normalizedName = name.lowercase()
-
-            if (normalizedName in OTEL_MAPPED_HEADERS) {
-                continue
+            if (normalizedName !in OTEL_MAPPED_HEADERS) {
+                target["$PREFIX_HTTP_REQUEST_HEADER$normalizedName"] = values
             }
-
-            val key = "$PREFIX_HTTP_REQUEST_HEADER$normalizedName"
-            target[key] = entry.value
         }
     }
 
     private fun fillResponseHeadersAttrs(rs: ClientHttpResponse, target: HashMap<String, Any>) {
-        val headers = rs.headers
-        for (entry in headers.entries) {
-            val name = entry.key
+        rs.headers.forEach { (name, values) ->
             val normalizedName = name.lowercase()
-
-            if (normalizedName in OTEL_MAPPED_HEADERS) {
-                continue
+            if (normalizedName !in OTEL_MAPPED_HEADERS) {
+                target["$PREFIX_HTTP_RESPONSE_HEADER$normalizedName"] = values
             }
-
-            val key = "$PREFIX_HTTP_RESPONSE_HEADER$normalizedName"
-            target[key] = entry.value
         }
     }
 
