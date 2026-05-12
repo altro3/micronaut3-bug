@@ -17,10 +17,16 @@ processors:
     send_batch_size: 1024
 
 exporters:
-  # Создаем эндпоинт, откуда Виктория будет забирать (scrape) метрики
-  prometheus:
-    endpoint: "0.0.0.0:8889"
-    add_metric_suffixes: true
+
+#  prometheusremotewrite:
+#    endpoint: "http://victoria-metrics:8428/api/v1/write"
+#    resource_to_telemetry_conversion:
+#      enabled: true # Это важно, чтобы service.name из приложения попал в метрики
+
+  otlp_http/metrics:
+    endpoint: "http://victoria-metrics:8428/opentelemetry"
+    tls:
+      insecure: true
 
   # Экспортер для трейсов в VictoriaTraces
   otlp_http/traces:
@@ -39,6 +45,11 @@ exporters:
 service:
   pipelines:
 
+    metrics:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlp_http/metrics, debug]
+
     traces:
       receivers: [otlp]
       processors: [batch]
@@ -53,4 +64,4 @@ service:
     metrics/service_graph:
       receivers: [service_graph] # Формально, данные придут из процессора service_graph
       processors: [batch]
-      exporters: [prometheus]
+      exporters: [otlp_http/metrics]

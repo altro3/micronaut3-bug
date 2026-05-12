@@ -27,7 +27,7 @@ class OtlpLogEncoder(
 ) {
 
     // Массив для быстрого доступа по индексу (циклический)
-    private val scopeCache = HashMap<String, InstrumentationScope>(CACHE_SIZE)
+    private val scopeCache = HashMap<String, InstrumentationScope>(CACHE_SIZE, 1F)
     private val scopeRingBuffer = arrayOfNulls<String>(CACHE_SIZE)
 
     // Указатель для ротации (заменяем самый старый элемент)
@@ -315,6 +315,7 @@ class OtlpLogEncoder(
 
         private val EMPTY_BYTE_ARRAY = ByteArray(0)
 
+        // Обязательно степень двойки
         private const val CACHE_SIZE = 2048
         private const val CACHE_MASK = CACHE_SIZE - 1
 

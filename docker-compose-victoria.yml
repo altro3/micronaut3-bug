@@ -4,17 +4,17 @@ name: "victoria-metrics-full"
 services:
   # Единое хранилище (Метрики + Трейсы)
   victoria-metrics:
-    image: victoriametrics/victoria-metrics:v1.142.0
+    image: victoriametrics/victoria-metrics:v1.143.0
     container_name: victoria-metrics
     ports:
       - "8428:8428"
     volumes:
       - vm-data:/victoria-metrics-data
-      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+#      - ./prometheus.yml:/etc/prometheus/prometheus.yml
     command:
       - "--retentionPeriod=1"
       - "-opentelemetry.usePrometheusNaming=true"
-      - "-promscrape.config=/etc/prometheus/prometheus.yml"
+#      - "-promscrape.config=/etc/prometheus/prometheus.yml"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     networks:
@@ -58,10 +58,11 @@ services:
       - ./otel-collector-config.yml:/etc/otel-collector-config.yml
     ports:
       - "4318:4318" # Только HTTP-приемник
-      - "8889:8889" # Порт для метрик графа
+#      - "8889:8889" # Порт для метрик графа
     networks:
       - vm-net
     depends_on:
+      - victoria-metrics
       - victoria-logs
       - victoria-traces
 

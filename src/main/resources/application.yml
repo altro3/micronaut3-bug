@@ -1,6 +1,6 @@
 app:
   mock:
-    enabled: false
+    enabled: true
   node:
     name: ift2
   trace:
@@ -77,24 +77,28 @@ spring:
 management:
   observations:
     key-values:
-      enabled: true # Включает дефолтные теги
+      enabled: true
   endpoints:
     web:
       exposure:
         include: health, info, metrics, prometheus
   metrics:
+    distribution:
+      percentiles-histogram:
+        all: true
     enable:
-      all: true # Принудительно включает всё
-      "http.server.requests": true # Включает конкретно HTTP запросы
-#  otlp:
-#    metrics:
-#      export:
-#        url: http://localhost:8428/opentelemetry/v1/metrics
-#        step: 10s
-#        aggregation-temporality: cumulative
-#        resource-attributes:
-#          "service.name": ${spring.application.name}
-#          "deployment.environment": ${app.node.name}
+      all: true
+  otlp:
+    metrics:
+      export:
+        url: http://localhost:4318/v1/metrics
+        step: PT10S
+        aggregation-temporality: delta
+        headers:
+          Content-Type: "application/x-protobuf"
+        resource-attributes:
+          "service.name": ${spring.application.name}
+          "deployment.environment": ${app.node.name}
 logging:
   pattern:
     console: "%d{MM-dd HH:mm:ss.SSS} %highlight{%level} %style{%uMDC}{magenta} [%t] %style{%logger{1.}}{cyan} : %msg%n%uEx"
@@ -102,6 +106,8 @@ logging:
 #    console: "%d{HH:mm:ss.SSS} %highlight{%-5level}{FATAL=red, ERROR=red, WARN=yellow, INFO=green, DEBUG=cyan, TRACE=black} [%t] %style{%logger{1.}}{cyan} - %msg%n%throwable"
   level:
     root: debug
+    io.micrometer.otlp: DEBUG
+    org.springframework.boot.actuate.metrics: DEBUG
     jdk: info
     sun: info
     javax: info
@@ -109,6 +115,6 @@ logging:
     org.apache: info
     org.eclipse: info
     org.hibernate: info
-    org.springframework: info
+#    org.springframework: info
 #    reactor.netty.http.server.HttpServer: DEBUG
     reactor: info
