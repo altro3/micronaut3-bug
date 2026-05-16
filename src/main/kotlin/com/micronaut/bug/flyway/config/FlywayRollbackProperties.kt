@@ -1,5 +1,9 @@
 package com.micronaut.bug.flyway.config
 
+import com.micronaut.bug.flyway.config.FlywayRollbackProperties.RollbackMode.NONE
+import com.micronaut.bug.flyway.config.FlywayRollbackProperties.RollbackMode.STEPS
+import com.micronaut.bug.flyway.config.FlywayRollbackProperties.RollbackMode.TAG
+import com.micronaut.bug.flyway.config.FlywayRollbackProperties.RollbackMode.VERSION
 import org.flywaydb.core.api.MigrationVersion
 import org.springframework.boot.context.properties.ConfigurationProperties
 import java.time.LocalDateTime
@@ -10,7 +14,7 @@ data class FlywayRollbackProperties(
     /**
      * Режим отката. Возможные значения: NONE, STEPS, VERSION, TAG.
      */
-    val mode: RollbackMode = RollbackMode.NONE,
+    val mode: RollbackMode = NONE,
     /**
      * Универсальное значение для отката.
      * В зависимости от mode это может быть: количество шагов ("2"), версия ("20260516150000") или имя папки-тега ("2.0").
@@ -20,11 +24,11 @@ data class FlywayRollbackProperties(
 
     init {
         when (mode) {
-            RollbackMode.NONE -> {
+            NONE -> {
                 // Для режима NONE значение value может быть любым (в том числе пустым)
             }
 
-            RollbackMode.STEPS -> {
+            STEPS -> {
                 val steps = value.toIntOrNull()
                     ?: throw IllegalArgumentException("Steps must be positive integer: '$value'")
                 if (steps <= 0) {
@@ -32,7 +36,7 @@ data class FlywayRollbackProperties(
                 }
             }
 
-            RollbackMode.VERSION -> {
+            VERSION -> {
                 if (value.isBlank()) {
                     throw IllegalArgumentException("Rollback value must not be blank when mode is VERSION")
                 }
@@ -51,7 +55,7 @@ data class FlywayRollbackProperties(
                 }
             }
 
-            RollbackMode.TAG -> {
+            TAG -> {
                 if (value.isBlank()) {
                     throw IllegalArgumentException("Rollback value must not be blank when mode is TAG")
                 }

@@ -4,15 +4,12 @@ import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.core.io.Resource
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.jdbc.datasource.init.ScriptUtils
-import org.springframework.transaction.annotation.Propagation
-import org.springframework.transaction.annotation.Transactional
 
 open class FlywayRollbackStepExecutor(
     private val jdbcTemplate: JdbcTemplate
 ) {
     private val log = KotlinLogging.logger {}
 
-    @Transactional(propagation = Propagation.REQUIRES_NEW, rollbackFor = [Exception::class])
     open fun executeRollbackStep(
         version: String,
         scriptResource: Resource?,
@@ -22,52 +19,67 @@ open class FlywayRollbackStepExecutor(
     ) {
         log.info { "Processing atomic rollback step for version: $version" }
 
-        // Гарантируем правильную схему (совместимо с Postgres)
-        if (activeSchema.isNotBlank() && activeSchema != "public") {
-            jdbcTemplate.execute("SET search_path TO $activeSchema")
-        }
+        val dataSource = jdbcTemplate.dataSource
+            ?: throw IllegalStateException("Failed to obtain database connection from DataSource")
 
-        if (isNoRollbackMigration) {
-            log.info { "Migration $version is explicitly marked as non-rollable. Skipping SQL execution, updating history only." }
-        } else {
-            val resource = scriptResource
-                ?: throw IllegalStateException("Rollback failed! No undo script resource provided for version $version")
+        val fullTableName = if (activeSchema.isNotBlank()) "$activeSchema.$historyTable" else historyTable
 
-            log.info { "Found native-style undo script: ${resource.filename}. Executing SQL..." }
+        // Берем физическое соединение из пула
+        val conn = dataSource.connection
+        try {
+            // Включаем ручное управление транзакцией (выключаем auto-commit)
+            conn.autoCommit = false
 
-            val connection = jdbcTemplate.dataSource?.connection
-                ?: throw IllegalStateException("Failed to obtain database connection from DataSource")
-
-            connection.use { conn ->
-                // Исправлено: Явно выставляем схему для текущего коннекта БД
-                if (activeSchema.isNotBlank()) {
-                    try {
-                        // Универсальный способ для большинства СУБД
-                        conn.schema = activeSchema
-                    } catch (_: Exception) {
-                        // Фолбэк для старых драйверов Postgres / H2
-                        conn.createStatement().use { stmt ->
-                            stmt.execute("SET search_path TO $activeSchema")
-                        }
+            // Выставляем схему для текущего соединения
+            if (activeSchema.isNotBlank()) {
+                try {
+                    conn.schema = activeSchema
+                } catch (_: Exception) {
+                    conn.createStatement().use { stmt ->
+                        stmt.execute("SET search_path TO $activeSchema")
                     }
-                    log.debug { "Database connection schema set to '$activeSchema'" }
                 }
+                log.debug { "Database connection schema set to '$activeSchema'" }
+            }
 
-                // Теперь скрипт выполнится строго в контексте нужной схемы!
+            if (isNoRollbackMigration) {
+                log.info { "Migration $version is explicitly marked as non-rollable. Skipping SQL execution, updating history only." }
+            } else {
+                val resource = scriptResource
+                    ?: throw IllegalStateException("Rollback failed! No undo script resource provided for version $version")
+
+                log.info { "Found native-style undo script: ${resource.filename}. Executing SQL..." }
+
+                // Выполняем скрипт отката строго в контексте нашей ручной транзакции
                 ScriptUtils.executeSqlScript(conn, resource)
             }
+
+            // Удаляем запись о миграции из таблицы истории Flyway через то же самое соединение!
+            conn.prepareStatement("DELETE FROM $fullTableName WHERE version = ?").use { stmt ->
+                stmt.setString(1, version)
+                val deletedRows = stmt.executeUpdate()
+
+                if (deletedRows == 0) {
+                    throw IllegalStateException("SQL executed, but failed to remove version $version from metadata table $fullTableName")
+                }
+            }
+
+            // Если всё прошло успешно и без ошибок — фиксируем транзакцию в БД
+            conn.commit()
+            log.info { "Metadata successfully synchronized. Version $version is now marked as unapplied." }
+
+        } catch (e: Exception) {
+            // В случае любой ошибки (ошибка в SQL или сбой удаления) откатываем всю транзакцию назад
+            log.error(e) { "Failed to execute rollback step for version $version. Rolling back transaction." }
+            try {
+                conn.rollback()
+            } catch (rollbackEx: Exception) {
+                log.error(rollbackEx) { "Failed to rollback transaction after error" }
+            }
+            throw e // Пробрасываем ошибку выше, чтобы сработал Fail-Fast в Engine
+        } finally {
+            // Гарантированно закрываем соединение и возвращаем его в пул ресурсов
+            conn.close()
         }
-
-        // Удаляем запись о миграции из таблицы истории Flyway
-        val deletedRows = jdbcTemplate.update(
-            "DELETE FROM $historyTable WHERE version = ?",
-            version
-        )
-
-        if (deletedRows == 0) {
-            throw IllegalStateException("SQL executed, but failed to remove version $version from metadata table $historyTable")
-        }
-
-        log.info { "Metadata successfully synchronized. Version $version is now marked as unapplied." }
     }
 }

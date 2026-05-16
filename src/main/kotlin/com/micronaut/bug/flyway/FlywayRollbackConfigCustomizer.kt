@@ -1,4 +1,4 @@
-package com.micronaut.bug.flyway.config
+package com.micronaut.bug.flyway
 
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.flywaydb.core.api.configuration.FluentConfiguration
