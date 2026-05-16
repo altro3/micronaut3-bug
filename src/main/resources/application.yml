@@ -79,9 +79,9 @@ spring:
     password: 1
   flyway:
     schemas: target
-#    rollback:
-#      mode: version
-#      value: 20260516140000
+    rollback:
+      mode: tag
+      value: 1.1
 
 management:
   observations:

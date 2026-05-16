@@ -1,43 +1,43 @@
 package com.micronaut.bug.flyway
 
 import io.github.oshai.kotlinlogging.KotlinLogging
-import org.flywaydb.core.Flyway
 import org.flywaydb.core.api.MigrationVersion
+import org.springframework.boot.autoconfigure.flyway.FlywayProperties
+import org.springframework.core.io.Resource
 import org.springframework.core.io.ResourceLoader
 import org.springframework.core.io.support.ResourcePatternUtils
 import org.springframework.jdbc.core.JdbcTemplate
-import org.springframework.transaction.annotation.Propagation
-import org.springframework.transaction.annotation.Transactional
-import java.io.BufferedReader
 
 open class FlywayRollbackEngine(
-    flyway: Flyway,
+    private val flywayProperties: FlywayProperties,
     private val jdbcTemplate: JdbcTemplate,
-    private val resourceLoader: ResourceLoader,
+    private val stepExecutor: FlywayRollbackStepExecutor,
+    resourceLoader: ResourceLoader,
 ) {
-
     private val log = KotlinLogging.logger {}
+    private val resourceResolver = ResourcePatternUtils.getResourcePatternResolver(resourceLoader)
 
     private val historyTable: String
     private val activeSchema: String
-    private val locations: List<String>
+    private val cleanedLocations: List<String>
 
     init {
-        val config = flyway.configuration
-        val schemaName = config.schemas.firstOrNull() ?: "public"
-        val tableName = config.table
+        val schemaName = flywayProperties.schemas.firstOrNull() ?: DEFAULT_SCHEMA
+        val tableName = flywayProperties.table ?: DEFAULT_TABLE
+
         this.activeSchema = schemaName
-        this.historyTable = "$schemaName.$tableName"
-        this.locations = config.locations.map { it.descriptor }
+        this.historyTable = "$activeSchema.$tableName"
+        this.cleanedLocations = flywayProperties.locations.map {
+            it.removePrefix(CLASSPATH_PREFIX).removePrefix(SLASH)
+        }
     }
 
     /**
-     * Эквивалент Liquibase: rollback <count>
+     * Откат на указанное количество шагов назад.
      */
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
     open fun rollback(steps: Int = 1) {
         require(steps > 0) { "Rollback steps count must be greater than 0. Passed: $steps" }
-        log.info { "Starting Community-style programmatic rollback for $steps step(s)" }
+        log.info { "Starting programmatic rollback for $steps step(s)" }
 
         val applied = getAppliedMigrationsDesc()
         if (applied.isEmpty()) {
@@ -46,25 +46,18 @@ open class FlywayRollbackEngine(
         }
 
         val stepsToExecute = minOf(steps, applied.size)
-        try {
-            repeat(stepsToExecute) { currentStep ->
-                val targetVersion = applied[currentStep]
-                executeRollbackScript(targetVersion)
-            }
-            log.info { "Successfully executed $stepsToExecute programmatic rollback step(s)" }
-        } catch (e: Exception) {
-            log.error(e) { "Rollback sequence failed." }
-            throw e
+        for (currentStep in 0 until stepsToExecute) {
+            processVersionRollback(applied[currentStep])
         }
+        log.info { "Successfully executed $stepsToExecute programmatic rollback step(s)" }
     }
 
     /**
-     * Эквивалент Liquibase: rollback <version>
+     * Откат до определенной версии (все версии строго выше целевой будут удалены).
      */
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
     open fun rollbackToVersion(targetVersion: String) {
         val target = MigrationVersion.fromVersion(targetVersion)
-        log.info { "Starting Community-style programmatic rollback to target version: $targetVersion" }
+        log.info { "Starting programmatic rollback to target version: $targetVersion" }
 
         val applied = getAppliedMigrationsDesc()
         val toUndo = applied.filter { MigrationVersion.fromVersion(it) > target }
@@ -74,125 +67,172 @@ open class FlywayRollbackEngine(
             return
         }
 
-        try {
-            toUndo.forEach { versionStr ->
-                executeRollbackScript(versionStr)
-            }
-            log.info { "Successfully rolled back to version $targetVersion" }
-        } catch (e: Exception) {
-            log.error(e) { "Rollback to version $targetVersion failed" }
-            throw e
+        toUndo.forEach { versionStr ->
+            processVersionRollback(versionStr)
         }
+        log.info { "Successfully rolled back to version $targetVersion" }
     }
 
     /**
-     * Эквивалент Liquibase: rollback <tag>
-     * В качестве тега используется имя директории релиза в любом формате (например, "2.0", "v2-hotfix").
-     * Откатывает все миграции, которые были применены ПОСЛЕ этого релиза.
-     *
-     * @param tag Название папки релиза (любой формат).
+     * Откат по имени конечной папки (тега).
+     * Находит максимальный installed_rank миграций внутри этой папки и откатывает все последующие миграции.
      */
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
     open fun rollbackToTag(tag: String) {
-        log.info { "Starting directory-based rollback to tag (release directory): $tag" }
+        log.info { "Starting directory-based rollback to tag (target folder name): $tag" }
 
-        // Находим точный путь к папке релиза среди активных локаций Flyway
-        // Сработает для "classpath:db/migration/2.0" и для "classpath:db/migration/v2-hotfix" одинаково успешно
-        val targetLocation = locations.firstOrNull { it.endsWith("/$tag") }
-            ?: throw IllegalArgumentException(
-                "Tag directory '$tag' was not found among active Flyway locations: $locations. " +
-                        "Make sure this directory exists and contains at least one migration file."
+        // 1. Собираем абсолютно все SQL файлы из всех базовых локаций рекурсивно
+        val allResources = cleanedLocations.flatMap { cleanLocation ->
+            val pattern = "$CLASSPATH_PREFIX$cleanLocation/$SQL_ALL_PATTERN"
+            try {
+                resourceResolver.getResources(pattern).toList()
+            } catch (e: Exception) {
+                log.warn(e) { "Failed to scan location: $cleanLocation" }
+                emptyList()
+            }
+        }
+
+        // 2. Исправлено: Безопасное выделение имени конечной папки для IDE и для JAR сред
+        val resourcesInTag = allResources.filter { resource ->
+            try {
+                // Получаем чистый абсолютный путь к файлу без префиксов 'file:' и скобок
+                val pathString = resource.file.absolutePath.replace(BACKSLASH, SLASH)
+                val tokens = pathString.split(SLASH).filter { it.isNotBlank() }
+
+                if (tokens.size >= 2) {
+                    val parentDir = tokens[tokens.size - 2]
+                    parentDir == tag
+                } else {
+                    false
+                }
+            } catch (_: Exception) {
+                // На случай, если это JAR среда и .file выбросит UnsupportedOperationException
+                val urlPath = resource.url.toString().replace(BACKSLASH, SLASH)
+                val cleanPath = urlPath.substringAfter("!").removeSuffix("]").removePrefix("[")
+                val tokens = cleanPath.split(SLASH).filter { it.isNotBlank() }
+
+                if (tokens.size >= 2) {
+                    val parentDir = tokens[tokens.size - 2]
+                    parentDir == tag
+                } else {
+                    false
+                }
+            }
+        }
+
+        if (resourcesInTag.isEmpty()) {
+            throw IllegalArgumentException(
+                "Tag directory '$tag' was not found or contains no migration files. " +
+                        "Checked active root locations: $cleanedLocations"
             )
-
-        val resolver = ResourcePatternUtils.getResourcePatternResolver(resourceLoader)
-        val pattern = "$targetLocation/**/*.sql"
-
-        val resources = try {
-            resolver.getResources(pattern)
-        } catch (e: Exception) {
-            throw IllegalArgumentException("Failed to scan directory for tag '$tag' using pattern '$pattern'", e)
         }
 
-        if (resources.isEmpty()) {
-            throw IllegalArgumentException("No migration files found in release directory (tag) '$tag' by pattern '$pattern'")
-        }
-
-        val versionsInTag = resources.mapNotNull { resource ->
+        // 3. Вытаскиваем версии (таймстампы) файлов, принадлежащих этому тегу
+        val versionsInTag = resourcesInTag.mapNotNull { resource ->
             val filename = resource.filename ?: return@mapNotNull null
-            Regex("""^\d+""").find(filename)?.value
-        }.map { MigrationVersion.fromVersion(it) }
+
+            // Удаляем префиксы 'V' или 'U' в любом регистре, чтобы строка начиналась сразу с цифр
+            val cleanFilename = filename.removePrefix("V").removePrefix("v")
+                .removePrefix("U").removePrefix("u")
+
+            VERSION_REGEX.find(cleanFilename)?.value
+        }.toSet()
 
         if (versionsInTag.isEmpty()) {
-            throw IllegalStateException("No valid versioned files found in tag directory '$tag'")
+            throw IllegalStateException("No valid versioned files found for tag directory '$tag'")
         }
 
-        // Вычисляем максимальную версию-таймстамп внутри этой папки
-        val maxVersionInTag = versionsInTag.maxOrNull()
-            ?: throw IllegalStateException("Could not determine max version for tag '$tag'")
+        log.info { "Tag '$tag' resolved to versions: $versionsInTag" }
 
-        log.info { "Tag '$tag' successfully resolved to highest migration version: $maxVersionInTag" }
+        // 4. Ищем максимальный installed_rank среди успешно примененных миграций этого тега
+        val placeholders = versionsInTag.joinToString { "?" }
+        val sql = "SELECT installed_rank FROM $historyTable WHERE version IN ($placeholders) AND success = true"
+        val installedRanks = jdbcTemplate.queryForList(sql, Int::class.java, *versionsInTag.toTypedArray())
 
-        // Запускаем откат до этой версии
-        rollbackToVersion(maxVersionInTag.version)
+        if (installedRanks.isEmpty()) {
+            log.info { "No migrations from tag '$tag' have been applied to the database yet. Nothing to roll back." }
+            return
+        }
+
+        val maxRankInTag = installedRanks.maxOrNull()
+            ?: throw IllegalStateException("Could not determine max installed_rank for tag '$tag'")
+
+        log.info { "Tag '$tag' matched highest database installed_rank: $maxRankInTag" }
+
+        // 5. Выбираем из истории ВСЕ миграции, которые были накатаны ПОЗДНЕЕ этого максимального ранга
+        val migrationsToUndo = jdbcTemplate.queryForList(
+            "SELECT version FROM $historyTable WHERE installed_rank > ? AND success = true ORDER BY installed_rank DESC",
+            String::class.java,
+            maxRankInTag
+        ).filterNotNull()
+
+        if (migrationsToUndo.isEmpty()) {
+            log.info { "Database state is already at tag '$tag' (or below). No subsequent migrations found." }
+            return
+        }
+
+        // 6. Запускаем последовательный откат через изолированный executor
+        log.info { "Found ${migrationsToUndo.size} subsequent migration(s) to roll back." }
+        migrationsToUndo.forEach { versionStr ->
+            processVersionRollback(versionStr)
+        }
+
+        log.info { "Successfully rolled back all migrations applied after tag '$tag'" }
     }
 
     /**
-     * Вручную находит, вычитывает и применяет SQL файл отката, после чего чистит историю Flyway
+     * Внутренний метод поиска ресурсов для конкретной версии миграции и отправки их на выполнение.
      */
-    private fun executeRollbackScript(version: String) {
-        log.info { "Processing programmatic rollback for version: $version" }
+    private fun processVersionRollback(version: String) {
+        var scriptResource: Resource? = null
+        var isNoRollbackMigration = false
 
-        var sqlContent: String? = null
-        var foundLocation: String? = null
+        for (cleanLocation in cleanedLocations) {
+            val undoPattern = "$CLASSPATH_PREFIX$cleanLocation/**/U${version}__*.sql"
+            val norbPattern = "$CLASSPATH_PREFIX$cleanLocation/**/V${version}__*_norb.sql"
 
-        for (location in locations) {
-            val cleanLocation = location.removePrefix("classpath:").removePrefix("/")
-            val pattern = "classpath:$cleanLocation/$version"
+            val undoResources = resourceResolver.getResources(undoPattern)
+            if (undoResources.isNotEmpty()) {
+                scriptResource = undoResources.first()
+                break
+            }
 
-            try {
-                val resources = ResourcePatternUtils
-                    .getResourcePatternResolver(resourceLoader)
-                    .getResources("${pattern}_rb__*.sql")
-
-                if (resources.isNotEmpty()) {
-                    val resource = resources.first()
-                    sqlContent = resource.inputStream.bufferedReader().use(BufferedReader::readText)
-                    foundLocation = resource.filename
-                    break
-                }
-            } catch (e: Exception) {
-                // Игнорируем ошибки
+            val norbResources = resourceResolver.getResources(norbPattern)
+            if (norbResources.isNotEmpty()) {
+                isNoRollbackMigration = true
+                break
             }
         }
 
-        if (sqlContent.isNullOrBlank()) {
-            throw IllegalStateException("Rollback script for version $version (matching *_rb__*.sql) was not found in locations: $locations")
+        if (scriptResource == null && !isNoRollbackMigration) {
+            throw IllegalStateException("Rollback failed! Neither U${version}__*.sql nor V${version}__*_norb.sql found.")
         }
 
-        log.info { "Found rollback script: $foundLocation. Executing SQL commands..." }
-
-        jdbcTemplate.execute("set search_path to $activeSchema")
-        jdbcTemplate.execute(sqlContent)
-
-        val deletedRows = jdbcTemplate.update(
-            "delete from $historyTable where version = ?",
-            version
+        stepExecutor.executeRollbackStep(
+            version = version,
+            scriptResource = scriptResource,
+            isNoRollbackMigration = isNoRollbackMigration,
+            activeSchema = activeSchema,
+            historyTable = historyTable
         )
-
-        if (deletedRows == 0) {
-            throw IllegalStateException("SQL executed, but failed to remove migration version $version from metadata table $historyTable")
-        }
-
-        log.info { "Metadata successfully synchronized. Version $version is now marked as unapplied." }
     }
 
     /**
-     * Получает список строк-версий примененных миграций из БД, отсортированных по убыванию
+     * Получение списка примененных версий миграций в порядке убывания их выполнения.
      */
     private fun getAppliedMigrationsDesc(): List<String> {
         return jdbcTemplate.queryForList(
-            "select version from $historyTable where success = true order by installed_rank desc",
+            "SELECT version FROM $historyTable WHERE success = true ORDER BY installed_rank DESC",
             String::class.java
         ).filterNotNull()
+    }
+
+    companion object {
+        private const val DEFAULT_SCHEMA = "public"
+        private const val DEFAULT_TABLE = "flyway_schema_history"
+        private const val CLASSPATH_PREFIX = "classpath:"
+        private const val SLASH = "/"
+        private const val BACKSLASH = "\\"
+        private const val SQL_ALL_PATTERN = "**/*.sql"
+        private val VERSION_REGEX = Regex("""^\d+""")
     }
 }

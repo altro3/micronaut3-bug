@@ -2,6 +2,7 @@ package com.micronaut.bug.flyway.config
 
 import com.micronaut.bug.flyway.FlywayRollbackDatabaseInitializer
 import com.micronaut.bug.flyway.FlywayRollbackEngine
+import com.micronaut.bug.flyway.FlywayRollbackStepExecutor
 import org.flywaydb.core.Flyway
 import org.springframework.boot.autoconfigure.AutoConfiguration
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass
@@ -25,17 +26,23 @@ class FlywayRollbackAutoConfig {
         flywayProperties: FlywayProperties
     ) = FlywayRollbackConfigCustomizer(
         resourceLoader = resourceLoader,
-        flywayProperties = flywayProperties
+        flywayProperties = flywayProperties,
     )
 
     @Bean
+    fun flywayRollbackStepExecutor(jdbcTemplate: JdbcTemplate) =
+        FlywayRollbackStepExecutor(jdbcTemplate)
+
+    @Bean
     fun flywayRollbackEngine(
-        flyway: Flyway,
+        flywayProperties: FlywayProperties,
         jdbcTemplate: JdbcTemplate,
+        flywayRollbackStepExecutor: FlywayRollbackStepExecutor,
         resourceLoader: ResourceLoader
     ) = FlywayRollbackEngine(
-        flyway = flyway,
+        flywayProperties = flywayProperties,
         jdbcTemplate = jdbcTemplate,
+        stepExecutor = flywayRollbackStepExecutor,
         resourceLoader = resourceLoader,
     )
 
@@ -50,3 +57,7 @@ class FlywayRollbackAutoConfig {
         context = context,
     )
 }
+
+/*
+давай теперь коротко сформулируем правила создания миграций и скриптов откатов к ним. Так же давай добавим правила именования миграций: директории - это версии релиза, и миграции
+ */
