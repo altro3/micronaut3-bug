@@ -11,21 +11,24 @@ import org.springframework.transaction.annotation.Transactional
 import java.io.BufferedReader
 
 open class FlywayRollbackEngine(
-    private val flyway: Flyway,
+    flyway: Flyway,
     private val jdbcTemplate: JdbcTemplate,
     private val resourceLoader: ResourceLoader,
-    private val locations: List<String>
 ) {
 
     private val log = KotlinLogging.logger {}
+
     private val historyTable: String
     private val activeSchema: String
+    private val locations: List<String>
 
     init {
-        val schemaName = flyway.configuration.schemas.firstOrNull() ?: "public"
-        val tableName = flyway.configuration.table
+        val config = flyway.configuration
+        val schemaName = config.schemas.firstOrNull() ?: "public"
+        val tableName = config.table
         this.activeSchema = schemaName
         this.historyTable = "$schemaName.$tableName"
+        this.locations = config.locations.map { it.descriptor }
     }
 
     /**

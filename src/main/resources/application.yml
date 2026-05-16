@@ -80,8 +80,8 @@ spring:
   flyway:
     schemas: target
 #    rollback:
-#      mode: steps
-#      value: 3
+#      mode: version
+#      value: 20260516140000
 
 management:
   observations:
