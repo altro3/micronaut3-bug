@@ -9,9 +9,9 @@ import org.springframework.core.io.support.ResourcePatternUtils
 import org.springframework.jdbc.core.JdbcTemplate
 
 open class FlywayRollbackEngine(
-    private val flywayProperties: FlywayProperties,
     private val jdbcTemplate: JdbcTemplate,
     private val stepExecutor: FlywayRollbackStepExecutor,
+    flywayProperties: FlywayProperties,
     resourceLoader: ResourceLoader,
 ) {
     private val log = KotlinLogging.logger {}
@@ -75,12 +75,12 @@ open class FlywayRollbackEngine(
 
     /**
      * Откат по имени конечной папки (тега).
-     * Находит максимальный installed_rank миграций внутри этой папки и откатывает все последующие миграции.
+     * Безопасен при параллельной разработке нескольких релизных веток и наличии сервисных папок (common, callbacks).
      */
     open fun rollbackToTag(tag: String) {
-        log.info { "Starting directory-based rollback to tag (target folder name): $tag" }
+        log.info { "Starting parallel-safe directory-based rollback to tag (target folder name): $tag" }
 
-        // 1. Собираем абсолютно все SQL файлы из всех базовых локаций рекурсивно
+        val targetTagVersion = MigrationVersion.fromVersion(tag)
         val allResources = cleanedLocations.flatMap { cleanLocation ->
             val pattern = "$CLASSPATH_PREFIX$cleanLocation/$SQL_ALL_PATTERN"
             try {
@@ -91,96 +91,105 @@ open class FlywayRollbackEngine(
             }
         }
 
-        // 2. Исправлено: Безопасное выделение имени конечной папки для IDE и для JAR сред
-        val resourcesInTag = allResources.filter { resource ->
-            try {
-                // Получаем чистый абсолютный путь к файлу без префиксов 'file:' и скобок
-                val pathString = resource.file.absolutePath.replace(BACKSLASH, SLASH)
-                val tokens = pathString.split(SLASH).filter { it.isNotBlank() }
+        // Шаг 1. Строим карту: Версия миграции -> Имя её родительской папки
+        val fileToFolderMap = mutableMapOf<String, String>()
 
-                if (tokens.size >= 2) {
-                    val parentDir = tokens[tokens.size - 2]
-                    parentDir == tag
-                } else {
-                    false
-                }
+        allResources.forEach { resource ->
+            val filename = resource.filename ?: return@forEach
+
+            // Безопасно вытаскиваем цифры версии, удаляя префиксы V/U в любом регистре
+            val cleanFilename = filename.replace(Regex("^[VvUu]"), "")
+            val version = VERSION_REGEX.find(cleanFilename)?.value ?: return@forEach
+
+            // Безопасно определяем имя папки (работает и в IDE, и внутри собранного JAR)
+            val cleanPath = try {
+                resource.file.absolutePath.replace(BACKSLASH, SLASH)
             } catch (_: Exception) {
-                // На случай, если это JAR среда и .file выбросит UnsupportedOperationException
                 val urlPath = resource.url.toString().replace(BACKSLASH, SLASH)
-                val cleanPath = urlPath.substringAfter("!").removeSuffix("]").removePrefix("[")
-                val tokens = cleanPath.split(SLASH).filter { it.isNotBlank() }
+                if (urlPath.contains("!")) urlPath.substringAfter("!") else urlPath
+            }
 
-                if (tokens.size >= 2) {
-                    val parentDir = tokens[tokens.size - 2]
-                    parentDir == tag
-                } else {
-                    false
-                }
+            val tokens = cleanPath.split(SLASH).filter { it.isNotBlank() }
+
+            if (tokens.size >= 2) {
+                val parentDir = tokens[tokens.size - 2]
+                fileToFolderMap[version] = parentDir
             }
         }
 
-        if (resourcesInTag.isEmpty()) {
-            throw IllegalArgumentException(
-                "Tag directory '$tag' was not found or contains no migration files. " +
-                        "Checked active root locations: $cleanedLocations"
-            )
+        // Проверяем, что целевой тег вообще физически существует в ресурсах проекта
+        if (!fileToFolderMap.values.contains(tag)) {
+            throw IllegalArgumentException("Tag directory '$tag' was not found or contains no migration files.")
         }
 
-        // 3. Вытаскиваем версии (таймстампы) файлов, принадлежащих этому тегу
-        val versionsInTag = resourcesInTag.mapNotNull { resource ->
-            val filename = resource.filename ?: return@mapNotNull null
+        // Шаг 2. Извлекаем ВСЕ успешные примененные миграции из БД
+        val appliedMigrations = jdbcTemplate.query(
+            "SELECT version, installed_rank FROM $historyTable WHERE success = true ORDER BY installed_rank DESC"
+        ) { rs, _ ->
+            Pair(rs.getString("version"), rs.getInt("installed_rank"))
+        }.filterNotNull()
 
-            // Удаляем префиксы 'V' или 'U' в любом регистре, чтобы строка начиналась сразу с цифр
-            val cleanFilename = filename.removePrefix("V").removePrefix("v")
-                .removePrefix("U").removePrefix("u")
-
-            VERSION_REGEX.find(cleanFilename)?.value
-        }.toSet()
-
-        if (versionsInTag.isEmpty()) {
-            throw IllegalStateException("No valid versioned files found for tag directory '$tag'")
-        }
-
-        log.info { "Tag '$tag' resolved to versions: $versionsInTag" }
-
-        // 4. Ищем максимальный installed_rank среди успешно примененных миграций этого тега
-        val placeholders = versionsInTag.joinToString { "?" }
-        val sql = "SELECT installed_rank FROM $historyTable WHERE version IN ($placeholders) AND success = true"
-        val installedRanks = jdbcTemplate.queryForList(sql, Int::class.java, *versionsInTag.toTypedArray())
-
-        if (installedRanks.isEmpty()) {
-            log.info { "No migrations from tag '$tag' have been applied to the database yet. Nothing to roll back." }
+        if (appliedMigrations.isEmpty()) {
+            log.warn { "No applied migrations found in history table. Nothing to roll back." }
             return
         }
 
-        val maxRankInTag = installedRanks.maxOrNull()
-            ?: throw IllegalStateException("Could not determine max installed_rank for tag '$tag'")
+        // Шаг 3. Находим стартовую точку "чужого" (более нового) релиза.
+        // Ищем минимальный installed_rank среди миграций, папки которых строго старше нашего тега.
+        val minRankOfSubsequentReleases = appliedMigrations.mapNotNull { (version, rank) ->
+            val folderName = fileToFolderMap[version] ?: return@mapNotNull null
+            try {
+                val folderVersion = MigrationVersion.fromVersion(folderName)
+                if (folderVersion > targetTagVersion) rank else null
+            } catch (e: Exception) {
+                // Игнорируем папки типа 'common', так как они не парсятся в объект версии
+                null
+            }
+        }.minOrNull()
 
-        log.info { "Tag '$tag' matched highest database installed_rank: $maxRankInTag" }
+        // Шаг 4. Отбираем только те миграции, которые подлежат уничтожению
+        val migrationsToUndo = appliedMigrations.filter { (version, rank) ->
+            val folderName = fileToFolderMap[version]
 
-        // 5. Выбираем из истории ВСЕ миграции, которые были накатаны ПОЗДНЕЕ этого максимального ранга
-        val migrationsToUndo = jdbcTemplate.queryForList(
-            "SELECT version FROM $historyTable WHERE installed_rank > ? AND success = true ORDER BY installed_rank DESC",
-            String::class.java,
-            maxRankInTag
-        ).filterNotNull()
+            // Если миграции нет в текущих ресурсах (например, её удалили из кода) — откатываем обязательно
+            if (folderName == null) {
+                return@filter true
+            }
+
+            // ПРАВИЛО 1: Если в базе уже начался более новый релиз, то абсолютно ВСЕ миграции,
+            // накатаные одновременно с ним или позже него (включая папки 'common'), идут под нож.
+            if (minRankOfSubsequentReleases != null && rank >= minRankOfSubsequentReleases) {
+                return@filter true
+            }
+
+            // ПРАВИЛО 2: Если до старта нового релиза дело не дошло, проверяем версию папки напрямую.
+            // Миграции из будущих релизов (например, '2.0' при откате до '1.1') — откатываем.
+            try {
+                val folderVersion = MigrationVersion.fromVersion(folderName)
+                folderVersion > targetTagVersion
+            } catch (e: Exception) {
+                // Если имя папки не версия (common, callbacks) и её rank меньше критического,
+                // значит она создана в эпоху целевого тега или раньше — мы её сохраняем (false)
+                false
+            }
+        }.map { it.first }
 
         if (migrationsToUndo.isEmpty()) {
-            log.info { "Database state is already at tag '$tag' (or below). No subsequent migrations found." }
+            log.info { "Database state is already aligned with tag '$tag'. No action required." }
             return
         }
 
-        // 6. Запускаем последовательный откат через изолированный executor
-        log.info { "Found ${migrationsToUndo.size} subsequent migration(s) to roll back." }
+        // Шаг 5. Запускаем последовательный откат строго сверху вниз (от больших рангов к меньшим)
+        log.info { "Parallel-safe mode: Found ${migrationsToUndo.size} subsequent migration(s) to roll back." }
         migrationsToUndo.forEach { versionStr ->
             processVersionRollback(versionStr)
         }
 
-        log.info { "Successfully rolled back all migrations applied after tag '$tag'" }
+        log.info { "Successfully rolled back all subsequent migrations to align with tag '$tag'" }
     }
 
     /**
-     * Внутренний метод поиска ресурсов для конкретной версии миграции и отправки их на выполнение.
+     * Поиск ресурсов миграции и отправка их на изолированное транзакционное исполнение.
      */
     private fun processVersionRollback(version: String) {
         var scriptResource: Resource? = null
@@ -216,9 +225,6 @@ open class FlywayRollbackEngine(
         )
     }
 
-    /**
-     * Получение списка примененных версий миграций в порядке убывания их выполнения.
-     */
     private fun getAppliedMigrationsDesc(): List<String> {
         return jdbcTemplate.queryForList(
             "SELECT version FROM $historyTable WHERE success = true ORDER BY installed_rank DESC",

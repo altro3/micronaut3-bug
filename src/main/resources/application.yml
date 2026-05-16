@@ -79,9 +79,9 @@ spring:
     password: 1
   flyway:
     schemas: target
-    rollback:
-      mode: tag
-      value: 1.1
+#    rollback:
+#      mode: steps
+#      value: 3
 
 management:
   observations:
