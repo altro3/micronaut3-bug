@@ -33,19 +33,19 @@ class FlywayRollbackConfigCustomizer(
         resources.forEach { resource ->
             val filename = resource.filename ?: return@forEach
 
-            // 1. Собираем все наши самописные Undo-скрипты (начинаются с 'U')
-            if (filename.startsWith("U")) {
+            // 1. Собираем все Undo-скрипты (поддерживаем 'U' и 'u')
+            if (filename.startsWith("U") || filename.startsWith("u")) {
                 val versionMatch = VERSION_REGEX.find(filename.substring(1)) ?: throw IllegalStateException(
-                    "Undo migration file '$filename' does not contain a valid timestamp version after 'U'."
+                    "Undo migration file '$filename' does not contain a valid timestamp version after prefix."
                 )
                 undoMigrations.add(versionMatch.value)
                 return@forEach
             }
 
-            // 2. Собираем все прямые миграции (начинаются с 'V')
-            if (filename.startsWith("V")) {
+            // 2. Собираем все прямые миграции (поддерживаем 'V' и 'v')
+            if (filename.startsWith("V") || filename.startsWith("v")) {
                 val versionMatch = VERSION_REGEX.find(filename.substring(1)) ?: throw IllegalStateException(
-                    "Forward migration file '$filename' does not contain a valid timestamp version after 'V'."
+                    "Forward migration file '$filename' does not contain a valid timestamp version after prefix."
                 )
                 val version = versionMatch.value
 
@@ -58,7 +58,7 @@ class FlywayRollbackConfigCustomizer(
             }
         }
 
-        // 3. Валидация парности V -> U
+        // 3. Валидация парности V -> U (не зависит от регистра, так как проверяем чистые версии-таймстампы)
         forwardMigrations.forEach { (version, forwardFile) ->
             // Если файл содержит суффикс _norb, ему не нужен U-скрипт отката
             if (forwardFile.contains(NO_ROLLBACK_SUFFIX)) {
@@ -68,26 +68,42 @@ class FlywayRollbackConfigCustomizer(
 
             if (!undoMigrations.contains(version)) {
                 throw IllegalStateException(
-                    "Flyway validation failed! Missing undo partner. Migration file '$forwardFile' exists, but no companion rollback file starting with 'U${version}__' was found. If rollback is impossible, add '$NO_ROLLBACK_SUFFIX' to the end of the filename (before .sql)."
+                    "Flyway validation failed! Missing undo partner. Migration file '$forwardFile' exists, but no companion rollback file starting with 'U${version}__' or 'u${version}__' was found. If rollback is impossible, add '$NO_ROLLBACK_SUFFIX' to the end of the filename (before .sql)."
                 )
             }
         }
 
         log.info { "Flyway fail-fast validation passed successfully. Total forward migrations checked: ${forwardMigrations.size}" }
 
-        // Динамический поиск подпапок (оставляем твою логику без изменений)
-        val releaseDirRegex = Regex("""${Regex.escape(cleanBase)}/((.+/)?([^/]+))/[^/]+\.sql$""")
+        // 4. Динамический поиск подпапок с защитой от особенностей путей Windows/IDE/JAR
         val activeLocations = resources
             .mapNotNull { resource ->
-                val urlPath = resource.url.toString().replace(BACKSLASH, SLASH)
-                val matchResult = releaseDirRegex.find(urlPath)
-                matchResult?.groupValues?.get(1)?.let { fullPath -> "$CLASSPATH_PREFIX$cleanBase/$fullPath" }
+                val cleanPath = try {
+                    resource.file.absolutePath.replace(BACKSLASH, SLASH)
+                } catch (e: Exception) {
+                    val urlPath = resource.url.toString().replace(BACKSLASH, SLASH)
+                    if (urlPath.contains("!")) urlPath.substringAfter("!") else urlPath
+                }
+
+                val tokens = cleanPath.split(SLASH).filter { it.isNotBlank() }
+
+                // Ищем индекс нашей базовой папки (например, 'migration'), чтобы восстановить относительный путь
+                val baseIndex = tokens.indexOfLast { it == cleanBase.substringAfterLast(SLASH) }
+                if (baseIndex != -1 && tokens.size > baseIndex + 2) {
+                    // Собираем весь хвост подпапок, идущих после db/migration, исключая сам файл
+                    // Пример: из [..., db, migration, 1.x, 1.1, V1.sql] соберет "1.x/1.1"
+                    val subDirs = tokens.subList(baseIndex + 1, tokens.size - 1).joinToString(SLASH)
+                    "$CLASSPATH_PREFIX$cleanBase/$subDirs"
+                } else {
+                    null
+                }
             }
             .distinct()
             .toTypedArray()
 
         if (activeLocations.isNotEmpty()) {
             configuration.locations(*activeLocations)
+            log.info { "Flyway dynamic locations registered: ${activeLocations.joinToString()}" }
         } else {
             configuration.locations(rawLocation)
         }
@@ -100,7 +116,6 @@ class FlywayRollbackConfigCustomizer(
         private const val BACKSLASH = "\\"
         private const val SQL_ALL_PATTERN = "**/*.sql"
 
-        // Теперь это суффикс в конце описания: пример V20260516140000__init_users_norb.sql
         private const val NO_ROLLBACK_SUFFIX = "_norb"
         private val VERSION_REGEX = Regex("""^\d+""")
     }

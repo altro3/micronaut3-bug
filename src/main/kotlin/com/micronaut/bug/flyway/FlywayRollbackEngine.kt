@@ -32,9 +32,6 @@ open class FlywayRollbackEngine(
         }
     }
 
-    /**
-     * Откат на указанное количество шагов назад.
-     */
     open fun rollback(steps: Int = 1) {
         require(steps > 0) { "Rollback steps count must be greater than 0. Passed: $steps" }
         log.info { "Starting programmatic rollback for $steps step(s)" }
@@ -52,9 +49,6 @@ open class FlywayRollbackEngine(
         log.info { "Successfully executed $stepsToExecute programmatic rollback step(s)" }
     }
 
-    /**
-     * Откат до определенной версии (все версии строго выше целевой будут удалены).
-     */
     open fun rollbackToVersion(targetVersion: String) {
         val target = MigrationVersion.fromVersion(targetVersion)
         log.info { "Starting programmatic rollback to target version: $targetVersion" }
@@ -73,10 +67,6 @@ open class FlywayRollbackEngine(
         log.info { "Successfully rolled back to version $targetVersion" }
     }
 
-    /**
-     * Откат по имени конечной папки (тега).
-     * Безопасен при параллельной разработке нескольких релизных веток и наличии сервисных папок (common, callbacks).
-     */
     open fun rollbackToTag(tag: String) {
         log.info { "Starting parallel-safe directory-based rollback to tag (target folder name): $tag" }
 
@@ -188,32 +178,45 @@ open class FlywayRollbackEngine(
         log.info { "Successfully rolled back all subsequent migrations to align with tag '$tag'" }
     }
 
-    /**
-     * Поиск ресурсов миграции и отправка их на изолированное транзакционное исполнение.
-     */
     private fun processVersionRollback(version: String) {
         var scriptResource: Resource? = null
         var isNoRollbackMigration = false
 
         for (cleanLocation in cleanedLocations) {
-            val undoPattern = "$CLASSPATH_PREFIX$cleanLocation/**/U${version}__*.sql"
-            val norbPattern = "$CLASSPATH_PREFIX$cleanLocation/**/V${version}__*_norb.sql"
+            // Проверяем как заглавные, так и строчные буквы в паттернах
+            val prefix = if (cleanLocation.startsWith("classpath")) "" else CLASSPATH_PREFIX
+            val undoPatterns = listOf(
+                "$prefix$cleanLocation/**/U${version}__*.sql",
+                "$prefix$cleanLocation/**/u${version}__*.sql"
+            )
+            val norbPatterns = listOf(
+                "$prefix$cleanLocation/**/V${version}__*_norb.sql",
+                "$prefix$cleanLocation/**/v${version}__*_norb.sql"
+            )
 
-            val undoResources = resourceResolver.getResources(undoPattern)
-            if (undoResources.isNotEmpty()) {
-                scriptResource = undoResources.first()
-                break
+            // Ищем U-скрипт отката
+            for (pattern in undoPatterns) {
+                val undoResources = resourceResolver.getResources(pattern)
+                if (undoResources.isNotEmpty()) {
+                    scriptResource = undoResources.first()
+                    break
+                }
             }
+            if (scriptResource != null) break
 
-            val norbResources = resourceResolver.getResources(norbPattern)
-            if (norbResources.isNotEmpty()) {
-                isNoRollbackMigration = true
-                break
+            // Ищем маркер безоткатной миграции
+            for (pattern in norbPatterns) {
+                val norbResources = resourceResolver.getResources(pattern)
+                if (norbResources.isNotEmpty()) {
+                    isNoRollbackMigration = true
+                    break
+                }
             }
+            if (isNoRollbackMigration) break
         }
 
         if (scriptResource == null && !isNoRollbackMigration) {
-            throw IllegalStateException("Rollback failed! Neither U${version}__*.sql nor V${version}__*_norb.sql found.")
+            throw IllegalStateException("Rollback failed! Neither U${version}__*.sql nor V${version}__*_norb.sql found (checked both cases: V/v/U/u).")
         }
 
         stepExecutor.executeRollbackStep(
