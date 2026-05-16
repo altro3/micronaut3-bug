@@ -11,7 +11,7 @@ import org.springframework.jdbc.core.JdbcTemplate
 open class FlywayRollbackEngine(
     private val jdbcTemplate: JdbcTemplate,
     private val stepExecutor: FlywayRollbackStepExecutor,
-    flywayProperties: FlywayProperties,
+    private val flywayProperties: FlywayProperties,
     resourceLoader: ResourceLoader,
 ) {
     private val log = KotlinLogging.logger {}
@@ -20,7 +20,6 @@ open class FlywayRollbackEngine(
     private val rawHistoryTable: String
     private val activeSchema: String
     private val fullHistoryTablePath: String
-    private val cleanedLocations: List<String>
 
     init {
         this.activeSchema = flywayProperties.schemas.firstOrNull() ?: ""
@@ -30,10 +29,6 @@ open class FlywayRollbackEngine(
             "$activeSchema.$rawHistoryTable"
         } else {
             rawHistoryTable
-        }
-
-        this.cleanedLocations = flywayProperties.locations.map {
-            it.removePrefix(CLASSPATH_PREFIX).removePrefix(SLASH)
         }
     }
 
@@ -50,16 +45,11 @@ open class FlywayRollbackEngine(
         val resourcesMeta = scanAllMigrationResources()
         val stepsToExecute = minOf(steps, applied.size)
 
-        // --- ШАГ ВАЛИДАЦИИ (Новый код) ---
-        // Проверяем ВСЮ цепочку миграций, выбранных для отката, ДО начала выполнения SQL
-        for (i in 0 until stepsToExecute) {
-            val version = applied[i]
-            val meta = resourcesMeta[version]
-            if (meta?.isNoRollback == true || (meta?.undoResource == null && meta?.isNoRollback != true)) {
-                throw IllegalStateException("Rollback aborted! Migration $version is marked as non-rollable (_norb) or is missing an undo script. Continuous rollback chain is broken.")
-            }
-        }
+        // --- ВАЛИДАЦИЯ ПЕРЕД ЗАПУСКОМ ---
+        val versionsToRollback = applied.take(stepsToExecute)
+        validateRollbackChainOrThrow(versionsToRollback, resourcesMeta)
 
+        // Если цепочка валидна — выполняем последовательный откат
         for (currentStep in 0 until stepsToExecute) {
             processVersionRollback(applied[currentStep], resourcesMeta)
         }
@@ -71,15 +61,19 @@ open class FlywayRollbackEngine(
         log.info { "Starting programmatic rollback to target version: $targetVersion" }
 
         val applied = getAppliedMigrationsDesc()
-        val toUndo = applied.filter { MigrationVersion.fromVersion(it) > target }
+        val toUndo = applied.filter { versionStr ->
+            MigrationVersion.fromVersion(versionStr).compareTo(target) > 0
+        }
 
         if (toUndo.isEmpty()) {
             log.info { "Database state is already at or below version $targetVersion. No action required." }
             return
         }
 
-        // Сканируем ресурсы один раз
         val resourcesMeta = scanAllMigrationResources()
+
+        // --- ВАЛИДАЦИЯ ПЕРЕД ЗАПУСКОМ ---
+        validateRollbackChainOrThrow(toUndo, resourcesMeta)
 
         toUndo.forEach { versionStr ->
             processVersionRollback(versionStr, resourcesMeta)
@@ -93,13 +87,11 @@ open class FlywayRollbackEngine(
         val targetTagVersion = MigrationVersion.fromVersion(tag)
         val resourcesMeta = scanAllMigrationResources()
 
-        // Проверяем, что целевой тег вообще физически существует в ресурсах проекта
         val availableFolders = resourcesMeta.values.map { it.parentFolder }.toSet()
         if (!availableFolders.contains(tag)) {
             throw IllegalArgumentException("Tag directory '$tag' was not found or contains no migration files.")
         }
 
-        // Шаг 2. Извлекаем ВСЕ успешные примененные миграции из БД
         val appliedMigrations = jdbcTemplate.query(
             "SELECT version, installed_rank FROM $fullHistoryTablePath WHERE success = true ORDER BY installed_rank DESC"
         ) { rs, _ ->
@@ -111,34 +103,32 @@ open class FlywayRollbackEngine(
             return
         }
 
-        // Шаг 3. Находим стартовую точку "чужого" (более нового) релиза.
         val minRankOfSubsequentReleases = appliedMigrations.mapNotNull { (version, rank) ->
             val folderName = resourcesMeta[version]?.parentFolder ?: return@mapNotNull null
             try {
                 val folderVersion = MigrationVersion.fromVersion(folderName)
-                if (folderVersion > targetTagVersion) rank else null
-            } catch (_: Exception) {
-                null // Игнорируем не-версионные папки (например, common)
+                if (folderVersion.compareTo(targetTagVersion) > 0) rank else null
+            } catch (e: Exception) {
+                null
             }
         }.minOrNull()
 
-        // Шаг 4. Отбираем только те миграции, которые подлежат уничтожению
         val migrationsToUndo = appliedMigrations.filter { (version, rank) ->
             val folderName = resourcesMeta[version]?.parentFolder
 
             if (folderName == null) {
-                return@filter true // Если файла нет в коде, откатываем обязательно
+                return@filter true
             }
 
             if (minRankOfSubsequentReleases != null && rank >= minRankOfSubsequentReleases) {
-                return@filter true // ПРАВИЛО 1: Накатили одновременно или позже нового релиза
+                return@filter true
             }
 
             try {
                 val folderVersion = MigrationVersion.fromVersion(folderName)
-                folderVersion > targetTagVersion // ПРАВИЛО 2: Версия папки выше целевой
+                folderVersion.compareTo(targetTagVersion) > 0
             } catch (e: Exception) {
-                false // Папки типа common/callbacks сохраняем, если они ниже критического ранга
+                false
             }
         }.map { it.first }
 
@@ -147,7 +137,9 @@ open class FlywayRollbackEngine(
             return
         }
 
-        // Шаг 5. Запускаем последовательный откат
+        // --- ВАЛИДАЦИЯ ПЕРЕД ЗАПУСКОМ ---
+        validateRollbackChainOrThrow(migrationsToUndo, resourcesMeta)
+
         log.info { "Parallel-safe mode: Found ${migrationsToUndo.size} subsequent migration(s) to roll back." }
         migrationsToUndo.forEach { versionStr ->
             processVersionRollback(versionStr, resourcesMeta)
@@ -156,23 +148,41 @@ open class FlywayRollbackEngine(
         log.info { "Successfully rolled back all subsequent migrations to align with tag '$tag'" }
     }
 
+    /**
+     * Проверяет список версий на возможность отката до внесения изменений в БД.
+     * Если найдена миграция без U-скрипта или с суффиксом _norb — выбрасывает исключение.
+     */
+    private fun validateRollbackChainOrThrow(versions: List<String>, resourcesMeta: Map<String, MigrationResourceMeta>) {
+        for (version in versions) {
+            val meta = resourcesMeta[version]
+
+            if (meta?.isNoRollback == true) {
+                throw IllegalStateException(
+                    "Rollback aborted! Migration $version is explicitly marked as non-rollable (_norb). " +
+                            "Continuous rollback chain is broken. Manual database intervention required."
+                )
+            }
+
+            if (meta?.undoResource == null) {
+                throw IllegalStateException(
+                    "Rollback aborted! Migration $version is missing an undo script (U${version}__*.sql) " +
+                            "and is not marked as '_norb'. Continuous rollback chain is broken."
+                )
+            }
+        }
+    }
+
     private fun processVersionRollback(version: String, resourcesMeta: Map<String, MigrationResourceMeta>) {
         val meta = resourcesMeta[version]
         val scriptResource = meta?.undoResource
-        val isNoRollbackMigration = meta?.isNoRollback ?: false
-
-        if (scriptResource == null && !isNoRollbackMigration) {
-            throw IllegalStateException(
-                "Rollback failed! Neither U${version}__*.sql nor V${version}__*_norb.sql found in project resources."
-            )
-        }
+            ?: throw IllegalStateException("Rollback failed! Script resource disappeared for version $version.")
 
         stepExecutor.executeRollbackStep(
             version = version,
             scriptResource = scriptResource,
-            isNoRollbackMigration = isNoRollbackMigration,
+            isNoRollbackMigration = false, // После валидации здесь всегда гарантирован настоящий откат
             activeSchema = activeSchema,
-            historyTable = rawHistoryTable,
+            historyTable = rawHistoryTable
         )
     }
 
@@ -183,20 +193,18 @@ open class FlywayRollbackEngine(
         ).filterNotNull()
     }
 
-    /**
-     * Сканирует ресурсы один раз, безопасно извлекая имена папок (включая работу внутри JAR)
-     * и сопоставляя их с версиями.
-     */
     private fun scanAllMigrationResources(): Map<String, MigrationResourceMeta> {
         val metaMap = mutableMapOf<String, MigrationResourceMeta>()
-        val locations = cleanedLocations.ifEmpty { listOf("classpath:db/migration") }
+        val locations = flywayProperties.locations.ifEmpty { listOf(DEFAULT_LOCATION) }
 
-        locations.forEach { cleanLocation ->
+        locations.forEach { rawLocation ->
+            val cleanLocation = rawLocation.removeSuffix(SLASH)
             val pattern = if (cleanLocation.contains(":")) {
                 "$cleanLocation/$SQL_ALL_PATTERN"
             } else {
                 "$CLASSPATH_PREFIX$cleanLocation/$SQL_ALL_PATTERN"
             }
+
             val resources = try {
                 resourceResolver.getResources(pattern)
             } catch (e: Exception) {
@@ -212,13 +220,11 @@ open class FlywayRollbackEngine(
                 if (tokens.size < 2) return@forEach
                 val parentFolder = tokens[tokens.size - 2]
 
-                // Удаляем строго заглавные префиксы V или U
                 val cleanFilename = filename.replace(Regex("^[VU]"), "")
                 val version = VERSION_REGEX.find(cleanFilename)?.value ?: return@forEach
 
                 val currentMeta = metaMap.computeIfAbsent(version) { MigrationResourceMeta(parentFolder = parentFolder) }
 
-                // Обработка строго по заглавным буквам
                 if (filename.startsWith("U")) {
                     currentMeta.undoResource = resource
                 } else if (filename.startsWith("V")) {
@@ -231,9 +237,6 @@ open class FlywayRollbackEngine(
         return metaMap
     }
 
-    /**
-     * Внутренний контейнер метаданных для файла миграции
-     */
     private class MigrationResourceMeta(
         val parentFolder: String,
         var undoResource: Resource? = null,
@@ -241,6 +244,7 @@ open class FlywayRollbackEngine(
     )
 
     companion object {
+        private const val DEFAULT_LOCATION = "classpath:db/migration"
         private const val DEFAULT_TABLE = "flyway_schema_history"
         private const val CLASSPATH_PREFIX = "classpath:"
         private const val SLASH = "/"

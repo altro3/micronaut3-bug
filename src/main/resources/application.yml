@@ -80,8 +80,8 @@ spring:
   flyway:
     schemas: target
     rollback:
-      mode: steps
-      value: 4
+      mode: tag
+      value: 2.0
 
 management:
   observations:
