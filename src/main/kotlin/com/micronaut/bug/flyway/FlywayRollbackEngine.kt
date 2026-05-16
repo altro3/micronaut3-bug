@@ -4,6 +4,7 @@ import io.github.oshai.kotlinlogging.KotlinLogging
 import org.flywaydb.core.Flyway
 import org.flywaydb.core.api.MigrationVersion
 import org.springframework.core.io.ResourceLoader
+import org.springframework.core.io.support.ResourcePatternUtils
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.transaction.annotation.Propagation
 import org.springframework.transaction.annotation.Transactional
@@ -17,7 +18,15 @@ open class FlywayRollbackEngine(
 ) {
 
     private val log = KotlinLogging.logger {}
-    private val historyTable = flyway.configuration.table
+    private val historyTable: String
+    private val activeSchema: String
+
+    init {
+        val schemaName = flyway.configuration.schemas.firstOrNull() ?: "public"
+        val tableName = flyway.configuration.table
+        this.activeSchema = schemaName
+        this.historyTable = "$schemaName.$tableName"
+    }
 
     /**
      * Эквивалент Liquibase: rollback <count>
@@ -75,22 +84,53 @@ open class FlywayRollbackEngine(
 
     /**
      * Эквивалент Liquibase: rollback <tag>
+     * В качестве тега используется имя директории релиза в любом формате (например, "2.0", "v2-hotfix").
+     * Откатывает все миграции, которые были применены ПОСЛЕ этого релиза.
+     *
+     * @param tag Название папки релиза (любой формат).
      */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     open fun rollbackToTag(tag: String) {
-        log.info { "Starting Community-style programmatic rollback to tag: $tag" }
+        log.info { "Starting directory-based rollback to tag (release directory): $tag" }
 
-        val info = flyway.info()
-        val tagMigration = info.applied()
-            .filter { it.version != null }
-            .firstOrNull { it.description.contains(tag, ignoreCase = true) }
+        // Находим точный путь к папке релиза среди активных локаций Flyway
+        // Сработает для "classpath:db/migration/2.0" и для "classpath:db/migration/v2-hotfix" одинаково успешно
+        val targetLocation = locations.firstOrNull { it.endsWith("/$tag") }
+            ?: throw IllegalArgumentException(
+                "Tag directory '$tag' was not found among active Flyway locations: $locations. " +
+                        "Make sure this directory exists and contains at least one migration file."
+            )
 
-        if (tagMigration == null) {
-            throw IllegalArgumentException("Tag '$tag' matching any applied migration description was not found.")
+        val resolver = ResourcePatternUtils.getResourcePatternResolver(resourceLoader)
+        val pattern = "$targetLocation/**/*.sql"
+
+        val resources = try {
+            resolver.getResources(pattern)
+        } catch (e: Exception) {
+            throw IllegalArgumentException("Failed to scan directory for tag '$tag' using pattern '$pattern'", e)
         }
 
-        log.info { "Found target tag '$tag' at version: ${tagMigration.version}" }
-        rollbackToVersion(tagMigration.version.version)
+        if (resources.isEmpty()) {
+            throw IllegalArgumentException("No migration files found in release directory (tag) '$tag' by pattern '$pattern'")
+        }
+
+        val versionsInTag = resources.mapNotNull { resource ->
+            val filename = resource.filename ?: return@mapNotNull null
+            Regex("""^\d+""").find(filename)?.value
+        }.map { MigrationVersion.fromVersion(it) }
+
+        if (versionsInTag.isEmpty()) {
+            throw IllegalStateException("No valid versioned files found in tag directory '$tag'")
+        }
+
+        // Вычисляем максимальную версию-таймстамп внутри этой папки
+        val maxVersionInTag = versionsInTag.maxOrNull()
+            ?: throw IllegalStateException("Could not determine max version for tag '$tag'")
+
+        log.info { "Tag '$tag' successfully resolved to highest migration version: $maxVersionInTag" }
+
+        // Запускаем откат до этой версии
+        rollbackToVersion(maxVersionInTag.version)
     }
 
     /**
@@ -99,20 +139,15 @@ open class FlywayRollbackEngine(
     private fun executeRollbackScript(version: String) {
         log.info { "Processing programmatic rollback for version: $version" }
 
-        // 1. Пытаемся найти файл отката во всех зарегистрированных каталогах (1.0, 2.0, 3.0 и т.д.)
         var sqlContent: String? = null
         var foundLocation: String? = null
 
         for (location in locations) {
-            // Формируем маску поиска: ищем файл, начинающийся с версии и содержащий маркер отката "_rb__"
-            val cleanLocation = location.removePrefix("classpath:")
+            val cleanLocation = location.removePrefix("classpath:").removePrefix("/")
             val pattern = "classpath:$cleanLocation/$version"
 
             try {
-                // Пытаемся найти файл, сканируя ресурсы через ResourceLoader Спринга.
-                // Так как точное имя описания скрипта мы не знаем, мы ищем файл по совпадению префикса версии.
-                // Для простоты и отказоустойчивости, ищем напрямую файл отката, зная структуру имен.
-                val resources = org.springframework.core.io.support.ResourcePatternUtils
+                val resources = ResourcePatternUtils
                     .getResourcePatternResolver(resourceLoader)
                     .getResources("${pattern}_rb__*.sql")
 
@@ -123,7 +158,7 @@ open class FlywayRollbackEngine(
                     break
                 }
             } catch (e: Exception) {
-                // Игнорируем ошибки сканирования конкретной папки, ищем в следующей
+                // Игнорируем ошибки
             }
         }
 
@@ -133,10 +168,9 @@ open class FlywayRollbackEngine(
 
         log.info { "Found rollback script: $foundLocation. Executing SQL commands..." }
 
-        // 2. Выполняем тело скрипта отката в базе данных
+        jdbcTemplate.execute("set search_path to $activeSchema")
         jdbcTemplate.execute(sqlContent)
 
-        // 3. Вручную вырезаем запись из таблицы истории Flyway, чтобы восстановить синхронизацию схемы
         val deletedRows = jdbcTemplate.update(
             "delete from $historyTable where version = ?",
             version

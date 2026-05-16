@@ -6,7 +6,7 @@ app:
   trace:
     enabled: true
     exporter:
-      enabled: true
+      enabled: false
       url: http://localhost:4318/v1/traces
       # Напрямую в викторию
       #url: http://localhost:10428/insert/opentelemetry/v1/traces
@@ -17,7 +17,7 @@ app:
     pretty-print: true
     max-payload-size: 4MB
     otlp:
-      enabled: true
+      enabled: false
       url: http://localhost:4318/v1/logs
       # Напрямую в викторию
       # url: http://localhost:9428/insert/opentelemetry/v1/logs
@@ -73,6 +73,15 @@ spring:
   http:
     codecs:
       max-in-memory-size: 10MB
+  datasource:
+    url: jdbc:postgresql://localhost:5432/micronaut3bug
+    username: micronaut3bug
+    password: 1
+  flyway:
+    schemas: target
+#    rollback:
+#      mode: steps
+#      value: 3
 
 management:
   observations:
@@ -114,6 +123,6 @@ logging:
     org.apache: info
     org.eclipse: info
     org.hibernate: info
-    org.springframework: info
+#    org.springframework: info
 #    reactor.netty.http.server.HttpServer: DEBUG
     reactor: info

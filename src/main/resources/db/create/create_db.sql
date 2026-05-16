@@ -17,3 +17,9 @@ CREATE DATABASE micronaut3bug
     ENCODING = 'UTF8'
     TABLESPACE = pg_default
     CONNECTION LIMIT = -1;
+
+\c micronaut3bug
+
+CREATE SCHEMA target AUTHORIZATION micronaut3bug;
+
+GRANT ALL PRIVILEGES ON SCHEMA target TO micronaut3bug;

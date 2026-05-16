@@ -17,9 +17,9 @@ class FlywayRollbackConfigCustomizer(
     override fun customize(configuration: FluentConfiguration) {
         // --- ТОТАЛЬНАЯ ЗАЩИТА ОТ КРИТИЧЕСКИХ СВОЙСТВ ---
         configuration
-            .group(false)        // Запрещаем объединение накатов в одну транзакцию
-            .outOfOrder(false)   // Строго запрещаем нарушение хронологии версий
-            .baselineOnMigrate(false) // Запрещаем базовые фейк-миграции
+            .group(false)
+            .outOfOrder(false)
+            .baselineOnMigrate(false)
 
         val resolver = ResourcePatternUtils.getResourcePatternResolver(resourceLoader)
         val rawLocation = flywayProperties.locations.firstOrNull() ?: "classpath:db/migration"
@@ -27,7 +27,7 @@ class FlywayRollbackConfigCustomizer(
 
         val resources = resolver.getResources("classpath:$cleanBase/**/*.sql")
 
-        // --- ВАЛИДАЦИЯ ПАРНОСТИ СТРУКТУРЫ (БЕЗ ДУБЛИРОВАНИЯ ЛОГОВ) ---
+        // --- ВАЛИДАЦИЯ ПАРНОСТИ СТРУКТУРЫ ---
         val forwardMigrations = mutableMapOf<String, String>()
         val rollbackMigrations = mutableSetOf<String>()
 
@@ -45,8 +45,7 @@ class FlywayRollbackConfigCustomizer(
             } else {
                 if (forwardMigrations.containsKey(version)) {
                     throw IllegalStateException(
-                        "Flyway validation failed! Duplicate version detected. " +
-                                "Version '$version' is defined in multiple files: '${forwardMigrations[version]}' and '$filename'."
+                        "Flyway validation failed! Duplicate version detected. Version '$version' is defined in multiple files: '${forwardMigrations[version]}' and '$filename'."
                     )
                 }
                 forwardMigrations[version] = filename
@@ -56,23 +55,22 @@ class FlywayRollbackConfigCustomizer(
         forwardMigrations.forEach { (version, forwardFile) ->
             if (!rollbackMigrations.contains(version)) {
                 throw IllegalStateException(
-                    "Flyway validation failed! Missing rollback partner. " +
-                            "Migration file '$forwardFile' exists, but no companion rollback file starting with '${version}_rb__' was found."
+                    "Flyway validation failed! Missing rollback partner. Migration file '$forwardFile' exists, but no companion rollback file starting with '${version}_rb__' was found."
                 )
             }
         }
 
         log.info { "Flyway fail-fast validation passed successfully. All migrations have valid '_rb__' partners." }
 
-        // Динамически вычисляем подпапки версий релизов (X.X)
-        // Используем деструктуризацию группы в регулярке, чтобы получить чисто "1.0", "2.0" вместо полного пути
-        val releaseDirRegex = Regex("""$cleanBase/(\d+\.\d+)""")
+        // Универсальный разбор: захватываем абсолютно любое имя папки до следующего слэша
+        // Паттерн выделит "1.0", "v2-hotfix", "release_2026_05" и т.д.
+        val releaseDirRegex = Regex("""$cleanBase/([^/]+)""")
 
         val activeLocations = resources
             .mapNotNull { resource ->
                 val urlPath = resource.url.toString()
                 val matchResult = releaseDirRegex.find(urlPath)
-                // matchResult.groupValues[1] вытащит строго то, что попало в круглые скобки (\d+\.\d+)
+                // groupValues[1] вернет только имя папки (например, "v2-hotfix")
                 matchResult?.groupValues?.get(1)?.let { releaseVersion -> "classpath:$cleanBase/$releaseVersion" }
             }
             .distinct()

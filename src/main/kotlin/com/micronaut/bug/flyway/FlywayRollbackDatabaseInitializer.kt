@@ -1,7 +1,6 @@
 package com.micronaut.bug.flyway
 
 import com.micronaut.bug.flyway.config.FlywayRollbackProperties
-import com.micronaut.bug.flyway.config.FlywayRollbackProperties.RollbackMode
 import com.micronaut.bug.flyway.config.FlywayRollbackProperties.RollbackMode.NONE
 import com.micronaut.bug.flyway.config.FlywayRollbackProperties.RollbackMode.STEPS
 import com.micronaut.bug.flyway.config.FlywayRollbackProperties.RollbackMode.TAG
@@ -25,22 +24,22 @@ class FlywayRollbackDatabaseInitializer(
             }
 
             STEPS -> {
-                log.info { "Rollback mode DETECTED: STEPS. Target steps: ${properties.steps}" }
-                rollbackEngine.rollback(properties.steps)
+                log.info { "Rollback mode DETECTED: STEPS. Target steps: ${properties.value}" }
+                rollbackEngine.rollback(properties.value.toInt())
                 shutdownApplication()
             }
 
             VERSION -> {
-                val targetVersion = properties.version
-                require(!targetVersion.isNullOrBlank()) { "Rollback mode is VERSION, but 'spring.flyway.rollback.version' is missing!" }
+                val targetVersion = properties.value
+                require(targetVersion.isNotBlank()) { "Rollback mode is VERSION, but 'spring.flyway.rollback.version' is missing!" }
                 log.info { "Rollback mode DETECTED: VERSION. Target version: $targetVersion" }
                 rollbackEngine.rollbackToVersion(targetVersion)
                 shutdownApplication()
             }
 
             TAG -> {
-                val targetTag = properties.tag
-                require(!targetTag.isNullOrBlank()) { "Rollback mode is TAG, but 'spring.flyway.rollback.tag' is missing!" }
+                val targetTag = properties.value
+                require(targetTag.isNotBlank()) { "Rollback mode is TAG, but 'spring.flyway.rollback.tag' is missing!" }
                 log.info { "Rollback mode DETECTED: TAG. Target tag: $targetTag" }
                 rollbackEngine.rollbackToTag(targetTag)
                 shutdownApplication()
