@@ -28,7 +28,7 @@ class NanoTracer(
     @PublishedApi
     internal val internalStack = ThreadLocal<Deque<TraceContext>>.withInitial { ArrayDeque<TraceContext>() }
 
-    private val clockOffsetNanos: Long
+    val clockOffsetNanos: Long
 
     init {
         val now = Instant.now()
@@ -311,7 +311,7 @@ class NanoTracer(
 
         const val ATTR_HTTP_SLOW_REQUEST = "http.slow_request"
 
-        private const val NANOS_PER_SECOND = 1_000_000_000L
+        const val NANOS_PER_SECOND = 1_000_000_000L
 
         val METHODS_WITHOUT_BODY = setOf(
             HttpMethod.GET.name(),

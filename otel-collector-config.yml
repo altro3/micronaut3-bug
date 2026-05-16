@@ -48,7 +48,7 @@ service:
     metrics:
       receivers: [otlp]
       processors: [batch]
-      exporters: [otlp_http/metrics, debug]
+      exporters: [otlp_http/metrics]
 
     traces:
       receivers: [otlp]

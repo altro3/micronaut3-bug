@@ -80,7 +80,7 @@ object TraceIdGenerator {
         for (i in result.indices) {
             val h = decodeDigit(hex[i * 2])
             val l = decodeDigit(hex[i * 2 + 1])
-            result[i] = ((h shl 4) or l).toByte()
+            result[i] = (((h shl 4) or l) and 0xFF).toByte()
         }
         return ByteString.copyFrom(result)
     }

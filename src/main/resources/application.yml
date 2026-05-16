@@ -91,11 +91,12 @@ management:
   otlp:
     metrics:
       export:
+        #url: http://localhost:8428/opentelemetry/v1/metrics
         url: http://localhost:4318/v1/metrics
         step: PT10S
         aggregation-temporality: delta
         headers:
-          Content-Type: "application/x-protobuf"
+          Content-Type: application/x-protobuf
         resource-attributes:
           "service.name": ${spring.application.name}
           "deployment.environment": ${app.node.name}
@@ -106,8 +107,6 @@ logging:
 #    console: "%d{HH:mm:ss.SSS} %highlight{%-5level}{FATAL=red, ERROR=red, WARN=yellow, INFO=green, DEBUG=cyan, TRACE=black} [%t] %style{%logger{1.}}{cyan} - %msg%n%throwable"
   level:
     root: debug
-    io.micrometer.otlp: DEBUG
-    org.springframework.boot.actuate.metrics: DEBUG
     jdk: info
     sun: info
     javax: info
@@ -115,6 +114,6 @@ logging:
     org.apache: info
     org.eclipse: info
     org.hibernate: info
-#    org.springframework: info
+    org.springframework: info
 #    reactor.netty.http.server.HttpServer: DEBUG
     reactor: info
