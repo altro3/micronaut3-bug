@@ -33,8 +33,8 @@ class FlywayRollbackConfigCustomizer(
         resources.forEach { resource ->
             val filename = resource.filename ?: return@forEach
 
-            // 1. Собираем все Undo-скрипты (поддерживаем 'U' и 'u')
-            if (filename.startsWith("U") || filename.startsWith("u")) {
+            // 1. Строго заглавная 'U' для Undo-скриптов
+            if (filename.startsWith("U")) {
                 val versionMatch = VERSION_REGEX.find(filename.substring(1)) ?: throw IllegalStateException(
                     "Undo migration file '$filename' does not contain a valid timestamp version after prefix."
                 )
@@ -42,8 +42,8 @@ class FlywayRollbackConfigCustomizer(
                 return@forEach
             }
 
-            // 2. Собираем все прямые миграции (поддерживаем 'V' и 'v')
-            if (filename.startsWith("V") || filename.startsWith("v")) {
+            // 2. Строго заглавная 'V' для прямых миграций
+            if (filename.startsWith("V")) {
                 val versionMatch = VERSION_REGEX.find(filename.substring(1)) ?: throw IllegalStateException(
                     "Forward migration file '$filename' does not contain a valid timestamp version after prefix."
                 )
@@ -58,9 +58,8 @@ class FlywayRollbackConfigCustomizer(
             }
         }
 
-        // 3. Валидация парности V -> U (не зависит от регистра, так как проверяем чистые версии-таймстампы)
+        // 3. Валидация парности V -> U (Проверка чистых таймстампов)
         forwardMigrations.forEach { (version, forwardFile) ->
-            // Если файл содержит суффикс _norb, ему не нужен U-скрипт отката
             if (forwardFile.contains(NO_ROLLBACK_SUFFIX)) {
                 log.debug { "Migration '$forwardFile' is explicitly marked as non-rollable. Skipping U-twin validation." }
                 return@forEach
@@ -68,7 +67,7 @@ class FlywayRollbackConfigCustomizer(
 
             if (!undoMigrations.contains(version)) {
                 throw IllegalStateException(
-                    "Flyway validation failed! Missing undo partner. Migration file '$forwardFile' exists, but no companion rollback file starting with 'U${version}__' or 'u${version}__' was found. If rollback is impossible, add '$NO_ROLLBACK_SUFFIX' to the end of the filename (before .sql)."
+                    "Flyway validation failed! Missing undo partner. Migration file '$forwardFile' exists, but no companion rollback file starting with 'U${version}__' was found. If rollback is impossible, add '$NO_ROLLBACK_SUFFIX' to the end of the filename (before .sql)."
                 )
             }
         }

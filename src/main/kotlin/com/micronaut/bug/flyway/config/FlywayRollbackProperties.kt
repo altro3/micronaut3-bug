@@ -1,5 +1,6 @@
 package com.micronaut.bug.flyway.config
 
+import org.flywaydb.core.api.MigrationVersion
 import org.springframework.boot.context.properties.ConfigurationProperties
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
@@ -53,6 +54,11 @@ data class FlywayRollbackProperties(
             RollbackMode.TAG -> {
                 if (value.isBlank()) {
                     throw IllegalArgumentException("Rollback value must not be blank when mode is TAG")
+                }
+                try {
+                    MigrationVersion.fromVersion(value)
+                } catch (e: Exception) {
+                    throw IllegalArgumentException("Invalid TAG format: '$value'. Tag directory name must be a valid version format (e.g., '2.0' or '1.1.5').", e)
                 }
             }
         }

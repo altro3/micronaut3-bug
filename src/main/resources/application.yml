@@ -79,9 +79,9 @@ spring:
     password: 1
   flyway:
     schemas: target
-#    rollback:
-#      mode: steps
-#      value: 3
+    rollback:
+      mode: steps
+      value: 4
 
 management:
   observations:
@@ -120,9 +120,12 @@ logging:
     sun: info
     javax: info
     io.netty: info
+    com.zaxxer: info
+    org.flywaydb: debug
     org.apache: info
+    org.postgresql: info
     org.eclipse: info
     org.hibernate: info
-#    org.springframework: info
+    org.springframework: info
 #    reactor.netty.http.server.HttpServer: DEBUG
     reactor: info
