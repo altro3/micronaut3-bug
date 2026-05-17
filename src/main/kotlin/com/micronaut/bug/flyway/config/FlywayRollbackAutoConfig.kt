@@ -50,11 +50,13 @@ class FlywayRollbackAutoConfig {
     @Bean
     fun flywayRollbackEngine(
         flywayProperties: FlywayProperties,
+        flywayRollbackProperties: FlywayRollbackProperties,
         dataSource: DataSource,
         flywayRollbackStepExecutor: FlywayRollbackStepExecutor,
         resourceLoader: ResourceLoader
     ) = FlywayRollbackEngine(
         flywayProperties = flywayProperties,
+        flywayRollbackProperties = flywayRollbackProperties,
         jdbcTemplate = JdbcTemplate(dataSource),
         stepExecutor = flywayRollbackStepExecutor,
         resourceLoader = resourceLoader,

@@ -15,7 +15,6 @@ class FlywayRollbackConfigCustomizer(
     private val log = KotlinLogging.logger {}
 
     override fun customize(configuration: FluentConfiguration) {
-        // Защита от деструктивных настроек
         configuration
             .group(false)
             .outOfOrder(false)
@@ -33,7 +32,6 @@ class FlywayRollbackConfigCustomizer(
         resources.forEach { resource ->
             val filename = resource.filename ?: return@forEach
 
-            // 1. Строго заглавная 'U' для Undo-скриптов
             if (filename.startsWith("U")) {
                 val versionMatch = VERSION_REGEX.find(filename.substring(1)) ?: throw IllegalStateException(
                     "Undo migration file '$filename' does not contain a valid timestamp version after prefix."
@@ -42,7 +40,6 @@ class FlywayRollbackConfigCustomizer(
                 return@forEach
             }
 
-            // 2. Строго заглавная 'V' для прямых миграций
             if (filename.startsWith("V")) {
                 val versionMatch = VERSION_REGEX.find(filename.substring(1)) ?: throw IllegalStateException(
                     "Forward migration file '$filename' does not contain a valid timestamp version after prefix."
@@ -58,7 +55,6 @@ class FlywayRollbackConfigCustomizer(
             }
         }
 
-        // 3. Валидация парности V -> U (Проверка чистых таймстампов)
         forwardMigrations.forEach { (version, forwardFile) ->
             if (forwardFile.contains(NO_ROLLBACK_SUFFIX)) {
                 log.debug { "Migration '$forwardFile' is explicitly marked as non-rollable. Skipping U-twin validation." }
@@ -74,23 +70,18 @@ class FlywayRollbackConfigCustomizer(
 
         log.info { "Flyway fail-fast validation passed successfully. Total forward migrations checked: ${forwardMigrations.size}" }
 
-        // 4. Динамический поиск подпапок с защитой от особенностей путей Windows/IDE/JAR
         val activeLocations = resources
             .mapNotNull { resource ->
                 val cleanPath = try {
                     resource.file.absolutePath.replace(BACKSLASH, SLASH)
-                } catch (e: Exception) {
+                } catch (_: Exception) {
                     val urlPath = resource.url.toString().replace(BACKSLASH, SLASH)
                     if (urlPath.contains("!")) urlPath.substringAfter("!") else urlPath
                 }
 
                 val tokens = cleanPath.split(SLASH).filter { it.isNotBlank() }
-
-                // Ищем индекс нашей базовой папки (например, 'migration'), чтобы восстановить относительный путь
                 val baseIndex = tokens.indexOfLast { it == cleanBase.substringAfterLast(SLASH) }
                 if (baseIndex != -1 && tokens.size > baseIndex + 2) {
-                    // Собираем весь хвост подпапок, идущих после db/migration, исключая сам файл
-                    // Пример: из [..., db, migration, 1.x, 1.1, V1.sql] соберет "1.x/1.1"
                     val subDirs = tokens.subList(baseIndex + 1, tokens.size - 1).joinToString(SLASH)
                     "$CLASSPATH_PREFIX$cleanBase/$subDirs"
                 } else {

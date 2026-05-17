@@ -10,16 +10,10 @@ import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 
 @ConfigurationProperties("spring.flyway.rollback")
-data class FlywayRollbackProperties(
-    /**
-     * Режим отката. Возможные значения: NONE, STEPS, VERSION, TAG.
-     */
+class FlywayRollbackProperties(
     val mode: RollbackMode = NONE,
-    /**
-     * Универсальное значение для отката.
-     * В зависимости от mode это может быть: количество шагов ("2"), версия ("20260516150000") или имя папки-тега ("2.0").
-     */
     val value: String = "",
+    val force: Boolean = false,
 ) {
 
     init {
@@ -41,13 +35,11 @@ data class FlywayRollbackProperties(
                     throw IllegalArgumentException("Rollback value must not be blank when mode is VERSION")
                 }
 
-                // Проверяем длину строки перед парсингом (должно быть строго 14 символов)
                 if (value.length != 14) {
                     throw IllegalArgumentException("Invalid version length: '$value'. Expected exactly 14 characters for format YYYYMMDDHHMMSS.")
                 }
 
                 try {
-                    // Пробуем распарсить строку как полноценную календарную дату
                     val formatter = DateTimeFormatter.ofPattern("yyyyMMddHHmmss")
                     LocalDateTime.parse(value, formatter)
                 } catch (e: Exception) {
