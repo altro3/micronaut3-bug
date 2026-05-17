@@ -1,1 +1,2 @@
 com.micronaut.bug.flyway.config.FlywayRollbackAutoConfig
+com.micronaut.bug.flyway.config.FlywayCoreConventionAutoConfig

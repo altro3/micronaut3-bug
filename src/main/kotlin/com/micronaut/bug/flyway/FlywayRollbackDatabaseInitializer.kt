@@ -42,6 +42,9 @@ class FlywayRollbackDatabaseInitializer(
                     }
                 }
                 shutdownApplication()
+                throw RollbackSuccessException("Rollback executed successfully.")
+            } catch (e: RollbackSuccessException) {
+                throw e
             } catch (e: Exception) {
                 if (e is RollbackSuccessTestException) throw e
 
@@ -78,4 +81,6 @@ class FlywayRollbackDatabaseInitializer(
     }
 
     class RollbackSuccessTestException(message: String) : RuntimeException(message)
+
+    class RollbackSuccessException(message: String) : RuntimeException(message)
 }

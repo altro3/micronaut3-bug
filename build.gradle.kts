@@ -41,7 +41,7 @@ dependencies {
     implementation(spring.projectreactor.reactorNettyHttp)
     implementation(spring.jackson.jacksonModuleKotlin)
     implementation(spring.jackson.jacksonModuleBlackbird)
-    implementation(spring.micrometer.micrometerRegistryOtlp)
+//    implementation(spring.micrometer.micrometerRegistryOtlp)
     implementation(coroutines.kotlinx.kotlinxCoroutinesCoreJvm)
     implementation(coroutines.kotlinx.kotlinxCoroutinesSlf4j)
     implementation(kot.kotlin.kotlinReflect)

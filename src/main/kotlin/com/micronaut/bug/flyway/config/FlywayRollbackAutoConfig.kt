@@ -1,6 +1,6 @@
 package com.micronaut.bug.flyway.config
 
-import com.micronaut.bug.flyway.FlywayRollbackConfigCustomizer
+import com.micronaut.bug.flyway.FlywayMetadataResolver
 import com.micronaut.bug.flyway.FlywayRollbackDatabaseInitializer
 import com.micronaut.bug.flyway.FlywayRollbackEngine
 import com.micronaut.bug.flyway.FlywayRollbackStepExecutor
@@ -33,33 +33,22 @@ import javax.sql.DataSource
 class FlywayRollbackAutoConfig {
 
     @Bean
-    fun flywayRollbackConfigCustomizer(
-        resourceLoader: ResourceLoader,
-        flywayProperties: FlywayProperties
-    ) = FlywayRollbackConfigCustomizer(
-        resourceLoader = resourceLoader,
-        flywayProperties = flywayProperties,
-    )
-
-    @Bean
-    fun flywayRollbackStepExecutor(dataSource: DataSource): FlywayRollbackStepExecutor {
-        val isolatedJdbcTemplate = JdbcTemplate(dataSource)
-        return FlywayRollbackStepExecutor(isolatedJdbcTemplate)
-    }
+    fun flywayRollbackStepExecutor(dataSource: DataSource) =
+        FlywayRollbackStepExecutor(JdbcTemplate(dataSource))
 
     @Bean
     fun flywayRollbackEngine(
+        flywayMetadataResolver: FlywayMetadataResolver,
         flywayProperties: FlywayProperties,
         flywayRollbackProperties: FlywayRollbackProperties,
         dataSource: DataSource,
         flywayRollbackStepExecutor: FlywayRollbackStepExecutor,
-        resourceLoader: ResourceLoader
     ) = FlywayRollbackEngine(
         flywayProperties = flywayProperties,
         flywayRollbackProperties = flywayRollbackProperties,
         jdbcTemplate = JdbcTemplate(dataSource),
         stepExecutor = flywayRollbackStepExecutor,
-        resourceLoader = resourceLoader,
+        metadataResolver = flywayMetadataResolver,
     )
 
     @Bean
