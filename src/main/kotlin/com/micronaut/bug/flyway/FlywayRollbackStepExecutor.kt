@@ -2,17 +2,37 @@ package com.micronaut.bug.flyway
 
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.flywaydb.core.api.configuration.ClassicConfiguration
+import org.flywaydb.core.internal.jdbc.JdbcConnectionFactory
 import org.flywaydb.core.internal.parser.ParsingContext
 import org.flywaydb.core.internal.resource.StringResource
+import org.flywaydb.database.postgresql.PostgreSQLDatabase
 import org.flywaydb.database.postgresql.PostgreSQLParser
 import org.springframework.core.io.Resource
-import org.springframework.jdbc.core.JdbcTemplate
+import org.springframework.jdbc.datasource.SingleConnectionDataSource
+import java.nio.charset.StandardCharsets
 import java.sql.Connection
 
 open class FlywayRollbackStepExecutor(
-    private val jdbcTemplate: JdbcTemplate
+    private val conn: Connection,
 ) {
+
     private val log = KotlinLogging.logger {}
+    private val postgresParser: PostgreSQLParser
+
+    init {
+        val classicConfig = ClassicConfiguration()
+        val singleConnectionDataSource = SingleConnectionDataSource(conn, true)
+        // На основе переданного в конструктор коннекшена один раз определяем версию БД
+        val connectionFactory = JdbcConnectionFactory(
+            singleConnectionDataSource,
+            classicConfig,
+            null,
+        )
+        val database = PostgreSQLDatabase(classicConfig, connectionFactory, null)
+        val parsingContext = ParsingContext().apply { this.database = database }
+
+        postgresParser = PostgreSQLParser(classicConfig, parsingContext)
+    }
 
     open fun executeRollbackStep(
         version: String,
@@ -22,123 +42,68 @@ open class FlywayRollbackStepExecutor(
         historyTable: String
     ) {
         log.info { "Processing atomic rollback step for version: $version" }
+        val fullTableName = if (activeSchema.isNotBlank()) "\"$activeSchema\".\"$historyTable\"" else "\"$historyTable\""
 
-        val dataSource = jdbcTemplate.dataSource
-            ?: throw IllegalStateException("Failed to obtain database connection from DataSource")
-
-        val escapedSchema = validateIdentifier(activeSchema)
-        val escapedTable = validateIdentifier(historyTable)
-        val fullTableName = if (escapedSchema.isNotBlank()) "\"$escapedSchema\".\"$escapedTable\"" else "\"$escapedTable\""
-
-        dataSource.connection.use { conn ->
+        // Настраиваем схему в рамках текущей сессии, если нужно
+        if (activeSchema.isNotBlank()) {
             try {
-                // =================================================================
-                // ЭТАП 1: Выполнение SQL-скрипта отката (Первая транзакция)
-                // =================================================================
-                conn.autoCommit = true
-
-                if (escapedSchema.isNotBlank()) {
-                    setSchema(conn, escapedSchema)
-                }
-
-                if (isNoRollbackMigration) {
-                    log.info { "Migration $version is explicitly marked as non-rollable. Skipping SQL execution." }
-                } else {
-                    val resource = scriptResource
-                        ?: throw IllegalStateException("Rollback failed! No undo script resource provided for version $version")
-
-                    log.info { "Found native-style undo script: ${resource.filename}. Parsing and executing..." }
-
-                    val sqlContent = resource.getContentAsString(Charsets.UTF_8)
-
-                    // Используем оригинальный парсер Flyway для PostgreSQL.
-                    // Он идеально понимает блоки $$, комментарии и разделители.
-                    val parser = PostgreSQLParser(ClassicConfiguration(), ParsingContext())
-                    val statementReader = parser.parse(StringResource(sqlContent))
-
-                    while (statementReader.hasNext()) {
-                        val statement = statementReader.next() ?: continue
-                        val sqlToExecute = statement.sql
-
-                        if (sqlToExecute.isNullOrBlank()) {
-                            continue
-                        }
-
-                        if (statement.canExecuteInTransaction() && conn.autoCommit) {
-                            conn.autoCommit = false // Включаем транзакцию для обычных DDL/DML
-                        } else if (!statement.canExecuteInTransaction() && !conn.autoCommit) {
-                            conn.commit() // Фиксируем накопленное, если встретили нетранзакционную команду
-                            conn.autoCommit = true
-                        }
-
-                        log.info {
-                            """
-                        |
-                        |Executing SQL statement:
-                        |--------------------------------------------------
-                        |${sqlToExecute.trim()}
-                        |--------------------------------------------------
-                        |""".trimIndent()
-                        }
-                        conn.createStatement().use { stmt ->
-                            stmt.execute(sqlToExecute)
-                        }
-                    }
-                }
-
-                // Если мы вышли из цикла и оставались в транзакции — фиксируем её
-                if (!conn.autoCommit) {
-                    conn.commit()
-                }
-                log.debug { "Transaction for SQL script of version $version successfully committed." }
-
-                // =================================================================
-                // ЭТАП 2: Синхронизация таблицы истории Flyway (Вторая транзакция)
-                // =================================================================
-                conn.autoCommit = false // Явно открываем чистую транзакцию для метаданных
-                conn.prepareStatement("DELETE FROM $fullTableName WHERE version = ?").use { stmt ->
-                    stmt.setString(1, version)
-                    val deletedRows = stmt.executeUpdate()
-
-                    if (deletedRows == 0) {
-                        throw IllegalStateException("SQL executed, but failed to remove version $version from metadata table $fullTableName")
-                    }
-                }
-
-                // Фиксируем транзакцию метаданных
-                conn.commit()
-                log.info { "Metadata successfully synchronized. Version $version is now marked as unapplied." }
-
-            } catch (e: Exception) {
-                log.error(e) { "Failed to execute rollback step for version $version. Rolling back active transaction." }
-                try {
-                    if (!conn.isClosed) {
-                        conn.rollback()
-                    }
-                } catch (rollbackEx: Exception) {
-                    log.error(rollbackEx) { "Failed to rollback transaction after error" }
-                }
-                throw e
+                conn.schema = activeSchema
+            } catch (_: Exception) {
+                conn.createStatement().use { it.execute("SET search_path TO \"$activeSchema\"") }
             }
         }
-    }
 
-    private fun setSchema(conn: Connection, schema: String) {
-        try {
-            conn.schema = schema
-        } catch (_: Exception) {
-            conn.createStatement().use { stmt ->
-                stmt.execute("SET search_path TO \"$schema\"")
+        // Переводим в автокоммит перед разбором скрипта
+        conn.autoCommit = true
+
+        if (isNoRollbackMigration) {
+            log.info { "Migration $version is explicitly marked as non-rollable. Skipping SQL execution." }
+        } else {
+            val resource = scriptResource
+                ?: throw IllegalStateException("Rollback failed! No undo script resource provided for version $version")
+            log.info { "Found native-style undo script: ${resource.filename}. Parsing and executing..." }
+
+            val sqlContent = resource.getContentAsString(StandardCharsets.UTF_8)
+            val statementReader = postgresParser.parse(StringResource(sqlContent))
+
+            while (statementReader.hasNext()) {
+                val statement = statementReader.next() ?: continue
+                val sqlToExecute = statement.sql ?: continue
+                if (sqlToExecute.isBlank()) continue
+
+                if (statement.canExecuteInTransaction() && conn.autoCommit) {
+                    conn.autoCommit = false
+                } else if (!statement.canExecuteInTransaction()) {
+                    if (!conn.autoCommit) {
+                        conn.commit()
+                        conn.autoCommit = true
+                    }
+                }
+
+                log.info {
+                    """
+                    |
+                    |Executing SQL statement:
+                    |--------------------------------------------------
+                    |${sqlToExecute.trim()}
+                    |--------------------------------------------------
+                    """.trimMargin()
+                }
+                conn.createStatement().use { it.execute(sqlToExecute) }
             }
         }
-        log.debug { "Database connection schema set to '$schema'" }
-    }
 
-    private fun validateIdentifier(identifier: String): String {
-        val trimmed = identifier.trim()
-        val validPattern = Regex("^[a-zA-Z0-9_]+$")
-        if (trimmed.isNotBlank() && !validPattern.matches(trimmed)) {
-            throw IllegalArgumentException("CRITICAL: Invalid database identifier detected: '$trimmed'. Potential SQL Injection attempt!")
+        if (!conn.autoCommit) conn.commit()
+
+        // Вторая транзакция (метаданные) на этой же сессии
+        conn.autoCommit = false
+        conn.prepareStatement("DELETE FROM $fullTableName WHERE version = ?").use { stmt ->
+            stmt.setString(1, version)
+            if (stmt.executeUpdate() == 0) {
+                throw IllegalStateException("SQL executed, but failed to remove version $version from metadata table $fullTableName")
+            }
         }
-        return trimmed
-    }}
+        conn.commit()
+        log.info { "Metadata successfully synchronized for version $version." }
+    }
+}

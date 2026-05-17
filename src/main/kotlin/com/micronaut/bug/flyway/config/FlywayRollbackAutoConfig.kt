@@ -3,7 +3,6 @@ package com.micronaut.bug.flyway.config
 import com.micronaut.bug.flyway.FlywayMetadataResolver
 import com.micronaut.bug.flyway.FlywayRollbackDatabaseInitializer
 import com.micronaut.bug.flyway.FlywayRollbackEngine
-import com.micronaut.bug.flyway.FlywayRollbackStepExecutor
 import com.micronaut.bug.flyway.config.FlywayRollbackAutoConfig.OnRollbackEnabledCondition
 import com.micronaut.bug.flyway.config.FlywayRollbackProperties.RollbackMode.NONE
 import org.flywaydb.core.Flyway
@@ -21,7 +20,6 @@ import org.springframework.context.ApplicationContext
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.ConditionContext
 import org.springframework.context.annotation.Conditional
-import org.springframework.core.io.ResourceLoader
 import org.springframework.core.type.AnnotatedTypeMetadata
 import org.springframework.jdbc.core.JdbcTemplate
 import javax.sql.DataSource
@@ -33,21 +31,15 @@ import javax.sql.DataSource
 class FlywayRollbackAutoConfig {
 
     @Bean
-    fun flywayRollbackStepExecutor(dataSource: DataSource) =
-        FlywayRollbackStepExecutor(JdbcTemplate(dataSource))
-
-    @Bean
     fun flywayRollbackEngine(
         flywayMetadataResolver: FlywayMetadataResolver,
         flywayProperties: FlywayProperties,
         flywayRollbackProperties: FlywayRollbackProperties,
         dataSource: DataSource,
-        flywayRollbackStepExecutor: FlywayRollbackStepExecutor,
     ) = FlywayRollbackEngine(
         flywayProperties = flywayProperties,
         flywayRollbackProperties = flywayRollbackProperties,
-        jdbcTemplate = JdbcTemplate(dataSource),
-        stepExecutor = flywayRollbackStepExecutor,
+        dataSource = dataSource,
         metadataResolver = flywayMetadataResolver,
     )
 

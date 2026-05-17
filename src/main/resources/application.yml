@@ -122,7 +122,7 @@ logging:
     javax: info
     io.netty: info
     com.zaxxer: info
-    org.flywaydb: debug
+    org.flywaydb: info
     org.apache: info
     org.postgresql: info
     org.eclipse: info

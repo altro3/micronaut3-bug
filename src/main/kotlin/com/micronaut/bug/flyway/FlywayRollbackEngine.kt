@@ -1,22 +1,26 @@
 package com.micronaut.bug.flyway
 
+import com.micronaut.bug.flyway.FlywayConventionConst.DEFAULT_TABLE
+import com.micronaut.bug.flyway.FlywayConventionConst.NO_ROLLBACK_SUFFIX
 import com.micronaut.bug.flyway.FlywayMetadataResolver.MigrationResourceMeta
 import com.micronaut.bug.flyway.config.FlywayRollbackProperties
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.flywaydb.core.api.MigrationVersion
 import org.springframework.boot.autoconfigure.flyway.FlywayProperties
 import org.springframework.jdbc.core.JdbcTemplate
+import javax.sql.DataSource
 
 open class FlywayRollbackEngine(
-    private val jdbcTemplate: JdbcTemplate,
-    private val stepExecutor: FlywayRollbackStepExecutor,
+    private val dataSource: DataSource,
     private val flywayRollbackProperties: FlywayRollbackProperties,
     private val metadataResolver: FlywayMetadataResolver,
     flywayProperties: FlywayProperties,
 ) {
     private val log = KotlinLogging.logger {}
 
-    private val rawHistoryTable: String = validateIdentifier(flywayProperties.table ?: "flyway_schema_history")
+    private val jdbcTemplate = JdbcTemplate(dataSource)
+
+    private val rawHistoryTable: String = validateIdentifier(flywayProperties.table ?: DEFAULT_TABLE)
     private val activeSchema: String = validateIdentifier(flywayProperties.schemas.firstOrNull() ?: "")
     private val fullHistoryTablePath: String = if (activeSchema.isNotBlank()) """"${activeSchema.trim()}"."${rawHistoryTable.trim()}"""" else """"${rawHistoryTable.trim()}""""
 
@@ -37,9 +41,7 @@ open class FlywayRollbackEngine(
         validateRollbackChainOrThrow(applied, resourcesMeta)
 
         val versionsToRollback = applied.take(stepsToExecute)
-        for (currentStep in 0 until stepsToExecute) {
-            processVersionRollback(versionsToRollback[currentStep], resourcesMeta)
-        }
+        executeInRollbackSession(versionsToRollback, resourcesMeta)
         log.info { "Successfully executed $stepsToExecute programmatic rollback step(s)" }
     }
 
@@ -60,9 +62,7 @@ open class FlywayRollbackEngine(
         val resourcesMeta = metadataResolver.getResolvedMetaMap()
         validateRollbackChainOrThrow(applied, resourcesMeta)
 
-        toUndo.forEach { versionStr ->
-            processVersionRollback(versionStr, resourcesMeta)
-        }
+        executeInRollbackSession(toUndo, resourcesMeta)
         log.info { "Successfully rolled back to version $targetVersion" }
     }
 
@@ -72,7 +72,7 @@ open class FlywayRollbackEngine(
         val targetTagVersion = MigrationVersion.fromVersion(tag)
         val resourcesMeta = metadataResolver.getResolvedMetaMap()
 
-        val availableFolders = resourcesMeta.values.map { it.parentFolder }.toSet()
+        val availableFolders = resourcesMeta.values.map { it.releaseTag }.toSet()
         if (!availableFolders.contains(tag)) {
             throw IllegalArgumentException("Tag directory '$tag' was not found or contains no migration files.")
         }
@@ -89,9 +89,9 @@ open class FlywayRollbackEngine(
         }
 
         val minRankOfSubsequentReleases = appliedMigrations.mapNotNull { (version, rank) ->
-            val folderName = resourcesMeta[version]?.parentFolder ?: return@mapNotNull null
+            val tagName = resourcesMeta[version]?.releaseTag ?: return@mapNotNull null
             try {
-                val folderVersion = MigrationVersion.fromVersion(folderName)
+                val folderVersion = MigrationVersion.fromVersion(tagName)
                 if (folderVersion > targetTagVersion) rank else null
             } catch (_: Exception) {
                 null
@@ -99,14 +99,14 @@ open class FlywayRollbackEngine(
         }.minOrNull()
 
         val migrationsToUndo = appliedMigrations.filter { (version, rank) ->
-            val folderName = resourcesMeta[version]?.parentFolder ?: return@filter false
+            val tagName = resourcesMeta[version]?.releaseTag ?: return@filter false
 
             if (minRankOfSubsequentReleases != null && rank >= minRankOfSubsequentReleases) {
                 return@filter true
             }
 
             val folderVersion = try {
-                MigrationVersion.fromVersion(folderName)
+                MigrationVersion.fromVersion(tagName)
             } catch (_: Exception) {
                 return@filter false
             }
@@ -121,9 +121,7 @@ open class FlywayRollbackEngine(
 
         validateRollbackChainOrThrow(appliedMigrations.map { it.first }, resourcesMeta)
 
-        migrationsToUndo.forEach { versionStr ->
-            processVersionRollback(versionStr, resourcesMeta)
-        }
+        executeInRollbackSession(migrationsToUndo, resourcesMeta)
         log.info { "Successfully rolled back all subsequent migrations to align with tag '$tag'" }
     }
 
@@ -136,25 +134,32 @@ open class FlywayRollbackEngine(
 
             if (meta.isNoRollback) {
                 if (!flywayRollbackProperties.force) {
-                    throw IllegalStateException("Rollback aborted! Migration $version is explicitly marked as non-rollable (_norb). To force bypass, enable 'spring.flyway.rollback.force=true'.")
+                    throw IllegalStateException("Rollback aborted! Migration $version is explicitly marked as non-rollable ($NO_ROLLBACK_SUFFIX). To force bypass, enable 'spring.flyway.rollback.force=true'.")
                 } else {
-                    log.warn { "Migration $version is marked as _norb, but 'force' flag is ENABLED. Bypassing." }
+                    log.warn { "Migration $version is marked as $NO_ROLLBACK_SUFFIX, but 'force' flag is ENABLED. Bypassing." }
                 }
             }
         }
     }
 
-    private fun processVersionRollback(version: String, resourcesMeta: Map<String, MigrationResourceMeta>) {
-        val meta = resourcesMeta[version]
-            ?: throw IllegalStateException("Rollback failed! Metadata missing for version $version.")
+    private fun executeInRollbackSession(versions: List<String>, resourcesMeta: Map<String, MigrationResourceMeta>) {
+        if (versions.isEmpty()) return
 
-        stepExecutor.executeRollbackStep(
-            version = version,
-            scriptResource = meta.undoResource,
-            isNoRollbackMigration = meta.isNoRollback,
-            activeSchema = activeSchema,
-            historyTable = rawHistoryTable,
-        )
+        dataSource.connection.use { conn ->
+            val stepExecutor = FlywayRollbackStepExecutor(conn)
+
+            versions.forEach { version ->
+                val meta = resourcesMeta[version] ?: throw IllegalStateException("Metadata missing for version $version.")
+                stepExecutor.executeRollbackStep(
+                    version = version,
+                    scriptResource = meta.undoResource,
+                    isNoRollbackMigration = meta.isNoRollback,
+                    activeSchema = activeSchema,
+                    historyTable = rawHistoryTable
+                )
+            }
+        }
+        log.info { "Successfully executed sequential rollback for ${versions.size} migration(s) inside a single connection session." }
     }
 
     private fun getAppliedMigrationsDesc(): List<String> =

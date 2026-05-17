@@ -1,5 +1,12 @@
 package com.micronaut.bug.flyway
 
+import com.micronaut.bug.flyway.FlywayConventionConst.CLEAN_VERSION_REGEX
+import com.micronaut.bug.flyway.FlywayConventionConst.DEFAULT_LOCATION
+import com.micronaut.bug.flyway.FlywayConventionConst.NO_ROLLBACK_SUFFIX
+import com.micronaut.bug.flyway.FlywayConventionConst.PREFIX_REPEATABLE
+import com.micronaut.bug.flyway.FlywayConventionConst.PREFIX_UNDO
+import com.micronaut.bug.flyway.FlywayConventionConst.PREFIX_VERSIONED
+import com.micronaut.bug.flyway.FlywayConventionConst.SEPARATOR_MIGRATION
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.boot.autoconfigure.flyway.FlywayProperties
 import org.springframework.core.io.Resource
@@ -16,10 +23,10 @@ class FlywayMetadataResolver(
     // Превращаем мапу в классический MutableMap для возможности вызова .clear()
     private val cachedMeta: MutableMap<String, MigrationResourceMeta> by lazy {
         val metaMap = mutableMapOf<String, MigrationResourceMeta>()
-        val locations = flywayProperties.locations.ifEmpty { listOf("classpath:db/migration") }
+        val locations = flywayProperties.locations.ifEmpty { listOf(DEFAULT_LOCATION) }
 
         // Вычисляем базовый маркер локации для честного отсечения подпутей
-        val rawLocation = locations.firstOrNull() ?: "classpath:db/migration"
+        val rawLocation = locations.firstOrNull() ?: DEFAULT_LOCATION
         val cleanBase = rawLocation.removePrefix("classpath:").removePrefix("/").removeSuffix("/")
         val baseMarker = "$cleanBase/"
 
@@ -36,14 +43,14 @@ class FlywayMetadataResolver(
 
             resources.forEach { resource ->
                 val filename = resource.filename ?: return@forEach
-                if (filename.startsWith("R")) {
-                    throw IllegalStateException("Flyway validation failed! Repeatable migrations ('R__') are prohibited.")
+                if (filename.startsWith(PREFIX_REPEATABLE)) {
+                    throw IllegalStateException("Flyway validation failed! Repeatable migrations ('$PREFIX_REPEATABLE$SEPARATOR_MIGRATION') are prohibited.")
                 }
 
-                if (!filename.startsWith("V") && !filename.startsWith("U")) return@forEach
+                if (!filename.startsWith(PREFIX_VERSIONED) && !filename.startsWith("U")) return@forEach
 
-                val cleanFilename = filename.replace(Regex("^[VU]"), "")
-                val version = Regex("""^\d+""").find(cleanFilename)?.value
+                val cleanFilename = filename.replace(Regex("^[$PREFIX_VERSIONED$PREFIX_UNDO]"), "")
+                val version = CLEAN_VERSION_REGEX.find(cleanFilename)?.value
                     ?: throw IllegalStateException("File '$filename' does not contain a valid timestamp prefix.")
 
                 if (version.length != 14) {
@@ -53,21 +60,25 @@ class FlywayMetadataResolver(
                 val urlPath = resource.url.toString().replace("\\", "/")
                 val baseIndex = urlPath.lastIndexOf(baseMarker)
 
-                // Честное вычисление вложенности любой глубины (например, вернет "1.x/1.0" или "1.x/1.1")
-                val parentFolder = if (baseIndex >= 0) {
+                val fullSubPath = if (baseIndex >= 0) {
                     val subPath = urlPath.substring(baseIndex + baseMarker.length)
                     if (subPath.contains("/")) subPath.substringBeforeLast("/") else ""
                 } else {
                     ""
                 }
+                val cleanTag = if (fullSubPath.contains("/")) fullSubPath.substringAfterLast("/") else fullSubPath
 
-                val currentMeta = metaMap.computeIfAbsent(version) { MigrationResourceMeta(parentFolder = parentFolder) }
+                val currentMeta = metaMap.computeIfAbsent(version) {
+                    MigrationResourceMeta(
+                        parentFolder = fullSubPath,
+                        releaseTag = cleanTag,
+                    )
+                }
 
-                if (filename.startsWith("U")) {
+                if (filename.startsWith(PREFIX_UNDO)) {
                     currentMeta.undoResource = resource
-                } else if (filename.startsWith("V")) {
-                    currentMeta.parentFolder = parentFolder
-                    if (filename.contains("_norb")) {
+                } else if (filename.startsWith(PREFIX_VERSIONED)) {
+                    if (filename.contains(NO_ROLLBACK_SUFFIX)) {
                         currentMeta.isNoRollback = true
                     }
                     if (currentMeta.forwardFilename != null) {
@@ -94,7 +105,7 @@ class FlywayMetadataResolver(
     fun getResolvedLocations(): Array<String> {
         if (resolvedLocationsCache != null) return resolvedLocationsCache!!
 
-        val rawLocation = flywayProperties.locations.firstOrNull() ?: "classpath:db/migration"
+        val rawLocation = flywayProperties.locations.firstOrNull() ?: DEFAULT_LOCATION
         val cleanBase = rawLocation.removePrefix("classpath:").removePrefix("/").removeSuffix("/")
 
         // Корректно склеиваем базовый путь и полный подпуть вложенности
@@ -127,6 +138,7 @@ class FlywayMetadataResolver(
 
     class MigrationResourceMeta(
         var parentFolder: String,
+        var releaseTag: String,
         var undoResource: Resource? = null,
         var isNoRollback: Boolean = false,
         var forwardFilename: String? = null
