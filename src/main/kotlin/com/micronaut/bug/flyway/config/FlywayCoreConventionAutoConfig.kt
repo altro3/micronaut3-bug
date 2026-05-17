@@ -1,6 +1,5 @@
 package com.micronaut.bug.flyway.config
 
-import com.micronaut.bug.flyway.FlywayConventionConfigCustomizer
 import com.micronaut.bug.flyway.FlywayConventionConst.CONFIG_IGNORE_PATTERNS
 import com.micronaut.bug.flyway.FlywayConventionConst.PREFIX_PLACEHOLDER
 import com.micronaut.bug.flyway.FlywayConventionConst.PREFIX_REPEATABLE
@@ -9,12 +8,10 @@ import com.micronaut.bug.flyway.FlywayConventionConst.PREFIX_VERSIONED
 import com.micronaut.bug.flyway.FlywayConventionConst.SEPARATOR_MIGRATION
 import com.micronaut.bug.flyway.FlywayConventionConst.SEPARATOR_PLACEHOLDER
 import com.micronaut.bug.flyway.FlywayMetadataResolver
-import com.micronaut.bug.flyway.config.FlywayRollbackProperties.RollbackMode
 import org.flywaydb.core.Flyway
 import org.flywaydb.core.api.Location
 import org.flywaydb.core.api.configuration.ClassicConfiguration
 import org.springframework.beans.factory.ObjectProvider
-import org.springframework.beans.factory.annotation.Value
 import org.springframework.boot.autoconfigure.AutoConfiguration
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
@@ -40,16 +37,6 @@ class FlywayCoreConventionAutoConfig {
         resourceLoader: ResourceLoader,
         flywayProperties: FlywayProperties
     ) = FlywayMetadataResolver(resourceLoader, flywayProperties)
-
-    @Bean
-    fun flywayConventionConfigCustomizer(
-        flywayMetadataResolver: FlywayMetadataResolver,
-        @Value($$"${spring.flyway.rollback.mode:NONE}")
-        mode: RollbackMode,
-    ) = FlywayConventionConfigCustomizer(
-        metadataResolver = flywayMetadataResolver,
-        isRollbackEnabled = mode != RollbackMode.NONE,
-    )
 
     @Bean
     @ConditionalOnMissingBean(Flyway::class)

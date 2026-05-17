@@ -7,6 +7,7 @@ import com.micronaut.bug.flyway.FlywayConventionConst.PREFIX_REPEATABLE
 import com.micronaut.bug.flyway.FlywayConventionConst.PREFIX_UNDO
 import com.micronaut.bug.flyway.FlywayConventionConst.PREFIX_VERSIONED
 import com.micronaut.bug.flyway.FlywayConventionConst.SEPARATOR_MIGRATION
+import com.micronaut.bug.flyway.FlywayConventionConst.SQL_ALL_PATTERN
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.boot.autoconfigure.flyway.FlywayProperties
 import org.springframework.core.io.Resource
@@ -32,7 +33,7 @@ class FlywayMetadataResolver(
 
         locations.forEach { rawLocationItem ->
             val cleanLocation = rawLocationItem.removeSuffix("/")
-            val pattern = if (cleanLocation.contains(":")) "$cleanLocation/**/*.sql" else "classpath:$cleanLocation/**/*.sql"
+            val pattern = if (cleanLocation.contains(":")) "$cleanLocation/$SQL_ALL_PATTERN" else "classpath:$cleanLocation/$SQL_ALL_PATTERN"
 
             val resources = try {
                 resourceResolver.getResources(pattern)
