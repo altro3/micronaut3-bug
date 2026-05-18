@@ -4,11 +4,12 @@ import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 plugins {
     alias(libs.plugins.spring.boot)
+    alias(libs.plugins.spring.boot.aot)
     alias(libs.plugins.jib)
     alias(libs.plugins.kotlin.jvm)
     alias(libs.plugins.kotlin.spring)
     alias(libs.plugins.kotlin.kapt)
-    alias(libs.plugins.jmh)
+//    alias(libs.plugins.jmh)
 }
 
 val jreImage = "bellsoft/liberica-openjre-alpine:21.0.11-x86_64"
@@ -23,8 +24,8 @@ repositories {
 
 dependencies {
 
-    kaptJmh("org.openjdk.jmh:jmh-generator-annprocess:1.37")
-    jmh("org.openjdk.jmh:jmh-core:1.37")
+//    kaptJmh("org.openjdk.jmh:jmh-generator-annprocess:1.37")
+//    jmh("org.openjdk.jmh:jmh-core:1.37")
 
     kapt(spring.spring.springBootConfigurationProcessor)
     kapt(spring.log4j.log4jCore)
@@ -37,7 +38,11 @@ dependencies {
     implementation(spring.spring.springBootStarterJdbc)
     implementation(spring.spring.springRetry)
     implementation(spring.postgresql.postgresql)
-    implementation(spring.flywaydb.flywayDatabasePostgresql)
+    implementation(spring.flywaydb.flywayDatabasePostgresql) {
+        exclude("com.fasterxml.jackson.dataformat")
+        exclude("com.fasterxml.jackson.datatype")
+    }
+    implementation(spring.liquibase.liquibaseCore)
     implementation(spring.projectreactor.reactorNettyHttp)
     implementation(spring.jackson.jacksonModuleKotlin)
     implementation(spring.jackson.jacksonModuleBlackbird)
@@ -104,6 +109,11 @@ tasks.withType<JibTask> {
     notCompatibleWithConfigurationCache("Jib does not support the Gradle configuration cache yet")
 }
 
+tasks.matching { it.name == "jib" || it.name == "jibDockerBuild" }.configureEach {
+    dependsOn(tasks.named("processAot"))
+}
+
+/*
 jmh {
     warmupIterations = 2
     iterations = 5
@@ -111,19 +121,33 @@ jmh {
     benchmarkMode = listOf("thrpt")
     timeUnit = "s"
 }
+*/
 
 jib {
     from { image = jreImage }
-    to {
-        image = "localhost:5000/micronaut3-bug:latest"
-    }
+    to { image = "localhost:5000/micronaut3-bug:latest" }
     container {
         jvmFlags = listOf(
             "-XX:+UseG1GC",
             "-XX:+UseStringDeduplication",
             "-XX:MaxRAMPercentage=75.0",
-            "-Dfile.encoding=UTF-8"
+            "-Dfile.encoding=UTF-8",
+            "-Dspring.aot.enabled=true",
         )
     }
+
+    extraDirectories {
+        paths {
+            path {
+                setFrom("build/classes/java/aot")
+                into = "/app/classes"
+            }
+            path {
+                setFrom("build/generated/aotResources")
+                into = "/app/resources"
+            }
+        }
+    }
+
     setAllowInsecureRegistries(true)
 }

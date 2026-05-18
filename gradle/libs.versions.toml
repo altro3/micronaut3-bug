@@ -25,6 +25,7 @@ coroutines = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-bom", version.
 
 [plugins]
 spring-boot = { id = "org.springframework.boot", version.ref = "spring" }
+spring-boot-aot = { id = "org.springframework.boot.aot", version.ref = "spring" }
 jib = { id = "com.google.cloud.tools.jib", version.ref = "jib" }
 kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
 kotlin-spring = { id = "org.jetbrains.kotlin.plugin.spring", version.ref = "kotlin" }

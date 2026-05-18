@@ -13,6 +13,7 @@ import org.flywaydb.core.api.Location
 import org.flywaydb.core.api.configuration.ClassicConfiguration
 import org.springframework.beans.factory.ObjectProvider
 import org.springframework.boot.autoconfigure.AutoConfiguration
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBooleanProperty
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.boot.autoconfigure.flyway.FlywayAutoConfiguration
@@ -28,6 +29,7 @@ import javax.sql.DataSource
     before = [FlywayAutoConfiguration::class],
     after = [DataSourceAutoConfiguration::class]
 )
+@ConditionalOnBooleanProperty("spring.flyway.enabled", matchIfMissing = true)
 @ConditionalOnClass(Flyway::class)
 @EnableConfigurationProperties(FlywayProperties::class)
 class FlywayCoreConventionAutoConfig {
@@ -70,6 +72,8 @@ class FlywayCoreConventionAutoConfig {
         configuration.isDetectEncoding = false
         configuration.isSkipDefaultCallbacks = true
         configuration.isCleanDisabled = true
+        configuration.isValidateOnMigrate = true
+        configuration.isValidateMigrationNaming = false
 
         // Подхватываем только безопасные инфраструктурные проперти из yaml
         flywayProperties.table?.let { configuration.table = it }

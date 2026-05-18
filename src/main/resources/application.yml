@@ -78,11 +78,17 @@ spring:
     username: micronaut3bug
     password: 1
   flyway:
+    enabled: true
     schemas: target
 #    rollback:
 #      mode: tag
 #      value: 1.1
 #      force: true
+  liquibase:
+    enabled: false
+    change-log: classpath:db/migration/changeset.yaml
+    # (Опционально) Закрываем транзакцию после каждого чейнджсета для PostgreSQL
+    default-schema: target
 
 management:
   observations:
@@ -123,6 +129,7 @@ logging:
     io.netty: info
     com.zaxxer: info
     org.flywaydb: info
+    liquibase: info
     org.apache: info
     org.postgresql: info
     org.eclipse: info
