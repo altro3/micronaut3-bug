@@ -34,15 +34,28 @@ class OtlpTraceEncoder(
         .setVersion("1.0")
         .build()
 
+    private val propKeyCache = object : LinkedHashMap<String, String>(MAX_CACHE_SIZE, 0.75f, true) {
+        override fun removeEldestEntry(eldest: Map.Entry<String, String>?): Boolean = size > MAX_CACHE_SIZE
+    }
+    private val baggageKeyCache = object : LinkedHashMap<String, String>(MAX_CACHE_SIZE, 0.75f, true) {
+        override fun removeEldestEntry(eldest: Map.Entry<String, String>?): Boolean = size > MAX_CACHE_SIZE
+    }
+
+    private val requestBuilder = ExportTraceServiceRequest.newBuilder()
+    private val resSpansBuilder = ResourceSpans.newBuilder()
+    private val scopeSpansBuilder = ScopeSpans.newBuilder()
+    private val spanBuilder = Span.newBuilder()
+    private val eventBuilder = Span.Event.newBuilder()
+    private val statusBuilder = Status.newBuilder()
+    private val valueBuilder = AnyValue.newBuilder()
+    private val keyValueBuilder = KeyValue.newBuilder()
+    private val stringBuilder = StringBuilder(2048)
+
     fun encodeBatch(events: List<TraceEvent>): ByteArray {
         val size = events.size
         if (size == 0) {
             return EMPTY_BYTE_ARRAY
         }
-
-        val scopeSpansBuilder = tlScopeSpansBuilder.get()
-        val spanBuilder = tlSpanBuilder.get()
-        val statusBuilder = tlStatusBuilder.get()
 
         scopeSpansBuilder.clear()
             .setScope(libScope)
@@ -60,42 +73,35 @@ class OtlpTraceEncoder(
                 .setEndTimeUnixNano(event.endEpochNanos)
                 .setStatus(statusBuilder.clear().setCode(event.status))
 
-            if (!event.parentIdHex.isNullOrBlank()) {
-                spanBuilder.parentSpanId = TraceIdGenerator.toByteString(event.parentIdHex)
+            val parentId = event.parentIdHex
+            if (!parentId.isNullOrBlank()) {
+                spanBuilder.parentSpanId = TraceIdGenerator.toByteString(parentId)
             }
 
-            // Наполняем атрибуты
-            event.userAttrs?.forEach { (k, v) ->
-                spanBuilder.addAttributes(keyValue(k, v))
-            }
-
-            // Наполняем багаж
-            event.baggage?.forEach { (k, v) ->
-                spanBuilder.addAttributes(keyValue("$PREFIX_BAGGAGE$k", v))
-            }
-
-            event.propagationHeaders?.forEach { (k, v) ->
-                spanBuilder.addAttributes(keyValue("$PREFIX_PROPAGATION$k", v))
-            }
+            // 1. Пользовательские атрибуты (без префикса и без кэша)
+            spanBuilder.addMapAttributes(event.userAttrs)
+            // 2. Динамический Багаж
+            spanBuilder.addMapAttributes(event.baggage, PREFIX_BAGGAGE, baggageKeyCache)
+            // 3. Заголовки пропогейшена
+            spanBuilder.addMapAttributes(event.propagationHeaders, PREFIX_PROPAGATION, propKeyCache)
 
             event.error?.let {
                 spanBuilder.addEvents(
-                    tlEventBuilder.get().clear()
+                    eventBuilder.clear()
                         .setName(EVENT_NAME_EXCEPTION)
                         .setTimeUnixNano(event.endEpochNanos)
-                        .addAttributes(keyValue(ATTR_EXCEPTION_TYPE, it.javaClass.name))
-                        .addAttributes(keyValue(ATTR_EXCEPTION_MESSAGE, it.message ?: it.javaClass.simpleName))
-                        .addAttributes(keyValue(ATTR_EXCEPTION_STACKTRACE, formatStackTrace(it, tlStringBuilder.get(), props.stackTraceMaxLines, props.stackTraceRootCauseFull)))
+                        .addAttributes(createKeyValue(ATTR_EXCEPTION_TYPE, it.javaClass.name))
+                        .addAttributes(createKeyValue(ATTR_EXCEPTION_MESSAGE, it.message ?: it.javaClass.simpleName))
+                        .addAttributes(createKeyValue(ATTR_EXCEPTION_STACKTRACE, formatStackTrace(it, stringBuilder, props.stackTraceMaxLines, props.stackTraceRootCauseFull)))
                 )
             }
 
             scopeSpansBuilder.addSpans(spanBuilder.build())
         }
 
-        return tlRequestBuilder.get().clear()
+        return requestBuilder.clear()
             .addResourceSpans(
-                tlResSpansBuilder.get()
-                    .clear()
+                resSpansBuilder.clear()
                     .setResource(serviceResource)
                     .addScopeSpans(scopeSpansBuilder.build())
                     .build()
@@ -104,53 +110,66 @@ class OtlpTraceEncoder(
             .toByteArray()
     }
 
-    private fun keyValue(k: String, v: Any): KeyValue {
-        val vBuilder = tlValueBuilder.get().clear()
+    private fun Span.Builder.addMapAttributes(
+        sourceMap: Map<String, Any?>?,
+        prefix: String = STRING_EMPTY,
+        cache: MutableMap<String, String>? = null
+    ) {
+        if (sourceMap.isNullOrEmpty()) return
 
+        for ((k, v) in sourceMap) {
+            // Если есть префикс и кэш — берем из кэша, иначе используем ключ как есть
+            val targetKey = if (prefix.isNotEmpty() && cache != null) {
+                cache.getOrPut(k) {
+                    if (k.startsWith(prefix)) k else "$prefix$k"
+                }
+            } else {
+                k
+            }
+            this.addAttributes(createKeyValue(targetKey, v))
+        }
+    }
+
+    private fun createKeyValue(key: String, value: Any?): KeyValue {
+        valueBuilder.clear()
+        buildAnyValue(value)
+        return keyValueBuilder.clear()
+            .setKey(key)
+            .setValue(valueBuilder)
+            .build()
+    }
+
+    private fun buildAnyValue(v: Any?) {
+        if (v == null) {
+            valueBuilder.setStringValue(STRING_NULL)
+            return
+        }
         when (v) {
-            is String -> vBuilder.setStringValue(v)
-            is Long -> vBuilder.setIntValue(v)
-            is Int -> vBuilder.setIntValue(v.toLong())
-            is Boolean -> vBuilder.setBoolValue(v)
-            is Double -> vBuilder.setDoubleValue(v)
-            is Float -> vBuilder.setDoubleValue(v.toDouble())
+            is String -> valueBuilder.setStringValue(v)
+            is Long -> valueBuilder.setIntValue(v)
+            is Int -> valueBuilder.setIntValue(v.toLong())
+            is Boolean -> valueBuilder.setBoolValue(v)
+            is Double -> valueBuilder.setDoubleValue(v)
+            is Float -> valueBuilder.setDoubleValue(v.toDouble())
             is Iterable<*> -> {
-                val arrayBuilder = vBuilder.arrayValueBuilder
-                val itemValBuilder = tlItemValueBuilder.get()
+                val arrayBuilder = valueBuilder.arrayValueBuilder
                 for (item in v) {
                     if (item != null) {
-                        arrayBuilder.addValues(
-                            itemValBuilder.clear()
-                                .setStringValue(item.toString())
-                                .build()
-                        )
+                        arrayBuilder.addValuesBuilder().setStringValue(item.toString())
                     }
                 }
             }
 
-            else -> vBuilder.setStringValue(v.toString())
+            else -> valueBuilder.setStringValue(v.toString())
         }
-        return tlKeyValueBuilder.get().clear()
-            .setKey(k)
-            .setValue(vBuilder)
-            .build()
     }
 
     companion object {
 
-        private val tlRequestBuilder = ThreadLocal.withInitial { ExportTraceServiceRequest.newBuilder() }
-        private val tlResSpansBuilder = ThreadLocal.withInitial { ResourceSpans.newBuilder() }
-        private val tlScopeSpansBuilder = ThreadLocal.withInitial { ScopeSpans.newBuilder() }
-        private val tlSpanBuilder = ThreadLocal.withInitial { Span.newBuilder() }
-        private val tlEventBuilder = ThreadLocal.withInitial { Span.Event.newBuilder() }
-        private val tlStatusBuilder = ThreadLocal.withInitial { Status.newBuilder() }
-        private val tlValueBuilder = ThreadLocal.withInitial { AnyValue.newBuilder() }
-        private val tlKeyValueBuilder = ThreadLocal.withInitial { KeyValue.newBuilder() }
-        private val tlItemValueBuilder = ThreadLocal.withInitial { AnyValue.newBuilder() }
-
-        private val tlStringBuilder = ThreadLocal.withInitial { StringBuilder(2048) }
+        const val STRING_EMPTY = ""
+        const val STRING_NULL = "null"
         private val EMPTY_BYTE_ARRAY = ByteArray(0)
-
         const val EVENT_NAME_EXCEPTION = "exception"
+        private const val MAX_CACHE_SIZE = 1000
     }
 }

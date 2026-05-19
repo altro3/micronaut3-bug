@@ -16,14 +16,13 @@ class TraceElement(
         val oldState = tracer.internalStack.get()
 
         tracer.internalStack.set(snapshot)
-
         tracer.syncMdc()
 
         return oldState
     }
 
     override fun restoreThreadContext(context: CoroutineContext, oldState: ArrayDeque<TraceContext>?) {
-        if (!oldState.isNullOrEmpty()) {
+        if (oldState != null) {
             tracer.internalStack.set(oldState)
         } else {
             tracer.internalStack.remove()

@@ -62,25 +62,21 @@ class NanoTraceFilter(
 
         val userId = rq.getHeader(HEADER_USER_ID)
 
-        // 1. Безаллокационный разбор W3C traceparent
         val traceParent = rq.getHeader(HEADER_TRACEPARENT)
         var traceId: String? = null
         var parentId: String? = null
         var isSampledByParent = true
 
-        if (traceParent != null && traceParent.startsWith(TRACEPARENT_PREFIX)) {
+        if (traceParent != null && traceParent.length == 55 && traceParent.startsWith(TRACEPARENT_PREFIX)) {
             val firstDash = traceParent.indexOf('-', 3)
             val secondDash = traceParent.indexOf('-', firstDash + 1)
 
-            if (firstDash != -1 && secondDash != -1) {
+            if (firstDash == 35 && secondDash == 52) { // Фиксированные позиции W3C
                 traceId = traceParent.substring(3, firstDash)
                 parentId = traceParent.substring(firstDash + 1, secondDash)
 
-                val flagsStr = traceParent.substring(secondDash + 1)
-                if (flagsStr.length >= 2) {
-                    val flags = flagsStr.toIntOrNull(16) ?: 0
-                    isSampledByParent = (flags and 0x01) == 1
-                }
+                val f2 = traceParent[54]
+                isSampledByParent = (f2 == '1' || f2 == '3' || f2 == '5' || f2 == '7' || f2 == '9' || f2 == 'b' || f2 == 'd' || f2 == 'f')
             }
         }
 
@@ -92,7 +88,11 @@ class NanoTraceFilter(
         }
 
         val propagationHeaders = HashMap<String, String>()
-        traceProps.propagationHeaders.forEach { key ->
+        val propKeys = traceProps.propagationHeaders
+
+        // ОПТИМИЗАЦИЯ: Чистый идиоматичный цикл без лямбд,
+        // отлично работающий с Set
+        for (key in propKeys) {
             val value = rq.getHeader(key)
             if (value != null) {
                 propagationHeaders[key.lowercase()] = value
@@ -184,10 +184,12 @@ class NanoTraceFilter(
         }
     }
 
-    private fun getFullUri(rq: HttpServletRequest): String =
-        rq.requestURL.let { if (rq.queryString != null) it.append(QUERY_MARKER).append(rq.queryString) else it }.toString()
+    private fun getFullUri(rq: HttpServletRequest): String {
+        val q = rq.queryString ?: return rq.requestURL.toString()
+        val sb = rq.requestURL // Он возвращает переиспользуемый StringBuffer сервлет-контейнера
+        return sb.append(QUERY_MARKER).append(q).toString()
+    }
 
-    // 5. Потоковое наполнение атрибутов без аллокаций Sequence
     private fun fillRequestHeadersAttrs(rq: HttpServletRequest, target: HashMap<String, Any>) {
         val names = rq.headerNames ?: return
         while (names.hasMoreElements()) {
@@ -196,17 +198,26 @@ class NanoTraceFilter(
 
             if (normalizedName in OTEL_MAPPED_HEADERS) continue
 
+            // Прямая конкатенация без кэша и блокировок: быстро и потокобезопасно
             val key = "$PREFIX_HTTP_REQUEST_HEADER$normalizedName"
 
             if (normalizedName in SENSITIVE_HEADERS) {
                 target[key] = MASKED_VALUES
             } else {
                 val headersEnum = rq.getHeaders(name)
-                val valuesList = ArrayList<String>()
-                while (headersEnum.hasMoreElements()) {
-                    valuesList.add(headersEnum.nextElement())
+                if (!headersEnum.hasMoreElements()) continue
+
+                val first = headersEnum.nextElement()
+                if (!headersEnum.hasMoreElements()) {
+                    target[key] = first
+                } else {
+                    val valuesList = ArrayList<String>(4)
+                    valuesList.add(first)
+                    while (headersEnum.hasMoreElements()) {
+                        valuesList.add(headersEnum.nextElement())
+                    }
+                    target[key] = valuesList
                 }
-                target[key] = valuesList
             }
         }
     }
@@ -217,13 +228,20 @@ class NanoTraceFilter(
             val normalizedName = name.lowercase()
             if (normalizedName in OTEL_MAPPED_HEADERS) continue
 
+            // Прямая конкатенация без кэша и блокировок
             val key = "$PREFIX_HTTP_RESPONSE_HEADER$normalizedName"
             val headers = rs.getHeaders(name)
-            val valuesList = ArrayList<String>(headers.size)
-            for (value in headers) {
-                valuesList.add(value)
+            val size = headers.size
+
+            if (size == 1) {
+                target[key] = headers.first()
+            } else if (size > 1) {
+                val valuesList = ArrayList<String>(size)
+                for (value in headers) {
+                    valuesList.add(value)
+                }
+                target[key] = valuesList
             }
-            target[key] = valuesList
         }
     }
 

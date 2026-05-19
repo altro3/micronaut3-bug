@@ -26,14 +26,15 @@ import java.io.ByteArrayOutputStream
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
+import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.zip.GZIPOutputStream
 import kotlin.time.Duration.Companion.milliseconds
 
 class TraceExporter(
     appName: String,
     nodeName: String,
-    private val httpClient: HttpClient,
     traceProps: TraceProperties,
+    private val httpClient: HttpClient,
 ) {
     private val log = KotlinLogging.logger {}
 
@@ -41,6 +42,9 @@ class TraceExporter(
     private val encoder = OtlpTraceEncoder(appName, nodeName, traceProps)
     private val channel = Channel<TraceEvent>(exporterProps.queueCapacity)
     private val exportScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private var gzipByteArrayOutputStream = ByteArrayOutputStream(BASELINE_GZIP_BUFFER_SIZE)
+
+    private val eventPool = ConcurrentLinkedQueue<TraceEvent>()
 
     fun enqueue(
         traceIdHex: String,
@@ -56,28 +60,24 @@ class TraceExporter(
         propagationHeaders: Map<String, String>?,
         error: Throwable? = null,
     ) {
-        if (!exporterProps.enabled) {
-            return
-        }
+        if (!exporterProps.enabled) return
 
-        val event = TraceEvent(
-            traceIdHex = traceIdHex,
-            spanIdHex = spanIdHex,
-            parentIdHex = parentIdHex,
-            name = name,
-            startEpochNanos = startEpochNanos,
-            endEpochNanos = endEpochNanos,
-            status = status,
-            kind = kind,
-            userAttrs = userAttrs,
-            baggage = baggage,
-            propagationHeaders = propagationHeaders,
-            error = error,
+        // 1. Берем готовый объект из пула. Если пул пустой — создаем (он быстро прогреется)
+        val event = eventPool.poll() ?: TraceEvent()
+
+        // 2. Накатываем новые данные поверх старых (метод внутри TraceEvent)
+        event.update(
+            traceIdHex, spanIdHex, parentIdHex, name, startEpochNanos,
+            endEpochNanos, status, kind, userAttrs, baggage, propagationHeaders, error
         )
 
         val result = channel.trySend(event)
         if (result.isFailure) {
             log.warn { "Trace queue overflow, span dropped: traceId=$traceIdHex" }
+
+            // Если очередь переполнена, зануляем ссылки, чтобы не держать память, и возвращаем в пул
+            event.clearReferences()
+            eventPool.offer(event)
         }
     }
 
@@ -91,29 +91,53 @@ class TraceExporter(
         exportScope.launch {
             log.info { "Starting Trace batch exporter..." }
 
-            // Пул батча выделяется ОДИН раз во имя избежания аллокаций в цикле [5.3]
             val batch = ArrayList<TraceEvent>(exporterProps.batchSize)
-            val flushIntervalMs = exporterProps.flushInterval.toMillis().milliseconds
+            val flushIntervalMs = exporterProps.flushInterval.toMillis()
 
             while (isActive) {
                 try {
-                    batch.clear()
+                    val result = channel.receiveCatching() // Блокирующее ожидание первого элемента
+                    if (result.isClosed) {
+                        log.info { "Worker: channel closed, flushing remaining spans from queue..." }
+                        flushRemainingOnShutdown(batch)
+                        break
+                    }
 
-                    // Ожидаем первый элемент пачки (блокирующий вызов)
-                    val first = channel.receive()
+                    val first = result.getOrThrow()
                     batch.add(first)
 
-                    // Накапливаем остальные спаны в рамках лимита времени
-                    withTimeoutOrNull(flushIntervalMs) {
-                        while (batch.size < exporterProps.batchSize) {
-                            val next = channel.tryReceive().getOrNull() ?: break
-                            batch.add(next)
+                    val startTime = System.currentTimeMillis()
+
+                    while (batch.size < exporterProps.batchSize) {
+                        val nextResult = channel.tryReceive()
+
+                        if (nextResult.isSuccess) {
+                            val event = nextResult.getOrNull()
+                            if (event != null) {
+                                batch.add(event)
+                            }
+                        } else {
+                            // ИСПРАВЛЕНИЕ 2: Если канал закрылся во время накопления,
+                            // не ждем окончания таймера, выходим мгновенно для быстрого shutdown
+                            if (nextResult.isClosed) {
+                                break
+                            }
+
+                            // Если просто нет элементов, проверяем лимит времени пачки
+                            if (System.currentTimeMillis() - startTime >= flushIntervalMs) {
+                                break
+                            }
+
+                            // ИСПРАВЛЕНИЕ 1: Заменяем yield() на честный микро-сон,
+                            // чтобы разгрузить CPU и не выжигать ядро процессора
+                            delay(1.milliseconds)
                         }
                     }
 
                     sendBatch(batch)
                 } catch (_: ClosedReceiveChannelException) {
-                    log.info { "Worker: channel closed, finishing loop" }
+                    log.info { "Worker: channel closed, flushing remaining spans from queue..." }
+                    flushRemainingOnShutdown(batch)
                     break
                 } catch (_: CancellationException) {
                     log.info { "Export loop stopped gracefully" }
@@ -121,6 +145,15 @@ class TraceExporter(
                 } catch (e: Exception) {
                     log.error(e) { "Error in Trace export loop. Retrying in ${exporterProps.retryInterval}..." }
                     delay(exporterProps.retryInterval.toMillis().milliseconds)
+                } finally {
+                    if (batch.isNotEmpty()) {
+                        val currentBatchSize = batch.size
+                        for (i in 0 until currentBatchSize) {
+                            batch[i].clearReferences()
+                        }
+                        eventPool.addAll(batch)
+                        batch.clear()
+                    }
                 }
             }
         }
@@ -135,15 +168,13 @@ class TraceExporter(
 
         runBlocking {
             val job = exportScope.coroutineContext[Job]
-
             val finished = withTimeoutOrNull(exporterProps.shutdownTimeout.toMillis().milliseconds) {
                 job?.children?.forEach { it.join() }
                 true
             }
 
             if (finished == null) {
-                log.warn { "Worker timeout, flushing remaining spans manually" }
-                flushRemaining()
+                log.warn { "Worker timeout during graceful shutdown. Forcing stop." }
             }
         }
 
@@ -152,10 +183,16 @@ class TraceExporter(
     }
 
     private fun compressGzip(data: ByteArray): ByteArray {
-        // Используем твой GZIP_ESTIMATED_RATIO = 2 для начальной емкости
-        val bos = ByteArrayOutputStream(data.size / GZIP_ESTIMATED_RATIO)
-        GZIPOutputStream(bos).use { it.write(data) }
-        return bos.toByteArray()
+        gzipByteArrayOutputStream.reset()
+        GZIPOutputStream(gzipByteArrayOutputStream).use { it.write(data) }
+        val result = gzipByteArrayOutputStream.toByteArray()
+
+        // ЗАЩИТА ОТ РАЗДУВАНИЯ:
+        if (gzipByteArrayOutputStream.size() > MAX_GZIP_BUFFER_SIZE) {
+            log.info { "Gzip buffer resized from ${gzipByteArrayOutputStream.size()} bytes back to baseline due to peak burst" }
+            gzipByteArrayOutputStream = ByteArrayOutputStream(BASELINE_GZIP_BUFFER_SIZE)
+        }
+        return result
     }
 
     private fun sendBatch(events: List<TraceEvent>) {
@@ -169,67 +206,88 @@ class TraceExporter(
                 payload = compressGzip(payload)
             }
 
-            sendRequest(payload, shouldCompress)
+            var attempts = 0
+            var success = false
+            while (attempts < 3 && !success) {
+                attempts++
+                success = sendRequest(payload, shouldCompress)
+                if (!success && attempts < 3) {
+                    Thread.sleep(exporterProps.retryInterval.toMillis())
+                }
+            }
         } catch (e: Exception) {
             log.error(e) { "Critical error during Trace batch encoding" }
         }
     }
 
-    private fun sendRequest(payload: ByteArray, isCompressed: Boolean) {
-        val rq = HttpRequest.newBuilder()
+    private fun sendRequest(payload: ByteArray, isCompressed: Boolean): Boolean {
+        val builder = HttpRequest.newBuilder()
             .uri(exporterProps.url)
             .header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_PROTOBUF_VALUE)
             .timeout(exporterProps.requestTimeout)
             .POST(HttpRequest.BodyPublishers.ofByteArray(payload))
-            .apply {
-                if (isCompressed) {
-                    header(CONTENT_ENCODING, ENCODING_GZIP)
-                }
-            }
-            .build()
 
-        try {
-            // Прямой синхронный вызов. Корутина на Dispatchers.IO уснет на время I/O
+        if (isCompressed) {
+            builder.header(CONTENT_ENCODING, ENCODING_GZIP)
+        }
+
+        val rq = builder.build()
+
+        return try {
             val rs = httpClient.send(rq, HttpResponse.BodyHandlers.discarding())
-            handleResponse(rs, null)
+            if (rs.statusCode() in 200..299) {
+                true
+            } else {
+                log.warn { "Trace rejected batch: code=${rs.statusCode()}" }
+                false
+            }
         } catch (ex: Exception) {
-            handleResponse(null, ex)
+            log.warn { "Trace batch export failed due to network error: ${ex.message}" }
+            false
         }
     }
 
-    private fun handleResponse(rs: HttpResponse<*>?, ex: Throwable?) {
-        if (ex != null) {
-            log.warn { "Trace batch export failed: ${ex.message}" }
-        } else if (rs?.statusCode() !in 200..299) {
-            log.warn { "Trace rejected batch: code=${rs?.statusCode()}" }
-        }
-    }
+    private fun flushRemainingOnShutdown(batch: ArrayList<TraceEvent>) {
+        // ИСПРАВЛЕНИЕ БАГА: Строка batch.clear() УДАЛЕНА.
+        // Мы сохраняем те элементы, которые воркер успел накопить перед закрытием канала.
 
-    private fun flushRemaining() {
-        val batchSize = exporterProps.batchSize
-        val batch = ArrayList<TraceEvent>(batchSize)
         var result = channel.tryReceive()
 
         while (result.isSuccess) {
-            val event = result.getOrNull() ?: break
-            batch.add(event)
+            val next = result.getOrNull()
+            if (next != null) {
+                batch.add(next)
 
-            if (batch.size >= batchSize) {
-                sendBatch(batch)
-                batch.clear()
+                if (batch.size >= exporterProps.batchSize) {
+                    sendBatch(batch)
+
+                    val size = batch.size
+                    for (i in 0 until size) {
+                        batch[i].clearReferences()
+                    }
+                    eventPool.addAll(batch)
+
+                    batch.clear()
+                }
             }
-
             result = channel.tryReceive()
         }
 
-        // Отправляем остатки, если они есть
+        // Досылаем абсолютно всё, что осталось (включая пред-накопленные элементы)
         if (batch.isNotEmpty()) {
             sendBatch(batch)
+            val size = batch.size
+            for (i in 0 until size) {
+                batch[i].clearReferences()
+            }
+            eventPool.addAll(batch)
+            batch.clear() // Хвост занулен, finally в start() отработает вхолостую безопасно
         }
     }
 
     companion object {
         private const val ENCODING_GZIP = "gzip"
-        private const val GZIP_ESTIMATED_RATIO = 2
+        private const val BASELINE_GZIP_BUFFER_SIZE = 16384
+        private const val MAX_GZIP_BUFFER_SIZE = 65536
     }
 }

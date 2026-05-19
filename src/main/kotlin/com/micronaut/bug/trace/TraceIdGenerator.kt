@@ -13,6 +13,14 @@ object TraceIdGenerator {
         }
     }
 
+    private val DECODE_TABLE = IntArray(128).apply {
+        for (i in 0..9) this['0'.code + i] = i
+        for (i in 0..5) {
+            this['a'.code + i] = 10 + i
+            this['A'.code + i] = 10 + i // Страхует на случай апперкейса из внешних систем
+        }
+    }
+
     /**
      * Генерирует 32-символьный hex-ID.
      * Быстрее UUID.randomUUID() в 10-20 раз.
@@ -78,17 +86,10 @@ object TraceIdGenerator {
         val len = hex.length
         val result = ByteArray(len / 2)
         for (i in result.indices) {
-            val h = decodeDigit(hex[i * 2])
-            val l = decodeDigit(hex[i * 2 + 1])
-            result[i] = (((h shl 4) or l) and 0xFF).toByte()
+            val h = DECODE_TABLE[hex[i * 2].code and 0x7F]
+            val l = DECODE_TABLE[hex[i * 2 + 1].code and 0x7F]
+            result[i] = ((h shl 4) or l).toByte()
         }
         return ByteString.copyFrom(result)
     }
-
-    private fun decodeDigit(c: Char): Int =
-        when (c) {
-            in '0'..'9' -> c - '0'
-            in 'a'..'f' -> c - 'a' + 10
-            else -> throw IllegalArgumentException("Invalid hex character: $c")
-        }
 }
