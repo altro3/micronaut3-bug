@@ -80,14 +80,13 @@ spring:
   flyway:
     enabled: true
     schemas: target
-#    rollback:
-#      mode: tag
-#      value: 1.1
-#      force: true
+    rollback:
+      mode: version
+      value: 20260516140000
+      force: true
   liquibase:
     enabled: false
     change-log: classpath:db/migration/changeset.yaml
-    # (Опционально) Закрываем транзакцию после каждого чейнджсета для PostgreSQL
     default-schema: target
 
 management:

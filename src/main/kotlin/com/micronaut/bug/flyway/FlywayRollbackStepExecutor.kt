@@ -22,7 +22,6 @@ open class FlywayRollbackStepExecutor(
     init {
         val classicConfig = ClassicConfiguration()
         val singleConnectionDataSource = SingleConnectionDataSource(conn, true)
-        // На основе переданного в конструктор коннекшена один раз определяем версию БД
         val connectionFactory = JdbcConnectionFactory(
             singleConnectionDataSource,
             classicConfig,
@@ -44,7 +43,7 @@ open class FlywayRollbackStepExecutor(
         log.info { "Processing atomic rollback step for version: $version" }
         val fullTableName = if (activeSchema.isNotBlank()) "\"$activeSchema\".\"$historyTable\"" else "\"$historyTable\""
 
-        // Настраиваем схему в рамках текущей сессии, если нужно
+        // Настраиваем схему в рамках текущей сессии
         if (activeSchema.isNotBlank()) {
             try {
                 conn.schema = activeSchema
@@ -53,57 +52,72 @@ open class FlywayRollbackStepExecutor(
             }
         }
 
-        // Переводим в автокоммит перед разбором скрипта
-        conn.autoCommit = true
-
-        if (isNoRollbackMigration) {
-            log.info { "Migration $version is explicitly marked as non-rollable. Skipping SQL execution." }
-        } else {
-            val resource = scriptResource
-                ?: throw IllegalStateException("Rollback failed! No undo script resource provided for version $version")
-            log.info { "Found native-style undo script: ${resource.filename}. Parsing and executing..." }
-
-            val sqlContent = resource.getContentAsString(StandardCharsets.UTF_8)
-            val statementReader = postgresParser.parse(StringResource(sqlContent))
-
-            while (statementReader.hasNext()) {
-                val statement = statementReader.next() ?: continue
-                val sqlToExecute = statement.sql ?: continue
-                if (sqlToExecute.isBlank()) continue
-
-                if (statement.canExecuteInTransaction() && conn.autoCommit) {
-                    conn.autoCommit = false
-                } else if (!statement.canExecuteInTransaction()) {
-                    if (!conn.autoCommit) {
-                        conn.commit()
-                        conn.autoCommit = true
-                    }
-                }
-
-                log.info {
-                    """
-                    |
-                    |Executing SQL statement:
-                    |--------------------------------------------------
-                    |${sqlToExecute.trim()}
-                    |--------------------------------------------------
-                    """.trimMargin()
-                }
-                conn.createStatement().use { it.execute(sqlToExecute) }
-            }
-        }
-
-        if (!conn.autoCommit) conn.commit()
-
-        // Вторая транзакция (метаданные) на этой же сессии
+        // Включаем режим ручного управления транзакцией для всего файла
         conn.autoCommit = false
-        conn.prepareStatement("DELETE FROM $fullTableName WHERE version = ?").use { stmt ->
-            stmt.setString(1, version)
-            if (stmt.executeUpdate() == 0) {
-                throw IllegalStateException("SQL executed, but failed to remove version $version from metadata table $fullTableName")
+
+        try {
+            if (isNoRollbackMigration) {
+                log.info { "Migration $version is explicitly marked as non-rollable. Skipping SQL execution." }
+            } else {
+                val resource = scriptResource
+                    ?: throw IllegalStateException("Rollback failed! No undo script resource provided for version $version")
+                log.info { "Found native-style undo script: ${resource.filename}. Parsing and executing..." }
+
+                val sqlContent = resource.getContentAsString(StandardCharsets.UTF_8)
+                val statementReader = postgresParser.parse(StringResource(sqlContent))
+
+                while (statementReader.hasNext()) {
+                    val statement = statementReader.next() ?: continue
+                    val sqlToExecute = statement.sql ?: continue
+                    if (sqlToExecute.isBlank()) continue
+
+                    // Если стейтмент требует автокоммита (например, CONCURRENTLY),
+                    // а у нас строгое правило "один файл - одна транзакция", прерываем выполнение.
+                    if (!statement.canExecuteInTransaction()) {
+                        throw IllegalStateException(
+                            "Statement in version $version cannot execute inside a transaction (e.g. CREATE INDEX CONCURRENTLY). " +
+                                    "This violates the 'one file - one transaction' constraint. Statement: $sqlToExecute"
+                        )
+                    }
+
+                    log.info {
+                        """
+                        |
+                        |Executing SQL statement:
+                        |--------------------------------------------------
+                        |${sqlToExecute.trim()}
+                        |--------------------------------------------------
+                        """.trimMargin()
+                    }
+                    conn.createStatement().use { it.execute(sqlToExecute) }
+                }
             }
+
+            // Фиксируем транзакцию выполнения скрипта ТУТ (один раз на весь файл)
+            conn.commit()
+            log.info { "SQL script for version $version successfully committed." }
+
+        } catch (e: Exception) {
+            // Если упал любой стейтмент скрипта — откатываем ВСЕ изменения этого файла
+            conn.rollback()
+            log.error(e) { "Rollback SQL execution failed for version $version. Whole transaction rolled back." }
+            throw e
         }
-        conn.commit()
-        log.info { "Metadata successfully synchronized for version $version." }
+
+        // Вторая транзакция — обновление метаданных (выполняется только при успехе первой)
+        try {
+            conn.prepareStatement("DELETE FROM $fullTableName WHERE version = ?").use { stmt ->
+                stmt.setString(1, version)
+                if (stmt.executeUpdate() == 0) {
+                    throw IllegalStateException("SQL executed, but failed to remove version $version from metadata table $fullTableName")
+                }
+            }
+            conn.commit()
+            log.info { "Metadata successfully synchronized for version $version." }
+        } catch (e: Exception) {
+            conn.rollback()
+            log.error(e) { "Failed to update metadata table for version $version." }
+            throw e
+        }
     }
 }
