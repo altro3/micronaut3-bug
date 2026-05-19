@@ -52,20 +52,18 @@ class NanoTraceClientInterceptor(
         val urlFull = if (rq.uri.isAbsolute) {
             rq.uri.toString()
         } else {
-            // basePrefix уже без слэша в конце (мы сделали removeSuffix(SLASH))
             val path = getFullUri(rq)
             if (path.startsWith(SLASH)) "$basePrefix$path" else "$basePrefix/$path"
         }
 
-        // Стартуем дочерний спан. Имя в формате "CLIENT: METHOD /path" для наглядности в UI Grafana.
-        val ctx = tracer.startSpan(name = "$PREFIX_CLIENT_SPAN ${rq.method} $urlFull")
+        val methodStr = rq.method.name()
 
-        // Проброс стандартного контекста трейсинга (W3C traceparent)
+        val ctx = tracer.startSpan(name = "$PREFIX_CLIENT_SPAN $methodStr $urlFull")
+
         tracer.getTraceParent()?.let {
             rq.headers.set(HEADER_TRACEPARENT, it)
         }
 
-        // Идентификация отправителя для внутренних вызовов
         if (props.type == INTERNAL) {
             rq.headers.set(HEADER_X_SENDER, selfServiceName)
             MDC.get(MDC_USER_ID)?.let {
@@ -73,23 +71,20 @@ class NanoTraceClientInterceptor(
             }
         }
 
-        // Проброс стандартного Baggage (W3C)
         formatBaggage(ctx.baggage)?.let {
             rq.headers.set(HEADER_BAGGAGE, it)
         }
 
-        // Проброс Tracestate по стандарту W3C
         ctx.traceState?.let {
             if (!rq.headers.containsKey(NanoTracer.HEADER_TRACESTATE)) {
                 rq.headers.set(NanoTracer.HEADER_TRACESTATE, it)
             }
         }
 
-        // Проброс кастомных заголовков (Propagation Headers)
-        // Мы берем их из контекста и проставляем "как есть"
-        if (!ctx.propagationHeaders.isNullOrEmpty()) {
+        val propHeaders = ctx.propagationHeaders
+        if (propHeaders != null && propHeaders.isNotEmpty()) {
             val headers = rq.headers
-            ctx.propagationHeaders.forEach { (key, value) ->
+            for ((key, value) in propHeaders) {
                 if (!headers.containsKey(key)) {
                     headers.set(key, value)
                 }
@@ -99,28 +94,29 @@ class NanoTraceClientInterceptor(
         val originalClient = MDC.get(MDC_SOURCE)
         val originalServer = MDC.get(MDC_TARGET)
 
+        val serviceNameStr = props.serviceName ?: HOST_UNKNOWN
+
         return try {
             val rs = execution.execute(rq, body)
 
             val durationMs = (System.nanoTime() - startTimeNano) / 1_000_000
-            // Берем порог из настроек конкретного клиента
             val isSlow = durationMs >= props.log.slowThreshold.toMillis()
 
             if (isSlow) {
-                log.warn { "Slow client response: ${rq.method} $urlFull took ${durationMs}ms (threshold: ${props.log.slowThreshold.toMillis()}ms) [extRqId: ${MDC.get(MDC_SPAN_ID)}]" }
+                log.warn { "Slow client response: $methodStr $urlFull took ${durationMs}ms (threshold: ${props.log.slowThreshold.toMillis()}ms) [extRqId: ${MDC.get(MDC_SPAN_ID)}]" }
             }
 
-            val isError = rs.statusCode.isError
+            val statusCode = rs.statusCode
+            val isError = statusCode.isError
 
             MDC.put(MDC_SOURCE, selfServiceName)
-            MDC.put(MDC_TARGET, props.serviceName)
+            MDC.put(MDC_TARGET, serviceNameStr)
 
-            // Собираем ТОЛЬКО кастомные атрибуты.
             val attrs = HashMap<String, Any>(32)
             MDC.get(MDC_USER_ID)?.let { attrs[ATTR_USER_ID] = it }
-            attrs[ATTR_HTTP_REQUEST_METHOD] = rq.method.name()
+            attrs[ATTR_HTTP_REQUEST_METHOD] = methodStr
             attrs[ATTR_URL_FULL] = urlFull
-            attrs[ATTR_HTTP_RESPONSE_STATUS_CODE] = rs.statusCode.value().toLong()
+            attrs[ATTR_HTTP_RESPONSE_STATUS_CODE] = statusCode.value().toLong()
 
             val host = rq.uri.host ?: props.url.host ?: HOST_UNKNOWN
             attrs[ATTR_SERVER_ADDRESS] = host
@@ -130,11 +126,10 @@ class NanoTraceClientInterceptor(
             attrs[ATTR_SERVER_PORT] = port.toLong()
 
             attrs[ATTR_CLIENT] = selfServiceName
-            attrs[ATTR_SERVER] = props.serviceName.toString()
+            attrs[ATTR_SERVER] = serviceNameStr
             attrs[ATTR_PEER_SERVICE] = props.serviceName ?: host
 
-            // Размеры
-            if (rq.method.name() !in METHODS_WITHOUT_BODY) {
+            if (methodStr !in METHODS_WITHOUT_BODY) {
                 val reqSize = body.size.toLong()
                 if (reqSize > 0) {
                     attrs[ATTR_HTTP_REQUEST_BODY_SIZE] = reqSize
@@ -146,14 +141,12 @@ class NanoTraceClientInterceptor(
             }
 
             if (isError) {
-                attrs[ATTR_EXCEPTION_MESSAGE] = "HTTP ${rs.statusCode.value()}"
+                attrs[ATTR_EXCEPTION_MESSAGE] = "HTTP ${statusCode.value()}"
             }
 
-            // Наполняем прямо в общую мапу без создания промежуточных Map
             fillRequestHeadersAttrs(rq, attrs)
             fillResponseHeadersAttrs(rs, attrs)
 
-            // Фиксация успешного (или логического ошибочного, например 4xx/5xx) результата
             tracer.stop(
                 ctx = ctx,
                 status = if (isError) StatusCode.STATUS_CODE_ERROR else StatusCode.STATUS_CODE_OK,
@@ -165,10 +158,10 @@ class NanoTraceClientInterceptor(
         } catch (e: Exception) {
             val attrs = HashMap<String, Any>(8)
             MDC.get(MDC_USER_ID)?.let { attrs[ATTR_USER_ID] = it }
-            attrs[ATTR_HTTP_REQUEST_METHOD] = rq.method.name()
+            attrs[ATTR_HTTP_REQUEST_METHOD] = methodStr
             attrs[ATTR_URL_FULL] = rq.uri.toString()
             attrs[ATTR_CLIENT] = selfServiceName
-            attrs[ATTR_SERVER] = props.serviceName.toString()
+            attrs[ATTR_SERVER] = serviceNameStr
 
             fillRequestHeadersAttrs(rq, attrs)
 
@@ -187,33 +180,48 @@ class NanoTraceClientInterceptor(
     }
 
     private fun fillRequestHeadersAttrs(rq: HttpRequest, target: HashMap<String, Any>) {
-        rq.headers.forEach { (name, values) ->
+        val entries = rq.headers.entries
+        for (entry in entries) {
+            val name = entry.key
             val normalizedName = name.lowercase()
-            if (normalizedName !in OTEL_MAPPED_HEADERS) {
-                target["$PREFIX_HTTP_REQUEST_HEADER$normalizedName"] = values
+            if (normalizedName in OTEL_MAPPED_HEADERS) continue
+
+            val key = "$PREFIX_HTTP_REQUEST_HEADER$normalizedName"
+            val values = entry.value
+            if (values.size == 1) {
+                target[key] = values[0]
+            } else if (values.size > 1) {
+                target[key] = values
             }
         }
     }
 
     private fun fillResponseHeadersAttrs(rs: ClientHttpResponse, target: HashMap<String, Any>) {
-        rs.headers.forEach { (name, values) ->
+        val entries = rs.headers.entries
+        for (entry in entries) {
+            val name = entry.key
             val normalizedName = name.lowercase()
-            if (normalizedName !in OTEL_MAPPED_HEADERS) {
-                target["$PREFIX_HTTP_RESPONSE_HEADER$normalizedName"] = values
+            if (normalizedName in OTEL_MAPPED_HEADERS) continue
+
+            val key = "$PREFIX_HTTP_RESPONSE_HEADER$normalizedName"
+            val values = entry.value
+            if (values.size == 1) {
+                target[key] = values[0]
+            } else if (values.size > 1) {
+                target[key] = values
             }
         }
     }
 
     private fun getFullUri(rq: HttpRequest): String {
         val uri = rq.uri
-        return if (uri.query != null) "${uri.path}?${uri.query}" else uri.path
+        val query = uri.query
+        return if (query != null) "${uri.path}?$query" else uri.path
     }
 
     companion object {
-
         const val PROTOCOL_HTTP = "http"
         const val PROTOCOL_HTTPS = "https"
-
         const val PREFIX_CLIENT_SPAN = "CLIENT:"
         const val HOST_UNKNOWN = "unknown"
     }
