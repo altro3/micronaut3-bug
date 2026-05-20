@@ -4,6 +4,7 @@ import com.micronaut.bug.trace.config.TraceProperties
 import com.micronaut.bug.trace.otlp.TraceExporter
 import io.opentelemetry.proto.trace.v1.Span.SpanKind
 import io.opentelemetry.proto.trace.v1.Status.StatusCode
+import kotlinx.coroutines.withContext
 import org.slf4j.MDC
 import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpHeaders.CONTENT_LENGTH
@@ -181,6 +182,32 @@ class NanoTracer(
             error = ctx.error,
         )
         syncMdc()
+    }
+
+    suspend inline fun <T> trace(
+        name: String,
+        kind: SpanKind = SpanKind.SPAN_KIND_INTERNAL,
+        crossinline block: suspend (TraceReport) -> T,
+    ): T {
+        val ctx = startSpan(name)
+        val report = TraceReport()
+
+        try {
+            // Передаем ссылку на stack напрямую в TraceElement
+            return withContext(TraceElement(internalStack.get(), this)) {
+                block(report)
+            }
+        } catch (e: Exception) {
+            report.status = StatusCode.STATUS_CODE_ERROR
+            throw e
+        } finally {
+            stop(
+                ctx = ctx,
+                status = report.status,
+                kind = kind,
+                attrs = report.attrs,
+            )
+        }
     }
 
     class TraceReport(

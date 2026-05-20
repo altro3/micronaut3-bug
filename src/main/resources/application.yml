@@ -58,6 +58,8 @@ app:
 
 server:
   port: 8080
+  tomcat:
+    additional-tld-skip-patterns: "*"
 
 spring:
   application:
@@ -68,6 +70,8 @@ spring:
   web:
     locale: en_US
     locale-resolver: fixed
+    resources:
+      add-mappings: false
   main:
     banner-mode: off
   http:
@@ -80,16 +84,14 @@ spring:
   flyway:
     enabled: true
     schemas: target
-    rollback:
-      mode: version
-      value: 20260516140000
-      force: true
-  liquibase:
-    enabled: false
-    change-log: classpath:db/migration/changeset.yaml
-    default-schema: target
+#    rollback:
+#      mode: tag
+#      value: 1.0
+#      force: true
 
 management:
+  server:
+    port: 9091
   observations:
     key-values:
       enabled: true
@@ -106,6 +108,7 @@ management:
   otlp:
     metrics:
       export:
+        enabled: false
         #url: http://localhost:8428/opentelemetry/v1/metrics
         url: http://localhost:4318/v1/metrics
         step: PT10S
@@ -122,14 +125,15 @@ logging:
 #    console: "%d{HH:mm:ss.SSS} %highlight{%-5level}{FATAL=red, ERROR=red, WARN=yellow, INFO=green, DEBUG=cyan, TRACE=black} [%t] %style{%logger{1.}}{cyan} - %msg%n%throwable"
   level:
     root: debug
-    jdk: info
-    sun: info
+    jdk: warn
+    sun: warn
     javax: info
     io.netty: info
-    com.zaxxer: info
+    com.zaxxer: warn
+    org.apache: warn
     org.flywaydb: info
     liquibase: info
-    org.apache: info
+    io.micrometer: info
     org.postgresql: info
     org.eclipse: info
     org.hibernate: info

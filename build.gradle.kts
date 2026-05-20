@@ -4,7 +4,7 @@ import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 plugins {
     alias(libs.plugins.spring.boot)
-    alias(libs.plugins.spring.boot.aot)
+//    alias(libs.plugins.spring.boot.aot)
     alias(libs.plugins.jib)
     alias(libs.plugins.kotlin.jvm)
     alias(libs.plugins.kotlin.spring)
@@ -30,9 +30,10 @@ dependencies {
     kapt(spring.spring.springBootConfigurationProcessor)
     kapt(spring.log4j.log4jCore)
 
-    implementation(spring.spring.springBootStarterWeb)
+    implementation(spring.spring.springBootStarterWeb) {
+        exclude(group = "org.apache.tomcat.embed", module = "tomcat-embed-websocket")
+    }
     implementation(spring.spring.springBootStarterLog4j2)
-    implementation(spring.spring.springBootStarterJson)
     implementation(spring.spring.springBootStarterValidation)
     implementation(spring.spring.springBootStarterActuator)
     implementation(spring.spring.springBootStarterJdbc)
@@ -42,11 +43,10 @@ dependencies {
         exclude("com.fasterxml.jackson.dataformat")
         exclude("com.fasterxml.jackson.datatype")
     }
-    implementation(spring.liquibase.liquibaseCore)
     implementation(spring.projectreactor.reactorNettyHttp)
     implementation(spring.jackson.jacksonModuleKotlin)
     implementation(spring.jackson.jacksonModuleBlackbird)
-//    implementation(spring.micrometer.micrometerRegistryOtlp)
+    implementation(spring.micrometer.micrometerRegistryOtlp)
     implementation(coroutines.kotlinx.kotlinxCoroutinesCoreJvm)
     implementation(coroutines.kotlinx.kotlinxCoroutinesSlf4j)
     implementation(kot.kotlin.kotlinReflect)
@@ -54,7 +54,7 @@ dependencies {
     implementation(libs.disruptor)
     implementation(libs.protobuf.java)
     implementation(libs.otel.proto)
-    implementation(libs.wiremock)
+    compileOnly(libs.wiremock)
 
     testImplementation(spring.spring.springBootStarterTest)
     testImplementation(kot.kotlin.kotlinTestJunit5)
@@ -71,7 +71,8 @@ configurations.all {
 
 tasks.withType<KotlinCompile>().configureEach {
     compilerOptions {
-        freeCompilerArgs.addAll("-Xjsr305=strict", "-java-parameters", "-Xemit-jvm-type-annotations", "-Xannotation-default-target=param-property")
+        javaParameters = true
+        freeCompilerArgs.addAll("-Xjsr305=strict", "-Xemit-jvm-type-annotations", "-Xannotation-default-target=param-property", "-Xjvm-default=all")
     }
 }
 
@@ -80,22 +81,18 @@ tasks.test {
 
     testLogging {
         events(TestLogEvent.PASSED, TestLogEvent.SKIPPED, TestLogEvent.FAILED)
-        showStandardStreams = true
         showExceptions = true
         showStackTraces = true
     }
 
-    outputs.upToDateWhen { false }
-
-    minHeapSize = "2g"
+    maxParallelForks = 4
+    minHeapSize = "256m"
     maxHeapSize = "4g"
 
     jvmArgs(
-        "-XX:MaxMetaspaceSize=512m",
-        "-XX:+EnableDynamicAgentLoading",
-        "-XX:+UseG1GC",
-        "-XX:+UseStringDeduplication",
-        "-Dfile.encoding=UTF-8"
+        "-XX:MaxMetaspaceSize=384m",
+        "-XX:+UseParallelGC",
+        "-Dfile.encoding=UTF-8",
     )
 }
 
@@ -109,9 +106,9 @@ tasks.withType<JibTask> {
     notCompatibleWithConfigurationCache("Jib does not support the Gradle configuration cache yet")
 }
 
-tasks.matching { it.name == "jib" || it.name == "jibDockerBuild" }.configureEach {
-    dependsOn(tasks.named("processAot"))
-}
+//tasks.matching { it.name == "jib" || it.name == "jibDockerBuild" }.configureEach {
+//    dependsOn(tasks.named("processAot"))
+//}
 
 /*
 jmh {
@@ -123,6 +120,10 @@ jmh {
 }
 */
 
+allOpen {
+    annotation("org.springframework.context.annotation.Lazy")
+}
+
 jib {
     from { image = jreImage }
     to { image = "localhost:5000/micronaut3-bug:latest" }
@@ -132,7 +133,7 @@ jib {
             "-XX:+UseStringDeduplication",
             "-XX:MaxRAMPercentage=75.0",
             "-Dfile.encoding=UTF-8",
-            "-Dspring.aot.enabled=true",
+//            "-Dspring.aot.enabled=true",
         )
     }
 

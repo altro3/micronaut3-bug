@@ -17,8 +17,8 @@ import org.springframework.stereotype.Service
 import java.io.ByteArrayOutputStream
 import java.util.zip.GZIPOutputStream
 
-@ConditionalOnBooleanProperty("app.mock.enabled")
-@Service
+//@ConditionalOnBooleanProperty("app.mock.enabled")
+//@Service
 class ExternalMockServer {
 
     // Используем динамический порт 8081, как договорились в YAML
