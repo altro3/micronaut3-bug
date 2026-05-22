@@ -8,11 +8,8 @@ class TracingTaskDecorator(
 ) : TaskDecorator {
 
     override fun decorate(runnable: Runnable): Runnable {
-        if (tracer == null) {
-            return runnable
-        }
+        if (tracer == null) return runnable
 
-        // 1. ЗАХВАТ КОНТЕКСТА В РОДИТЕЛЬСКОМ ПОТОКЕ
         val parent = tracer.currentSpan()
         val traceId = parent?.traceId
         val spanId = parent?.spanId
@@ -24,17 +21,25 @@ class TracingTaskDecorator(
         val parentMdc = MDC.getCopyOfContextMap()
 
         return Runnable {
-            val originalSpan = tracer.currentSpan()
-            val originalMdc = MDC.getCopyOfContextMap()
+            val isScheduled = traceId == null
 
-            if (parentMdc != null) {
-                MDC.setContextMap(parentMdc)
-            } else {
+            val originalMdc = if (!isScheduled) MDC.getCopyOfContextMap() else null
+
+            if (isScheduled) {
+                tracer.clearThreadSpan()
                 MDC.clear()
+            } else {
+                if (parentMdc != null) {
+                    MDC.setContextMap(parentMdc)
+                } else {
+                    MDC.clear()
+                }
             }
 
+            val spanPrefix = if (isScheduled) PREFIX_SCHEDULED else PREFIX_ASYNC
+
             val asyncSpan = tracer.startTrace(
-                name = "ASYNC: ${runnable.javaClass.simpleName}",
+                name = "$spanPrefix: ${runnable.javaClass.simpleName}",
                 remoteTraceId = traceId,
                 remoteParentId = spanId,
                 sampled = sampled,
@@ -50,14 +55,23 @@ class TracingTaskDecorator(
                 throw e
             } finally {
                 tracer.stop(asyncSpan)
-                tracer.setSpanInternal(originalSpan)
 
-                if (originalMdc != null) {
-                    MDC.setContextMap(originalMdc)
-                } else {
+                if (isScheduled) {
+                    tracer.clearThreadSpan()
                     MDC.clear()
+                } else {
+                    if (originalMdc != null) {
+                        MDC.setContextMap(originalMdc)
+                    } else {
+                        MDC.clear()
+                    }
                 }
             }
         }
+    }
+
+    companion object {
+        private const val PREFIX_SCHEDULED = "SCHEDULED"
+        private const val PREFIX_ASYNC = "ASYNC"
     }
 }

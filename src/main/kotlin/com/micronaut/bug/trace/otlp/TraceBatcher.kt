@@ -22,7 +22,9 @@ import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.withTimeoutOrNull
 import java.net.http.HttpClient
 import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.concurrent.atomic.LongAdder
 import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.minutes
 
 class TraceBatcher(
     appName: String,
@@ -40,6 +42,12 @@ class TraceBatcher(
 
     private val concurrencySemaphore = Semaphore(exporterProps.maxSenders)
 
+    private val droppedSpansCounter = LongAdder()
+
+    // Четкое разделение джоб для контролируемого shutdown
+    private var workerJob: Job? = null
+    private var reporterJob: Job? = null
+
     fun enqueue(
         traceIdHex: String, spanIdHex: String, parentIdHex: String?, name: String,
         startEpochNanos: Long, endEpochNanos: Long, status: StatusCode, kind: Span.SpanKind,
@@ -56,7 +64,7 @@ class TraceBatcher(
 
         val result = channel.trySend(event)
         if (result.isFailure) {
-            log.warn { "Trace queue overflow, span dropped: traceId=$traceIdHex" }
+            droppedSpansCounter.increment()
             event.clearReferences()
             eventPool.offer(event)
         }
@@ -66,7 +74,7 @@ class TraceBatcher(
     fun start() {
         if (!exporterProps.enabled) return
 
-        exportScope.launch {
+        workerJob = exportScope.launch {
             log.info { "Starting Trace batcher worker..." }
             var batch = ArrayList<TraceEvent>(exporterProps.batchSize)
             val flushIntervalMs = exporterProps.flushInterval.toMillis()
@@ -121,11 +129,28 @@ class TraceBatcher(
                 }
             }
         }
+
+        reporterJob = exportScope.launch {
+            while (isActive) {
+                try {
+                    delay(1.minutes)
+                    val droppedCount = droppedSpansCounter.sumThenReset()
+                    if (droppedCount > 0) {
+                        log.warn { "Trace queue overflow detected. Dropped $droppedCount spans in the last minute. Consider increasing queueCapacity or batchSize." }
+                    }
+                } catch (_: CancellationException) {
+                    break
+                } catch (e: Exception) {
+                    log.error(e) { "Error in Trace dropped spans reporter loop." }
+                }
+            }
+        }
     }
 
-    private fun dispatchBatch(batch: ArrayList<TraceEvent>) {
+    private suspend fun dispatchBatch(batch: ArrayList<TraceEvent>) {
+        concurrencySemaphore.acquire()
+
         exportScope.launch {
-            concurrencySemaphore.acquire()
             try {
                 sender.sendBatch(batch)
             } finally {
@@ -138,12 +163,13 @@ class TraceBatcher(
     fun stop() {
         if (!exporterProps.enabled) return
         log.info { "Shutting down Trace batcher..." }
+
+        reporterJob?.cancel()
         channel.close()
 
         runBlocking {
-            val job = exportScope.coroutineContext[Job]
             withTimeoutOrNull(exporterProps.shutdownTimeout.toMillis().milliseconds) {
-                job?.children?.forEach { it.join() }
+                workerJob?.join()
                 true
             }
         }

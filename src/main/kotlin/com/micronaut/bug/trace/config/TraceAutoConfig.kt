@@ -12,6 +12,7 @@ import org.springframework.boot.web.servlet.FilterRegistrationBean
 import org.springframework.context.annotation.Bean
 import org.springframework.core.Ordered
 import java.net.http.HttpClient
+import java.util.concurrent.Executors
 
 @ConditionalOnBooleanProperty("app.trace.enabled", matchIfMissing = true)
 @AutoConfiguration
@@ -23,6 +24,9 @@ class TraceAutoConfig {
         HttpClient.newBuilder()
             .connectTimeout(properties.exporter.connectTimeout)
             .version(HttpClient.Version.HTTP_2)
+            .executor(Executors.newFixedThreadPool(properties.exporter.maxSenders) { runnable ->
+                Thread(runnable, "trace-http-sender").apply { isDaemon = true }
+            })
             .build()
 
     @Bean
@@ -53,7 +57,6 @@ class TraceAutoConfig {
     ): FilterRegistrationBean<NanoTraceFilter> = FilterRegistrationBean(
         NanoTraceFilter(tracer, traceProps, appName)
     ).apply {
-        // Трейсинг ВСЕГДА идет самым первым в цепочке фильтров Tomcat/Netty
         order = Ordered.HIGHEST_PRECEDENCE
         addUrlPatterns("/*")
     }

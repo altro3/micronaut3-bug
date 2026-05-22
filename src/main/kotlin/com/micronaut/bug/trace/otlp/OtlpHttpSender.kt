@@ -12,7 +12,9 @@ import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
 import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.concurrent.ThreadLocalRandom
 import java.util.zip.GZIPOutputStream
+import kotlin.math.pow
 import kotlin.time.Duration.Companion.milliseconds
 
 class OtlpHttpSender(
@@ -25,6 +27,8 @@ class OtlpHttpSender(
     private val log = KotlinLogging.logger {}
 
     private val exporterProps = traceProps.exporter
+    private val retryInterval = exporterProps.retryInterval.toMillis()
+    private val maxAttempts = exporterProps.maxAttempts
     private val encoder = OtlpTraceEncoder(appName, nodeName, traceProps)
 
     suspend fun sendBatch(events: List<TraceEvent>) {
@@ -40,14 +44,12 @@ class OtlpHttpSender(
                 payload = compressGzip(rawPayload)
             }
 
-            var attempts = 0
-            var success = false
-            while (attempts < 3 && !success) {
-                attempts++
-                success = sendRequest(payload, shouldCompress)
-                if (!success && attempts < 3) {
-                    delay(exporterProps.retryInterval.toMillis().milliseconds)
-                }
+            for (attempt in 1..maxAttempts) {
+                if (sendRequest(payload, shouldCompress)) return
+
+                val jitter = ThreadLocalRandom.current().nextDouble(exporterProps.jitterMin, exporterProps.jitterMax)
+                val backoffDelay = (retryInterval * exporterProps.backoffMultiplier.pow((attempt - 1).toDouble()) * jitter).toLong()
+                delay(backoffDelay.milliseconds)
             }
         } catch (e: Exception) {
             log.error(e) { "Critical error during Trace batch encoding/sending" }

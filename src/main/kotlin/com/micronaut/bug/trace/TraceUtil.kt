@@ -11,6 +11,9 @@ object TraceUtil {
     const val MDC_TRACE_FLAGS = "traceFlags"
     const val MDC_SOURCE = "source"
     const val MDC_TARGET = "target"
+    const val MDC_SUB_TITLE = "subTitle"
+    const val MDC_MAIN_STAT = "mainStat"
+    const val MDC_COLOR = "color"
 
     // Флаги сэмплирования по спецификации W3C Trace Context
     const val TRACE_FLAG_SAMPLED = "01"
@@ -92,67 +95,29 @@ object TraceUtil {
         NanoTraceFilter.HEADER_API_KEY,
     )
 
-    /**
-     * Высокопроизводительный разбор заголовка Baggage (W3C).
-     * Разбирает строку формата `key1=value1,key2=value2;metadata` за один проход.
-     * Игнорирует опциональные свойства (properties/metadata) после точки с запятой.
-     */
     fun parseBaggage(header: String): Map<String, String>? {
         if (header.isBlank()) return null
 
         val result = HashMap<String, String>(4)
-        val len = header.length
-        var i = 0
 
-        while (i < len) {
-            // Пропускаем пробелы перед ключом
-            while (i < len && header[i] <= ' ') i++
-            if (i >= len) break
+        // 1. Бьем по запятым на отдельные пары
+        val pairs = header.split(',')
+        for (i in pairs.indices) {
+            val pair = pairs[i].trim()
+            if (pair.isEmpty()) continue
 
-            // Ищем конец ключа (знак '=' или конец строки)
-            val keyStart = i
-            while (i < len && header[i] != '=' && header[i] != ',' && header[i] != ';') i++
-            val keyEnd = i
+            // 2. Отрезаем метаданные после точки с запятой, если они есть
+            val cleanPair = if (pair.contains(';')) pair.substringBefore(';') else pair
 
-            if (i < len && header[i] == '=') {
-                i++ // Пропускаем '='
-
-                // Пропускаем пробелы перед значением
-                while (i < len && header[i] <= ' ') i++
-                val valStart = i
-
-                // Ищем конец значения (запятая или точка с запятой)
-                var inMetadata = false
-                while (i < len) {
-                    val ch = header[i]
-                    if (ch == ',') {
-                        break
-                    } else if (ch == ';') {
-                        inMetadata = true
-                    }
-                    i++
+            // 3. Выделяем ключ и значение
+            val eqIdx = cleanPair.indexOf('=')
+            if (eqIdx > 0) {
+                val key = cleanPair.substring(0, eqIdx).trim()
+                val value = cleanPair.substring(eqIdx + 1).trim()
+                if (key.isNotEmpty() && value.isNotEmpty()) {
+                    result[key] = value
                 }
-
-                var valEnd = i
-                if (inMetadata) {
-                    // Если была точка с запятой, отматываем назад до её появления, игнорируя метаданные
-                    valEnd = header.indexOf(';', valStart)
-                    if (valEnd == -1) valEnd = i
-                }
-
-                // Убираем возможные шлейфовые пробелы у значения
-                var actualValEnd = valEnd
-                while (actualValEnd > valStart && header[actualValEnd - 1] <= ' ') actualValEnd--
-
-                val key = header.substring(keyStart, keyEnd).trim()
-                if (key.isNotEmpty() && actualValEnd > valStart) {
-                    result[key] = header.substring(valStart, actualValEnd)
-                }
-            } else {
-                // Ключ без значения или некорректная структура, пропускаем до следующей пары
-                while (i < len && header[i] != ',') i++
             }
-            i++ // Пропускаем запятую
         }
 
         return if (result.isEmpty()) null else result

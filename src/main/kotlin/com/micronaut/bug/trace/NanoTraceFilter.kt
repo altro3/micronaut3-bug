@@ -100,40 +100,36 @@ class NanoTraceFilter(
             rs.setHeader(HEADER_TRACEPARENT, tracer.getTraceParent())
             chain.doFilter(rq, rs)
         } finally {
-            val durationMs = (System.nanoTime() - startTimeNano) / 1_000_000
-            val isSlow = durationMs >= traceProps.slowRequestThreshold.toMillis()
+            try {
+                val durationMs = (System.nanoTime() - startTimeNano) / 1_000_000
+                val isSlow = durationMs >= traceProps.slowRequestThreshold.toMillis()
+                val isError = rs.status >= ERROR_STATUS_THRESHOLD
+                val attrs = HashMap<String, Any>(32)
 
-            if (isSlow) {
-                log.warn { "Slow request detected: ${rq.method} ${rq.requestURI} took ${durationMs}ms" }
+                MDC.get(MDC_USER_ID)?.let { attrs[ATTR_USER_ID] = it }
+                attrs[ATTR_CLIENT] = sender
+                attrs[ATTR_SERVER] = selfServiceName
+
+                if (isError) attrs[ATTR_EXCEPTION_MESSAGE] = "HTTP ${rs.status}"
+
+                extractBaseAttributes(rq, rs, attrs, isSlow)
+                fillRequestHeadersAttrs(rq, attrs)
+                fillResponseHeadersAttrs(rs, attrs)
+
+                tracer.stop(
+                    span = curSpan,
+                    status = if (isError) Status.StatusCode.STATUS_CODE_ERROR else Status.StatusCode.STATUS_CODE_OK,
+                    attrs = attrs,
+                    forceExport = isSlow || isError,
+                )
+            } catch (e: Throwable) {
+                log.error(e) { "Tracer failed to extract HTTP trace attributes" }
+            } finally {
+                tracer.clearThreadSpan()
+                MDC.remove(MDC_USER_ID)
+                MDC.remove(MDC_SOURCE)
+                MDC.remove(MDC_TARGET)
             }
-
-            val isError = rs.status >= ERROR_STATUS_THRESHOLD
-            val attrs = HashMap<String, Any>(32)
-
-            MDC.get(MDC_USER_ID)?.let { attrs[ATTR_USER_ID] = it }
-            attrs[ATTR_CLIENT] = sender
-            attrs[ATTR_SERVER] = selfServiceName
-
-            if (isError) {
-                attrs[ATTR_EXCEPTION_MESSAGE] = "HTTP ${rs.status}"
-            }
-
-            // Вызываем извлечение HTTP-метаданных и заголовков из выделенного HttpTraceExtractor
-            extractBaseAttributes(rq, rs, attrs, isSlow)
-            fillRequestHeadersAttrs(rq, attrs)
-            fillResponseHeadersAttrs(rs, attrs)
-
-            tracer.stop(
-                span = curSpan,
-                status = if (isError) Status.StatusCode.STATUS_CODE_ERROR else Status.StatusCode.STATUS_CODE_OK,
-                attrs = attrs,
-                forceExport = isSlow || isError,
-            )
-
-            tracer.clearThreadSpan()
-            MDC.remove(MDC_USER_ID)
-            MDC.remove(MDC_SOURCE)
-            MDC.remove(MDC_TARGET)
         }
     }
 

@@ -5,13 +5,12 @@ import com.fasterxml.jackson.databind.SerializationFeature
 import com.micronaut.bug.client.HttpClientProperties.ClientType.EXTERNAL
 import com.micronaut.bug.client.LoggingInterceptor.Companion.LIMIT_TEXT_CHECK_THRESHOLD
 import com.micronaut.bug.client.NanoTraceClientInterceptor.Companion.PREFIX_CLIENT_SPAN
-import com.micronaut.bug.trace.NanoTracer
-import com.micronaut.bug.trace.NanoTracer.Companion.MDC_COLOR
-import com.micronaut.bug.trace.NanoTracer.Companion.MDC_MAIN_STAT
-import com.micronaut.bug.trace.NanoTracer.Companion.MDC_SOURCE
-import com.micronaut.bug.trace.NanoTracer.Companion.MDC_SPAN_ID
-import com.micronaut.bug.trace.NanoTracer.Companion.MDC_SUB_TITLE
 import com.micronaut.bug.trace.TraceIdGenerator.generateSpanId
+import com.micronaut.bug.trace.TraceUtil.MDC_COLOR
+import com.micronaut.bug.trace.TraceUtil.MDC_MAIN_STAT
+import com.micronaut.bug.trace.TraceUtil.MDC_SOURCE
+import com.micronaut.bug.trace.TraceUtil.MDC_SPAN_ID
+import com.micronaut.bug.trace.TraceUtil.MDC_SUB_TITLE
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.slf4j.MDC
 import org.springframework.http.HttpHeaders
@@ -160,7 +159,7 @@ class LoggingInterceptor(
             return rs
         } finally {
             MDC.put(MDC_SOURCE, oldClient)
-            MDC.put(NanoTracer.MDC_TARGET, oldServer)
+            MDC.put(MDC_TARGET, oldServer)
             MDC.put(MDC_SUB_TITLE, oldSubtitle)
             MDC.put(MDC_MAIN_STAT, oldDuration)
             MDC.put(MDC_COLOR, oldColor)

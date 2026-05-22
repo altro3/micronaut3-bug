@@ -4,7 +4,7 @@ import com.micronaut.bug.trace.TraceUtil.ATTR_ERROR_MESSAGE
 import io.opentelemetry.proto.trace.v1.Status.StatusCode
 
 class TraceReport {
-    var status: StatusCode = StatusCode.STATUS_CODE_OK
+    var status: StatusCode = StatusCode.STATUS_CODE_UNSET
     var attrs: MutableMap<String, Any>? = null
         private set
 
@@ -19,7 +19,7 @@ class TraceReport {
     }
 
     fun clear() {
-        status = StatusCode.STATUS_CODE_OK
+        status = StatusCode.STATUS_CODE_UNSET
         attrs?.clear()
     }
 }

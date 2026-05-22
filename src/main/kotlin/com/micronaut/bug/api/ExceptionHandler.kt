@@ -20,8 +20,8 @@ class ExceptionHandler(
      */
     @ExceptionHandler(Exception::class)
     fun handleAll(ex: Exception): ResponseEntity<ErrorRs> {
-        val ctx = tracer.currentContext()
-        ctx?.error = ex // Фиксируем для Tempo
+        val span = tracer.currentSpan()
+        span?.error = ex
 
         log.error(ex) { "System error: ${ex.message}" }
 
@@ -29,7 +29,7 @@ class ExceptionHandler(
             .status(HttpStatus.INTERNAL_SERVER_ERROR)
             .body(
                 ErrorRs(
-                    rqId = ctx?.traceId,
+                    rqId = span?.traceId,
                     code = "INTERNAL_SERVER_ERROR",
                     message = ex.message
                 )
@@ -41,7 +41,7 @@ class ExceptionHandler(
      */
     @ExceptionHandler(IllegalArgumentException::class)
     fun handleBadRequest(ex: IllegalArgumentException): ResponseEntity<ErrorRs> {
-        val ctx = tracer.currentContext()
+        val ctx = tracer.currentSpan()
         // Даже для 400-х ошибок лучше писать exception в трейс для отладки
         ctx?.error = ex
 
@@ -61,7 +61,7 @@ class ExceptionHandler(
      */
     @ExceptionHandler(ResponseStatusException::class)
     fun handleResponseStatus(ex: ResponseStatusException): ResponseEntity<ErrorRs> {
-        val ctx = tracer.currentContext()
+        val ctx = tracer.currentSpan()
         ctx?.error = ex
 
         log.error(ex) { "Error" }
