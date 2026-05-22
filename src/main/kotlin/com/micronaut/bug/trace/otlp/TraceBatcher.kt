@@ -6,10 +6,20 @@ import io.opentelemetry.proto.trace.v1.Span
 import io.opentelemetry.proto.trace.v1.Status.StatusCode
 import jakarta.annotation.PostConstruct
 import jakarta.annotation.PreDestroy
-import kotlinx.coroutines.*
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.ClosedReceiveChannelException
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.withTimeoutOrNull
 import java.net.http.HttpClient
 import java.util.concurrent.ConcurrentLinkedQueue
 import kotlin.time.Duration.Companion.milliseconds
@@ -74,7 +84,6 @@ class TraceBatcher(
 
                     while (batch.size < exporterProps.batchSize) {
                         val nextResult = channel.tryReceive()
-
                         if (nextResult.isSuccess) {
                             val event = nextResult.getOrNull()
                             if (event != null) batch.add(event)
@@ -84,17 +93,15 @@ class TraceBatcher(
                             val remainingTime = flushIntervalMs - (System.currentTimeMillis() - startTime)
                             if (remainingTime <= 0) break
 
-                            val nextResTimeout = withTimeoutOrNull(remainingTime.milliseconds) {
-                                channel.receiveCatching()
-                            }
+                            delay(remainingTime.milliseconds)
 
-                            if (nextResTimeout == null) {
-                                break
-                            } else if (nextResTimeout.isSuccess) {
-                                batch.add(nextResTimeout.getOrThrow())
-                            } else {
-                                break
+                            var drainResult = channel.tryReceive()
+                            while (drainResult.isSuccess && batch.size < exporterProps.batchSize) {
+                                val ev = drainResult.getOrNull()
+                                if (ev != null) batch.add(ev)
+                                drainResult = channel.tryReceive()
                             }
+                            break
                         }
                     }
 

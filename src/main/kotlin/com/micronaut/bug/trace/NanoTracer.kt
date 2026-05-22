@@ -123,6 +123,8 @@ class NanoTracer(
             setSpan(newChain)
         }
 
+        span.parentSpan = null
+
         val isError = span.error != null || status == StatusCode.STATUS_CODE_ERROR
         val shouldExport = isError || forceExport || span.sampled
 

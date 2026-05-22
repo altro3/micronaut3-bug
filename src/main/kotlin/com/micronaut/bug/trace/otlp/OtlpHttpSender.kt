@@ -3,6 +3,7 @@ package com.micronaut.bug.trace.otlp
 import com.micronaut.bug.trace.config.TraceProperties
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.future.await
 import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpHeaders.CONTENT_ENCODING
 import org.springframework.http.MediaType
@@ -55,10 +56,9 @@ class OtlpHttpSender(
         }
     }
 
-    private fun sendRequest(payload: ByteArray, isCompressed: Boolean): Boolean {
+    private suspend fun sendRequest(payload: ByteArray, isCompressed: Boolean): Boolean {
         val builder = HttpRequest.newBuilder()
             .uri(exporterProps.url)
-            .version(HttpClient.Version.HTTP_2)
             .header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_PROTOBUF_VALUE)
             .timeout(exporterProps.requestTimeout)
             .POST(HttpRequest.BodyPublishers.ofByteArray(payload))
@@ -68,7 +68,8 @@ class OtlpHttpSender(
         }
 
         return try {
-            val rs = httpClient.send(builder.build(), HttpResponse.BodyHandlers.discarding())
+            val rs = httpClient.sendAsync(builder.build(), HttpResponse.BodyHandlers.discarding())
+                .await()
             rs.statusCode() in 200..299
         } catch (ex: Exception) {
             log.warn { "Trace batch export failed due to network error: ${ex.message}" }

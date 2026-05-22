@@ -19,10 +19,12 @@ import com.micronaut.bug.trace.TraceUtil.OTEL_MAPPED_HEADERS
 import com.micronaut.bug.trace.TraceUtil.PREFIX_HTTP_REQUEST_HEADER
 import com.micronaut.bug.trace.TraceUtil.PREFIX_HTTP_RESPONSE_HEADER
 import com.micronaut.bug.trace.TraceUtil.SENSITIVE_HEADERS
+import com.micronaut.bug.trace.TraceUtil.containsIgnoreCase
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
 import org.springframework.http.HttpHeaders.CONTENT_LENGTH
 import org.springframework.http.HttpHeaders.USER_AGENT
+import java.util.StringJoiner
 
 object HttpTraceExtractor {
 
@@ -39,13 +41,14 @@ object HttpTraceExtractor {
         val names = rq.headerNames ?: return
         while (names.hasMoreElements()) {
             val name = names.nextElement()
-            val normalizedName = name.lowercase()
 
-            if (normalizedName in OTEL_MAPPED_HEADERS) continue
+            // ОПТИМИЗАЦИЯ: Ищем совпадения без выделения памяти под .lowercase() на каждый хедер
+            if (OTEL_MAPPED_HEADERS.containsIgnoreCase(name)) continue
 
-            val key = "$PREFIX_HTTP_REQUEST_HEADER$normalizedName"
+            // Для ключа атрибута всё же приводим к lowercase один раз
+            val key = "$PREFIX_HTTP_REQUEST_HEADER${name.lowercase()}"
 
-            if (normalizedName in SENSITIVE_HEADERS) {
+            if (SENSITIVE_HEADERS.containsIgnoreCase(name)) {
                 target[key] = MASKED_VALUES
             } else {
                 val headersEnum = rq.getHeaders(name)
@@ -55,12 +58,14 @@ object HttpTraceExtractor {
                 if (!headersEnum.hasMoreElements()) {
                     target[key] = first
                 } else {
-                    val valuesList = ArrayList<String>(4)
-                    valuesList.add(first)
+                    // ОПТИМИЗАЦИЯ: Склеиваем многозначные заголовки через StringJoiner.
+                    // Никаких ArrayList и итераторов. По стандарту RFC это легально для HTTP.
+                    val sj = StringJoiner(", ")
+                    sj.add(first)
                     while (headersEnum.hasMoreElements()) {
-                        valuesList.add(headersEnum.nextElement())
+                        sj.add(headersEnum.nextElement())
                     }
-                    target[key] = valuesList
+                    target[key] = sj.toString()
                 }
             }
         }
@@ -69,21 +74,21 @@ object HttpTraceExtractor {
     fun fillResponseHeadersAttrs(rs: HttpServletResponse, target: HashMap<String, Any>) {
         val names = rs.headerNames ?: return
         for (name in names) {
-            val normalizedName = name.lowercase()
-            if (normalizedName in OTEL_MAPPED_HEADERS) continue
+            if (OTEL_MAPPED_HEADERS.containsIgnoreCase(name)) continue
 
-            val key = "$PREFIX_HTTP_RESPONSE_HEADER$normalizedName"
+            val key = "$PREFIX_HTTP_RESPONSE_HEADER${name.lowercase()}"
             val headers = rs.getHeaders(name)
             val size = headers.size
 
             if (size == 1) {
                 target[key] = headers.first()
             } else if (size > 1) {
-                val valuesList = ArrayList<String>(size)
+                // ОПТИМИЗАЦИЯ: Заменяем ArrayList на плоскую склейку строк
+                val sj = StringJoiner(", ")
                 for (value in headers) {
-                    valuesList.add(value)
+                    sj.add(value)
                 }
-                target[key] = valuesList
+                target[key] = sj.toString()
             }
         }
     }

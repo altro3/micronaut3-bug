@@ -20,7 +20,10 @@ class TraceElement(
 
     override fun updateThreadContext(context: CoroutineContext): TraceStateSnapshot {
         val oldSpan = tracer.currentSpan()
-        val oldMdc = MDC.getCopyOfContextMap()
+
+        val oldTraceId = MDC.get(MDC_TRACE_ID)
+        val oldSpanId = MDC.get(MDC_SPAN_ID)
+        val oldTraceFlags = MDC.get(MDC_TRACE_FLAGS)
 
         tracer.setSpanInternal(spanToRestore)
 
@@ -34,22 +37,34 @@ class TraceElement(
             MDC.remove(MDC_TRACE_FLAGS)
         }
 
-        return TraceStateSnapshot(oldSpan, oldMdc)
+        return TraceStateSnapshot(oldSpan, oldTraceId, oldSpanId, oldTraceFlags)
     }
 
     override fun restoreThreadContext(context: CoroutineContext, oldState: TraceStateSnapshot) {
         tracer.setSpanInternal(oldState.oldSpan)
-        if (oldState.oldMdc != null) {
-            MDC.setContextMap(oldState.oldMdc)
+
+        // ОПТИМИЗАЦИЯ: Точечно восстанавливаем состояние MDC, не затирая чужие бизнес-ключи
+        if (oldState.oldTraceId != null) {
+            MDC.put(MDC_TRACE_ID, oldState.oldTraceId)
         } else {
             MDC.remove(MDC_TRACE_ID)
+        }
+        if (oldState.oldSpanId != null) {
+            MDC.put(MDC_SPAN_ID, oldState.oldSpanId)
+        } else {
             MDC.remove(MDC_SPAN_ID)
+        }
+        if (oldState.oldTraceFlags != null) {
+            MDC.put(MDC_TRACE_FLAGS, oldState.oldTraceFlags)
+        } else {
             MDC.remove(MDC_TRACE_FLAGS)
         }
     }
 
     class TraceStateSnapshot(
         val oldSpan: NanoSpan?,
-        val oldMdc: Map<String, String>?
+        val oldTraceId: String?,
+        val oldSpanId: String?,
+        val oldTraceFlags: String?
     )
 }
