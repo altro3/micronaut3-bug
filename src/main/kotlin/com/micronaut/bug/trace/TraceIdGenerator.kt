@@ -1,6 +1,5 @@
 package com.micronaut.bug.trace
 
-import com.google.protobuf.ByteString
 import java.util.concurrent.ThreadLocalRandom
 
 object TraceIdGenerator {
@@ -10,14 +9,6 @@ object TraceIdGenerator {
         for (i in 0 until 256) {
             this[i * 2] = hexChars[i shr 4 and 0xF].code.toByte()
             this[i * 2 + 1] = hexChars[i and 0xF].code.toByte()
-        }
-    }
-
-    private val DECODE_TABLE = IntArray(128).apply {
-        for (i in 0..9) this['0'.code + i] = i
-        for (i in 0..5) {
-            this['a'.code + i] = 10 + i
-            this['A'.code + i] = 10 + i // Страхует на случай апперкейса из внешних систем
         }
     }
 
@@ -73,23 +64,5 @@ object TraceIdGenerator {
         val idx = (shiftedValue.toInt() and 0xFF) shl 1
         target[offset] = HEX_TABLE[idx]
         target[offset + 1] = HEX_TABLE[idx + 1]
-    }
-
-    /**
-     * Быстро конвертирует HEX-строку обратно в ByteString для отправки в Tempo.
-     * Исключает использование тяжелого HexFormat и лишние проверки.
-     *
-     * @param hex 32-символьная (для traceId) или 16-символьная (для spanId) HEX-строка
-     * @return ByteString для Protobuf билдера
-     */
-    fun toByteString(hex: String): ByteString {
-        val len = hex.length
-        val result = ByteArray(len / 2)
-        for (i in result.indices) {
-            val h = DECODE_TABLE[hex[i * 2].code and 0x7F]
-            val l = DECODE_TABLE[hex[i * 2 + 1].code and 0x7F]
-            result[i] = ((h shl 4) or l).toByte()
-        }
-        return ByteString.copyFrom(result)
     }
 }

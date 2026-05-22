@@ -30,5 +30,6 @@ class TraceProperties(
         val retryInterval: Duration = Duration.ofSeconds(1),
         var useGzip: Boolean = true,
         var compressionThreshold: DataSize = DataSize.ofKilobytes(4),
+        val maxSenders: Int = 5,
     )
 }
