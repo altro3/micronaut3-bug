@@ -31,7 +31,6 @@ class TraceProperties(
         var useGzip: Boolean = true,
         var compressionThreshold: DataSize = DataSize.ofKilobytes(4),
         val maxSenders: Int = 5,
-
         val maxAttempts: Int = 3,
         val backoffMultiplier: Double = 2.0,
         val jitterMin: Double = 0.7,
