@@ -2,7 +2,7 @@ package com.micronaut.bug.trace.reactor
 
 /**
  * Реактивный фильтр для [org.springframework.web.reactive.function.client.WebClient].
- * Аналог [com.micronaut.bug.client.NanoTraceClientInterceptor] для неблокирующего стека.
+ * Аналог [com.micronaut.bug.trace.http.NanoTraceClientInterceptor] для неблокирующего стека.
  */
 /*
 class NanoTraceReactiveClientFilter(

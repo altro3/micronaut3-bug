@@ -1,19 +1,7 @@
-package com.micronaut.bug.trace
+package com.micronaut.bug.trace.http
 
-import com.micronaut.bug.trace.HttpTraceExtractor.extractBaseAttributes
-import com.micronaut.bug.trace.HttpTraceExtractor.fillRequestHeadersAttrs
-import com.micronaut.bug.trace.HttpTraceExtractor.fillResponseHeadersAttrs
-import com.micronaut.bug.trace.TraceUtil.ATTR_CLIENT
-import com.micronaut.bug.trace.TraceUtil.ATTR_EXCEPTION_MESSAGE
-import com.micronaut.bug.trace.TraceUtil.ATTR_SERVER
-import com.micronaut.bug.trace.TraceUtil.HEADER_BAGGAGE
-import com.micronaut.bug.trace.TraceUtil.HEADER_TRACEPARENT
-import com.micronaut.bug.trace.TraceUtil.HEADER_TRACESTATE
-import com.micronaut.bug.trace.TraceUtil.HEADER_X_SENDER
-import com.micronaut.bug.trace.TraceUtil.MDC_SOURCE
-import com.micronaut.bug.trace.TraceUtil.MDC_TARGET
-import com.micronaut.bug.trace.TraceUtil.TRACEPARENT_PREFIX
-import com.micronaut.bug.trace.TraceUtil.parseBaggage
+import com.micronaut.bug.trace.NanoTracer
+import com.micronaut.bug.trace.TraceUtil
 import com.micronaut.bug.trace.config.TraceProperties
 import io.github.oshai.kotlinlogging.KotlinLogging
 import io.opentelemetry.proto.trace.v1.Status
@@ -43,12 +31,12 @@ class NanoTraceFilter(
         }
 
         val userId = rq.getHeader(HEADER_USER_ID)
-        val traceParent = rq.getHeader(HEADER_TRACEPARENT)
+        val traceParent = rq.getHeader(TraceUtil.HEADER_TRACEPARENT)
         var traceId: String? = null
         var parentId: String? = null
         var isSampledByParent = true
 
-        if (traceParent != null && traceParent.length == 55 && traceParent.startsWith(TRACEPARENT_PREFIX)) {
+        if (traceParent != null && traceParent.length == 55 && traceParent.startsWith(TraceUtil.TRACEPARENT_PREFIX)) {
             val firstDash = traceParent.indexOf('-', 3)
             val secondDash = traceParent.indexOf('-', firstDash + 1)
 
@@ -61,11 +49,11 @@ class NanoTraceFilter(
             }
         }
 
-        val sender = rq.getHeader(HEADER_X_SENDER) ?: DEFAULT_SENDER
+        val sender = rq.getHeader(TraceUtil.HEADER_X_SENDER) ?: DEFAULT_SENDER
 
         val baggage = mutableMapOf<String, String>()
-        rq.getHeader(HEADER_BAGGAGE)?.let { header ->
-            parseBaggage(header)?.let { baggage.putAll(it) }
+        rq.getHeader(TraceUtil.HEADER_BAGGAGE)?.let { header ->
+            TraceUtil.parseBaggage(header)?.let { baggage.putAll(it) }
         }
 
         val propagationHeaders = HashMap<String, String>()
@@ -78,7 +66,7 @@ class NanoTraceFilter(
             }
         }
 
-        val traceState = rq.getHeader(HEADER_TRACESTATE)
+        val traceState = rq.getHeader(TraceUtil.HEADER_TRACESTATE)
 
         val curSpan = tracer.startTrace(
             name = "${rq.method} ${rq.requestURI}",
@@ -94,10 +82,10 @@ class NanoTraceFilter(
             if (userId != null) {
                 MDC.put(MDC_USER_ID, userId)
             }
-            MDC.put(MDC_SOURCE, sender)
-            MDC.put(MDC_TARGET, selfServiceName)
+            MDC.put(TraceUtil.MDC_SOURCE, sender)
+            MDC.put(TraceUtil.MDC_TARGET, selfServiceName)
 
-            rs.setHeader(HEADER_TRACEPARENT, tracer.getTraceParent())
+            rs.setHeader(TraceUtil.HEADER_TRACEPARENT, tracer.getTraceParent())
             chain.doFilter(rq, rs)
         } finally {
             try {
@@ -107,14 +95,14 @@ class NanoTraceFilter(
                 val attrs = HashMap<String, Any>(32)
 
                 MDC.get(MDC_USER_ID)?.let { attrs[ATTR_USER_ID] = it }
-                attrs[ATTR_CLIENT] = sender
-                attrs[ATTR_SERVER] = selfServiceName
+                attrs[TraceUtil.ATTR_CLIENT] = sender
+                attrs[TraceUtil.ATTR_SERVER] = selfServiceName
 
-                if (isError) attrs[ATTR_EXCEPTION_MESSAGE] = "HTTP ${rs.status}"
+                if (isError) attrs[TraceUtil.ATTR_EXCEPTION_MESSAGE] = "HTTP ${rs.status}"
 
-                extractBaseAttributes(rq, rs, attrs, isSlow)
-                fillRequestHeadersAttrs(rq, attrs)
-                fillResponseHeadersAttrs(rs, attrs)
+                HttpTraceExtractor.extractBaseAttributes(rq, rs, attrs, isSlow)
+                HttpTraceExtractor.fillRequestHeadersAttrs(rq, attrs)
+                HttpTraceExtractor.fillResponseHeadersAttrs(rs, attrs)
 
                 tracer.stop(
                     span = curSpan,
@@ -127,8 +115,8 @@ class NanoTraceFilter(
             } finally {
                 tracer.clearThreadSpan()
                 MDC.remove(MDC_USER_ID)
-                MDC.remove(MDC_SOURCE)
-                MDC.remove(MDC_TARGET)
+                MDC.remove(TraceUtil.MDC_SOURCE)
+                MDC.remove(TraceUtil.MDC_TARGET)
             }
         }
     }

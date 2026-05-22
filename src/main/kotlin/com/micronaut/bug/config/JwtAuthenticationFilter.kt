@@ -1,6 +1,6 @@
 package com.micronaut.bug.config
 
-import com.micronaut.bug.trace.NanoTraceFilter.Companion.MDC_USER_ID
+import com.micronaut.bug.trace.http.NanoTraceFilter.Companion.MDC_USER_ID
 import io.github.oshai.kotlinlogging.KotlinLogging
 import jakarta.servlet.FilterChain
 import jakarta.servlet.http.HttpServletRequest

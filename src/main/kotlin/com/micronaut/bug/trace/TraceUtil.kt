@@ -1,7 +1,9 @@
 package com.micronaut.bug.trace
 
+import com.micronaut.bug.trace.http.NanoTraceFilter
 import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpMethod
+import java.lang.StringBuilder
 
 object TraceUtil {
 
@@ -34,6 +36,7 @@ object TraceUtil {
     const val ATTR_DEPLOYMENT_ENVIRONMENT = "deployment.environment"
     const val ATTR_CLIENT = "client"
     const val ATTR_SERVER = "server"
+    const val ATTR_PEER_SERVICE = "peer.service"
 
     const val ATTR_URL_FULL = "url.full"
     const val ATTR_URL_SCHEME = "url.scheme"
@@ -95,6 +98,7 @@ object TraceUtil {
         NanoTraceFilter.HEADER_API_KEY,
     )
 
+    @JvmStatic
     fun parseBaggage(header: String): Map<String, String>? {
         if (header.isBlank()) return null
 
@@ -119,14 +123,26 @@ object TraceUtil {
                 }
             }
         }
-
         return if (result.isEmpty()) null else result
     }
 
-    fun Collection<String>.containsIgnoreCase(charSequence: String): Boolean {
-        for (element in this) {
-            if (element.equals(charSequence, ignoreCase = true)) return true
+    @JvmStatic
+    fun formatBaggage(baggage: Map<String, String>?): String? {
+        if (baggage.isNullOrEmpty()) return null
+
+        val sb = StringBuilder(baggage.size * 32)
+        var first = true
+
+        baggage.forEach { (key, value) ->
+            if (key.isNotEmpty() && value.isNotEmpty()) {
+                if (!first) {
+                    sb.append(',')
+                }
+                sb.append(key).append('=').append(value)
+                first = false
+            }
         }
-        return false
+
+        return if (sb.isEmpty()) null else sb.toString()
     }
 }

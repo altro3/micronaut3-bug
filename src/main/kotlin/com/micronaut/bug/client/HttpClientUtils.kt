@@ -3,6 +3,7 @@ package com.micronaut.bug.client
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.databind.json.JsonMapper
 import com.micronaut.bug.trace.NanoTracer
+import com.micronaut.bug.trace.http.NanoTraceClientInterceptor
 import io.github.oshai.kotlinlogging.KotlinLogging
 import io.netty.channel.ChannelOption
 import io.netty.handler.timeout.ReadTimeoutHandler

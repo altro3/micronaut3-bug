@@ -1,7 +1,7 @@
 package com.micronaut.bug.trace.config
 
-import com.micronaut.bug.trace.NanoTraceFilter
 import com.micronaut.bug.trace.NanoTracer
+import com.micronaut.bug.trace.http.NanoTraceFilter
 import com.micronaut.bug.trace.otlp.TraceBatcher
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.beans.factory.annotation.Value

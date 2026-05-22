@@ -4,13 +4,13 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.databind.SerializationFeature
 import com.micronaut.bug.client.HttpClientProperties.ClientType.EXTERNAL
 import com.micronaut.bug.client.LoggingInterceptor.Companion.LIMIT_TEXT_CHECK_THRESHOLD
-import com.micronaut.bug.client.NanoTraceClientInterceptor.Companion.PREFIX_CLIENT_SPAN
 import com.micronaut.bug.trace.TraceIdGenerator.generateSpanId
 import com.micronaut.bug.trace.TraceUtil.MDC_COLOR
 import com.micronaut.bug.trace.TraceUtil.MDC_MAIN_STAT
 import com.micronaut.bug.trace.TraceUtil.MDC_SOURCE
 import com.micronaut.bug.trace.TraceUtil.MDC_SPAN_ID
 import com.micronaut.bug.trace.TraceUtil.MDC_SUB_TITLE
+import com.micronaut.bug.trace.http.NanoTraceClientInterceptor.Companion.PREFIX_CLIENT_SPAN
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.slf4j.MDC
 import org.springframework.http.HttpHeaders

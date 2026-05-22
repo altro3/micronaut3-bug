@@ -2,6 +2,7 @@ package com.micronaut.bug.trace
 
 import org.slf4j.MDC
 import org.springframework.core.task.TaskDecorator
+import org.springframework.scheduling.support.ScheduledMethodRunnable
 
 class TracingTaskDecorator(
     private val tracer: NanoTracer? = null,
@@ -37,9 +38,14 @@ class TracingTaskDecorator(
             }
 
             val spanPrefix = if (isScheduled) PREFIX_SCHEDULED else PREFIX_ASYNC
-
+            val spanName = if (runnable is ScheduledMethodRunnable) {
+                val method = runnable.method
+                "$spanPrefix: ${method.declaringClass.simpleName}#${method.name}"
+            } else {
+                "$spanPrefix: ${runnable.javaClass.simpleName}"
+            }
             val asyncSpan = tracer.startTrace(
-                name = "$spanPrefix: ${runnable.javaClass.simpleName}",
+                name = spanName,
                 remoteTraceId = traceId,
                 remoteParentId = spanId,
                 sampled = sampled,
