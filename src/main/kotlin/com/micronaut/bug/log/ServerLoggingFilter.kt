@@ -4,9 +4,9 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.databind.SerializationFeature
 import com.micronaut.bug.log.ServerLoggingFilter.Companion.LIMIT_TEXT_CHECK_THRESHOLD
 import com.micronaut.bug.log.config.LogProperties
-import com.micronaut.bug.trace.NanoTracer.Companion.MDC_COLOR
-import com.micronaut.bug.trace.NanoTracer.Companion.MDC_MAIN_STAT
-import com.micronaut.bug.trace.NanoTracer.Companion.MDC_SUB_TITLE
+import com.micronaut.bug.trace.TraceUtil.MDC_COLOR
+import com.micronaut.bug.trace.TraceUtil.MDC_MAIN_STAT
+import com.micronaut.bug.trace.TraceUtil.MDC_SUB_TITLE
 import io.github.oshai.kotlinlogging.KotlinLogging
 import jakarta.servlet.FilterChain
 import jakarta.servlet.ReadListener

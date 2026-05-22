@@ -4,8 +4,8 @@ import com.google.protobuf.ByteString
 import com.micronaut.bug.log.LogMasker
 import com.micronaut.bug.log.LogUtil.formatStackTrace
 import com.micronaut.bug.log.config.LogProperties
+import com.micronaut.bug.trace.TraceUtil.MDC_COLOR
 import com.micronaut.bug.trace.http.NanoTraceFilter.Companion.MDC_USER_ID
-import com.micronaut.bug.trace.NanoTracer.Companion.MDC_COLOR
 import io.opentelemetry.proto.collector.logs.v1.ExportLogsServiceRequest
 import io.opentelemetry.proto.common.v1.AnyValue
 import io.opentelemetry.proto.common.v1.InstrumentationScope

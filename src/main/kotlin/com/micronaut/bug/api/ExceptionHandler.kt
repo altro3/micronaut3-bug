@@ -11,7 +11,7 @@ import org.springframework.web.server.ResponseStatusException
 
 @RestControllerAdvice
 class ExceptionHandler(
-    private val tracer: NanoTracer
+    private val tracer: NanoTracer? = null
 ) {
     private val log = KotlinLogging.logger {}
 
@@ -20,7 +20,7 @@ class ExceptionHandler(
      */
     @ExceptionHandler(Exception::class)
     fun handleAll(ex: Exception): ResponseEntity<ErrorRs> {
-        val span = tracer.currentSpan()
+        val span = tracer?.currentSpan()
         span?.error = ex
 
         log.error(ex) { "System error: ${ex.message}" }
@@ -41,15 +41,15 @@ class ExceptionHandler(
      */
     @ExceptionHandler(IllegalArgumentException::class)
     fun handleBadRequest(ex: IllegalArgumentException): ResponseEntity<ErrorRs> {
-        val ctx = tracer.currentSpan()
+        val span = tracer?.currentSpan()
         // Даже для 400-х ошибок лучше писать exception в трейс для отладки
-        ctx?.error = ex
+        span?.error = ex
 
         return ResponseEntity
             .status(HttpStatus.BAD_REQUEST)
             .body(
                 ErrorRs(
-                    rqId = ctx?.traceId,
+                    rqId = span?.traceId,
                     code = "BAD_REQUEST",
                     message = ex.message
                 )
@@ -61,8 +61,8 @@ class ExceptionHandler(
      */
     @ExceptionHandler(ResponseStatusException::class)
     fun handleResponseStatus(ex: ResponseStatusException): ResponseEntity<ErrorRs> {
-        val ctx = tracer.currentSpan()
-        ctx?.error = ex
+        val span = tracer?.currentSpan()
+        span?.error = ex
 
         log.error(ex) { "Error" }
 
@@ -70,7 +70,7 @@ class ExceptionHandler(
             .status(ex.statusCode)
             .body(
                 ErrorRs(
-                    rqId = ctx?.traceId,
+                    rqId = span?.traceId,
                     code = "HTTP_${ex.statusCode.value()}",
                     message = ex.reason ?: ex.message
                 )

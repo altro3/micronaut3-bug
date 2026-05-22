@@ -1,8 +1,8 @@
 package com.micronaut.bug.trace.reactor
 
 import com.micronaut.bug.trace.NanoSpan
-import com.micronaut.bug.trace.NanoTracer.Companion.MDC_SPAN_ID
-import com.micronaut.bug.trace.NanoTracer.Companion.MDC_TRACE_ID
+import com.micronaut.bug.trace.TraceUtil.MDC_SPAN_ID
+import com.micronaut.bug.trace.TraceUtil.MDC_TRACE_ID
 import org.slf4j.MDC
 import reactor.core.CoreSubscriber
 import reactor.core.publisher.Hooks
