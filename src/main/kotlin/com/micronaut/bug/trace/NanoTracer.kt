@@ -1,7 +1,8 @@
 package com.micronaut.bug.trace
 
+import com.micronaut.bug.trace.NanoTraceFilter.Companion.HEADER_API_KEY
 import com.micronaut.bug.trace.config.TraceProperties
-import com.micronaut.bug.trace.otlp.TraceExporter
+import com.micronaut.bug.trace.otlp.TraceBatcher
 import io.opentelemetry.proto.trace.v1.Span.SpanKind
 import io.opentelemetry.proto.trace.v1.Status.StatusCode
 import kotlinx.coroutines.withContext
@@ -12,64 +13,44 @@ import org.springframework.http.HttpHeaders.CONTENT_TYPE
 import org.springframework.http.HttpHeaders.HOST
 import org.springframework.http.HttpHeaders.USER_AGENT
 import org.springframework.http.HttpMethod
-import reactor.util.context.ContextView
 import java.time.Instant
+import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.ThreadLocalRandom
 
 class NanoTracer(
     @PublishedApi
-    internal val exporter: TraceExporter,
+    internal val batcher: TraceBatcher,
     private val traceProps: TraceProperties,
 ) {
+    private val threadContext = ThreadLocal<NanoSpan?>()
+
+    val clockOffsetNanos: Long = (Instant.now().let { it.epochSecond * NANOS_PER_SECOND + it.nano }) - System.nanoTime()
+
     @PublishedApi
-    internal val internalStack = ThreadLocal.withInitial { ArrayDeque<TraceContext>() }
-
-    val clockOffsetNanos: Long
-
-    init {
-        val now = Instant.now()
-        clockOffsetNanos = (now.epochSecond * NANOS_PER_SECOND + now.nano) - System.nanoTime()
-    }
+    internal val reportPool = ConcurrentLinkedQueue<TraceReport>()
 
     @PublishedApi
     internal fun getCurrentEpochNanos(): Long = System.nanoTime() + clockOffsetNanos
 
-    fun currentContext(): TraceContext? = internalStack.get().firstOrNull()
+    fun currentSpan(): NanoSpan? = threadContext.get()
 
-    fun currentContext(reactorContext: ContextView): TraceContext? =
-        reactorContext.getOrDefault(TraceContext::class.java, null)
-
-    fun dispatcher(): TraceElement {
-        val stack = internalStack.get()
-        val snapshot = if (stack != null) ArrayDeque(stack) else ArrayDeque()
-        return TraceElement(snapshot, this)
+    internal fun setSpan(ctx: NanoSpan?) {
+        threadContext.set(ctx)
+        syncMdc(ctx)
     }
 
-    private fun pushAndSync(ctx: TraceContext): TraceContext {
-        internalStack.get().addFirst(ctx)
-        syncMdc()
+    private fun pushSpan(ctx: NanoSpan): NanoSpan {
+        threadContext.set(ctx)
+        syncMdc(ctx)
         return ctx
     }
 
     @PublishedApi
-    internal fun syncMdc() {
-        val current = internalStack.get().firstOrNull()
+    internal fun syncMdc(current: NanoSpan?) {
         if (current != null) {
-            val oldTrace = MDC.get(MDC_TRACE_ID)
-            if (oldTrace != current.traceId) {
-                MDC.put(MDC_TRACE_ID, current.traceId)
-            }
-
-            val oldSpan = MDC.get(MDC_SPAN_ID)
-            if (oldSpan != current.spanId) {
-                MDC.put(MDC_SPAN_ID, current.spanId)
-            }
-
-            val oldFlags = MDC.get(MDC_TRACE_FLAGS)
-            val currentFlags = if (current.sampled) TRACE_FLAG_SAMPLED else TRACE_FLAG_NOT_SAMPLED
-            if (oldFlags != currentFlags) {
-                MDC.put(MDC_TRACE_FLAGS, currentFlags)
-            }
+            MDC.put(MDC_TRACE_ID, current.traceId)
+            MDC.put(MDC_SPAN_ID, current.spanId)
+            MDC.put(MDC_TRACE_FLAGS, if (current.sampled) TRACE_FLAG_SAMPLED else TRACE_FLAG_NOT_SAMPLED)
         } else {
             MDC.remove(MDC_TRACE_ID)
             MDC.remove(MDC_SPAN_ID)
@@ -77,37 +58,15 @@ class NanoTracer(
         }
     }
 
-    fun getTraceParent(): String? {
-        val current = currentContext() ?: return null
-        val sb = tlStringBuilder.get()
-        sb.setLength(0)
-
-        sb.append(TRACEPARENT_PREFIX)
-            .append(current.traceId)
-            .append('-')
-            .append(current.spanId)
-            .append('-')
-            .append(if (current.sampled) TRACE_FLAG_SAMPLED else TRACE_FLAG_NOT_SAMPLED)
-
-        return sb.toString()
-    }
-
     fun startTrace(
-        name: String,
-        remoteTraceId: String? = null,
-        remoteParentId: String? = null,
-        sampled: Boolean? = null,
-        baggage: Map<String, String>? = null,
-        propagationHeaders: Map<String, String>? = null,
-        traceState: String? = null,
-    ): TraceContext {
-        val effectiveSampled = sampled ?: when {
-            remoteParentId != null -> true
-            else -> ThreadLocalRandom.current().nextDouble() < traceProps.sampleRate
-        }
+        name: String, remoteTraceId: String? = null, remoteParentId: String? = null,
+        sampled: Boolean? = null, baggage: Map<String, String>? = null,
+        propagationHeaders: Map<String, String>? = null, traceState: String? = null,
+    ): NanoSpan {
+        val effectiveSampled = sampled ?: (remoteParentId != null || ThreadLocalRandom.current().nextDouble() < traceProps.sampleRate)
 
-        return pushAndSync(
-            TraceContext(
+        return pushSpan(
+            NanoSpan(
                 traceId = remoteTraceId ?: TraceIdGenerator.generate(),
                 spanId = TraceIdGenerator.generateSpanId(),
                 parentId = remoteParentId,
@@ -117,18 +76,16 @@ class NanoTracer(
                 baggage = baggage,
                 propagationHeaders = propagationHeaders,
                 traceState = traceState,
+                parentContext = threadContext.get(),
             )
         )
     }
 
-    fun startSpan(name: String, parent: TraceContext? = null): TraceContext {
-        val effectiveParent = parent ?: currentContext()
-        if (effectiveParent == null) {
-            return startTrace(name)
-        }
+    fun startSpan(name: String, parent: NanoSpan? = null): NanoSpan {
+        val effectiveParent = parent ?: currentSpan() ?: return startTrace(name)
 
-        return pushAndSync(
-            TraceContext(
+        return pushSpan(
+            NanoSpan(
                 traceId = effectiveParent.traceId,
                 spanId = TraceIdGenerator.generateSpanId(),
                 parentId = effectiveParent.spanId,
@@ -138,36 +95,35 @@ class NanoTracer(
                 baggage = effectiveParent.baggage,
                 propagationHeaders = effectiveParent.propagationHeaders,
                 traceState = effectiveParent.traceState,
+                parentContext = effectiveParent,
             )
         )
     }
 
     fun stop(
-        ctx: TraceContext,
+        ctx: NanoSpan,
         status: StatusCode = StatusCode.STATUS_CODE_OK,
-        kind: SpanKind = SpanKind.SPAN_KIND_SERVER,
+        kind: SpanKind = SpanKind.SPAN_KIND_INTERNAL,
         attrs: Map<String, Any>? = null,
         forceExport: Boolean = false,
     ) {
-        val stack = internalStack.get()
-        if (stack.isNotEmpty() && stack.firstOrNull() === ctx) {
-            stack.removeFirst()
-        } else {
-            val index = stack.indexOfFirst { it === ctx }
-            if (index != -1) {
-                stack.removeAt(index)
-            }
+        if (!ctx.tryClose()) return
+
+        val current = threadContext.get()
+
+        if (current === ctx) {
+            setSpan(ctx.parentContext)
+        } else if (current != null) {
+            val newChain = removeFromChain(current, ctx)
+            setSpan(newChain)
         }
 
         val isError = ctx.error != null || status == StatusCode.STATUS_CODE_ERROR
         val shouldExport = isError || forceExport || ctx.sampled
 
-        if (!shouldExport) {
-            syncMdc()
-            return
-        }
+        if (!shouldExport) return
 
-        exporter.enqueue(
+        batcher.enqueue(
             traceIdHex = ctx.traceId,
             spanIdHex = ctx.spanId,
             parentIdHex = ctx.parentId,
@@ -181,7 +137,34 @@ class NanoTracer(
             propagationHeaders = ctx.propagationHeaders,
             error = ctx.error,
         )
-        syncMdc()
+    }
+
+
+    private fun removeFromChain(node: NanoSpan, targetToRemove: NanoSpan): NanoSpan? {
+        if (node === targetToRemove) {
+            return node.parentContext
+        }
+
+        val parent = node.parentContext ?: return node
+
+        val newParent = removeFromChain(parent, targetToRemove)
+
+        if (newParent === parent) {
+            return node
+        }
+
+        return NanoSpan(
+            traceId = node.traceId,
+            spanId = node.spanId,
+            parentId = node.parentId,
+            name = node.name,
+            startEpochNanos = node.startEpochNanos,
+            sampled = node.sampled,
+            baggage = node.baggage,
+            propagationHeaders = node.propagationHeaders,
+            traceState = node.traceState,
+            parentContext = newParent,
+        )
     }
 
     suspend inline fun <T> trace(
@@ -190,43 +173,43 @@ class NanoTracer(
         crossinline block: suspend (TraceReport) -> T,
     ): T {
         val ctx = startSpan(name)
-        val report = TraceReport()
+        // Беру репорт из пула — ноль аллокаций HashMap!
+        val report = reportPool.poll() ?: TraceReport()
 
         try {
-            // Передаем ссылку на stack напрямую в TraceElement
-            return withContext(TraceElement(internalStack.get(), this)) {
+            // Легальный и безопасный перенос контекста через встроенный корутинный механизм
+            return withContext(TraceElement(ctx, this)) {
                 block(report)
             }
         } catch (e: Exception) {
+            ctx.error = e
             report.status = StatusCode.STATUS_CODE_ERROR
             throw e
         } finally {
-            stop(
-                ctx = ctx,
-                status = report.status,
-                kind = kind,
-                attrs = report.attrs,
-            )
+            stop(ctx = ctx, status = report.status, kind = kind, attrs = report.attrs)
+            report.clear()
+            reportPool.offer(report)
         }
     }
 
-    class TraceReport(
-        var status: StatusCode = StatusCode.STATUS_CODE_OK
-    ) {
-        var attrs: MutableMap<String, Any>? = null
-            private set
+    fun getTraceParent(): String? {
+        val current = currentSpan() ?: return null
+        val sb = tlStringBuilder.get()
+        sb.setLength(0)
+        sb.append(TRACEPARENT_PREFIX)
+            .append(current.traceId)
+            .append('-')
+            .append(current.spanId)
+            .append('-')
+            .append(if (current.sampled) TRACE_FLAG_SAMPLED else TRACE_FLAG_NOT_SAMPLED)
+        return sb.toString()
+    }
 
-        fun putAttr(key: String, value: Any) {
-            if (attrs == null) {
-                attrs = HashMap(4)
-            }
-            attrs!![key] = value
-        }
-
-        fun error(message: String?) {
-            status = StatusCode.STATUS_CODE_ERROR
-            message?.let { putAttr(ATTR_ERROR_MESSAGE, it) }
-        }
+    fun clearThreadContext() {
+        threadContext.remove()
+        MDC.remove(MDC_TRACE_ID)
+        MDC.remove(MDC_SPAN_ID)
+        MDC.remove(MDC_TRACE_FLAGS)
     }
 
     companion object {
@@ -248,10 +231,17 @@ class NanoTracer(
         const val TRACE_FLAG_SAMPLED = "01"
         const val TRACE_FLAG_NOT_SAMPLED = "00"
 
+        val ATTR_ERROR_MESSAGE = "error.message"
+
+        @JvmField
         val OTEL_MAPPED_HEADERS = setOf(
-            CONTENT_LENGTH.lowercase(), CONTENT_TYPE.lowercase(),
-            USER_AGENT.lowercase(), HOST.lowercase(),
-            HEADER_TRACEPARENT.lowercase(), HEADER_TRACESTATE.lowercase(), HEADER_BAGGAGE.lowercase(),
+            CONTENT_LENGTH.lowercase(),
+            CONTENT_TYPE.lowercase(),
+            USER_AGENT.lowercase(),
+            HOST.lowercase(),
+            HEADER_TRACEPARENT.lowercase(),
+            HEADER_TRACESTATE.lowercase(),
+            HEADER_BAGGAGE.lowercase(),
         )
 
         private val tlStringBuilder = ThreadLocal.withInitial { StringBuilder(64) }
@@ -278,7 +268,6 @@ class NanoTracer(
         const val ATTR_CLIENT = "client"
         const val ATTR_SERVER = "server"
         const val ATTR_PEER_SERVICE = "peer.service"
-        const val ATTR_ERROR_MESSAGE = "error.message"
         const val ATTR_ERROR_TYPE = "error.type"
         const val PREFIX_BAGGAGE = "baggage."
         const val PREFIX_PROPAGATION = "prop."
@@ -286,56 +275,54 @@ class NanoTracer(
 
         const val NANOS_PER_SECOND = 1_000_000_000L
 
+        @JvmField
         val METHODS_WITHOUT_BODY = setOf(
-            HttpMethod.GET.name(), HttpMethod.HEAD.name(), HttpMethod.OPTIONS.name(),
-            HttpMethod.DELETE.name(), HttpMethod.TRACE.name(),
+            HttpMethod.GET.name(),
+            HttpMethod.HEAD.name(),
+            HttpMethod.OPTIONS.name(),
+            HttpMethod.DELETE.name(),
+            HttpMethod.TRACE.name(),
         )
 
+        @JvmField
         val SENSITIVE_HEADERS = setOf(
-            HttpHeaders.AUTHORIZATION.lowercase(), HttpHeaders.COOKIE.lowercase(),
+            HttpHeaders.AUTHORIZATION.lowercase(),
+            HttpHeaders.COOKIE.lowercase(),
             HttpHeaders.SET_COOKIE.lowercase(),
-            "api-key",
+            HEADER_API_KEY,
         )
 
         const val MASK = "***"
+
+        @JvmField
         val MASKED_VALUES = listOf(MASK)
 
+        @JvmStatic
         fun parseBaggage(header: String?): Map<String, String>? {
             if (header.isNullOrBlank()) return null
-
             val map = HashMap<String, String>()
             var start = 0
             val len = header.length
-
             while (start < len) {
                 var end = header.indexOf(',', start)
-                if (end == -1) {
-                    end = len
-                }
-
-                // Защита от пустых спаренных запятых типа ",,"
+                if (end == -1) end = len
                 if (start >= end) {
-                    start = end + 1
-                    continue
+                    start = end + 1; continue
                 }
-
                 val equalsIdx = header.indexOf('=', start)
                 if (equalsIdx != -1 && equalsIdx < end) {
                     val semicolonIdx = header.indexOf(';', start)
                     val valueEnd = if (semicolonIdx != -1 && semicolonIdx < end) semicolonIdx else end
-
                     val key = header.substring(start, equalsIdx).trim().lowercase()
                     val value = header.substring(equalsIdx + 1, valueEnd).trim()
-
-                    if (key.isNotEmpty()) {
-                        map[key] = value
-                    }
+                    if (key.isNotEmpty()) map[key] = value
                 }
                 start = end + 1
             }
             return map
         }
 
+        @JvmStatic
         fun formatBaggage(baggage: Map<String, String>?): String? {
             if (baggage.isNullOrEmpty()) return null
 

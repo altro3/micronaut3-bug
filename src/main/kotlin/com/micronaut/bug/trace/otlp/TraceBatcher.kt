@@ -39,8 +39,6 @@ class TraceBatcher(
 
     private val sender = OtlpHttpSender(appName, nodeName, traceProps, httpClient, eventPool)
 
-    // БАГФИКС: Корутинный неблокирующий семафор вместо java.util.concurrent.Semaphore.
-    // Он не блокирует поток ядра ОС, а мягко приостанавливает корутину главного воркера.
     private val concurrencySemaphore = Semaphore(exporterProps.maxSenders)
 
     fun enqueue(
@@ -119,9 +117,6 @@ class TraceBatcher(
                         }
                     }
 
-                    // ОПТИМИЗАЦИЯ ПАМЯТИ: Ждем свободный сетевой слот ДО того, как породить новый ArrayList.
-                    // Если сеть тормозит, главный воркер заснет тут, канал channel начнет заполняться,
-                    // и лишние трейсы безопасно сбросятся в enqueue через trySend. Мусор в хипе расти не будет!
                     concurrencySemaphore.acquire()
 
                     dispatchBatch(batch)
@@ -147,7 +142,6 @@ class TraceBatcher(
             try {
                 sender.sendBatch(batch)
             } finally {
-                // Освобождаем слот строго после окончания отправки
                 concurrencySemaphore.release()
             }
         }
@@ -162,7 +156,6 @@ class TraceBatcher(
         runBlocking {
             val job = exportScope.coroutineContext[Job]
             withTimeoutOrNull(exporterProps.shutdownTimeout.toMillis().milliseconds) {
-                // Даем воркеру корректно обработать flushRemainingOnShutdown
                 job?.children?.forEach { it.join() }
                 true
             }
@@ -177,7 +170,7 @@ class TraceBatcher(
             if (next != null) {
                 batch.add(next)
                 if (batch.size >= exporterProps.batchSize) {
-                    sender.sendBatch(batch) // При шатдауне шлем синхронно, sender сам вернет в пул
+                    sender.sendBatch(batch)
                     batch.clear()
                 }
             }

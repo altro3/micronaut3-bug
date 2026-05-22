@@ -18,6 +18,7 @@ import com.micronaut.bug.trace.NanoTracer.Companion.ATTR_URL_SCHEME
 import com.micronaut.bug.trace.NanoTracer.Companion.ATTR_USER_AGENT_ORIGINAL
 import com.micronaut.bug.trace.NanoTracer.Companion.HEADER_BAGGAGE
 import com.micronaut.bug.trace.NanoTracer.Companion.HEADER_TRACEPARENT
+import com.micronaut.bug.trace.NanoTracer.Companion.HEADER_TRACESTATE
 import com.micronaut.bug.trace.NanoTracer.Companion.HEADER_X_SENDER
 import com.micronaut.bug.trace.NanoTracer.Companion.MASKED_VALUES
 import com.micronaut.bug.trace.NanoTracer.Companion.MDC_SOURCE
@@ -28,7 +29,6 @@ import com.micronaut.bug.trace.NanoTracer.Companion.PREFIX_HTTP_REQUEST_HEADER
 import com.micronaut.bug.trace.NanoTracer.Companion.PREFIX_HTTP_RESPONSE_HEADER
 import com.micronaut.bug.trace.NanoTracer.Companion.SENSITIVE_HEADERS
 import com.micronaut.bug.trace.NanoTracer.Companion.TRACEPARENT_PREFIX
-import com.micronaut.bug.trace.NanoTracer.Companion.parseBaggage
 import com.micronaut.bug.trace.config.TraceProperties
 import io.github.oshai.kotlinlogging.KotlinLogging
 import io.opentelemetry.proto.trace.v1.Status
@@ -36,7 +36,7 @@ import jakarta.servlet.FilterChain
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
 import org.slf4j.MDC
-import org.springframework.http.HttpHeaders
+import org.springframework.http.HttpHeaders.CONTENT_LENGTH
 import org.springframework.http.HttpHeaders.USER_AGENT
 import org.springframework.util.ClassUtils
 import org.springframework.web.filter.OncePerRequestFilter
@@ -52,8 +52,8 @@ class NanoTraceFilter(
     private val withActuator: Boolean = ClassUtils.isPresent("org.springframework.boot.actuate.autoconfigure.endpoint.web.WebEndpointProperties", null)
 
     override fun doFilterInternal(rq: HttpServletRequest, rs: HttpServletResponse, chain: FilterChain) {
-
         val startTimeNano = System.nanoTime()
+
         // Пропускаем Actuator-эндпоинты, если это указано в настройках
         if (withActuator && rq.requestURI.startsWith(rq.contextPath + PATH_ACTUATOR)) {
             chain.doFilter(rq, rs)
@@ -61,7 +61,6 @@ class NanoTraceFilter(
         }
 
         val userId = rq.getHeader(HEADER_USER_ID)
-
         val traceParent = rq.getHeader(HEADER_TRACEPARENT)
         var traceId: String? = null
         var parentId: String? = null
@@ -71,7 +70,7 @@ class NanoTraceFilter(
             val firstDash = traceParent.indexOf('-', 3)
             val secondDash = traceParent.indexOf('-', firstDash + 1)
 
-            if (firstDash == 35 && secondDash == 52) { // Фиксированные позиции W3C
+            if (firstDash == 35 && secondDash == 52) {
                 traceId = traceParent.substring(3, firstDash)
                 parentId = traceParent.substring(firstDash + 1, secondDash)
 
@@ -84,14 +83,12 @@ class NanoTraceFilter(
 
         val baggage = mutableMapOf<String, String>()
         rq.getHeader(HEADER_BAGGAGE)?.let { header ->
-            parseBaggage(header)?.let { baggage.putAll(it) }
+            NanoTracer.parseBaggage(header)?.let { baggage.putAll(it) }
         }
 
         val propagationHeaders = HashMap<String, String>()
         val propKeys = traceProps.propagationHeaders
 
-        // ОПТИМИЗАЦИЯ: Чистый идиоматичный цикл без лямбд,
-        // отлично работающий с Set
         for (key in propKeys) {
             val value = rq.getHeader(key)
             if (value != null) {
@@ -99,10 +96,10 @@ class NanoTraceFilter(
             }
         }
 
-        val traceState = rq.getHeader(NanoTracer.HEADER_TRACESTATE)
+        val traceState = rq.getHeader(HEADER_TRACESTATE)
 
-        // Стартуем трейс, учитывая родителя
-        val ctx = tracer.startTrace(
+        // Стартуем наш высокопроизводительный NanoSpan
+        val curSpan = tracer.startTrace(
             name = "${rq.method} ${rq.requestURI}",
             remoteTraceId = traceId,
             remoteParentId = parentId,
@@ -131,7 +128,7 @@ class NanoTraceFilter(
 
             val isError = rs.status >= ERROR_STATUS_THRESHOLD
 
-            // 3. Прямое наполнение HashMap вместо тяжелого buildMap
+            // Наполняем теги спана напрямую без тяжелых buildMap билдеров
             val attrs = HashMap<String, Any>(32)
 
             MDC.get(MDC_USER_ID)?.let { attrs[ATTR_USER_ID] = it }
@@ -154,7 +151,7 @@ class NanoTraceFilter(
                 attrs[ATTR_HTTP_SLOW_REQUEST] = true
             }
 
-            rs.getHeader(HttpHeaders.CONTENT_LENGTH)
+            rs.getHeader(CONTENT_LENGTH)
                 ?.toLongOrNull()
                 ?.let { attrs[ATTR_HTTP_RESPONSE_BODY_SIZE] = it }
 
@@ -170,24 +167,33 @@ class NanoTraceFilter(
                 attrs[ATTR_EXCEPTION_MESSAGE] = "HTTP ${rs.status}"
             }
 
-            // 4. Наполняем мапу напрямую без создания лишних коллекций
             fillRequestHeadersAttrs(rq, attrs)
             fillResponseHeadersAttrs(rs, attrs)
 
+            // Останавливаем спан и отправляем в неблокирующий батчер
             tracer.stop(
-                ctx = ctx,
+                ctx = curSpan,
                 status = if (isError) Status.StatusCode.STATUS_CODE_ERROR else Status.StatusCode.STATUS_CODE_OK,
                 attrs = attrs,
                 forceExport = isSlow || isError,
             )
-            MDC.clear()
+
+            // БАГФИКС: Точечно вычищаем контекст трейсера вместо ядерного MDC.clear(),
+            // сохраняя метаданные логов, которые могли прописать фильтры Spring Security
+            tracer.clearThreadContext()
+            MDC.remove(MDC_USER_ID)
+            MDC.remove(MDC_SOURCE)
+            MDC.remove(MDC_TARGET)
         }
     }
 
     private fun getFullUri(rq: HttpServletRequest): String {
         val q = rq.queryString ?: return rq.requestURL.toString()
-        val sb = rq.requestURL // Он возвращает переиспользуемый StringBuffer сервлет-контейнера
-        return sb.append(QUERY_MARKER).append(q).toString()
+        // БАГФИКС: Используем локальный изолированный StringBuilder, чтобы избежать
+        // side-effect мутации переиспользуемого StringBuffer контейнера Tomcat!
+        val sb = StringBuilder(128)
+        sb.append(rq.requestURL).append(QUERY_MARKER).append(q)
+        return sb.toString()
     }
 
     private fun fillRequestHeadersAttrs(rq: HttpServletRequest, target: HashMap<String, Any>) {
@@ -198,7 +204,6 @@ class NanoTraceFilter(
 
             if (normalizedName in OTEL_MAPPED_HEADERS) continue
 
-            // Прямая конкатенация без кэша и блокировок: быстро и потокобезопасно
             val key = "$PREFIX_HTTP_REQUEST_HEADER$normalizedName"
 
             if (normalizedName in SENSITIVE_HEADERS) {
@@ -228,7 +233,6 @@ class NanoTraceFilter(
             val normalizedName = name.lowercase()
             if (normalizedName in OTEL_MAPPED_HEADERS) continue
 
-            // Прямая конкатенация без кэша и блокировок
             val key = "$PREFIX_HTTP_RESPONSE_HEADER$normalizedName"
             val headers = rs.getHeaders(name)
             val size = headers.size

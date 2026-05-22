@@ -2,7 +2,7 @@ package com.micronaut.bug.trace.reactor
 
 import com.micronaut.bug.trace.NanoTracer.Companion.MDC_SPAN_ID
 import com.micronaut.bug.trace.NanoTracer.Companion.MDC_TRACE_ID
-import com.micronaut.bug.trace.TraceContext
+import com.micronaut.bug.trace.NanoSpan
 import org.slf4j.MDC
 import reactor.core.CoreSubscriber
 import reactor.core.publisher.Hooks
@@ -41,7 +41,7 @@ object ReactorMdcHook {
 
         private fun updateMdc() {
             val ctx = delegate.currentContext()
-                .getOrEmpty<TraceContext>(TraceContext::class.java)
+                .getOrEmpty<NanoSpan>(NanoSpan::class.java)
                 .orElse(null)
             if (ctx != null) {
                 MDC.put(MDC_TRACE_ID, ctx.traceId)

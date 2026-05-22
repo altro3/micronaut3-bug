@@ -59,53 +59,50 @@ import org.springframework.core.task.TaskDecorator
  *
  * @property tracer Экземпляр [NanoTracer] для управления стеком контекстов.
  */
+
 class TracingTaskDecorator(
     private val tracer: NanoTracer? = null,
 ) : TaskDecorator {
 
     override fun decorate(runnable: Runnable): Runnable {
-        // Если трейсер не прилетел или трейсинг выключен — возвращаем как есть
+        // Если трейсер не инициализирован, возвращаем задачу как есть
         if (tracer == null) {
             return runnable
         }
-        // 1. Делаем снимок текущего стека NanoTracer и MDC в РОДИТЕЛЬСКОМ потоке
-        val parentTraceElement = tracer.dispatcher()
-        val mdcSnapshot = MDC.getCopyOfContextMap()
+
+        // 1. ЗАХВАТ КОНТЕКСТА В РОДИТЕЛЬСКОМ ПОТОКЕ (Zero-Allocation)
+        // Просто копируем 64-битную ссылку на текущую ноду иммутабельного стека
+        val parentSpan = tracer.currentSpan()
+        val parentMdc = MDC.getCopyOfContextMap()
 
         return Runnable {
+            // 2. ИНИЦИАЛИЗАЦИЯ В ФОНОВОМ ПОТОКЕ ПУЛА
+            // Устанавливаем родительский контекст в ThreadLocal фонового потока
+            tracer.setSpan(parentSpan)
 
-            val oldContext = tracer.internalStack.get()
-            val oldMdc = MDC.getCopyOfContextMap()
+            // Если в MDC родителя были кастомные бизнес-метрики/ключи, восстанавливаем их
+            if (parentMdc != null) {
+                MDC.setContextMap(parentMdc)
+            }
 
-            // 2. Восстанавливаем родительский контекст в новом потоке
-            tracer.internalStack.set(parentTraceElement.snapshot)
-            // 3. СРАЗУ открываем новый дочерний спан для асинхронной задачи
-            // Это создаст новую связь в дереве Tempo
+            // На основе восстановленного контекста открываем изолированный асинхронный спан.
+            // Имя класса runnable берется безопасно.
             val asyncSpan = tracer.startSpan("ASYNC: ${runnable.javaClass.simpleName}")
 
             try {
-                // Синхронизируем MDC на основе восстановленного стека
-                tracer.syncMdc()
-                // Если в MDC были кастомные ключи, которых нет в стеке — докидываем их
-                mdcSnapshot?.let { MDC.setContextMap(it) }
-
                 runnable.run()
             } catch (e: Exception) {
-                // Если задача упала, фиксируем ошибку в этом специфичном спане
+                // Если фоновая задача упала — фиксируем ошибку в спане
                 asyncSpan.error = e
                 throw e
             } finally {
-                // 3. Очищаем или восстанавливаем старое состояние (вежливость к пулу потоков)
-                if (oldContext != null) {
-                    tracer.internalStack.set(oldContext)
-                } else {
-                    tracer.internalStack.remove()
-                }
-                if (oldMdc != null) {
-                    MDC.setContextMap(oldMdc)
-                } else {
-                    MDC.clear()
-                }
+                // 3. ОБЯЗАТЕЛЬНАЯ И СТРОГАЯ ОЧИСТКА ПОТОКА ПУЛА
+                // Сначала закрываем наш спан (NanoTracer сам откатит поток на parentCtx)
+                tracer.stop(asyncSpan)
+
+                // Полностью вычищаем ThreadLocal и MDC перед возвратом потока в пул Spring/Tomcat.
+                // Это гарантирует 100% изоляцию данных между независимыми задачами.
+                tracer.clearThreadContext()
             }
         }
     }

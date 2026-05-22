@@ -1,15 +1,5 @@
 package com.micronaut.bug.trace.reactor
 
-import com.micronaut.bug.client.HttpClientProperties
-import com.micronaut.bug.trace.NanoTracer
-import com.micronaut.bug.trace.TraceContext
-import io.opentelemetry.proto.trace.v1.Span
-import io.opentelemetry.proto.trace.v1.Status
-import org.springframework.http.HttpHeaders
-import org.springframework.web.client.RestClient
-import reactor.core.publisher.Mono
-import wiremock.org.apache.hc.core5.http.message.MessageSupport
-
 /**
  * Реактивный фильтр для [org.springframework.web.reactive.function.client.WebClient].
  * Аналог [com.micronaut.bug.client.NanoTraceClientInterceptor] для неблокирующего стека.

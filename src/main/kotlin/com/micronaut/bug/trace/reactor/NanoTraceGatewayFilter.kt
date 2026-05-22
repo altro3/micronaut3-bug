@@ -1,48 +1,7 @@
 package com.micronaut.bug.trace.gateway
 
-import com.micronaut.bug.trace.NanoTracer
-import com.micronaut.bug.trace.NanoTracer.Companion.ATTR_CLIENT
-import com.micronaut.bug.trace.NanoTracer.Companion.ATTR_CLIENT_ADDRESS
-import com.micronaut.bug.trace.NanoTracer.Companion.ATTR_EXCEPTION_MESSAGE
-import com.micronaut.bug.trace.NanoTracer.Companion.ATTR_HTTP_REQUEST_BODY_SIZE
-import com.micronaut.bug.trace.NanoTracer.Companion.ATTR_HTTP_REQUEST_METHOD
-import com.micronaut.bug.trace.NanoTracer.Companion.ATTR_HTTP_RESPONSE_BODY_SIZE
-import com.micronaut.bug.trace.NanoTracer.Companion.ATTR_HTTP_RESPONSE_STATUS_CODE
-import com.micronaut.bug.trace.NanoTracer.Companion.ATTR_HTTP_SLOW_REQUEST
-import com.micronaut.bug.trace.NanoTracer.Companion.ATTR_SERVER
-import com.micronaut.bug.trace.NanoTracer.Companion.ATTR_SERVER_ADDRESS
-import com.micronaut.bug.trace.NanoTracer.Companion.ATTR_SERVER_PORT
-import com.micronaut.bug.trace.NanoTracer.Companion.ATTR_URL_FULL
-import com.micronaut.bug.trace.NanoTracer.Companion.ATTR_URL_PATH
-import com.micronaut.bug.trace.NanoTracer.Companion.ATTR_URL_QUERY
-import com.micronaut.bug.trace.NanoTracer.Companion.ATTR_URL_SCHEME
-import com.micronaut.bug.trace.NanoTracer.Companion.ATTR_USER_AGENT_ORIGINAL
-import com.micronaut.bug.trace.NanoTracer.Companion.HEADER_BAGGAGE
-import com.micronaut.bug.trace.NanoTracer.Companion.HEADER_TRACEPARENT
-import com.micronaut.bug.trace.NanoTracer.Companion.HEADER_X_SENDER
-import com.micronaut.bug.trace.NanoTracer.Companion.MASKED_VALUES
-import com.micronaut.bug.trace.NanoTracer.Companion.METHODS_WITHOUT_BODY
-import com.micronaut.bug.trace.NanoTracer.Companion.OTEL_MAPPED_HEADERS
-import com.micronaut.bug.trace.NanoTracer.Companion.PREFIX_HTTP_REQUEST_HEADER
-import com.micronaut.bug.trace.NanoTracer.Companion.PREFIX_HTTP_RESPONSE_HEADER
-import com.micronaut.bug.trace.NanoTracer.Companion.SENSITIVE_HEADERS
-import com.micronaut.bug.trace.NanoTracer.Companion.TRACEPARENT_PREFIX
-import com.micronaut.bug.trace.NanoTracer.Companion.parseBaggage
-import com.micronaut.bug.trace.TraceContext
-import com.micronaut.bug.trace.config.TraceProperties
-import io.github.oshai.kotlinlogging.KotlinLogging
-import io.opentelemetry.proto.trace.v1.Status
-import org.springframework.beans.factory.annotation.Value
 //import org.springframework.cloud.gateway.filter.GatewayFilterChain
 //import org.springframework.cloud.gateway.filter.GlobalFilter
-import org.springframework.core.Ordered
-import org.springframework.http.HttpHeaders
-import org.springframework.http.server.reactive.ServerHttpRequest
-import org.springframework.http.server.reactive.ServerHttpResponse
-import org.springframework.stereotype.Component
-import org.springframework.web.server.ServerWebExchange
-import reactor.core.publisher.Mono
-import reactor.core.publisher.SignalType
 
 /*
 @Component

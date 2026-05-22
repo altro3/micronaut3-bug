@@ -39,7 +39,10 @@ fun CoroutineScope.launchTraced(
     context: CoroutineContext = EmptyCoroutineContext,
     block: suspend CoroutineScope.() -> Unit
 ): Job {
-    return launch(context + tracer.dispatcher()) {
+    // Извлекаем текущий спан из ThreadLocal и оборачиваем его в TraceElement.
+    // Больше никакого копирования стека через dispatcher()!
+    val currentSpan = tracer.currentSpan()
+    return launch(context + TraceElement(currentSpan, tracer)) {
         block()
     }
 }
@@ -67,7 +70,11 @@ fun <T> CoroutineScope.asyncTraced(
     context: CoroutineContext = EmptyCoroutineContext,
     block: suspend CoroutineScope.() -> T
 ): Deferred<T> {
-    return async(context + tracer.dispatcher()) {
+    // Просто извлекаем текущий NanoSpan из ThreadLocal родительского потока
+    val currentSpan = tracer.currentSpan()
+
+    // Передаем ссылку. Это работает со скоростью копирования 64-битного адреса в процессоре
+    return async(context + TraceElement(currentSpan, tracer)) {
         block()
     }
 }
@@ -101,7 +108,10 @@ fun CoroutineScope.launchNewSpan(
     context: CoroutineContext = EmptyCoroutineContext,
     block: suspend (NanoTracer.TraceReport) -> Unit
 ): Job {
-    return launch(context + tracer.dispatcher()) {
+    val currentSpan = tracer.currentSpan()
+    return launch(context + TraceElement(currentSpan, tracer)) {
+        // tracer.trace() автоматически создаст дочерний спан,
+        // безопасно выполнит блок и вернет репорт в пул
         tracer.trace(spanName) { report ->
             block(report)
         }
