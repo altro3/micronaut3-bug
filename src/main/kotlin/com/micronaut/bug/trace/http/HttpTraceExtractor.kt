@@ -5,8 +5,8 @@ import com.micronaut.bug.trace.TraceUtil
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
 import org.springframework.http.HttpHeaders
-import org.springframework.http.HttpRequest
-import org.springframework.http.client.ClientHttpResponse
+import java.net.URI
+import java.util.ArrayList
 
 object HttpTraceExtractor {
 
@@ -14,24 +14,20 @@ object HttpTraceExtractor {
     private const val PROTOCOL_HTTPS = "https"
     private const val HOST_UNKNOWN = "unknown"
     private const val ATTR_USER_ID = "user.id"
+    private const val PREFIX_HTTP_ERROR = "HTTP"
 
-    // ==========================================================================================
-    // 1. УНИВЕРСАЛЬНЫЙ СЛОЙ SPRING (HttpHeaders подходит для WebFlux, Netty и RestTemplate)
-    // ==========================================================================================
+    private const val PORT_HTTPS = 443
+    private const val PORT_HTTP = 80
+    private const val ERROR_STATUS_THRESHOLD = 400
 
     fun fillHeadersAttrs(headers: HttpHeaders, prefix: String, isSensitive: Boolean, target: MutableMap<String, Any>) {
         for (name in headers.keys) {
             val lowerName = name.lowercase()
-
             fillHeadersCore(lowerName, prefix, isSensitive, target) {
                 headers[name]
             }
         }
     }
-
-    // ==========================================================================================
-    // 2. СИНХРОННЫЙ СЕРВЛЕТНЫЙ СЛОЙ (Tomcat / Jetty / Jakarta Servlet API)
-    // ==========================================================================================
 
     fun getFullUri(rq: HttpServletRequest): String =
         rq.queryString?.let { "${rq.requestURL}$QUERY_MARKER$it" } ?: rq.requestURL.toString()
@@ -67,71 +63,118 @@ object HttpTraceExtractor {
         }
     }
 
-    fun extractBaseAttributes(rq: HttpServletRequest, rs: HttpServletResponse, attrs: HashMap<String, Any>, isSlow: Boolean) {
-        attrs[TraceUtil.ATTR_URL_FULL] = getFullUri(rq)
-        attrs[TraceUtil.ATTR_URL_SCHEME] = rq.scheme
-        attrs[TraceUtil.ATTR_URL_PATH] = rq.requestURI
-        rq.queryString?.let { attrs[TraceUtil.ATTR_URL_QUERY] = it }
+    fun extractServerBaseAttributes(
+        methodStr: String,
+        scheme: String,
+        path: String,
+        queryString: String?,
+        urlFull: String,
+        userAgent: String?,
+        remoteAddr: String?,
+        serverName: String?,
+        serverPort: Int,
+        reqBodySize: Long,
+        resStatusCode: Int,
+        resContentLength: Long?,
+        isSlow: Boolean,
+        target: MutableMap<String, Any>
+    ) {
+        extractCommonHttpAttributes(
+            host = serverName,
+            port = serverPort,
+            fallbackPortConfig = null,
+            bodySize = reqBodySize,
+            statusCode = resStatusCode,
+            contentLength = resContentLength,
+            isError = resStatusCode >= ERROR_STATUS_THRESHOLD,
+            urlFull = urlFull,
+            methodStr = methodStr,
+            target = target
+        )
 
-        attrs[TraceUtil.ATTR_HTTP_REQUEST_METHOD] = rq.method
-        rq.getHeader(HttpHeaders.USER_AGENT)?.let { attrs[TraceUtil.ATTR_USER_AGENT_ORIGINAL] = it }
+        target[TraceUtil.ATTR_URL_SCHEME] = scheme
+        target[TraceUtil.ATTR_URL_PATH] = path
+        if (queryString != null) target[TraceUtil.ATTR_URL_QUERY] = queryString
+        if (userAgent != null) target[TraceUtil.ATTR_USER_AGENT_ORIGINAL] = userAgent
+        target[TraceUtil.ATTR_CLIENT_ADDRESS] = remoteAddr ?: HOST_UNKNOWN
 
-        if (rq.method !in TraceUtil.METHODS_WITHOUT_BODY) {
-            val reqSize = rq.contentLength.toLong()
-            if (reqSize != -1L) attrs[TraceUtil.ATTR_HTTP_REQUEST_BODY_SIZE] = reqSize
+        if (isSlow) {
+            target[TraceUtil.ATTR_HTTP_SLOW_REQUEST] = true
         }
-
-        if (isSlow) attrs[TraceUtil.ATTR_HTTP_SLOW_REQUEST] = true
-
-        rs.getHeader(HttpHeaders.CONTENT_LENGTH)?.toLongOrNull()?.let { attrs[TraceUtil.ATTR_HTTP_RESPONSE_BODY_SIZE] = it }
-
-        attrs[TraceUtil.ATTR_SERVER_ADDRESS] = rq.serverName
-        attrs[TraceUtil.ATTR_SERVER_PORT] = rq.serverPort.toLong()
-        attrs[TraceUtil.ATTR_CLIENT_ADDRESS] = rq.remoteAddr
-        attrs[TraceUtil.ATTR_HTTP_RESPONSE_STATUS_CODE] = rs.status.toLong()
     }
 
-    // ==========================================================================================
-    // 3. БАЗОВЫЕ МЕТАДАННЫЕ ИСХОДЯЩЕГО КЛИЕНТА (Spring Client API)
-    // ==========================================================================================
+    fun getFullUri(uri: URI): String =
+        uri.query?.let { "${uri.path}$QUERY_MARKER$it" } ?: uri.path
 
-    fun getFullUri(rq: HttpRequest): String =
-        rq.uri.query?.let { "${rq.uri.path}$QUERY_MARKER$it" } ?: rq.uri.path
-
-    fun extractBaseAttributes(
-        rq: HttpRequest, body: ByteArray, rs: ClientHttpResponse?, urlFull: String, methodStr: String,
-        selfServiceName: String, serviceNameStr: String, userId: String?, props: HttpClientProperties,
-        target: HashMap<String, Any>
+    fun extractClientBaseAttributes(
+        uri: URI,
+        bodySize: Long,
+        statusCode: Int?,
+        contentLength: Long?,
+        isError: Boolean,
+        urlFull: String,
+        methodStr: String,
+        selfServiceName: String,
+        serviceNameStr: String,
+        userId: String?,
+        props: HttpClientProperties,
+        target: MutableMap<String, Any>
     ) {
+        extractCommonHttpAttributes(
+            host = uri.host,
+            port = uri.port,
+            fallbackPortConfig = props.url.port,
+            bodySize = bodySize,
+            statusCode = statusCode,
+            contentLength = contentLength,
+            isError = isError,
+            urlFull = urlFull,
+            methodStr = methodStr,
+            target = target
+        )
+
         if (userId != null) target[ATTR_USER_ID] = userId
-        target[TraceUtil.ATTR_HTTP_REQUEST_METHOD] = methodStr
-        target[TraceUtil.ATTR_URL_FULL] = urlFull
-
-        val host = rq.uri.host ?: props.url.host ?: HOST_UNKNOWN
-        target[TraceUtil.ATTR_SERVER_ADDRESS] = host
-
-        val port = rq.uri.port.takeIf { it != -1 } ?: props.url.port.takeIf { it != -1 } ?: if (urlFull.startsWith(PROTOCOL_HTTPS)) 443 else 80
-        target[TraceUtil.ATTR_SERVER_PORT] = port.toLong()
-
         target[TraceUtil.ATTR_CLIENT] = selfServiceName
         target[TraceUtil.ATTR_SERVER] = serviceNameStr
-        target[TraceUtil.ATTR_PEER_SERVICE] = props.serviceName ?: host
-
-        if (methodStr !in TraceUtil.METHODS_WITHOUT_BODY && body.isNotEmpty()) {
-            target[TraceUtil.ATTR_HTTP_REQUEST_BODY_SIZE] = body.size.toLong()
-        }
-
-        if (rs != null) {
-            val statusCode = rs.statusCode
-            target[TraceUtil.ATTR_HTTP_RESPONSE_STATUS_CODE] = statusCode.value().toLong()
-            rs.headers.contentLength.takeIf { it != -1L }?.let { target[TraceUtil.ATTR_HTTP_RESPONSE_BODY_SIZE] = it }
-            if (statusCode.isError) target[TraceUtil.ATTR_EXCEPTION_MESSAGE] = "HTTP ${statusCode.value()}"
-        }
+        target[TraceUtil.ATTR_PEER_SERVICE] = props.serviceName ?: (uri.host ?: props.url.host ?: HOST_UNKNOWN)
     }
 
-    // ==========================================================================================
-    // 4. СВЕРХБЫСТРОЕ ОБЩЕЕ ЯДРО ОБРАБОТКИ ХЭДЕРОВ (Единая инлайновая логика)
-    // ==========================================================================================
+    @Suppress("NOTHING_TO_INLINE")
+    private inline fun extractCommonHttpAttributes(
+        host: String?,
+        port: Int,
+        fallbackPortConfig: Int?,
+        bodySize: Long,
+        statusCode: Int?,
+        contentLength: Long?,
+        isError: Boolean,
+        urlFull: String,
+        methodStr: String,
+        target: MutableMap<String, Any>
+    ) {
+        target[TraceUtil.ATTR_HTTP_REQUEST_METHOD] = methodStr
+        target[TraceUtil.ATTR_URL_FULL] = urlFull
+        target[TraceUtil.ATTR_SERVER_ADDRESS] = host ?: HOST_UNKNOWN
+
+        val finalPort = port.takeIf { it != -1 }
+            ?: fallbackPortConfig?.takeIf { it != -1 }
+            ?: if (urlFull.startsWith(PROTOCOL_HTTPS)) PORT_HTTPS else PORT_HTTP
+        target[TraceUtil.ATTR_SERVER_PORT] = finalPort.toLong()
+
+        if (methodStr !in TraceUtil.METHODS_WITHOUT_BODY && bodySize > 0) {
+            target[TraceUtil.ATTR_HTTP_REQUEST_BODY_SIZE] = bodySize
+        }
+
+        if (statusCode != null) {
+            target[TraceUtil.ATTR_HTTP_RESPONSE_STATUS_CODE] = statusCode.toLong()
+            if (contentLength != null && contentLength != -1L) {
+                target[TraceUtil.ATTR_HTTP_RESPONSE_BODY_SIZE] = contentLength
+            }
+            if (isError) {
+                target[TraceUtil.ATTR_EXCEPTION_MESSAGE] = "$PREFIX_HTTP_ERROR $statusCode"
+            }
+        }
+    }
 
     @Suppress("NOTHING_TO_INLINE")
     private inline fun fillHeadersCore(

@@ -24,7 +24,7 @@ class TraceEvent {
         traceIdHex: String, spanIdHex: String, parentIdHex: String?, name: String,
         startEpochNanos: Long, endEpochNanos: Long, status: StatusCode, kind: SpanKind,
         userAttrs: Map<String, Any>?, baggage: Map<String, String>?, propagationHeaders: Map<String, String>?,
-        error: Throwable?
+        error: Throwable?,
     ) {
         parseHex(traceIdHex, traceIdBytes)
         parseHex(spanIdHex, spanIdBytes)

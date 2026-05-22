@@ -12,7 +12,7 @@ import com.micronaut.bug.trace.TraceUtil.MDC_TARGET
 import com.micronaut.bug.trace.TraceUtil.PREFIX_HTTP_REQUEST_HEADER
 import com.micronaut.bug.trace.TraceUtil.PREFIX_HTTP_RESPONSE_HEADER
 import com.micronaut.bug.trace.TraceUtil.formatBaggage
-import com.micronaut.bug.trace.http.HttpTraceExtractor.extractBaseAttributes
+import com.micronaut.bug.trace.http.HttpTraceExtractor.extractClientBaseAttributes
 import com.micronaut.bug.trace.http.HttpTraceExtractor.fillHeadersAttrs
 import com.micronaut.bug.trace.http.HttpTraceExtractor.getFullUri
 import com.micronaut.bug.trace.http.NanoTraceFilter.Companion.MDC_USER_ID
@@ -39,7 +39,7 @@ class NanoTraceClientInterceptor(
         val urlFull = if (rq.uri.isAbsolute) {
             rq.uri.toString()
         } else {
-            val path = getFullUri(rq)
+            val path = getFullUri(rq.uri)
             if (path.startsWith(LoggingInterceptor.SLASH)) "$basePrefix$path" else "$basePrefix/$path"
         }
 
@@ -95,17 +95,19 @@ class NanoTraceClientInterceptor(
 
             val attrs = HashMap<String, Any>(32)
 
-            extractBaseAttributes(
-                rq = rq,
-                body = body,
-                rs = rs,
+            extractClientBaseAttributes(
+                uri = rq.uri,
+                bodySize = body.size.toLong(),
+                statusCode = rs.statusCode.value(),
+                contentLength = rs.headers.contentLength,
+                isError = rs.statusCode.isError,
                 urlFull = urlFull,
                 methodStr = methodStr,
                 selfServiceName = selfServiceName,
                 serviceNameStr = serviceNameStr,
                 userId = userId,
                 props = props,
-                target = attrs
+                target = attrs,
             )
             fillHeadersAttrs(rq.headers, PREFIX_HTTP_REQUEST_HEADER, isSensitive = true, attrs)
             fillHeadersAttrs(rs.headers, PREFIX_HTTP_RESPONSE_HEADER, isSensitive = false, attrs)
@@ -120,10 +122,12 @@ class NanoTraceClientInterceptor(
             rs
         } catch (e: Exception) {
             val attrs = HashMap<String, Any>(16)
-            extractBaseAttributes(
-                rq = rq,
-                body = body,
-                rs = null,
+            extractClientBaseAttributes(
+                uri = rq.uri,
+                bodySize = body.size.toLong(),
+                statusCode = null,
+                contentLength = null,
+                isError = true,
                 urlFull = urlFull,
                 methodStr = methodStr,
                 selfServiceName = selfServiceName,

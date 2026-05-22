@@ -3,12 +3,16 @@ package com.micronaut.bug.trace.http
 import com.micronaut.bug.trace.NanoTracer
 import com.micronaut.bug.trace.TraceUtil
 import com.micronaut.bug.trace.config.TraceProperties
+import com.micronaut.bug.trace.http.HttpTraceExtractor.extractServerBaseAttributes
+import com.micronaut.bug.trace.http.HttpTraceExtractor.fillRequestHeadersAttrs
+import com.micronaut.bug.trace.http.HttpTraceExtractor.fillResponseHeadersAttrs
 import io.github.oshai.kotlinlogging.KotlinLogging
 import io.opentelemetry.proto.trace.v1.Status
 import jakarta.servlet.FilterChain
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
 import org.slf4j.MDC
+import org.springframework.http.HttpHeaders
 import org.springframework.util.ClassUtils
 import org.springframework.web.filter.OncePerRequestFilter
 
@@ -100,9 +104,24 @@ class NanoTraceFilter(
 
                 if (isError) attrs[TraceUtil.ATTR_EXCEPTION_MESSAGE] = "HTTP ${rs.status}"
 
-                HttpTraceExtractor.extractBaseAttributes(rq, rs, attrs, isSlow)
-                HttpTraceExtractor.fillRequestHeadersAttrs(rq, attrs)
-                HttpTraceExtractor.fillResponseHeadersAttrs(rs, attrs)
+                extractServerBaseAttributes(
+                    methodStr = rq.method,
+                    scheme = rq.scheme,
+                    path = rq.requestURI,
+                    queryString = rq.queryString,
+                    urlFull = HttpTraceExtractor.getFullUri(rq),
+                    userAgent = rq.getHeader(HttpHeaders.USER_AGENT),
+                    remoteAddr = rq.remoteAddr,
+                    serverName = rq.serverName,
+                    serverPort = rq.serverPort,
+                    reqBodySize = rq.contentLength.toLong().takeIf { it != -1L } ?: 0L,
+                    resStatusCode = rs.status,
+                    resContentLength = rs.getHeader(HttpHeaders.CONTENT_LENGTH)?.toLongOrNull(),
+                    isSlow = isSlow,
+                    target = attrs
+                )
+                fillRequestHeadersAttrs(rq, attrs)
+                fillResponseHeadersAttrs(rs, attrs)
 
                 tracer.stop(
                     span = curSpan,

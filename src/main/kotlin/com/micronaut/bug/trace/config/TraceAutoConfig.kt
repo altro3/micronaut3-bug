@@ -5,17 +5,17 @@ import com.micronaut.bug.trace.http.NanoTraceFilter
 import com.micronaut.bug.trace.otlp.TraceBatcher
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.beans.factory.annotation.Value
-import org.springframework.boot.autoconfigure.AutoConfiguration
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBooleanProperty
 import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.boot.web.servlet.FilterRegistrationBean
 import org.springframework.context.annotation.Bean
+import org.springframework.context.annotation.Configuration
 import org.springframework.core.Ordered
 import java.net.http.HttpClient
 import java.util.concurrent.Executors
 
 @ConditionalOnBooleanProperty("app.trace.enabled", matchIfMissing = true)
-@AutoConfiguration
+@Configuration
 @EnableConfigurationProperties(TraceProperties::class)
 class TraceAutoConfig {
 
