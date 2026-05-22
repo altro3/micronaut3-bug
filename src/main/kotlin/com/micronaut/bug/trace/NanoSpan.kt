@@ -22,7 +22,7 @@ class NanoSpan(
     @JvmField
     val traceState: String?,
     @JvmField
-    val parentContext: NanoSpan? = null,
+    var parentSpan: NanoSpan? = null,
 ) {
     @Volatile
     var error: Throwable? = null

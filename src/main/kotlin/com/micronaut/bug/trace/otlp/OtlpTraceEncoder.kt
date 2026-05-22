@@ -2,12 +2,13 @@ package com.micronaut.bug.trace.otlp
 
 import com.google.protobuf.UnsafeByteOperations.unsafeWrap
 import com.micronaut.bug.log.LogUtil.formatStackTrace
-import com.micronaut.bug.trace.NanoTracer
-import com.micronaut.bug.trace.NanoTracer.Companion.ATTR_EXCEPTION_MESSAGE
-import com.micronaut.bug.trace.NanoTracer.Companion.ATTR_EXCEPTION_STACKTRACE
-import com.micronaut.bug.trace.NanoTracer.Companion.ATTR_EXCEPTION_TYPE
-import com.micronaut.bug.trace.NanoTracer.Companion.PREFIX_BAGGAGE
-import com.micronaut.bug.trace.NanoTracer.Companion.PREFIX_PROPAGATION
+import com.micronaut.bug.trace.TraceUtil.ATTR_DEPLOYMENT_ENVIRONMENT
+import com.micronaut.bug.trace.TraceUtil.ATTR_EXCEPTION_MESSAGE
+import com.micronaut.bug.trace.TraceUtil.ATTR_EXCEPTION_STACKTRACE
+import com.micronaut.bug.trace.TraceUtil.ATTR_EXCEPTION_TYPE
+import com.micronaut.bug.trace.TraceUtil.ATTR_SERVICE_NAME
+import com.micronaut.bug.trace.TraceUtil.PREFIX_BAGGAGE
+import com.micronaut.bug.trace.TraceUtil.PREFIX_PROPAGATION
 import com.micronaut.bug.trace.config.TraceProperties
 import io.opentelemetry.proto.collector.trace.v1.ExportTraceServiceRequest
 import io.opentelemetry.proto.common.v1.AnyValue
@@ -27,8 +28,8 @@ class OtlpTraceEncoder(
 ) {
 
     private val serviceResource = Resource.newBuilder()
-        .addAttributes(KeyValue.newBuilder().setKey(NanoTracer.ATTR_SERVICE_NAME).setValue(AnyValue.newBuilder().setStringValue(appName).build()).build())
-        .addAttributes(KeyValue.newBuilder().setKey(NanoTracer.ATTR_DEPLOYMENT_ENVIRONMENT).setValue(AnyValue.newBuilder().setStringValue(nodeName).build()).build())
+        .addAttributes(KeyValue.newBuilder().setKey(ATTR_SERVICE_NAME).setValue(AnyValue.newBuilder().setStringValue(appName).build()).build())
+        .addAttributes(KeyValue.newBuilder().setKey(ATTR_DEPLOYMENT_ENVIRONMENT).setValue(AnyValue.newBuilder().setStringValue(nodeName).build()).build())
         .build()
 
     private val libScope = InstrumentationScope.newBuilder()

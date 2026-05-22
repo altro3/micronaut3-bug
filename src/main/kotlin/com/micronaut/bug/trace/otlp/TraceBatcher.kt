@@ -6,20 +6,10 @@ import io.opentelemetry.proto.trace.v1.Span
 import io.opentelemetry.proto.trace.v1.Status.StatusCode
 import jakarta.annotation.PostConstruct
 import jakarta.annotation.PreDestroy
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
+import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.ClosedReceiveChannelException
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.isActive
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Semaphore
-import kotlinx.coroutines.withTimeoutOrNull
 import java.net.http.HttpClient
 import java.util.concurrent.ConcurrentLinkedQueue
 import kotlin.time.Duration.Companion.milliseconds
@@ -36,24 +26,15 @@ class TraceBatcher(
     private val channel = Channel<TraceEvent>(exporterProps.queueCapacity)
     private val exportScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val eventPool = ConcurrentLinkedQueue<TraceEvent>()
-
     private val sender = OtlpHttpSender(appName, nodeName, traceProps, httpClient, eventPool)
 
     private val concurrencySemaphore = Semaphore(exporterProps.maxSenders)
 
     fun enqueue(
-        traceIdHex: String,
-        spanIdHex: String,
-        parentIdHex: String?,
-        name: String,
-        startEpochNanos: Long,
-        endEpochNanos: Long,
-        status: StatusCode,
-        kind: Span.SpanKind,
-        userAttrs: Map<String, Any>?,
-        baggage: Map<String, String>?,
-        propagationHeaders: Map<String, String>?,
-        error: Throwable? = null,
+        traceIdHex: String, spanIdHex: String, parentIdHex: String?, name: String,
+        startEpochNanos: Long, endEpochNanos: Long, status: StatusCode, kind: Span.SpanKind,
+        userAttrs: Map<String, Any>?, baggage: Map<String, String>?, propagationHeaders: Map<String, String>?,
+        error: Throwable?,
     ) {
         if (!exporterProps.enabled) return
 
@@ -117,10 +98,10 @@ class TraceBatcher(
                         }
                     }
 
-                    concurrencySemaphore.acquire()
-
-                    dispatchBatch(batch)
-                    batch = ArrayList(exporterProps.batchSize)
+                    if (batch.isNotEmpty()) {
+                        dispatchBatch(batch)
+                        batch = ArrayList(exporterProps.batchSize)
+                    }
 
                 } catch (_: ClosedReceiveChannelException) {
                     flushRemainingOnShutdown(batch)
@@ -136,9 +117,8 @@ class TraceBatcher(
     }
 
     private fun dispatchBatch(batch: ArrayList<TraceEvent>) {
-        if (batch.isEmpty()) return
-
         exportScope.launch {
+            concurrencySemaphore.acquire()
             try {
                 sender.sendBatch(batch)
             } finally {

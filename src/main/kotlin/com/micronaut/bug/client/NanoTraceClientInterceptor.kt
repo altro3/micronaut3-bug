@@ -148,7 +148,7 @@ class NanoTraceClientInterceptor(
             fillResponseHeadersAttrs(rs, attrs)
 
             tracer.stop(
-                ctx = ctx,
+                span = ctx,
                 status = if (isError) StatusCode.STATUS_CODE_ERROR else StatusCode.STATUS_CODE_OK,
                 kind = Span.SpanKind.SPAN_KIND_CLIENT,
                 forceExport = isSlow,
@@ -167,7 +167,7 @@ class NanoTraceClientInterceptor(
 
             ctx.error = e
             tracer.stop(
-                ctx = ctx,
+                span = ctx,
                 status = StatusCode.STATUS_CODE_ERROR,
                 kind = Span.SpanKind.SPAN_KIND_CLIENT,
                 attrs = attrs,

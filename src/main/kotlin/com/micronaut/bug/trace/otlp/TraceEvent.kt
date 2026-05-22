@@ -4,14 +4,11 @@ import io.opentelemetry.proto.trace.v1.Span.SpanKind
 import io.opentelemetry.proto.trace.v1.Status.StatusCode
 
 class TraceEvent {
-    // Внутренние фиксированные буферы для байт. Вообще не пересоздаются.
     val traceIdBytes = ByteArray(16)
     val spanIdBytes = ByteArray(8)
     val parentIdBytes = ByteArray(8)
 
-    // Флаг, есть ли у спана родитель, чтобы не делать проверку строк в цикле энкодера
     var hasParent: Boolean = false
-
     var name: String = ""
     var startEpochNanos: Long = 0L
     var endEpochNanos: Long = 0L
@@ -29,7 +26,6 @@ class TraceEvent {
         userAttrs: Map<String, Any>?, baggage: Map<String, String>?, propagationHeaders: Map<String, String>?,
         error: Throwable?
     ) {
-        // Парсим Hex прямо при записи в пул. Это разгружает фоновый поток энкодера!
         parseHex(traceIdHex, traceIdBytes)
         parseHex(spanIdHex, spanIdBytes)
 
@@ -58,11 +54,14 @@ class TraceEvent {
         this.baggage = null
         this.propagationHeaders = null
         this.error = null
+        traceIdBytes.fill(0)
+        spanIdBytes.fill(0)
+        parentIdBytes.fill(0)
     }
 
     private fun parseHex(hex: String, target: ByteArray) {
         val len = hex.length
-        val bytesCount = len / 2
+        val bytesCount = minOf(len / 2, target.size)
         for (i in 0 until bytesCount) {
             val h = DECODE_TABLE[hex[i * 2].code and 0x7F]
             val l = DECODE_TABLE[hex[i * 2 + 1].code and 0x7F]

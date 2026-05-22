@@ -1,6 +1,6 @@
 package com.micronaut.bug.trace
 
-import com.micronaut.bug.trace.NanoTracer.Companion.ATTR_ERROR_MESSAGE
+import com.micronaut.bug.trace.TraceUtil.ATTR_ERROR_MESSAGE
 import io.opentelemetry.proto.trace.v1.Status.StatusCode
 
 class TraceReport {

@@ -106,7 +106,7 @@ fun CoroutineScope.launchNewSpan(
     tracer: NanoTracer,
     spanName: String,
     context: CoroutineContext = EmptyCoroutineContext,
-    block: suspend (NanoTracer.TraceReport) -> Unit
+    block: suspend (TraceReport) -> Unit
 ): Job {
     val currentSpan = tracer.currentSpan()
     return launch(context + TraceElement(currentSpan, tracer)) {
