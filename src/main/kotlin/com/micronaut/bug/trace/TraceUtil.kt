@@ -3,7 +3,6 @@ package com.micronaut.bug.trace
 import com.micronaut.bug.trace.http.NanoTraceFilter
 import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpMethod
-import java.lang.StringBuilder
 
 object TraceUtil {
 
@@ -65,6 +64,15 @@ object TraceUtil {
     const val PREFIX_BAGGAGE = "baggage."
     const val PREFIX_PROPAGATION = "propagation."
     const val MASK = "***"
+
+    // БД Атрибуты (OTEL Semantic Conventions)
+    const val ATTR_DB_SYSTEM = "db.system"
+    const val ATTR_DB_USER = "db.user"
+    const val ATTR_DB_CONNECTION_STRING = "db.connection_string"
+    const val ATTR_DB_STATEMENT = "db.statement"
+    const val ATTR_DB_OPERATION = "db.operation"
+    const val ATTR_DB_NAME = "db.name"
+    const val ATTR_DB_SQL_TABLE = "db.sql.table"
 
     // Маскирование и фильтрация приватных данных
     @JvmField

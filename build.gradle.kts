@@ -12,10 +12,14 @@ plugins {
 //    alias(libs.plugins.jmh)
 }
 
-val jreImage = "bellsoft/liberica-openjre-alpine:21.0.11-x86_64"
+val jreImage = "bellsoft/liberica-openjre-alpine:25.0.2-x86_64"
 
 kotlin {
-    jvmToolchain(21)
+    jvmToolchain(25)
+    compilerOptions {
+        freeCompilerArgs.addAll("-Xjsr305=strict", "-Xemit-jvm-type-annotations", "-Xannotation-default-target=param-property", "-jvm-default=enable")
+        javaParameters = true
+    }
 }
 
 repositories {
@@ -66,13 +70,6 @@ configurations.all {
     resolutionStrategy {
         cacheDynamicVersionsFor(0, "minutes")
         cacheChangingModulesFor(0, "minutes")
-    }
-}
-
-tasks.withType<KotlinCompile>().configureEach {
-    compilerOptions {
-        javaParameters = true
-        freeCompilerArgs.addAll("-Xjsr305=strict", "-Xemit-jvm-type-annotations", "-Xannotation-default-target=param-property", "-Xjvm-default=all")
     }
 }
 

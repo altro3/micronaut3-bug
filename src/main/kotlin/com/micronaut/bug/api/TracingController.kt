@@ -2,18 +2,23 @@ package com.micronaut.bug.api
 
 import com.micronaut.bug.service.BusinessService
 import io.github.oshai.kotlinlogging.KotlinLogging
+import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.RestController
 
 @RestController
 class TracingController(
     private val businessService: BusinessService,
+    private val jdbcTemplate: JdbcTemplate,
 ) {
 
     private val log = KotlinLogging.logger {}
 
     @GetMapping("/trace/ping")
-    fun ping() = "pong"
+    fun ping(): String {
+        jdbcTemplate.execute("SELECT 1")
+        return "pong"
+    }
 
     @GetMapping("/trace/error")
     fun triggerError(): String {

@@ -43,7 +43,6 @@ class TraceElement(
     override fun restoreThreadContext(context: CoroutineContext, oldState: TraceStateSnapshot) {
         tracer.setSpanInternal(oldState.oldSpan)
 
-        // ОПТИМИЗАЦИЯ: Точечно восстанавливаем состояние MDC, не затирая чужие бизнес-ключи
         if (oldState.oldTraceId != null) {
             MDC.put(MDC_TRACE_ID, oldState.oldTraceId)
         } else {

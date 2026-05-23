@@ -2,7 +2,7 @@ package com.micronaut.bug.trace.http
 
 import com.micronaut.bug.trace.NanoTracer
 import com.micronaut.bug.trace.TraceUtil
-import com.micronaut.bug.trace.config.TraceProperties
+import com.micronaut.bug.trace.config.TraceProperties.TraceHttpProperties
 import com.micronaut.bug.trace.http.HttpTraceExtractor.extractServerBaseAttributes
 import com.micronaut.bug.trace.http.HttpTraceExtractor.fillRequestHeadersAttrs
 import com.micronaut.bug.trace.http.HttpTraceExtractor.fillResponseHeadersAttrs
@@ -18,13 +18,14 @@ import org.springframework.web.filter.OncePerRequestFilter
 
 class NanoTraceFilter(
     private val tracer: NanoTracer,
-    private val traceProps: TraceProperties,
+    private val traceProps: TraceHttpProperties,
     private val selfServiceName: String,
 ) : OncePerRequestFilter() {
 
     private val log = KotlinLogging.logger {}
 
     private val withActuator: Boolean = ClassUtils.isPresent("org.springframework.boot.actuate.autoconfigure.endpoint.web.WebEndpointProperties", null)
+    private val slowRequestThresholdMs = traceProps.slowRequestThreshold.toMillis()
 
     override fun doFilterInternal(rq: HttpServletRequest, rs: HttpServletResponse, chain: FilterChain) {
         val startTimeNano = System.nanoTime()
@@ -94,7 +95,7 @@ class NanoTraceFilter(
         } finally {
             try {
                 val durationMs = (System.nanoTime() - startTimeNano) / 1_000_000
-                val isSlow = durationMs >= traceProps.slowRequestThreshold.toMillis()
+                val isSlow = durationMs >= slowRequestThresholdMs
                 val isError = rs.status >= ERROR_STATUS_THRESHOLD
                 val attrs = HashMap<String, Any>(32)
 

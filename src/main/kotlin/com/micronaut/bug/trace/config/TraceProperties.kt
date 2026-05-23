@@ -9,16 +9,18 @@ import java.time.Duration
 @ConfigurationProperties("app.trace")
 class TraceProperties(
     val enabled: Boolean = true,
-    val slowRequestThreshold: Duration = Duration.ofSeconds(10),
     val sampleRate: Double = 1.0,
-    @NestedConfigurationProperty
-    val exporter: ExporterProperties = ExporterProperties(),
-    val propagationHeaders: Set<String> = setOf(),
     var stackTraceMaxLines: Int = 10,
     var stackTraceRootCauseFull: Boolean = true,
+    @NestedConfigurationProperty
+    val exporter: TraceExportProperties = TraceExportProperties(),
+    @NestedConfigurationProperty
+    val jdbc: TraceJdbcProperties = TraceJdbcProperties(),
+    @NestedConfigurationProperty
+    val http: TraceHttpProperties = TraceHttpProperties(),
 ) {
 
-    class ExporterProperties(
+    class TraceExportProperties(
         val enabled: Boolean = true,
         val url: URI = URI.create("http://localhost:4318/v1/traces"),
         val connectTimeout: Duration = Duration.ofSeconds(2),
@@ -35,5 +37,18 @@ class TraceProperties(
         val backoffMultiplier: Double = 2.0,
         val jitterMin: Double = 0.7,
         val jitterMax: Double = 1.3,
+    )
+
+    class TraceHttpProperties(
+        val enabled: Boolean = true,
+        val slowRequestThreshold: Duration = Duration.ofSeconds(10),
+        val propagationHeaders: Set<String> = setOf(),
+    )
+
+    class TraceJdbcProperties(
+        val enabled: Boolean = true,
+        val system: String = "postgresql",
+        val maxStatementLength: Int = 2048,
+        val truncatedMarker: String = " ... [TRUNCATED]"
     )
 }
