@@ -107,7 +107,7 @@ class NanoTracer(
 
     fun stop(
         span: NanoSpan,
-        status: StatusCode = StatusCode.STATUS_CODE_OK,
+        status: StatusCode = StatusCode.STATUS_CODE_UNSET,
         kind: SpanKind = SpanKind.SPAN_KIND_INTERNAL,
         attrs: Map<String, Any>? = null,
         forceExport: Boolean = false,

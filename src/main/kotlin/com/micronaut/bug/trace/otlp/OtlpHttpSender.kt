@@ -26,7 +26,7 @@ class OtlpHttpSender(
 ) {
     private val log = KotlinLogging.logger {}
 
-    private val exporterProps = traceProps.exporter
+    private val exporterProps = traceProps.export
     private val retryInterval = exporterProps.retryInterval.toMillis()
     private val maxAttempts = exporterProps.maxAttempts
     private val encoder = OtlpTraceEncoder(appName, nodeName, traceProps)

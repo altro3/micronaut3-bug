@@ -13,7 +13,7 @@ class TraceProperties(
     var stackTraceMaxLines: Int = 10,
     var stackTraceRootCauseFull: Boolean = true,
     @NestedConfigurationProperty
-    val exporter: TraceExportProperties = TraceExportProperties(),
+    val export: TraceExportProperties = TraceExportProperties(),
     @NestedConfigurationProperty
     val jdbc: TraceJdbcProperties = TraceJdbcProperties(),
     @NestedConfigurationProperty

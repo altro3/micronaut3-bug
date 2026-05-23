@@ -126,7 +126,7 @@ class NanoTraceFilter(
 
                 tracer.stop(
                     span = curSpan,
-                    status = if (isError) Status.StatusCode.STATUS_CODE_ERROR else Status.StatusCode.STATUS_CODE_OK,
+                    status = if (isError) Status.StatusCode.STATUS_CODE_ERROR else Status.StatusCode.STATUS_CODE_UNSET,
                     attrs = attrs,
                     forceExport = isSlow || isError,
                 )

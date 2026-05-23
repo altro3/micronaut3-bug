@@ -40,7 +40,7 @@ dependencies {
     implementation(spring.spring.springBootStarterLog4j2)
     implementation(spring.spring.springBootStarterValidation)
     implementation(spring.spring.springBootStarterActuator)
-    implementation(spring.spring.springBootStarterJdbc)
+    implementation(spring.spring.springBootStarterDataJdbc)
     implementation(spring.spring.springRetry)
     implementation(spring.postgresql.postgresql)
     implementation(spring.flywaydb.flywayDatabasePostgresql) {

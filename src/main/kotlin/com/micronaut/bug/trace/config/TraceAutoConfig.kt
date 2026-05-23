@@ -10,10 +10,12 @@ import org.springframework.beans.factory.annotation.Value
 import org.springframework.beans.factory.config.BeanPostProcessor
 import org.springframework.boot.autoconfigure.AutoConfiguration
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBooleanProperty
+import org.springframework.boot.autoconfigure.condition.ConditionalOnClass
 import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.boot.web.servlet.FilterRegistrationBean
 import org.springframework.context.annotation.Bean
 import org.springframework.core.Ordered
+import org.springframework.core.env.Environment
 import java.net.http.HttpClient
 import java.util.concurrent.Executors
 import javax.sql.DataSource
@@ -26,9 +28,9 @@ class TraceAutoConfig {
     @Bean
     fun traceHttpClient(properties: TraceProperties) =
         HttpClient.newBuilder()
-            .connectTimeout(properties.exporter.connectTimeout)
+            .connectTimeout(properties.export.connectTimeout)
             .version(HttpClient.Version.HTTP_2)
-            .executor(Executors.newFixedThreadPool(properties.exporter.maxSenders) { runnable ->
+            .executor(Executors.newFixedThreadPool(properties.export.maxSenders) { runnable ->
                 Thread(runnable, "trace-http-sender").apply { isDaemon = true }
             })
             .build()
@@ -66,11 +68,16 @@ class TraceAutoConfig {
         addUrlPatterns("/*")
     }
 
+    @ConditionalOnClass(DataSource::class)
     @ConditionalOnBooleanProperty("app.trace.jdbc.enabled", matchIfMissing = true)
     @Bean
-    fun dataSourceTraceBeanPostProcessor(tracer: NanoTracer, traceProps: TraceProperties): BeanPostProcessor =
+    fun dataSourceTraceBeanPostProcessor(
+        tracer: NanoTracer,
+        traceProps: TraceProperties,
+        environment: Environment
+    ): BeanPostProcessor =
         object : BeanPostProcessor, Ordered {
-            private val interceptor = JdbcTraceInterceptor(tracer, traceProps.jdbc)
+            private val interceptor = JdbcTraceInterceptor(tracer, traceProps.jdbc, environment)
 
             override fun postProcessAfterInitialization(bean: Any, beanName: String): Any {
                 if (bean is DataSource && bean !is TraceDataSource) {

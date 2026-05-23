@@ -66,13 +66,15 @@ object TraceUtil {
     const val MASK = "***"
 
     // БД Атрибуты (OTEL Semantic Conventions)
-    const val ATTR_DB_SYSTEM = "db.system"
-    const val ATTR_DB_USER = "db.user"
-    const val ATTR_DB_CONNECTION_STRING = "db.connection_string"
-    const val ATTR_DB_STATEMENT = "db.statement"
-    const val ATTR_DB_OPERATION = "db.operation"
-    const val ATTR_DB_NAME = "db.name"
-    const val ATTR_DB_SQL_TABLE = "db.sql.table"
+    const val ATTR_DB_SYSTEM_NAME = "db.system.name"
+    const val ATTR_DB_QUERY_TEXT = "db.query.text"
+    const val ATTR_DB_QUERY_SUMMARY = "db.query.summary"
+    const val ATTR_DB_OPERATION_NAME = "db.operation.name"
+    const val ATTR_DB_COLLECTION_NAME = "db.collection.name"
+    const val ATTR_DB_NAMESPACE = "db.namespace"
+    const val ATTR_DB_OPERATION_BATCH_SIZE = "db.operation.batch.size"
+    const val ATTR_DB_RESPONSE_STATUS_CODE = "db.response.status_code"
+    const val ATTR_ERROR_TYPE = "error.type"
 
     // Маскирование и фильтрация приватных данных
     @JvmField

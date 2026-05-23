@@ -33,7 +33,7 @@ class TraceBatcher(
     httpClient: HttpClient
 ) {
     private val log = KotlinLogging.logger {}
-    private val exporterProps = traceProps.exporter
+    private val exporterProps = traceProps.export
 
     private val channel = Channel<TraceEvent>(exporterProps.queueCapacity)
     private val exportScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)

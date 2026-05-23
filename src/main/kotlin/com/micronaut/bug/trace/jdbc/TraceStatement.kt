@@ -10,7 +10,10 @@ class TraceStatement(
     private val delegate: Statement,
     tracer: NanoTracer,
     traceProps: TraceJdbcProperties,
-) : BaseTraceStatement(tracer, traceProps), Statement by delegate {
+    serverAddress: String,
+    serverPort: Long,
+    dbNamespace: String?
+) : BaseTraceStatement(tracer, traceProps, serverAddress, serverPort, dbNamespace), Statement by delegate {
 
     override fun execute(sql: String): Boolean =
         executeWithTrace(sql) { delegate.execute(sql) }
@@ -50,4 +53,10 @@ class TraceStatement(
 
     override fun executeLargeUpdate(sql: String, columnNames: Array<out String>?): Long =
         executeWithTrace(sql) { delegate.executeLargeUpdate(sql, columnNames) }
+
+    override fun executeBatch(): IntArray =
+        executeBatchWithTrace(null) { delegate.executeBatch() }
+
+    override fun executeLargeBatch(): LongArray =
+        executeBatchWithTrace(null) { delegate.executeLargeBatch() }
 }

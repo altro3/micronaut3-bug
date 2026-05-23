@@ -114,7 +114,7 @@ class NanoTraceClientInterceptor(
 
             tracer.stop(
                 span = span,
-                status = if (rs.statusCode.isError) Status.StatusCode.STATUS_CODE_ERROR else Status.StatusCode.STATUS_CODE_OK,
+                status = if (rs.statusCode.isError) Status.StatusCode.STATUS_CODE_ERROR else Status.StatusCode.STATUS_CODE_UNSET,
                 kind = Span.SpanKind.SPAN_KIND_CLIENT,
                 forceExport = isSlow,
                 attrs = attrs,

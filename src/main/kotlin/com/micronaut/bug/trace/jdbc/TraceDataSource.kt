@@ -10,11 +10,14 @@ class TraceDataSource(
     private val delegate: DataSource,
     private val tracer: NanoTracer,
     private val traceProps: TraceJdbcProperties,
+    private val serverAddress: String,
+    private val serverPort: Long,
+    private val dbNamespace: String?
 ) : DataSource by delegate {
 
     override fun getConnection(): Connection =
-        TraceConnection(delegate.connection, tracer, traceProps)
+        TraceConnection(delegate.connection, tracer, traceProps, serverAddress, serverPort, dbNamespace)
 
     override fun getConnection(username: String?, password: String?): Connection =
-        TraceConnection(delegate.getConnection(username, password), tracer, traceProps)
+        TraceConnection(delegate.getConnection(username, password), tracer, traceProps, serverAddress, serverPort, dbNamespace)
 }
