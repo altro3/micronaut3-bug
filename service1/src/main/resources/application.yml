@@ -1,0 +1,144 @@
+app:
+  mock:
+    enabled: true
+  node:
+    name: ift2
+  trace:
+    enabled: true
+    export:
+      enabled: true
+      url: http://localhost:4318/v1/traces
+      # Напрямую в викторию
+      #url: http://localhost:10428/insert/opentelemetry/v1/traces
+      connect-timeout: 2s
+    http:
+      enabled: true
+    jdbc:
+      enabled: true
+  log:
+    enabled: true
+    mdc-keys: test
+    pretty-print: true
+    max-payload-size: 4MB
+    otlp:
+      enabled: true
+      url: http://localhost:4318/v1/logs
+      # Напрямую в викторию
+      # url: http://localhost:9428/insert/opentelemetry/v1/logs
+  integration:
+    ext-service:
+      endpoints:
+        ping:
+          path: /health/check
+          method: GET
+        process-file:
+          path: /v1/files/upload
+          method: POST
+        update-data:
+          path: /v1/data/sync
+          method: POST
+        complex-multipart:
+          path: /v2/complex-process/{id}
+          method: POST
+      http:
+        service-name: ext-service
+        url: http://localhost:8081
+        type: external
+        compress: true
+        log:
+          pretty-print: true
+          max-payload-size: 4MB
+    service2:
+      endpoints:
+        ping:
+          path: /internal/ping
+          method: GET
+        error:
+          path: /internal/error
+          method: GET
+      http:
+        service-name: service2
+        url: http://localhost:9092
+
+server:
+  port: 8080
+  tomcat:
+    additional-tld-skip-patterns: "*"
+
+spring:
+  application:
+    name: service1
+  servlet:
+    multipart:
+      enabled: true
+  web:
+    locale: en_US
+    locale-resolver: fixed
+    resources:
+      add-mappings: false
+  main:
+    banner-mode: off
+  http:
+    codecs:
+      max-in-memory-size: 10MB
+  datasource:
+    url: jdbc:postgresql://localhost:5432/micronaut3bug?currentSchema=target
+    username: micronaut3bug
+    password: 1
+  flyway:
+    enabled: true
+    schemas: target
+#    rollback:
+#      mode: tag
+#      value: 1.0
+#      force: true
+
+management:
+  server:
+    port: 9091
+  observations:
+    key-values:
+      enabled: true
+  endpoints:
+    web:
+      exposure:
+        include: health, info, metrics, prometheus
+  metrics:
+    distribution:
+      percentiles-histogram:
+        all: true
+    enable:
+      all: true
+  otlp:
+    metrics:
+      export:
+        enabled: false
+        #url: http://localhost:8428/opentelemetry/v1/metrics
+        url: http://localhost:4318/v1/metrics
+        step: PT10S
+        aggregation-temporality: delta
+        headers:
+          Content-Type: application/x-protobuf
+        resource-attributes:
+          "service.name": ${spring.application.name}
+          "deployment.environment": ${app.node.name}
+logging:
+  pattern:
+    console: "%d{MM-dd HH:mm:ss.SSS} %highlight{%level} %style{%uMDC}{magenta} [%t] %style{%logger{1.}}{cyan} : %msg%n%uEx"
+  level:
+    root: debug
+    jdk: warn
+    sun: warn
+    javax: info
+    io.netty: info
+    com.zaxxer: warn
+    org.apache: warn
+    org.flywaydb: info
+    liquibase: info
+    io.micrometer: info
+    org.postgresql: info
+    org.eclipse: info
+    org.hibernate: info
+    org.springframework: info
+#    reactor.netty.http.server.HttpServer: DEBUG
+    reactor: info

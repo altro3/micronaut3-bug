@@ -1,0 +1,2 @@
+com.altro.common.flyway.config.FlywayRollbackAutoConfig
+com.altro.common.flyway.config.FlywayCoreConventionAutoConfig
