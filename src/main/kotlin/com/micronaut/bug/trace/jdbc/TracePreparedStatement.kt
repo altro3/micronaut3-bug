@@ -2,6 +2,7 @@ package com.micronaut.bug.trace.jdbc
 
 import com.micronaut.bug.trace.NanoTracer
 import com.micronaut.bug.trace.config.TraceProperties.TraceJdbcProperties
+import com.micronaut.bug.trace.jdbc.JdbcUrlParser.ConnectionInfo
 import java.sql.PreparedStatement
 import java.sql.ResultSet
 
@@ -11,10 +12,8 @@ class TracePreparedStatement(
     private val sql: String,
     tracer: NanoTracer,
     traceProps: TraceJdbcProperties,
-    serverAddress: String,
-    serverPort: Long,
-    dbNamespace: String?
-) : BaseTraceStatement(tracer, traceProps, serverAddress, serverPort, dbNamespace), PreparedStatement by delegate {
+    connectionInfo: ConnectionInfo,
+) : BaseTraceStatement(tracer, traceProps, connectionInfo), PreparedStatement by delegate {
 
     override fun execute(): Boolean =
         executeWithTrace(sql) { delegate.execute() }

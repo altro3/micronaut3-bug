@@ -4,6 +4,7 @@ import com.micronaut.bug.trace.NanoSpan
 import com.micronaut.bug.trace.NanoTracer
 import com.micronaut.bug.trace.TraceUtil
 import com.micronaut.bug.trace.config.TraceProperties.TraceJdbcProperties
+import com.micronaut.bug.trace.jdbc.JdbcUrlParser.ConnectionInfo
 import io.opentelemetry.proto.trace.v1.Span.SpanKind
 import io.opentelemetry.proto.trace.v1.Status.StatusCode
 import java.sql.SQLException
@@ -11,9 +12,7 @@ import java.sql.SQLException
 abstract class BaseTraceStatement(
     protected val tracer: NanoTracer,
     protected val traceProps: TraceJdbcProperties,
-    protected val serverAddress: String,
-    protected val serverPort: Long,
-    protected val dbNamespace: String?
+    protected val connectionInfo: ConnectionInfo,
 ) {
 
     protected inline fun <T> executeWithTrace(sql: String, block: () -> T): T {
@@ -66,23 +65,21 @@ abstract class BaseTraceStatement(
             return
         }
 
-        // Зажали размер мапы до 6 элементов, так как убрали дубликаты и ложные ошибки
         val attrs = HashMap<String, Any>(6)
 
         attrs[TraceUtil.ATTR_DB_SYSTEM_NAME] = traceProps.system
-        attrs[TraceUtil.ATTR_SERVER_ADDRESS] = serverAddress
-        attrs[TraceUtil.ATTR_SERVER_PORT] = serverPort
+        attrs[TraceUtil.ATTR_SERVER_ADDRESS] = connectionInfo.host
+        attrs[TraceUtil.ATTR_SERVER_PORT] = connectionInfo.port
         attrs[TraceUtil.ATTR_DB_OPERATION_NAME] = operation
 
         if (collectionName != null) attrs[TraceUtil.ATTR_DB_COLLECTION_NAME] = collectionName
-        if (dbNamespace != null) attrs[TraceUtil.ATTR_DB_NAMESPACE] = dbNamespace
+        connectionInfo.namespace?.let { attrs[TraceUtil.ATTR_DB_NAMESPACE] = it }
 
         if (batchSize >= 0L) {
             attrs[TraceUtil.ATTR_DB_OPERATION_BATCH_SIZE] = batchSize
         }
 
         if (sql != null) {
-            // Пишем ОДИН раз строго в db.query.text. Больше никакого дублирования в summary!
             attrs[TraceUtil.ATTR_DB_QUERY_TEXT] = if (sql.length > traceProps.maxStatementLength) {
                 sql.substring(0, traceProps.maxStatementLength) + traceProps.truncatedMarker
             } else sql
