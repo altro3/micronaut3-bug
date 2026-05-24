@@ -1,6 +1,5 @@
 package com.altro.common.client
 
-import com.fasterxml.jackson.databind.ObjectMapper
 import com.altro.common.client.HttpClientConst.HEADER_API_KEY
 import com.altro.common.client.HttpClientProperties.ClientType.INTERNAL
 import com.altro.common.client.HttpClientUtils.DEFAULT_RETRY_ON
@@ -10,15 +9,15 @@ import com.altro.common.client.LoggingInterceptor.Companion.ATTR_SKIP_LOGGING
 import com.altro.common.trace.NanoTracer
 import com.altro.common.trace.TraceUtil.METHODS_WITHOUT_BODY
 import org.springframework.core.ParameterizedTypeReference
+import org.springframework.core.retry.RetryTemplate
 import org.springframework.http.HttpHeaders.CONTENT_TYPE
 import org.springframework.http.HttpMethod
 import org.springframework.http.MediaType
 import org.springframework.http.converter.HttpMessageConverter
-import org.springframework.retry.RetryCallback
-import org.springframework.retry.support.RetryTemplate
 import org.springframework.web.client.ResponseErrorHandler
 import org.springframework.web.client.RestClient
 import org.springframework.web.client.RestClient.ResponseSpec
+import tools.jackson.databind.json.JsonMapper
 
 open class DefaultHttpClient {
 
@@ -61,7 +60,7 @@ open class DefaultHttpClient {
     constructor(
         senderAppName: String,
         httpClientProperties: HttpClientProperties,
-        objectMapper: ObjectMapper,
+        jsonMapper: JsonMapper,
         tracer: NanoTracer? = null,
         messageConverters: List<HttpMessageConverter<*>>? = null,
         errorHandler: ResponseErrorHandler? = null,
@@ -72,7 +71,7 @@ open class DefaultHttpClient {
         restClient = createRestClient(
             senderAppName = senderAppName,
             clientProps = httpClientProperties,
-            objectMapper = objectMapper,
+            jsonMapper = jsonMapper,
             messageConverters = messageConverters,
             errorHandler = errorHandler,
             tracer = tracer,
@@ -84,7 +83,7 @@ open class DefaultHttpClient {
         senderAppName: String,
         httpClientProperties: HttpClientProperties,
         restClientBuilder: RestClient.Builder,
-        objectMapper: ObjectMapper,
+        jsonMapper: JsonMapper,
         tracer: NanoTracer? = null,
         messageConverters: List<HttpMessageConverter<*>>? = null,
         errorHandler: ResponseErrorHandler? = null,
@@ -96,7 +95,7 @@ open class DefaultHttpClient {
             senderAppName = senderAppName,
             clientProps = httpClientProperties,
             clientBuilder = restClientBuilder,
-            objectMapper = objectMapper,
+            jsonMapper = jsonMapper,
             messageConverters = messageConverters,
             errorHandler = errorHandler,
             tracer = tracer,
@@ -126,7 +125,7 @@ open class DefaultHttpClient {
         this.retryTemplate = retryTemplate
     }
 
-    fun <Rs> sendRq(
+    fun <Rs : Any> sendRq(
         endpoint: Endpoint,
         responseClass: Class<Rs>,
         rqBody: Any? = null,
@@ -135,17 +134,12 @@ open class DefaultHttpClient {
         headers: Map<String, String>? = null,
         logBody: Boolean = true,
     ): Rs? =
-        if (retryTemplate != null) {
-            retryTemplate.execute(RetryCallback {
-                sendRq(endpoint.path, endpoint.method, endpoint.withApiKey, rqBody, pathVars, queryParams, headers, logBody)
-                    .body(responseClass)
-            })
-        } else {
+        executeWithRetry {
             sendRq(endpoint.path, endpoint.method, endpoint.withApiKey, rqBody, pathVars, queryParams, headers, logBody)
                 .body(responseClass)
         }
 
-    fun <Rs> sendRq(
+    fun <Rs : Any> sendRq(
         endpoint: Endpoint,
         responseType: ParameterizedTypeReference<Rs>,
         rqBody: Any? = null,
@@ -154,17 +148,12 @@ open class DefaultHttpClient {
         headers: Map<String, String>? = null,
         logBody: Boolean = true,
     ): Rs? =
-        if (retryTemplate != null) {
-            retryTemplate.execute(RetryCallback {
-                sendRq(endpoint.path, endpoint.method, endpoint.withApiKey, rqBody, pathVars, queryParams, headers, logBody)
-                    .body(responseType)
-            })
-        } else {
+        executeWithRetry {
             sendRq(endpoint.path, endpoint.method, endpoint.withApiKey, rqBody, pathVars, queryParams, headers, logBody)
                 .body(responseType)
         }
 
-    fun <Rs> sendRq(
+    fun <Rs : Any> sendRq(
         path: String,
         method: HttpMethod,
         responseClass: Class<Rs>,
@@ -175,17 +164,12 @@ open class DefaultHttpClient {
         headers: Map<String, String>? = null,
         logBody: Boolean = true,
     ): Rs? =
-        if (retryTemplate != null) {
-            retryTemplate.execute(RetryCallback {
-                sendRq(path, method, withApiKey, rqBody, pathVars, queryParams, headers, logBody)
-                    .body(responseClass)
-            })
-        } else {
+        executeWithRetry {
             sendRq(path, method, withApiKey, rqBody, pathVars, queryParams, headers, logBody)
                 .body(responseClass)
         }
 
-    fun <Rs> sendRq(
+    fun <Rs : Any> sendRq(
         path: String,
         method: HttpMethod,
         responseType: ParameterizedTypeReference<Rs>,
@@ -196,12 +180,7 @@ open class DefaultHttpClient {
         headers: Map<String, String>? = null,
         logBody: Boolean = true,
     ): Rs? =
-        if (retryTemplate != null) {
-            retryTemplate.execute(RetryCallback {
-                sendRq(path, method, withApiKey, rqBody, pathVars, queryParams, headers, logBody)
-                    .body(responseType)
-            })
-        } else {
+        executeWithRetry {
             sendRq(path, method, withApiKey, rqBody, pathVars, queryParams, headers, logBody)
                 .body(responseType)
         }
@@ -214,11 +193,7 @@ open class DefaultHttpClient {
         headers: Map<String, String>? = null,
         logBody: Boolean = true,
     ): ResponseSpec =
-        if (retryTemplate != null) {
-            retryTemplate.execute(RetryCallback {
-                sendRq(endpoint.path, endpoint.method, endpoint.withApiKey, rqBody, pathVars, queryParams, headers, logBody)
-            })
-        } else {
+        executeWithRetry {
             sendRq(endpoint.path, endpoint.method, endpoint.withApiKey, rqBody, pathVars, queryParams, headers, logBody)
         }
 
@@ -241,14 +216,14 @@ open class DefaultHttpClient {
         if (pathVars.isNullOrEmpty() && queryParams.isNullOrEmpty()) {
             rqBuilder.uri(path)
         } else {
-            rqBuilder.uri(path) {
+            rqBuilder.uri(path) { uriVars ->
                 queryParams?.forEach { param ->
-                    it.queryParam(param.key, param.value)
+                    param.value?.let { uriVars.queryParam(param.key, it) }
                 }
-                return@uri if (!pathVars.isNullOrEmpty()) {
-                    it.build(pathVars)
+                if (!pathVars.isNullOrEmpty()) {
+                    uriVars.build(pathVars)
                 } else {
-                    it.build()
+                    uriVars.build()
                 }
             }
         }
@@ -263,11 +238,19 @@ open class DefaultHttpClient {
         }
 
         if (httpClientProperties.type == INTERNAL) {
-            if (httpClientProperties.apiKey != null && withApiKey) {
-                rqBuilder.header(HEADER_API_KEY, httpClientProperties.apiKey)
+            if (withApiKey) {
+                httpClientProperties.apiKey?.let { rqBuilder.header(HEADER_API_KEY, it) }
             }
         }
 
         return rqBuilder.retrieve()
+    }
+
+    private fun <T> executeWithRetry(block: () -> T): T {
+        return if (retryTemplate != null) {
+            retryTemplate.invoke<T> { block() }
+        } else {
+            block()
+        }
     }
 }

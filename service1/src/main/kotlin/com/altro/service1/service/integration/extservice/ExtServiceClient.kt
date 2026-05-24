@@ -5,7 +5,6 @@ import com.altro.service1.service.integration.extservice.api.MyDataRequest
 import com.altro.service1.service.integration.extservice.api.MyDataResponse
 import com.altro.service1.service.integration.extservice.api.MyDto
 import com.altro.service1.service.integration.extservice.config.ExtServiceProperties
-import com.fasterxml.jackson.databind.ObjectMapper
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.core.ParameterizedTypeReference
 import org.springframework.core.io.Resource
@@ -16,6 +15,7 @@ import org.springframework.http.MediaType
 import org.springframework.stereotype.Service
 import org.springframework.util.LinkedMultiValueMap
 import org.springframework.util.MultiValueMap
+import tools.jackson.databind.json.JsonMapper
 import java.io.ByteArrayOutputStream
 
 @Service
@@ -23,7 +23,7 @@ class ExtServiceClient(
     props: ExtServiceProperties,
     @Qualifier("extServiceHttpClient")
     val httpClient: DefaultHttpClient,
-    private val objectMapper: ObjectMapper,
+    private val jsonMapper: JsonMapper,
 ) {
 
     private val endpoints = props.endpoints
@@ -103,7 +103,7 @@ class ExtServiceClient(
             // Предположим, добавили gzip в Endpoints проперти
             path = "/v1/data/manual-gzip",
             method = HttpMethod.POST,
-            rqBody = compress(objectMapper.writeValueAsBytes(request)),
+            rqBody = compress(jsonMapper.writeValueAsBytes(request)),
             responseClass = ByteArray::class.java,
             headers = mapOf(
                 HttpHeaders.CONTENT_ENCODING to "gzip",

@@ -12,6 +12,7 @@ import org.springframework.boot.autoconfigure.AutoConfiguration
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBooleanProperty
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass
 import org.springframework.boot.context.properties.EnableConfigurationProperties
+import org.springframework.boot.jdbc.DataSourceUnwrapper
 import org.springframework.boot.web.servlet.FilterRegistrationBean
 import org.springframework.context.annotation.Bean
 import org.springframework.core.Ordered
@@ -68,7 +69,7 @@ class TraceAutoConfig {
         addUrlPatterns("/*")
     }
 
-    @ConditionalOnClass(DataSource::class)
+    @ConditionalOnClass(DataSource::class, DataSourceUnwrapper::class)
     @ConditionalOnBooleanProperty("app.trace.jdbc.enabled", matchIfMissing = true)
     @Bean
     fun dataSourceTraceBeanPostProcessor(

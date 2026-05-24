@@ -1,12 +1,12 @@
 package com.altro.common.util.api.json
 
-import com.fasterxml.jackson.annotation.JsonInclude
-import com.fasterxml.jackson.databind.DeserializationFeature
-import com.fasterxml.jackson.databind.PropertyNamingStrategies
-import com.fasterxml.jackson.databind.json.JsonMapper
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule
-import com.fasterxml.jackson.module.blackbird.BlackbirdModule
-import com.fasterxml.jackson.module.kotlin.KotlinModule
+import com.fasterxml.jackson.annotation.JsonInclude.Include
+import tools.jackson.core.StreamWriteFeature
+import tools.jackson.databind.DeserializationFeature
+import tools.jackson.databind.MapperFeature
+import tools.jackson.databind.PropertyNamingStrategies
+import tools.jackson.databind.introspect.DefaultAccessorNamingStrategy
+import tools.jackson.databind.json.JsonMapper
 
 object JsonUtil {
 
@@ -15,10 +15,20 @@ object JsonUtil {
 
     fun jonBuilder() =
         JsonMapper.builder()
-            .defaultPropertyInclusion(JsonInclude.Value.ALL_NON_NULL)
+            .accessorNaming(
+                DefaultAccessorNamingStrategy.Provider()
+                    .withFirstCharAcceptance(true, true)
+            )
+            .changeDefaultPropertyInclusion {
+                it.withValueInclusion(Include.NON_NULL)
+                    .withContentInclusion(Include.NON_NULL)
+            }
             .propertyNamingStrategy(PropertyNamingStrategies.LOWER_CAMEL_CASE)
-            .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
-            .addModule(JavaTimeModule())
-            .addModule(BlackbirdModule())
-            .addModule(KotlinModule.Builder().build())
+            .enable(MapperFeature.USE_GETTERS_AS_SETTERS)
+            .enable(StreamWriteFeature.WRITE_BIGDECIMAL_AS_PLAIN)
+            .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
+
+//            .addModule(JavaTimeModule())
+//            .addModule(BlackbirdModule())
+//            .addModule(KotlinModule.Builder().build())
 }

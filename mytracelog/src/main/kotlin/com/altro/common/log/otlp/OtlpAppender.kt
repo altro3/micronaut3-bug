@@ -21,7 +21,7 @@ class OtlpAppender(
     private val encoder: OtlpLogEncoder,
 ) : AbstractAppender(name, null, null, true, Property.EMPTY_ARRAY) {
 
-    private val otlpProps = props.otlp
+    private val otlpProps = props.export
 
     private val httpClient = HttpClient.newBuilder()
         .connectTimeout(otlpProps.connectionTimeout)

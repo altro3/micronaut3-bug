@@ -51,7 +51,7 @@ class NanoTraceClientInterceptor(
         TraceUtil.formatBaggage(span.baggage)?.let { rq.headers.set(TraceUtil.HEADER_BAGGAGE, it) }
 
         span.traceState?.let {
-            if (!rq.headers.containsKey(TraceUtil.HEADER_TRACESTATE)) {
+            if (!rq.headers.containsHeader(TraceUtil.HEADER_TRACESTATE)) {
                 rq.headers.set(TraceUtil.HEADER_TRACESTATE, it)
             }
         }
@@ -60,7 +60,7 @@ class NanoTraceClientInterceptor(
         if (!propHeaders.isNullOrEmpty()) {
             val headers = rq.headers
             for ((key, value) in propHeaders) {
-                if (!headers.containsKey(key)) {
+                if (!headers.containsHeader(key)) {
                     headers.set(key, value)
                 }
             }

@@ -1,9 +1,9 @@
 [versions]
-spring = "3.5.14"
+spring = "4.0.6"
 kotlin = "2.3.21"
-coroutines = "1.10.2"
-kotlin-log = "8.0.01"
-protobuf = "4.34.1"
+coroutines = "1.11.0"
+kotlin-log = "8.0.03"
+protobuf = "4.35.0"
 otel-proto = "1.10.0-alpha"
 wiremock = "3.13.2"
 disruptor = "4.0.0"

@@ -9,7 +9,7 @@ import com.altro.common.flyway.FlywayConventionConst.PREFIX_VERSIONED
 import com.altro.common.flyway.FlywayConventionConst.SEPARATOR_MIGRATION
 import com.altro.common.flyway.FlywayConventionConst.SQL_ALL_PATTERN
 import io.github.oshai.kotlinlogging.KotlinLogging
-import org.springframework.boot.autoconfigure.flyway.FlywayProperties
+import org.springframework.boot.flyway.autoconfigure.FlywayProperties
 import org.springframework.core.io.Resource
 import org.springframework.core.io.ResourceLoader
 import org.springframework.core.io.support.ResourcePatternUtils

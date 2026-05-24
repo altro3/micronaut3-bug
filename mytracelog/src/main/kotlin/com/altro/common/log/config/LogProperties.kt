@@ -5,6 +5,7 @@ import jakarta.validation.constraints.Min
 import jakarta.validation.constraints.NotNull
 import jakarta.validation.constraints.Positive
 import org.springframework.boot.context.properties.ConfigurationProperties
+import org.springframework.boot.context.properties.NestedConfigurationProperty
 import org.springframework.core.Ordered
 import org.springframework.http.HttpHeaders
 import org.springframework.util.unit.DataSize
@@ -28,11 +29,13 @@ class LogProperties(
     var prettyPrint: Boolean = true,
     var mdcKeys: List<String> = emptyList(),
     @field:Valid
-    var otlp: OtlpProperties = OtlpProperties(),
+    @NestedConfigurationProperty
+    var export: LogExportProperties = LogExportProperties(),
+    @NestedConfigurationProperty
     var masking: MaskingProperties = MaskingProperties(),
 ) {
 
-    class OtlpProperties(
+    class LogExportProperties(
         var enabled: Boolean = true,
         var url: URI = URI.create("http://localhost:9428/opentelemetry/v1/logs"),
         @field:Positive
@@ -86,7 +89,7 @@ class LogProperties(
         ),
         var maskChar: String = "*",
         val maskedPackages: Set<String> = setOf(
-            "com.micronaut.bug",
+            "com.altro",
         ),
     )
 }

@@ -8,6 +8,7 @@ import org.apache.logging.log4j.core.pattern.LogEventPatternConverter
 @Plugin(name = "SmartExConverter", category = "Converter")
 @ConverterKeys("uEx")
 class SmartExConverter : LogEventPatternConverter("SmartEx", "uEx") {
+
     override fun format(event: LogEvent, toAppendTo: StringBuilder) {
         val proxy = event.thrownProxy ?: return
         LogUtil.formatStackTrace(

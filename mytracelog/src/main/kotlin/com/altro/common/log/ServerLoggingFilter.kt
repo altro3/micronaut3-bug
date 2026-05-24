@@ -1,7 +1,5 @@
 package com.altro.common.log
 
-import com.fasterxml.jackson.databind.ObjectMapper
-import com.fasterxml.jackson.databind.SerializationFeature
 import com.altro.common.log.ServerLoggingFilter.Companion.LIMIT_TEXT_CHECK_THRESHOLD
 import com.altro.common.log.config.LogProperties
 import com.altro.common.trace.TraceUtil.MDC_COLOR
@@ -22,6 +20,8 @@ import org.springframework.http.MediaType
 import org.springframework.util.ClassUtils
 import org.springframework.web.filter.OncePerRequestFilter
 import org.springframework.web.util.ContentCachingResponseWrapper
+import tools.jackson.databind.SerializationFeature
+import tools.jackson.databind.json.JsonMapper
 import java.io.BufferedReader
 import java.io.ByteArrayInputStream
 import java.io.InputStreamReader
@@ -31,7 +31,7 @@ import java.io.InputStreamReader
  * Поддерживает защиту от OOM, разбор Multipart и Pretty Print для JSON.
  */
 class ServerLoggingFilter(
-    objectMapper: ObjectMapper,
+    jsonMapper: JsonMapper,
     private val logProps: LogProperties,
 ) : OncePerRequestFilter() {
 
@@ -41,8 +41,9 @@ class ServerLoggingFilter(
      * Mapper для красивого вывода JSON.
      * Копируем основной, чтобы не менять глобальные настройки сериализации.
      */
-    private val prettyMapper: ObjectMapper = objectMapper.copy()
+    private val prettyMapper: JsonMapper = jsonMapper.rebuild()
         .enable(SerializationFeature.INDENT_OUTPUT)
+        .build()
     private val withActuator: Boolean = ClassUtils.isPresent("org.springframework.boot.actuate.autoconfigure.endpoint.web.WebEndpointProperties", null)
 
     override fun doFilterInternal(

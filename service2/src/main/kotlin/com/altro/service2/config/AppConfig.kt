@@ -1,4 +1,4 @@
-package com.altro.service1.config
+package com.altro.service2.config
 
 import com.altro.common.util.api.json.JsonUtil
 import org.springframework.context.annotation.Bean

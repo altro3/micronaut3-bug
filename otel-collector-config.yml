@@ -28,16 +28,16 @@ exporters:
     tls:
       insecure: true
 
-  # Экспортер для трейсов в VictoriaTraces
-  otlp_http/traces:
-    endpoint: "http://victoria-traces:10428/insert/opentelemetry"
+  # Экспортер для логов в VictoriaLogs
+  otlp_http/logs:
+    endpoint: "http://victoria-logs:9428/insert/opentelemetry"
     compression: gzip
     tls:
       insecure: true
 
-  # Экспортер для логов в VictoriaLogs
-  otlp_http/logs:
-    endpoint: "http://victoria-logs:9428/insert/opentelemetry"
+  # Экспортер для трейсов в VictoriaTraces
+  otlp_http/traces:
+    endpoint: "http://victoria-traces:10428/insert/opentelemetry"
     compression: gzip
     tls:
       insecure: true
@@ -50,15 +50,15 @@ service:
       processors: [batch]
       exporters: [otlp_http/metrics]
 
-    traces:
-      receivers: [otlp]
-      processors: [batch]
-      exporters: [service_graph, otlp_http/traces]
-
     logs:
       receivers: [otlp]
       processors: [batch]
       exporters: [otlp_http/logs]
+
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [service_graph, otlp_http/traces]
 
     # Добавляем этот технический пайплайн, чтобы "завести" экспорт метрик
     metrics/service_graph:

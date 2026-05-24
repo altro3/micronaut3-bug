@@ -1,16 +1,14 @@
 package com.altro.common.client
 
-import com.fasterxml.jackson.databind.ObjectMapper
-import com.fasterxml.jackson.databind.SerializationFeature
 import com.altro.common.client.HttpClientProperties.ClientType.EXTERNAL
 import com.altro.common.client.LoggingInterceptor.Companion.LIMIT_TEXT_CHECK_THRESHOLD
+import com.altro.common.client.NanoTraceClientInterceptor.Companion.PREFIX_CLIENT_SPAN
 import com.altro.common.trace.TraceIdGenerator.generateSpanId
 import com.altro.common.trace.TraceUtil.MDC_COLOR
 import com.altro.common.trace.TraceUtil.MDC_MAIN_STAT
 import com.altro.common.trace.TraceUtil.MDC_SOURCE
 import com.altro.common.trace.TraceUtil.MDC_SPAN_ID
 import com.altro.common.trace.TraceUtil.MDC_SUB_TITLE
-import com.altro.common.client.NanoTraceClientInterceptor.Companion.PREFIX_CLIENT_SPAN
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.slf4j.MDC
 import org.springframework.http.HttpHeaders
@@ -21,6 +19,8 @@ import org.springframework.http.MediaType
 import org.springframework.http.client.ClientHttpRequestExecution
 import org.springframework.http.client.ClientHttpRequestInterceptor
 import org.springframework.http.client.ClientHttpResponse
+import tools.jackson.databind.SerializationFeature
+import tools.jackson.databind.json.JsonMapper
 import java.io.ByteArrayInputStream
 import java.util.zip.GZIPInputStream
 
@@ -36,7 +36,7 @@ import java.util.zip.GZIPInputStream
  */
 class LoggingInterceptor(
     props: HttpClientProperties,
-    objectMapper: ObjectMapper,
+    jsonMapper: JsonMapper,
 ) : ClientHttpRequestInterceptor {
 
     private val log = KotlinLogging.logger {}
@@ -44,8 +44,9 @@ class LoggingInterceptor(
     private val logProps = props.log
     private val serviceName = props.serviceName
     private val isExternal = props.type == EXTERNAL
-    private val prettyMapper = objectMapper.copy()
+    private val prettyMapper = jsonMapper.rebuild()
         .enable(SerializationFeature.INDENT_OUTPUT)
+        .build()
 
     /**
      * Префикс для формирования полного URI. Вычисляется один раз при создании интерцептора.

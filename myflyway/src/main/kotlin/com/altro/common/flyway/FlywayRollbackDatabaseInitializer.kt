@@ -8,7 +8,7 @@ import com.altro.common.flyway.config.FlywayRollbackProperties.RollbackMode.VERS
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.flywaydb.core.Flyway
 import org.springframework.boot.SpringApplication
-import org.springframework.boot.autoconfigure.flyway.FlywayMigrationStrategy
+import org.springframework.boot.flyway.autoconfigure.FlywayMigrationStrategy
 import org.springframework.context.ApplicationContext
 import kotlin.system.exitProcess
 

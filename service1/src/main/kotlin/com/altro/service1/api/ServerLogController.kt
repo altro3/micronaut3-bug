@@ -1,6 +1,5 @@
 package com.altro.service1.api
 
-import com.fasterxml.jackson.databind.ObjectMapper
 import com.altro.service1.config.SecurityContext
 import com.altro.service1.config.User
 import com.altro.service1.service.BusinessService
@@ -22,13 +21,14 @@ import org.springframework.web.bind.annotation.RequestPart
 import org.springframework.web.bind.annotation.ResponseStatus
 import org.springframework.web.bind.annotation.RestController
 import org.springframework.web.multipart.MultipartFile
+import tools.jackson.databind.json.JsonMapper
 import java.io.ByteArrayOutputStream
 import java.util.zip.GZIPOutputStream
 
 @RestController
 class ServerLogController(
     private val businessService: BusinessService,
-    private val objectMapper: ObjectMapper,
+    private val jsonMapper: JsonMapper,
 ) {
 
     private val log = KotlinLogging.logger {}
@@ -92,7 +92,7 @@ class ServerLogController(
         @RequestPart(required = false) binaryFile: MultipartFile? // Новая необязательная бинарная парта
     ): MultiValueMap<String, Any> {
         val dataParsed = data?.let {
-            objectMapper.readValue(it, MyData::class.java)
+            jsonMapper.readValue(it, MyData::class.java)
         }
         log.info { "body: ${data ?: "null"}" }
         log.info { "dataParsed: $dataParsed" }

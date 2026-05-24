@@ -1,12 +1,13 @@
 package com.altro.common.client
 
-import com.fasterxml.jackson.databind.ObjectMapper
-import com.fasterxml.jackson.databind.json.JsonMapper
 import com.altro.common.trace.NanoTracer
+import com.altro.common.util.api.json.JsonUtil
 import io.github.oshai.kotlinlogging.KotlinLogging
 import io.netty.channel.ChannelOption
 import io.netty.handler.timeout.ReadTimeoutHandler
 import io.netty.handler.timeout.WriteTimeoutHandler
+import org.springframework.core.retry.RetryPolicy
+import org.springframework.core.retry.RetryTemplate
 import org.springframework.http.client.BufferingClientHttpRequestFactory
 import org.springframework.http.client.ClientHttpRequestFactory
 import org.springframework.http.client.ReactorClientHttpRequestFactory
@@ -14,15 +15,15 @@ import org.springframework.http.converter.ByteArrayHttpMessageConverter
 import org.springframework.http.converter.HttpMessageConverter
 import org.springframework.http.converter.ResourceHttpMessageConverter
 import org.springframework.http.converter.StringHttpMessageConverter
-import org.springframework.http.converter.json.MappingJackson2HttpMessageConverter
+import org.springframework.http.converter.json.JacksonJsonHttpMessageConverter
 import org.springframework.http.converter.support.AllEncompassingFormHttpMessageConverter
-import org.springframework.retry.support.RetryTemplate
 import org.springframework.web.client.HttpServerErrorException
 import org.springframework.web.client.ResourceAccessException
 import org.springframework.web.client.ResponseErrorHandler
 import org.springframework.web.client.RestClient
 import reactor.netty.http.client.HttpClient
 import reactor.netty.transport.ProxyProvider
+import tools.jackson.databind.json.JsonMapper
 import java.time.Duration
 import java.util.concurrent.TimeUnit
 
@@ -44,23 +45,23 @@ object HttpClientUtils {
         senderAppName: String,
         clientProps: HttpClientProperties,
         clientBuilder: RestClient.Builder = RestClient.builder(),
-        objectMapper: ObjectMapper = JsonMapper.builder().build(),
+        jsonMapper: JsonMapper = JsonUtil.createMapper(),
         messageConverters: List<HttpMessageConverter<*>>? = null,
         errorHandler: ResponseErrorHandler? = null,
         tracer: NanoTracer? = null,
     ): RestClient {
         val requestFactory = createRequestFactory(clientProps)
         val builder = clientBuilder
-            .messageConverters(
+            .configureMessageConverters {
                 messageConverters ?: listOf(
-                    MappingJackson2HttpMessageConverter(objectMapper),
+                    JacksonJsonHttpMessageConverter(jsonMapper),
                     StringHttpMessageConverter(Charsets.UTF_8),
                     ByteArrayHttpMessageConverter(),
                     ResourceHttpMessageConverter(false),
                     AllEncompassingFormHttpMessageConverter(),
                     MultipartReadHttpMessageConverter()
                 )
-            )
+            }
 
         builder.observationConvention(HttpClientObservationConvention(clientProps))
 
@@ -86,7 +87,7 @@ object HttpClientUtils {
                 .requestInterceptor(
                     LoggingInterceptor(
                         props = clientProps,
-                        objectMapper = objectMapper,
+                        jsonMapper = jsonMapper,
                     )
                 )
 
@@ -142,7 +143,7 @@ object HttpClientUtils {
                 if (proxyProps.username != null) {
                     (typeSpec as ProxyProvider.Builder)
                         .username(proxyProps.username!!)
-                        .password { proxyProps.password }
+                        .password { proxyProps.password ?: "" }
                 }
             }
         }
@@ -156,25 +157,35 @@ object HttpClientUtils {
             return null
         }
 
-        val builder = RetryTemplate.builder()
+        val policyBuilder = RetryPolicy.builder()
+
         if (clientProps.maxAttempts > 0) {
-            builder.maxAttempts(clientProps.maxAttempts)
-        } else {
-            builder.infiniteRetry()
+            val maxRetries = (clientProps.maxAttempts - 1).coerceAtLeast(0)
+            policyBuilder.maxRetries(maxRetries.toLong())
         }
 
         val backoffProps = clientProps.retryBackoff
+
         if (backoffProps.multiplier == DEFAULT_RETRY_MULTIPLIER) {
-            builder.fixedBackoff(backoffProps.delay)
+            policyBuilder.delay(backoffProps.delay)
         } else {
             require(backoffProps.maxDelay != null && backoffProps.maxDelay > backoffProps.delay) {
-                "You use multiplier, need to set maxDelay. And maxDelay must be much then delay"
+                "You use multiplier, need to set maxDelay. And maxDelay must be greater than delay"
             }
-            builder.exponentialBackoff(backoffProps.delay, backoffProps.multiplier, backoffProps.maxDelay, backoffProps.random)
+
+            policyBuilder
+                .delay(backoffProps.delay)
+                .multiplier(backoffProps.multiplier)
+                .maxDelay(backoffProps.maxDelay)
+
+            if (backoffProps.random) {
+                policyBuilder.jitter(Duration.ofMillis(backoffProps.delay.toMillis() / 2))
+            }
         }
 
-        return builder
-            .retryOn(retryOn)
-            .build()
+        policyBuilder.includes(retryOn)
+
+        val retryPolicy = policyBuilder.build()
+        return RetryTemplate(retryPolicy)
     }
 }

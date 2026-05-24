@@ -6,7 +6,7 @@ import com.altro.common.flyway.FlywayMetadataResolver.MigrationResourceMeta
 import com.altro.common.flyway.config.FlywayRollbackProperties
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.flywaydb.core.api.MigrationVersion
-import org.springframework.boot.autoconfigure.flyway.FlywayProperties
+import org.springframework.boot.flyway.autoconfigure.FlywayProperties
 import org.springframework.jdbc.core.JdbcTemplate
 import javax.sql.DataSource
 

@@ -33,7 +33,7 @@ class LogReconfigurator(
         SmartExConverter.rootCauseFull = props.stackTraceRootCauseFull
 
         // 2. Добавляем OTLP (VictoriaLogs), если он включен в конфигурации И библиотека присутствует в classpath
-        if (props.otlp.enabled && isOtlpPresent()) {
+        if (props.export.enabled && isOtlpPresent()) {
             setup(ctx, appName, nodeName, props, logMasker)
         }
 

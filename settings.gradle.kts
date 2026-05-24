@@ -30,3 +30,5 @@ include(
     "service1",
     "service2",
 )
+
+enableFeaturePreview("TYPESAFE_PROJECT_ACCESSORS")

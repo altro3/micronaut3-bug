@@ -19,7 +19,7 @@ object HttpTraceExtractor {
     private const val ERROR_STATUS_THRESHOLD = 400
 
     fun fillHeadersAttrs(headers: HttpHeaders, prefix: String, isSensitive: Boolean, target: MutableMap<String, Any>) {
-        for (name in headers.keys) {
+        for (name in headers.headerNames()) {
             val lowerName = name.lowercase()
             fillHeadersCore(lowerName, prefix, isSensitive, target) {
                 headers[name]

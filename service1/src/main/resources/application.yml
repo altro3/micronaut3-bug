@@ -58,7 +58,7 @@ app:
           method: GET
       http:
         service-name: service2
-        url: http://localhost:9092
+        url: http://localhost:9080
 
 server:
   port: 8080

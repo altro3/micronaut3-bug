@@ -11,6 +11,8 @@ dependencies {
     api(spring.jackson.jacksonModuleKotlin)
     api(libs.otel.proto)
 
+    compileOnly(spring.spring.springBootJdbc)
+
     implementation(spring.spring.springBootStarterWeb)
     implementation(spring.spring.springBootStarterLog4j2)
     implementation(spring.jakarta.jakartaValidationApi)

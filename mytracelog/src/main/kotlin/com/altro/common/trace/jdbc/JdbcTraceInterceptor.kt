@@ -10,7 +10,7 @@ import javax.sql.DataSource
 class JdbcTraceInterceptor(
     private val tracer: NanoTracer,
     private val traceProps: TraceJdbcProperties,
-    private val environment: Environment
+    private val environment: Environment,
 ) {
 
     fun wrap(dataSource: DataSource): DataSource {
@@ -19,7 +19,7 @@ class JdbcTraceInterceptor(
         if (jdbcUrl.isNullOrBlank()) {
             jdbcUrl = try {
                 val unwrapped = DataSourceUnwrapper.unwrap(dataSource, DataSource::class.java)
-                unwrapped.connection.use { conn -> conn.metaData.url }
+                unwrapped?.connection.use { it?.metaData?.url }
             } catch (_: Throwable) {
                 null
             }
