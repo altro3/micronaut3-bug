@@ -20,7 +20,7 @@ app:
     mdc-keys: test
     pretty-print: true
     max-payload-size: 4MB
-    otlp:
+    export:
       enabled: true
       url: http://localhost:4318/v1/logs
       # Напрямую в викторию

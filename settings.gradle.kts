@@ -23,6 +23,7 @@ dependencyResolutionManagement {
 rootProject.name = "micronaut3-bug"
 
 include(
+    "mycommon",
     "myflyway",
     "myhttp",
     "mytracelog",

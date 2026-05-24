@@ -1,8 +1,5 @@
 import com.google.cloud.tools.jib.gradle.JibTask
 import org.gradle.api.tasks.testing.logging.TestLogEvent
-import org.gradle.kotlin.dsl.assign
-import org.gradle.kotlin.dsl.withType
-import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 plugins {
     alias(libs.plugins.jib)
@@ -28,10 +25,11 @@ dependencies {
     implementation(spring.micrometer.micrometerRegistryOtlp)
     implementation(kot.kotlin.kotlinReflect)
     implementation(libs.wiremock)
-    implementation(project(":myutil"))
-    implementation(project(":myflyway"))
-    implementation(project(":mytracelog"))
-    implementation(project(":myhttp"))
+    implementation(projects.mycommon)
+    implementation(projects.myutil)
+    implementation(projects.myflyway)
+    implementation(projects.mytracelog)
+    implementation(projects.myhttp)
 
     testImplementation(spring.spring.springBootStarterTest)
 }

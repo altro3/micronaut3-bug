@@ -8,7 +8,6 @@ dependencies {
     kapt(spring.log4j.log4jCore)
 
     api(libs.kotlin.logging)
-    api(spring.jackson.jacksonModuleKotlin)
     api(libs.otel.proto)
 
     compileOnly(spring.spring.springBootJdbc)
@@ -20,4 +19,5 @@ dependencies {
     implementation(coroutines.kotlinx.kotlinxCoroutinesSlf4j)
     implementation(libs.disruptor)
     implementation(libs.protobuf.java)
+    implementation(projects.myutil)
 }

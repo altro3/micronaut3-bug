@@ -18,9 +18,10 @@ dependencies {
     implementation(spring.micrometer.micrometerRegistryOtlp)
     implementation(kot.kotlin.kotlinReflect)
     implementation(libs.kotlin.logging)
-    implementation(project(":myutil"))
-    implementation(project(":mytracelog"))
-    implementation(project(":myhttp"))
+    implementation(projects.mycommon)
+    implementation(projects.myutil)
+    implementation(projects.mytracelog)
+    implementation(projects.myhttp)
 }
 configurations.all {
     exclude(group = "org.springframework.boot", module = "spring-boot-starter-logging")

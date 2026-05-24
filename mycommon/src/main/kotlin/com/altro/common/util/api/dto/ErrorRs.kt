@@ -1,4 +1,4 @@
-package com.altro.common.api.dto
+package com.altro.common.util.api.dto
 
 /**
  * Стандартный формат ответа об ошибке в системе.

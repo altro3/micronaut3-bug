@@ -52,15 +52,18 @@ object HttpClientUtils {
     ): RestClient {
         val requestFactory = createRequestFactory(clientProps)
         val builder = clientBuilder
-            .configureMessageConverters {
-                messageConverters ?: listOf(
-                    JacksonJsonHttpMessageConverter(jsonMapper),
-                    StringHttpMessageConverter(Charsets.UTF_8),
-                    ByteArrayHttpMessageConverter(),
-                    ResourceHttpMessageConverter(false),
-                    AllEncompassingFormHttpMessageConverter(),
-                    MultipartReadHttpMessageConverter()
-                )
+            .configureMessageConverters { convertersBuilder ->
+                if (messageConverters != null) {
+                    messageConverters.forEach { convertersBuilder.addCustomConverter(it) }
+                } else {
+                    convertersBuilder
+                        .withJsonConverter(JacksonJsonHttpMessageConverter(jsonMapper))
+                        .withStringConverter(StringHttpMessageConverter(Charsets.UTF_8))
+                        .addCustomConverter(ByteArrayHttpMessageConverter())
+                        .addCustomConverter(ResourceHttpMessageConverter(false))
+                        .addCustomConverter(AllEncompassingFormHttpMessageConverter())
+                        .addCustomConverter(MultipartReadHttpMessageConverter())
+                }
             }
 
         builder.observationConvention(HttpClientObservationConvention(clientProps))

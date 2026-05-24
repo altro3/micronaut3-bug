@@ -8,8 +8,6 @@ dependencies {
     implementation(spring.jakarta.jakartaValidationApi)
     implementation(spring.spring.springBootStarterWeb)
     implementation(spring.projectreactor.reactorNettyHttp)
-    implementation(spring.jackson.jacksonModuleKotlin)
-    implementation(spring.jackson.jacksonModuleBlackbird)
-    implementation(project(":mytracelog"))
-    implementation(project(":myutil"))
+    implementation(projects.mytracelog)
+    implementation(projects.myutil)
 }

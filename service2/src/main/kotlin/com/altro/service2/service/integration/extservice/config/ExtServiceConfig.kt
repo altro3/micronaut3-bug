@@ -17,12 +17,10 @@ class ExtServiceConfig {
         props: ExtServiceProperties,
         @Value($$"${spring.application.name}")
         appName: String,
-        jsonMapper: JsonMapper,
         tracer: NanoTracer? = null,
     ) = DefaultHttpClient(
         senderAppName = appName,
         httpClientProperties = props.http,
-        jsonMapper = jsonMapper,
         tracer = tracer,
     )
 }

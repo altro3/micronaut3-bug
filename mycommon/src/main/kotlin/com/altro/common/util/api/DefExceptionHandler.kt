@@ -1,6 +1,6 @@
 package com.altro.common.util.api
 
-import com.altro.common.api.dto.ErrorRs
+import com.altro.common.util.api.dto.ErrorRs
 import com.altro.common.trace.NanoTracer
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.http.HttpStatus
