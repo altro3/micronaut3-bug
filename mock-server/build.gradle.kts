@@ -16,14 +16,10 @@ dependencies {
 
     implementation(spring.spring.springBootStarterWeb)
     implementation(spring.spring.springBootStarterLog4j2)
-    implementation(spring.spring.springBootStarterActuator)
-    implementation(spring.micrometer.micrometerRegistryOtlp)
     implementation(kot.kotlin.kotlinReflect)
     implementation(libs.wiremock)
     implementation(projects.mycommon)
     implementation(projects.myutil)
-    implementation(projects.mytracelog)
-    implementation(projects.myhttp)
 }
 configurations.all {
     exclude(group = "org.springframework.boot", module = "spring-boot-starter-logging")

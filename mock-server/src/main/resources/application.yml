@@ -26,40 +26,6 @@ app:
       url: http://localhost:4318/v1/logs
       # Напрямую в викторию
       # url: http://localhost:9428/insert/opentelemetry/v1/logs
-  integration:
-    ext-service:
-      endpoints:
-        ping:
-          path: /health/check
-          method: GET
-        process-file:
-          path: /v1/files/upload
-          method: POST
-        update-data:
-          path: /v1/data/sync
-          method: POST
-        complex-multipart:
-          path: /v2/complex-process/{id}
-          method: POST
-      http:
-        service-name: ext-service
-        url: http://localhost:8081
-        type: external
-        compress: true
-        log:
-          pretty-print: true
-          max-payload-size: 4MB
-    service2:
-      endpoints:
-        ping:
-          path: /internal/ping
-          method: GET
-        error:
-          path: /internal/error
-          method: GET
-      http:
-        service-name: service2
-        url: http://localhost:9080
 
 server:
   port: 8082

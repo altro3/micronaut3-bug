@@ -27,7 +27,7 @@ app:
     ext-service:
       endpoints:
         update-data:
-          path: /v1/data/sync
+          path: /testtracelog/v1/data/sync
           method: POST
       http:
         service-name: ext-service

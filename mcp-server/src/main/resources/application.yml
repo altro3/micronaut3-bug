@@ -23,20 +23,6 @@ app:
       url: http://localhost:4318/v1/logs
       # Напрямую в викторию
       # url: http://localhost:9428/insert/opentelemetry/v1/logs
-  integration:
-    ext-service:
-      endpoints:
-        update-data:
-          path: /v1/data/sync
-          method: POST
-      http:
-        service-name: ext-service
-        url: http://localhost:8081
-        type: external
-        compress: true
-        log:
-          pretty-print: true
-          max-payload-size: 4MB
 
 server:
   port: 9080
@@ -59,6 +45,12 @@ spring:
   http:
     codecs:
       max-in-memory-size: 10MB
+  ai:
+    mcp:
+      server:
+        enabled: true
+        name: "ad-broker-mcp-server"
+        version: "1.0.0"
 
 management:
   server:

@@ -29,16 +29,16 @@ app:
     ext-service:
       endpoints:
         ping:
-          path: /health/check
+          path: /testtracelog/health/check
           method: GET
         process-file:
-          path: /v1/files/upload
+          path: /testtracelog/v1/files/upload
           method: POST
         update-data:
-          path: /v1/data/sync
+          path: /testtracelog/v1/data/sync
           method: POST
         complex-multipart:
-          path: /v2/complex-process/{id}
+          path: /testtracelog/v2/complex-process/{id}
           method: POST
       http:
         service-name: ext-service
