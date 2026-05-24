@@ -6,8 +6,6 @@ plugins {
 
 dependencies {
     api(spring.spring.springBootFlyway)
-    api(libs.flyway.core)
-    api(libs.flyway.database.postgresql)
 
     implementation(spring.spring.springBootAutoconfigure)
     implementation(spring.spring.springJdbc)

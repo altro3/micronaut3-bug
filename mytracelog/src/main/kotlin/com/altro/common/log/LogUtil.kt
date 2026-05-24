@@ -4,6 +4,8 @@ import org.apache.logging.log4j.core.impl.ThrowableProxy
 
 object LogUtil {
 
+    private const val SUFFIX_TRUNCATED = "... [TRUNCATED]"
+
     fun formatStackTrace(t: Throwable, sb: StringBuilder, maxLines: Int, rootCauseFull: Boolean = true): String {
         sb.setLength(0)
         var current: Throwable? = t
@@ -53,5 +55,14 @@ object LogUtil {
         if (stack.size > linesToShow) {
             sb.append("\t... and ").append(stack.size - linesToShow).append(" more lines\n")
         }
+    }
+
+    fun truncateIfNeeded(text: String, limitLogSize: Int, truncateChunkSize: Int): String {
+        if (limitLogSize > 0 && text.length > limitLogSize) {
+            val head = text.take(truncateChunkSize)
+            val tail = text.takeLast(truncateChunkSize)
+            return "$head\n$SUFFIX_TRUNCATED [Skipped ${text.length - 2 * truncateChunkSize} chars]\n$tail"
+        }
+        return text
     }
 }

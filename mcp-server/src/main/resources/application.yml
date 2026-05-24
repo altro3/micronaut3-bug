@@ -25,13 +25,13 @@ app:
       # url: http://localhost:9428/insert/opentelemetry/v1/logs
 
 server:
-  port: 9080
+  port: 8090
   tomcat:
     additional-tld-skip-patterns: "*"
 
 spring:
   application:
-    name: service1
+    name: mcp-server
   servlet:
     multipart:
       enabled: true
@@ -42,15 +42,12 @@ spring:
       add-mappings: false
   main:
     banner-mode: off
-  http:
-    codecs:
-      max-in-memory-size: 10MB
   ai:
     mcp:
       server:
         enabled: true
-        name: "ad-broker-mcp-server"
-        version: "1.0.0"
+        name: adbroker-mcp-server
+        version: 1.0.0
 
 management:
   server:
@@ -61,7 +58,7 @@ management:
   endpoints:
     web:
       exposure:
-        include: health, info, metrics, prometheus
+        include: health, info, metrics, prometheus, mappings
   metrics:
     distribution:
       percentiles-histogram:

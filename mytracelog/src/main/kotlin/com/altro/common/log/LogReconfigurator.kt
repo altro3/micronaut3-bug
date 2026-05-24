@@ -25,19 +25,15 @@ class LogReconfigurator(
         val appName = environment.getProperty(PROP_APP_NAME) ?: VAL_UNKNOWN_APP
         val nodeName = environment.getProperty(PROP_NODE_NAME) ?: VAL_UNKNOWN_NODE
 
-        // 1. Настройка MDC (передаем ключи в наш Garbage-Free конвертер)
         MdcConverter.keys = props.mdcKeys
 
-        // 2. Настройка сокращения стектрейса для консоли
         SmartExConverter.maxLines = props.stackTraceMaxLines
         SmartExConverter.rootCauseFull = props.stackTraceRootCauseFull
 
-        // 2. Добавляем OTLP (VictoriaLogs), если он включен в конфигурации И библиотека присутствует в classpath
         if (props.export.enabled && isOtlpPresent()) {
             setup(ctx, appName, nodeName, props, logMasker)
         }
 
-        // Применяем изменения ко всем активным логгерам
         ctx.updateLoggers()
     }
 
@@ -51,10 +47,8 @@ class LogReconfigurator(
         fun setup(ctx: LoggerContext, appName: String, nodeName: String, props: LogProperties, logMasker: LogMasker) {
             val config = ctx.configuration
 
-            // Если аппендер уже есть — не плодим дубликаты
             if (config.appenders.containsKey(APPENDER_NAME_OTLP)) return
 
-            // Создаем энкодер (адаптированный под LogEvent)
             val otlpLogEncoder = OtlpLogEncoder(
                 appName = appName,
                 nodeName = nodeName,
@@ -71,7 +65,6 @@ class LogReconfigurator(
             appender.start()
             config.addAppender(appender)
 
-            // Добавляем аппендер в Root логгер
             val rootConfig = config.getRootLogger()
             rootConfig.addAppender(appender, null, null)
         }

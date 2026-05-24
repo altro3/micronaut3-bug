@@ -56,9 +56,6 @@ spring:
       add-mappings: false
   main:
     banner-mode: off
-  http:
-    codecs:
-      max-in-memory-size: 10MB
 
 management:
   server:

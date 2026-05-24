@@ -12,6 +12,8 @@ val jreImage = "bellsoft/liberica-openjre-alpine:25.0.2-x86_64"
 
 dependencies {
     implementation(springAi.spring.springAiStarterMcpServerWebmvc)
+    implementation(springAi.spring.springAiAutoconfigureMcpServerCommon)
+    implementation(springAi.spring.springAiAutoconfigureMcpServerWebmvc)
     implementation(spring.spring.springBootStarterLog4j2)
     implementation(spring.spring.springBootStarterValidation)
     implementation(spring.spring.springBootStarterActuator)

@@ -1,16 +1,20 @@
 package com.altro.common.log.config
 
+import com.altro.common.log.LogFormatter
 import com.altro.common.log.LogReconfigurator
+import com.altro.common.log.RequestWrapperFactory
 import com.altro.common.log.ServerLoggingFilter
+import org.springframework.boot.autoconfigure.AutoConfiguration
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBooleanProperty
 import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.boot.web.servlet.FilterRegistrationBean
 import org.springframework.context.annotation.Bean
-import org.springframework.context.annotation.Configuration
 import org.springframework.core.env.Environment
 import tools.jackson.databind.json.JsonMapper
 
+@ConditionalOnBooleanProperty("app.log.enabled", matchIfMissing = true)
 @EnableConfigurationProperties(LogProperties::class)
-@Configuration
+@AutoConfiguration
 class LogAutoConfig {
 
     @Bean
@@ -25,15 +29,15 @@ class LogAutoConfig {
     @Bean
     fun unifiedLoggingFilterRegistration(
         jsonMapper: JsonMapper,
-        props: LogProperties,
+        logProps: LogProperties,
     ): FilterRegistrationBean<ServerLoggingFilter> {
         val registration = FilterRegistrationBean(
             ServerLoggingFilter(
-                jsonMapper = jsonMapper,
-                logProps = props,
+                formatter = LogFormatter(jsonMapper),
+                logProps = logProps,
             ),
         )
-        registration.order = props.order
+        registration.order = logProps.order
         return registration
     }
 }

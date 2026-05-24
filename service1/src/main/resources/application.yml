@@ -78,9 +78,6 @@ spring:
       add-mappings: false
   main:
     banner-mode: off
-  http:
-    codecs:
-      max-in-memory-size: 10MB
   datasource:
     url: jdbc:postgresql://localhost:5432/micronaut3bug?currentSchema=target
     username: micronaut3bug

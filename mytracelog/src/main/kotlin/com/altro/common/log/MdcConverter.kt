@@ -25,20 +25,17 @@ class MdcConverter : LogEventPatternConverter("MdcConverter", "mdc") {
 
         var hasContent = false
 
-        // 1. Вывод traceId
         if (traceId != null) {
             toAppendTo.append(PREFIX).append(traceId)
             hasContent = true
         }
 
-        // 2. Вывод userId
         if (userId != null) {
             if (hasContent) toAppendTo.append(SEPARATOR) else toAppendTo.append(PREFIX)
             toAppendTo.append(userId)
             hasContent = true
         }
 
-        // 3. Вывод кастомных ключей
         for (i in customKeys.indices) {
             val key = customKeys[i]
             if (key == MDC_TRACE_ID || key == MDC_USER_ID) continue

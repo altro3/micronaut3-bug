@@ -12,7 +12,6 @@ import org.springframework.http.HttpRequest
 import org.springframework.http.client.ClientHttpRequestExecution
 import org.springframework.http.client.ClientHttpRequestInterceptor
 import org.springframework.http.client.ClientHttpResponse
-import kotlin.collections.iterator
 
 class NanoTraceClientInterceptor(
     private val tracer: NanoTracer,
@@ -21,7 +20,7 @@ class NanoTraceClientInterceptor(
 ) : ClientHttpRequestInterceptor {
 
     private val log = KotlinLogging.logger {}
-    private val basePrefix: String = props.url.toString().removeSuffix(LoggingInterceptor.SLASH)
+    private val basePrefix: String = props.url.toString().removeSuffix("/")
 
     override fun intercept(rq: HttpRequest, body: ByteArray, execution: ClientHttpRequestExecution): ClientHttpResponse {
         val startTimeNano = System.nanoTime()
@@ -29,7 +28,7 @@ class NanoTraceClientInterceptor(
             rq.uri.toString()
         } else {
             val path = HttpTraceExtractor.getFullUri(rq.uri)
-            if (path.startsWith(LoggingInterceptor.SLASH)) "$basePrefix$path" else "$basePrefix/$path"
+            if (path.startsWith('/')) "$basePrefix$path" else "$basePrefix/$path"
         }
 
         val methodStr = rq.method.name()
