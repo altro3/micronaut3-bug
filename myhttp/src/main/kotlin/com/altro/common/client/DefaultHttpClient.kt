@@ -5,7 +5,7 @@ import com.altro.common.client.HttpClientProperties.ClientType.INTERNAL
 import com.altro.common.client.HttpClientUtils.DEFAULT_RETRY_ON
 import com.altro.common.client.HttpClientUtils.createRestClient
 import com.altro.common.client.HttpClientUtils.createRetryTemplate
-import com.altro.common.client.LoggingInterceptor.Companion.ATTR_SKIP_LOGGING
+import com.altro.common.log.LogConst.ATTR_SKIP_LOGGING
 import com.altro.common.trace.NanoTracer
 import com.altro.common.trace.TraceUtil.METHODS_WITHOUT_BODY
 import org.springframework.core.ParameterizedTypeReference

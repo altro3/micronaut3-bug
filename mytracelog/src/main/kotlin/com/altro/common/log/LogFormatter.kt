@@ -19,7 +19,7 @@ import tools.jackson.databind.json.JsonMapper
 
 class LogFormatter(
     jsonMapper: JsonMapper,
-    private val logMasker: LogMasker,
+    private val logMasker: LogMasker? = null,
 ) {
 
     private val prettyMapper: JsonMapper = jsonMapper.rebuild()
@@ -100,7 +100,7 @@ class LogFormatter(
                     if (isBinaryContent(contentBytes, partHeaders, partCt, finalName)) {
                         TEMPLATE_PART_PREFIX.format(description, headersInfo, BODY_BINARY)
                     } else {
-                        val headersMap = logMasker.maskMap(partHeaders)
+                        val headersMap = logMasker?.maskMap(partHeaders) ?: partHeaders
                         val partContent = formatBody(contentBytes, partCt, headersMap, prettyPrint, limitLogSize, truncateChunkSize)
                         val prefix = if (partContent == BODY_BINARY) BODY_BINARY else "Content: $partContent"
                         TEMPLATE_PART_PREFIX.format(description, headersInfo, prefix)

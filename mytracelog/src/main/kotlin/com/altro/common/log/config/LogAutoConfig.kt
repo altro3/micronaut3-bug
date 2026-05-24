@@ -1,8 +1,8 @@
 package com.altro.common.log.config
 
 import com.altro.common.log.LogFormatter
+import com.altro.common.log.LogMasker
 import com.altro.common.log.LogReconfigurator
-import com.altro.common.log.RequestWrapperFactory
 import com.altro.common.log.ServerLoggingFilter
 import org.springframework.boot.autoconfigure.AutoConfiguration
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBooleanProperty
@@ -18,7 +18,7 @@ import tools.jackson.databind.json.JsonMapper
 class LogAutoConfig {
 
     @Bean
-    fun logbackReconfigurator(
+    fun logReconfigurator(
         environment: Environment,
         logProperties: LogProperties,
     ) = LogReconfigurator(
@@ -27,14 +27,16 @@ class LogAutoConfig {
     )
 
     @Bean
-    fun unifiedLoggingFilterRegistration(
+    fun serverLoggingFilter(
         jsonMapper: JsonMapper,
         logProps: LogProperties,
     ): FilterRegistrationBean<ServerLoggingFilter> {
+        val masker = if (logProps.masking.enabled) LogMasker(logProps) else null
         val registration = FilterRegistrationBean(
             ServerLoggingFilter(
-                formatter = LogFormatter(jsonMapper),
+                formatter = LogFormatter(jsonMapper, masker),
                 logProps = logProps,
+                logMasker = masker,
             ),
         )
         registration.order = logProps.order

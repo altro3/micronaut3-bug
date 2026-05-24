@@ -2,6 +2,10 @@ app:
   wiremock:
     enabled: true
     port: 8083
+  log:
+    enabled: false
+  trace:
+    enabled: false
 
 server:
   port: 8082

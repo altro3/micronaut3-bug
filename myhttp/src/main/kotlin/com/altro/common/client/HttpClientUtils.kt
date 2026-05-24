@@ -1,5 +1,6 @@
 package com.altro.common.client
 
+import com.altro.common.log.LogFormatter
 import com.altro.common.trace.NanoTracer
 import com.altro.common.util.api.json.JsonUtil
 import io.github.oshai.kotlinlogging.KotlinLogging
@@ -83,20 +84,14 @@ object HttpClientUtils {
         }
 
         if (clientProps.log.enabled) {
-            // ВАЖНО: BufferingClientHttpRequestFactory позволяет перечитывать InputStream тела.
-            // Без него интерцептор логирования "съест" данные, и клиент получит пустое тело.
-            // Добавляем наш интерцептор
             builder.requestFactory(BufferingClientHttpRequestFactory(requestFactory))
                 .requestInterceptor(
                     LoggingInterceptor(
                         props = clientProps,
-                        jsonMapper = jsonMapper,
+                        formatter = LogFormatter(jsonMapper),
                     )
                 )
 
-            // 2. Регистрация GZIP-интерцептора
-            // Эта логика независима от логирования. Если сжатие включено в конфиге,
-            // клиент обязан уметь сжимать исходящие тела запросов.
             if (clientProps.compress) {
                 builder.requestInterceptor(GzipRequestInterceptor())
             }
@@ -116,21 +111,14 @@ object HttpClientUtils {
         val timeoutNanos = clientProperties.readTimeout.toNanos()
 
         var httpClient = HttpClient.create()
-            .wiretap(true) // <--- Включает детальное логирование трафика Netty
+//            .wiretap(true)
             .baseUrl(clientProperties.url.toString())
-            // Включаем или выключаем GZIP на основе настроек
             .compress(clientProperties.compress)
-            // Глобальный лимит: от полной отправки запроса до получения заголовков ответа.
-            // Это главная защита для синхронного RestClient.
             .responseTimeout(clientProperties.readTimeout)
             .doOnConnected {
-                // 3. НИЗКОУРОВНЕВЫЕ ТАЙМ-АУТЫ (Netty Pipeline)
-                // Мы передаем наносекунды напрямую, как ты и хотел.
-                // Это защищает от "залипших" пакетов внутри уже открытого соединения.
                 it.addHandlerLast(ReadTimeoutHandler(timeoutNanos, TimeUnit.NANOSECONDS))
                 it.addHandlerLast(WriteTimeoutHandler(timeoutNanos, TimeUnit.NANOSECONDS))
             }
-            // Тайм-аут на установку TCP-соединения (на уровне опций сокета)
             .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, clientProperties.connectTimeout.toMillis().toInt())
 
         val proxyProps = clientProperties.proxy

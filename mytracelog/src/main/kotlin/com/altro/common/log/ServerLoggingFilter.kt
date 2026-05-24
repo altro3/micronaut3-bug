@@ -23,8 +23,8 @@ import org.springframework.web.util.ContentCachingResponseWrapper
 
 class ServerLoggingFilter(
     private val formatter: LogFormatter,
-    private val logMasker: LogMasker,
     private val logProps: LogProperties,
+    private val logMasker: LogMasker? = null,
 ) : OncePerRequestFilter() {
 
     private val log = KotlinLogging.logger {}
@@ -46,7 +46,7 @@ class ServerLoggingFilter(
 
         val requestLogData by lazy {
             val headersMap = getHeadersMap(currentRq)
-            val maskedHeaders = logMasker.maskMap(headersMap)
+            val maskedHeaders = logMasker?.maskMap(headersMap) ?: headersMap
 
             val bodyResult = when (currentRq) {
                 is CachedBodyRequestWrapper -> {
@@ -105,7 +105,7 @@ class ServerLoggingFilter(
                 val httpStatus = HttpStatus.resolve(status)
                 val statusMessage = httpStatus?.reasonPhrase ?: if (status == 0) STATUS_UNDEFINED else STATUS_UNKNOWN
                 val headersMap = getResponseHeaders(rsWrapper)
-                val maskedHeaders = logMasker.maskMap(headersMap)
+                val maskedHeaders = logMasker?.maskMap(headersMap) ?: headersMap
 
                 val bodyText = if (ContentTypeAnalyzer.isMultipart(rsWrapper.contentType) && !rsBodyBytes.contentEquals(BODY_TOO_LARGE.toByteArray(Charsets.UTF_8))) {
                     formatter.formatMultipartResponse(rsBodyBytes, rsWrapper.contentType, logProps.prettyPrint, logProps.limitLogSize, logProps.truncateChunkSize)

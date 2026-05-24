@@ -34,7 +34,7 @@ import java.util.zip.GZIPInputStream
 class LoggingInterceptor(
     props: HttpClientProperties,
     private val formatter: LogFormatter,
-    private val logMasker: LogMasker,
+    private val logMasker: LogMasker? = null,
 ) : ClientHttpRequestInterceptor {
 
     private val log = KotlinLogging.logger {}
@@ -70,7 +70,7 @@ class LoggingInterceptor(
         MDC.put(MDC_COLOR, "green")
 
         val rqLogData by lazy {
-            val maskedHeaders = logMasker.maskMap(rq.headers.toSingleValueMap())
+            val maskedHeaders = logMasker?.maskMap(rq.headers.toSingleValueMap()) ?: rq.headers.toSingleValueMap()
             val ct = rq.headers.contentType?.toString()
 
             val bodyResult = when {
@@ -125,7 +125,7 @@ class LoggingInterceptor(
                 val rsBodyBytes = extractResponseBody(rs, skipLogging)
 
                 val rsLogData = run {
-                    val maskedHeaders = logMasker.maskMap(rs.headers.toSingleValueMap())
+                    val maskedHeaders = logMasker?.maskMap(rs.headers.toSingleValueMap()) ?: rs.headers.toSingleValueMap()
                     val ct = rs.headers.contentType?.toString()
 
                     val bodyResult = when {

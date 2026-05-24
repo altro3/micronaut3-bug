@@ -1,8 +1,8 @@
 package com.altro.common.client
 
-import com.altro.common.client.LoggingInterceptor.Companion.ATTR_EXT_RQ_ID
-import com.altro.common.client.LoggingInterceptor.Companion.ATTR_SKIP_LOGGING
-import com.altro.common.client.LoggingInterceptor.Companion.ENCODING_GZIP
+import com.altro.common.log.LogConst.ATTR_EXT_RQ_ID
+import com.altro.common.log.LogConst.ATTR_SKIP_LOGGING
+import com.altro.common.log.LogConst.ENCODING_GZIP
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpRequest
