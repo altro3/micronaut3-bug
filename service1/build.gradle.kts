@@ -19,8 +19,6 @@ dependencies {
     implementation(spring.spring.springBootStarterValidation)
     implementation(spring.spring.springBootStarterActuator)
     implementation(spring.spring.springBootStarterDataJdbc)
-    implementation(spring.spring.springBootStarterFlyway)
-    implementation(spring.flywaydb.flywayDatabasePostgresql)
     implementation(spring.postgresql.postgresql)
     implementation(spring.micrometer.micrometerRegistryOtlp)
     implementation(kot.kotlin.kotlinReflect)

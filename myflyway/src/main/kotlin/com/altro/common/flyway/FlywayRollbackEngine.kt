@@ -20,7 +20,7 @@ open class FlywayRollbackEngine(
 
     private val jdbcTemplate = JdbcTemplate(dataSource)
 
-    private val rawHistoryTable: String = validateIdentifier(flywayProperties.table ?: DEFAULT_TABLE)
+    private val rawHistoryTable: String = validateIdentifier(flywayProperties.table)
     private val activeSchema: String = validateIdentifier(flywayProperties.schemas.firstOrNull() ?: "")
     private val fullHistoryTablePath: String = if (activeSchema.isNotBlank()) """"${activeSchema.trim()}"."${rawHistoryTable.trim()}"""" else """"${rawHistoryTable.trim()}""""
 

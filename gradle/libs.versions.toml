@@ -1,6 +1,7 @@
 [versions]
 spring = "4.0.6"
 kotlin = "2.3.21"
+flyway = "12.6.2"
 coroutines = "1.11.0"
 kotlin-log = "8.0.03"
 protobuf = "4.35.0"
@@ -17,6 +18,8 @@ protobuf-java = { module = "com.google.protobuf:protobuf-java", version.ref = "p
 otel-proto = { module = "io.opentelemetry.proto:opentelemetry-proto", version.ref = "otel-proto" }
 wiremock = { module = "org.wiremock:wiremock-standalone", version.ref = "wiremock" }
 disruptor = { module = "com.lmax:disruptor", version.ref = "disruptor" }
+flyway-core = { module = "org.flywaydb:flyway-core", version.ref = "flyway" }
+flyway-database-postgresql = { module = "org.flywaydb:flyway-database-postgresql", version.ref = "flyway" }
 
 # BOMs
 spring-boot-dependencies = { module = "org.springframework.boot:spring-boot-dependencies", version.ref = "spring" }

@@ -76,7 +76,7 @@ class FlywayCoreConventionAutoConfig {
         configuration.isValidateMigrationNaming = false
 
         // Подхватываем только безопасные инфраструктурные проперти из yaml
-        flywayProperties.table?.let { configuration.table = it }
+        configuration.table = flywayProperties.table
         flywayProperties.tablespace?.let { configuration.tablespace = it }
         if (flywayProperties.schemas.isNotEmpty()) {
             configuration.setSchemas(flywayProperties.schemas.toTypedArray())

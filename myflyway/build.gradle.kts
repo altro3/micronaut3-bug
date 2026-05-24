@@ -5,9 +5,11 @@ plugins {
 }
 
 dependencies {
-    implementation(libs.kotlin.logging)
+    api(spring.spring.springBootFlyway)
+    api(libs.flyway.core)
+    api(libs.flyway.database.postgresql)
+
     implementation(spring.spring.springBootAutoconfigure)
-    implementation(spring.spring.springBootFlyway)
     implementation(spring.spring.springJdbc)
-    implementation(spring.flywaydb.flywayDatabasePostgresql)
+    implementation(libs.kotlin.logging)
 }
