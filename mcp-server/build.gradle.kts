@@ -6,29 +6,22 @@ plugins {
     alias(libs.plugins.spring.boot)
     alias(libs.plugins.kotlin.jvm)
     alias(libs.plugins.kotlin.spring)
-    alias(libs.plugins.kotlin.kapt)
 }
 
 val jreImage = "bellsoft/liberica-openjre-alpine:25.0.2-x86_64"
 
 dependencies {
-    kapt(spring.spring.springBootConfigurationProcessor)
-
-    implementation(spring.spring.springBootStarterWeb)
+    implementation(springAi.spring.springAiStarterMcpServerWebmvc)
     implementation(spring.spring.springBootStarterLog4j2)
     implementation(spring.spring.springBootStarterValidation)
     implementation(spring.spring.springBootStarterActuator)
-    implementation(spring.spring.springBootStarterDataJdbc)
-    implementation(spring.postgresql.postgresql)
     implementation(spring.micrometer.micrometerRegistryOtlp)
     implementation(kot.kotlin.kotlinReflect)
+    implementation(libs.kotlin.logging)
     implementation(projects.mycommon)
     implementation(projects.myutil)
-    implementation(projects.myflyway)
     implementation(projects.mytracelog)
     implementation(projects.myhttp)
-
-    testImplementation(spring.spring.springBootStarterTest)
 }
 configurations.all {
     exclude(group = "org.springframework.boot", module = "spring-boot-starter-logging")

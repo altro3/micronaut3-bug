@@ -17,6 +17,7 @@ dependencyResolutionManagement {
         generate("spring") { fromToml("spring-boot-dependencies") }
         generate("kot") { fromToml("kotlin") }
         generate("coroutines") { fromToml("coroutines") }
+        generate("springAi") { fromToml("spring-ai") }
     }
 }
 
@@ -30,6 +31,8 @@ include(
     "myutil",
     "service1",
     "service2",
+    "mcp-server",
+    "mock-server",
 )
 
 enableFeaturePreview("TYPESAFE_PROJECT_ACCESSORS")

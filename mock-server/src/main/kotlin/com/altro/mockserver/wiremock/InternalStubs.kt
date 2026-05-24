@@ -1,4 +1,4 @@
-package com.altro.service1.service
+package com.altro.mockserver.wiremock
 
 import com.github.tomakehurst.wiremock.WireMockServer
 import com.github.tomakehurst.wiremock.client.WireMock.aResponse
@@ -8,37 +8,15 @@ import com.github.tomakehurst.wiremock.client.WireMock.get
 import com.github.tomakehurst.wiremock.client.WireMock.post
 import com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo
 import com.github.tomakehurst.wiremock.client.WireMock.urlMatching
-import com.github.tomakehurst.wiremock.core.Options
-import com.github.tomakehurst.wiremock.core.WireMockConfiguration.wireMockConfig
-import jakarta.annotation.PostConstruct
-import jakarta.annotation.PreDestroy
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBooleanProperty
-import org.springframework.stereotype.Service
 import java.io.ByteArrayOutputStream
 import java.util.zip.GZIPOutputStream
 
-@ConditionalOnBooleanProperty("app.mock.enabled")
-@Service
-class ExternalMockServer {
+object InternalStubs {
 
-    // Используем динамический порт 8081, как договорились в YAML
-    private val wireMockServer = WireMockServer(
-        wireMockConfig()
-            .port(8081)
-            .useChunkedTransferEncoding(Options.ChunkedEncodingPolicy.NEVER)
-    )
-
-    @PostConstruct
-    fun start() {
-        wireMockServer.start()
-        setupStubs()
-        // Теперь WireMock будет писать в свой лог подробности несовпадения запросов (если будут)
-    }
-
-    private fun setupStubs() {
+    fun setupStubs(wireMockServer: WireMockServer) {
         // 1. Тест Ping — проверяем логирование пустого тела и статус кода
         wireMockServer.stubFor(
-            get(urlEqualTo("/health/check"))
+            get(urlEqualTo("/testtracelog/health/check"))
                 .willReturn(
                     aResponse()
                         .withStatus(200)
@@ -49,7 +27,7 @@ class ExternalMockServer {
 
         // 2. Тест JSON — проверяем Pretty Print в твоем интерцепторе
         wireMockServer.stubFor(
-            post(urlEqualTo("/v1/data/sync"))
+            post(urlEqualTo("/testtracelog/v1/data/sync"))
                 .willReturn(
                     aResponse()
                         .withStatus(200)
@@ -61,7 +39,7 @@ class ExternalMockServer {
 
         // 3. Тест Process File — проверяем детектирование бинарных данных (BINARY DATA в логах)
         wireMockServer.stubFor(
-            post(urlEqualTo("/v1/files/upload"))
+            post(urlEqualTo("/testtracelog/v1/files/upload"))
                 .willReturn(
                     aResponse()
                         .withStatus(200)
@@ -100,7 +78,7 @@ class ExternalMockServer {
         }.toByteArray()
 
         wireMockServer.stubFor(
-            post(urlMatching("/v2/complex-process/.*"))
+            post(urlMatching("/testtracelog/v2/complex-process/.*"))
                 .willReturn(
                     aResponse()
                         .withStatus(200)
@@ -120,7 +98,7 @@ class ExternalMockServer {
         }.toString()
 
         wireMockServer.stubFor(
-            get(urlEqualTo("/v1/data/huge"))
+            get(urlEqualTo("/testtracelog/v1/data/huge"))
                 .willReturn(
                     aResponse()
                         .withStatus(200)
@@ -130,7 +108,7 @@ class ExternalMockServer {
         )
 
         wireMockServer.stubFor(
-            post(urlEqualTo("/v1/data/gzip"))
+            post(urlEqualTo("/testtracelog/v1/data/gzip"))
                 // Используем встроенный матчер WireMock для заголовка
                 .withHeader("Content-Encoding", containing("gzip"))
                 .willReturn(
@@ -143,7 +121,7 @@ class ExternalMockServer {
         )
 
         wireMockServer.stubFor(
-            post(urlEqualTo("/v1/data/manual-gzip"))
+            post(urlEqualTo("/testtracelog/v1/data/manual-gzip"))
                 // Используем встроенный матчер WireMock для заголовка
                 .withHeader("Content-Encoding", containing("gzip"))
                 .willReturn(
@@ -157,7 +135,7 @@ class ExternalMockServer {
 
         // В класс ExternalMockServer, метод setupStubs()
         wireMockServer.stubFor(
-            post(urlEqualTo("/v1/data/plain-to-gzip"))
+            post(urlEqualTo("/testtracelog/v1/data/plain-to-gzip"))
                 // Проверяем, что клиент НЕ прислал сжатые данные
                 .withHeader("Content-Encoding", absent())
                 .willReturn(
@@ -184,15 +162,9 @@ class ExternalMockServer {
         )
     }
 
-    // Вспомогательная функция для генерации GZIP тела в моке
     private fun convertToGzip(content: String): ByteArray {
         val baos = ByteArrayOutputStream()
         GZIPOutputStream(baos).use { it.write(content.toByteArray()) }
         return baos.toByteArray()
-    }
-
-    @PreDestroy
-    fun stop() {
-        wireMockServer.stop()
     }
 }

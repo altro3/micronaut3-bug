@@ -31,7 +31,7 @@ app:
           method: POST
       http:
         service-name: ext-service
-        url: http://localhost:8081
+        url: http://localhost:8083
         type: external
         compress: true
         log:
@@ -39,7 +39,7 @@ app:
           max-payload-size: 4MB
 
 server:
-  port: 9080
+  port: 8081
   tomcat:
     additional-tld-skip-patterns: "*"
 
@@ -62,7 +62,7 @@ spring:
 
 management:
   server:
-    port: 9092
+    port: 9091
   observations:
     key-values:
       enabled: true

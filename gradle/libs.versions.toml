@@ -1,5 +1,6 @@
 [versions]
 spring = "4.0.6"
+spring-ai = "2.0.0-M7"
 kotlin = "2.3.21"
 flyway = "12.6.2"
 coroutines = "1.11.0"
@@ -25,6 +26,7 @@ flyway-database-postgresql = { module = "org.flywaydb:flyway-database-postgresql
 spring-boot-dependencies = { module = "org.springframework.boot:spring-boot-dependencies", version.ref = "spring" }
 kotlin = { module = "org.jetbrains.kotlin:kotlin-bom", version.ref = "kotlin" }
 coroutines = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-bom", version.ref = "coroutines" }
+spring-ai = { module = "org.springframework.ai:spring-ai-bom", version.ref = "spring-ai" }
 
 [plugins]
 spring-boot = { id = "org.springframework.boot", version.ref = "spring" }

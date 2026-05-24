@@ -1,6 +1,7 @@
 app:
-  mock:
+  wiremock:
     enabled: true
+    port: 8083
   node:
     name: ift2
   trace:
@@ -42,7 +43,7 @@ app:
           method: POST
       http:
         service-name: ext-service
-        url: http://localhost:8083
+        url: http://localhost:8081
         type: external
         compress: true
         log:
@@ -58,10 +59,10 @@ app:
           method: GET
       http:
         service-name: service2
-        url: http://localhost:8081
+        url: http://localhost:9080
 
 server:
-  port: 8080
+  port: 8082
   tomcat:
     additional-tld-skip-patterns: "*"
 
@@ -81,21 +82,10 @@ spring:
   http:
     codecs:
       max-in-memory-size: 10MB
-  datasource:
-    url: jdbc:postgresql://localhost:5432/micronaut3bug?currentSchema=target
-    username: micronaut3bug
-    password: 1
-  flyway:
-    enabled: true
-    schemas: target
-#    rollback:
-#      mode: tag
-#      value: 1.0
-#      force: true
 
 management:
   server:
-    port: 9090
+    port: 9092
   observations:
     key-values:
       enabled: true
