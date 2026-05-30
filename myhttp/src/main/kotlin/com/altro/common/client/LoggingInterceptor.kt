@@ -31,6 +31,7 @@ import org.springframework.http.client.ClientHttpRequestExecution
 import org.springframework.http.client.ClientHttpRequestInterceptor
 import org.springframework.http.client.ClientHttpResponse
 import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
 import java.util.zip.GZIPInputStream
 
 class LoggingInterceptor(
@@ -179,13 +180,11 @@ class LoggingInterceptor(
 
         if (contentLength > maxAllowed) return BODY_TOO_LARGE.toByteArray()
 
-        // Проверяем размер до чтения, чтобы избежать переполнения памяти
         val rawBytes = if (contentLength in 1..maxAllowed) {
             rs.body.readAllBytes()
         } else {
-            // Если contentLength неизвестен или больше лимита, читаем по частям
             val buffer = ByteArray(1024)
-            val outputStream = java.io.ByteArrayOutputStream()
+            val outputStream = ByteArrayOutputStream()
             var bytesRead = 0
             var totalBytes = 0L
             while (totalBytes < maxAllowed && rs.body.read(buffer).also { bytesRead = it } != -1) {
