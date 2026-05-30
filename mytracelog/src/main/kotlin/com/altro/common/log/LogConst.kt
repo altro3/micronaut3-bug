@@ -7,6 +7,7 @@ object LogConst {
     const val BODY_TOO_LARGE = "[BODY TOO LARGE TO LOG]"
     const val BODY_LOG_DISABLED = "[BODY LOGGING DISABLED]"
     const val BODY_MULTIPART_RS = "[MULTIPART RAW DISABLED]"
+    const val BODY_STREAM = "[STREAMING CONTENT LOGGING DISABLED]"
     
     // Статусы ответов
     const val STATUS_UNKNOWN = "UNKNOWN"

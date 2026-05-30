@@ -7,6 +7,7 @@ import com.altro.common.log.LogConst.STATUS_UNKNOWN
 import com.altro.common.log.RequestWrapperFactory.wrap
 import com.altro.common.log.RequestWrapperFactory.CachedBodyRequestWrapper
 import com.altro.common.log.RequestWrapperFactory.MultipartTypeWrapper
+import com.altro.common.log.RequestWrapperFactory.isStreamingRequest
 import com.altro.common.log.config.LogProperties
 import com.altro.common.trace.TraceUtil.MDC_COLOR
 import com.altro.common.trace.TraceUtil.MDC_MAIN_STAT
@@ -34,6 +35,12 @@ class ServerLoggingFilter(
         val startTimeNano = System.nanoTime()
 
         if (withActuator && logProps.skipActuator && rq.requestURI.startsWith(rq.contextPath + PATH_ACTUATOR)) {
+            chain.doFilter(rq, rs)
+            return
+        }
+
+        if (isStreamingRequest(rq)) {
+            log.info { "📡 MCP SSE Stream connected: ${rq.method} ${rq.requestURI}" }
             chain.doFilter(rq, rs)
             return
         }

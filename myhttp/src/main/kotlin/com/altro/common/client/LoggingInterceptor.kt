@@ -6,6 +6,7 @@ import com.altro.common.log.ContentTypeAnalyzer
 import com.altro.common.log.LogConst.ATTR_EXT_RQ_ID
 import com.altro.common.log.LogConst.ATTR_SKIP_LOGGING
 import com.altro.common.log.LogConst.BODY_LOG_DISABLED
+import com.altro.common.log.LogConst.BODY_STREAM
 import com.altro.common.log.LogConst.BODY_TOO_LARGE
 import com.altro.common.log.LogConst.ENCODING_GZIP
 import com.altro.common.log.LogConst.MARKER_HTTP_PROTOCOL
@@ -25,6 +26,7 @@ import io.github.oshai.kotlinlogging.KotlinLogging
 import org.slf4j.MDC
 import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpRequest
+import org.springframework.http.MediaType
 import org.springframework.http.client.ClientHttpRequestExecution
 import org.springframework.http.client.ClientHttpRequestInterceptor
 import org.springframework.http.client.ClientHttpResponse
@@ -114,6 +116,7 @@ class LoggingInterceptor(
             val durationMs = durationNs / 1_000_000
             val isError = rs.statusCode.isError
             val isSlow = durationMs >= logProps.slowThreshold.toMillis()
+            val isStream = isStreamingResponse(rs)
 
             when {
                 isError -> MDC.put(MDC_COLOR, "red")
@@ -122,7 +125,7 @@ class LoggingInterceptor(
             MDC.put(MDC_MAIN_STAT, "${durationMs}ms")
 
             if (isDebug || isError) {
-                val rsBodyBytes = extractResponseBody(rs, skipLogging)
+                val rsBodyBytes = extractResponseBody(rs, skipLogging = skipLogging, isStream = isStream)
 
                 val rsLogData = run {
                     val maskedHeaders = logMasker?.maskMap(rs.headers.toSingleValueMap()) ?: rs.headers.toSingleValueMap()
@@ -130,6 +133,7 @@ class LoggingInterceptor(
 
                     val bodyResult = when {
                         skipLogging -> BODY_LOG_DISABLED
+                        isStream -> BODY_STREAM
                         rsBodyBytes.contentEquals(BODY_TOO_LARGE.toByteArray()) -> BODY_TOO_LARGE
                         ContentTypeAnalyzer.isMultipart(ct) -> formatter.formatMultipartResponse(rsBodyBytes, ct, logProps.prettyPrint, logProps.limitLogSize, logProps.truncateChunkSize)
                         else -> formatter.formatBody(rsBodyBytes, ct, maskedHeaders, logProps.prettyPrint, logProps.limitLogSize, logProps.truncateChunkSize)
@@ -166,7 +170,8 @@ class LoggingInterceptor(
         }
     }
 
-    private fun extractResponseBody(rs: ClientHttpResponse, skipLogging: Boolean): ByteArray {
+    private fun extractResponseBody(rs: ClientHttpResponse, skipLogging: Boolean, isStream: Boolean): ByteArray {
+        if (isStream) return BODY_STREAM.toByteArray()
         if (skipLogging) return BODY_LOG_DISABLED.toByteArray()
 
         val maxAllowed = logProps.maxPayloadSize.toBytes()
@@ -201,5 +206,13 @@ class LoggingInterceptor(
         } else {
             path
         }
+    }
+
+    private fun isStreamingResponse(rs: ClientHttpResponse): Boolean {
+        val contentType = rs.headers.contentType?.toString() ?: ""
+        val transferEncoding = rs.headers[HttpHeaders.TRANSFER_ENCODING]?.joinToString() ?: ""
+
+        return contentType.contains(MediaType.TEXT_EVENT_STREAM_VALUE) ||
+                transferEncoding.contains("chunked")
     }
 }

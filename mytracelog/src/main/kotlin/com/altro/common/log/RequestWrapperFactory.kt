@@ -23,6 +23,17 @@ object RequestWrapperFactory {
         }
     }
 
+    fun isStreamingRequest(rq: HttpServletRequest): Boolean {
+        val acceptHeader = rq.getHeader("Accept") ?: ""
+        val contentTypeHeader = rq.getHeader("Content-Type") ?: ""
+        val upgradeHeader = rq.getHeader("Upgrade") ?: ""
+
+        return acceptHeader.contains("text/event-stream") ||
+                contentTypeHeader.contains("text/event-stream") ||
+                upgradeHeader.equals("websocket", ignoreCase = true) ||
+                rq.requestURI.endsWith("/sse")
+    }
+
     class CachedBodyRequestWrapper(
         rq: HttpServletRequest,
         val body: ByteArray,
