@@ -179,7 +179,25 @@ class LoggingInterceptor(
 
         if (contentLength > maxAllowed) return BODY_TOO_LARGE.toByteArray()
 
-        val rawBytes = rs.body.readAllBytes()
+        // Проверяем размер до чтения, чтобы избежать переполнения памяти
+        val rawBytes = if (contentLength in 1..maxAllowed) {
+            rs.body.readAllBytes()
+        } else {
+            // Если contentLength неизвестен или больше лимита, читаем по частям
+            val buffer = ByteArray(1024)
+            val outputStream = java.io.ByteArrayOutputStream()
+            var bytesRead = 0
+            var totalBytes = 0L
+            while (totalBytes < maxAllowed && rs.body.read(buffer).also { bytesRead = it } != -1) {
+                outputStream.write(buffer, 0, bytesRead)
+                totalBytes += bytesRead
+            }
+            if (totalBytes >= maxAllowed) {
+                return BODY_TOO_LARGE.toByteArray()
+            }
+            outputStream.toByteArray()
+        }
+        
         if (rawBytes.size > maxAllowed) return BODY_TOO_LARGE.toByteArray()
 
         return decompressIfNeeded(rs, rawBytes)

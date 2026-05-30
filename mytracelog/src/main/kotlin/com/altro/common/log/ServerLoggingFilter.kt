@@ -101,7 +101,7 @@ class ServerLoggingFilter(
                 MDC.put(MDC_COLOR, "yellow")
             }
 
-            val isFullBodyCached = rsWrapper.contentSize < logProps.maxPayloadSize.toBytes()
+            val isFullBodyCached = rsWrapper.contentSize <= logProps.maxPayloadSize.toBytes()
             val rsBodyBytes = when {
                 rsWrapper.contentSize == 0 -> BODY_EMPTY.toByteArray(Charsets.UTF_8)
                 !isFullBodyCached -> BODY_TOO_LARGE.toByteArray(Charsets.UTF_8)
