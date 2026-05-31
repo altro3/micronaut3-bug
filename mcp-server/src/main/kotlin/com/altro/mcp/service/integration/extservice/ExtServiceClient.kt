@@ -1,9 +1,9 @@
-package com.altro.service2.service.integration.extservice
+package com.altro.mcp.service.integration.extservice
 
 import com.altro.common.client.DefaultHttpClient
-import com.altro.service2.service.integration.extservice.api.MyDataRequest
-import com.altro.service2.service.integration.extservice.api.MyDataResponse
-import com.altro.service2.service.integration.extservice.config.ExtServiceProperties
+import com.altro.mcp.service.integration.extservice.api.MyDataRequest
+import com.altro.mcp.service.integration.extservice.api.MyDataResponse
+import com.altro.mcp.service.integration.extservice.config.ExtServiceProperties
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.stereotype.Service
 

@@ -1,4 +1,4 @@
-package com.altro.service2.config
+package com.altro.mcp.config
 
 import com.altro.common.util.api.config.DefWebConfig
 import com.altro.common.util.api.json.JsonUtil

@@ -1,4 +1,4 @@
-package com.altro.service2.api
+package com.altro.mcp.api
 
 import com.altro.common.trace.NanoTracer
 import com.altro.common.util.api.DefExceptionHandler

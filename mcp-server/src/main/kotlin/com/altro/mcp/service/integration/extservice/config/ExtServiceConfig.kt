@@ -1,4 +1,4 @@
-package com.altro.service2.service.integration.extservice.config
+package com.altro.mcp.service.integration.extservice.config
 
 import com.altro.common.client.DefaultHttpClient
 import com.altro.common.trace.NanoTracer
