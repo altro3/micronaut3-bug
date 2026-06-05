@@ -16,7 +16,6 @@ class InternalApiController(
 
     @GetMapping("/internal/ping")
     fun process(): MyDataResponse? {
-        // Здесь твоя common-либа должна автоматически подхватить rqId из MDC
         log.info { "== Service request == Received call from parent" }
 
         val updateRs = extServiceClient.updateData(MyDataRequest(name = "Test item"))
