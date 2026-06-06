@@ -1,9 +1,9 @@
 [versions]
 spring = "4.1.0-RC1"
-spring-ai = "2.0.0-M7"
-kotlin = "2.3.21"
+spring-ai = "2.0.0-RC1"
+kotlin = "2.4.0"
 coroutines = "1.11.0"
-kotlin-log = "8.0.03"
+kotlin-log = "8.0.4"
 protobuf = "4.35.0"
 otel-proto = "1.10.0-alpha"
 wiremock = "3.13.2"

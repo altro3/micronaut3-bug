@@ -6,27 +6,27 @@ plugins {
     alias(libs.plugins.spring.boot)
     alias(libs.plugins.kotlin.jvm)
     alias(libs.plugins.kotlin.spring)
-    alias(libs.plugins.kotlin.kapt)
 }
 
 val jreImage = "bellsoft/liberica-openjre-alpine:25.0.2-x86_64"
 
 dependencies {
-    // Внутренние модули проекта через строго верный type-safe синтаксис
-    implementation(projects.mycommon)
-    implementation(projects.myutil)
-    implementation(projects.mytracelog)
-    implementation(projects.myhttp)
-
     implementation(spring.spring.springBootStarterWeb)
     implementation(spring.spring.springBootStarterLog4j2)
     implementation(spring.spring.springBootStarterValidation)
     implementation(spring.spring.springBootStarterActuator)
+    implementation(springAi.spring.springAiStarterModelOpenai)
+    implementation(springAi.spring.springAiStarterMcpClient)
+    implementation(springAi.spring.mcpSpringWebmvc)
     implementation(spring.micrometer.micrometerRegistryOtlp)
+    implementation(coroutines.kotlinx.kotlinxCoroutinesCoreJvm)
+    implementation(coroutines.kotlinx.kotlinxCoroutinesSlf4j)
     implementation(kot.kotlin.kotlinReflect)
     implementation(libs.kotlin.logging)
-//    implementation(spring.spring.springBootStarterOpenai)
-//    implementation("org.springframework.ai:spring-ai-mcp-client") // Подключится под управление spring-ai-bom
+    implementation(projects.mycommon)
+    implementation(projects.myutil)
+    implementation(projects.mytracelog)
+    implementation(projects.myhttp)
 }
 configurations.all {
     exclude(group = "org.springframework.boot", module = "spring-boot-starter-logging")

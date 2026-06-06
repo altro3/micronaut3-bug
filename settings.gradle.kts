@@ -28,6 +28,7 @@ include(
     "myflyway",
     "myhttp",
     "mytracelog",
+    "myorchestrator-spring",
     "myutil",
     "service1",
     "service2",

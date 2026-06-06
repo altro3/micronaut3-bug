@@ -37,8 +37,6 @@ class TracingController(
             businessService.someFunc()
         } catch (e: Exception) {
             log.error { "Oops! Something went wrong in our business logic" }
-            // Выбрасываем исключение, чтобы Spring вернул 500 статус,
-            // а наш ServerLoggingFilter перехватил это и отправил Error-статус в Tempo.
             throw Exception("Большое сообщение об ошибке на несколько строк\nБольшое сообщение об ошибке на несколько строк\nБольшое сообщение об ошибке на несколько строк\nБольшое сообщение об ошибке на несколько строк\nБольшое сообщение об ошибке на несколько строк\n", e)
         }
         return "OK"
