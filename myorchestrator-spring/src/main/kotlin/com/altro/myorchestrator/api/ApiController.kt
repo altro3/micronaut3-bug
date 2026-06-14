@@ -4,12 +4,10 @@ import com.altro.myorchestrator.api.dto.chat.ChatRq
 import com.altro.myorchestrator.api.dto.chat.ChatRs
 import com.altro.myorchestrator.service.ChatOrchestrator
 import jakarta.validation.Valid
-import org.springframework.http.MediaType
 import org.springframework.http.MediaType.TEXT_EVENT_STREAM_VALUE
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RestController
-import org.springframework.web.servlet.mvc.method.annotation.SseEmitter
 import reactor.core.publisher.Flux
 
 @RestController

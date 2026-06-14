@@ -15,7 +15,7 @@ import java.util.UUID
 
 @Service
 class ChatOrchestrator(
-    chatClientBuilder: ChatClient.Builder
+    chatClientBuilder: ChatClient.Builder,
 ) {
     private val chatClient = chatClientBuilder.build()
 
@@ -43,7 +43,6 @@ class ChatOrchestrator(
             .messages(springAiMessages)
             .stream()
             .content()
-            .filter { it != null }
     }
 
     fun orchestrateChat(request: ChatRq): ChatRs {
