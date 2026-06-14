@@ -10,6 +10,7 @@ import org.springframework.ai.chat.messages.Message
 import org.springframework.ai.chat.messages.SystemMessage
 import org.springframework.ai.chat.messages.UserMessage
 import org.springframework.stereotype.Service
+import reactor.core.publisher.Flux
 import java.util.UUID
 
 @Service
@@ -18,13 +19,39 @@ class ChatOrchestrator(
 ) {
     private val chatClient = chatClientBuilder.build()
 
+    fun orchestrateChatStream(request: ChatRq): Flux<String> {
+        val springAiMessages = ArrayList<Message>(request.messages.size + 1)
+        var hasSystemPrompt = false
+
+        for (msg in request.messages) {
+            val role = msg.role.lowercase()
+            if (role == SYSTEM_ROLE) hasSystemPrompt = true
+            val aiMessage = when (role) {
+                SYSTEM_ROLE -> SystemMessage(msg.content)
+                ASSISTANT_ROLE -> AssistantMessage(msg.content)
+                else -> UserMessage(msg.content)
+            }
+            springAiMessages.add(aiMessage)
+        }
+
+        if (!hasSystemPrompt) {
+            springAiMessages.add(0, SystemMessage(SYSTEM_PROMPT))
+        }
+
+        // Возвращаем чистый Flux. Spring AI сам правильно доставит его в Tomcat
+        return chatClient.prompt()
+            .messages(springAiMessages)
+            .stream()
+            .content()
+            .filter { it != null }
+    }
+
     fun orchestrateChat(request: ChatRq): ChatRs {
         val aiText = processChat(request.messages)
         return ChatRs(
             id = "$ID_PREFIX${UUID.randomUUID()}",
             `object` = OBJECT_TYPE_COMPLETION,
             created = System.currentTimeMillis() / 1000,
-            model = request.model,
             choices = listOf(
                 ChatChoice(
                     index = 0,

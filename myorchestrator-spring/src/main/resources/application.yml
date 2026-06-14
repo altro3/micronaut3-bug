@@ -12,7 +12,7 @@ app:
     jdbc:
       enabled: true
   log:
-    enabled: true
+    enabled: false
     mdc-keys: test
     pretty-print: true
     max-payload-size: 4MB
@@ -48,26 +48,18 @@ spring:
       add-mappings: false
   main:
     banner-mode: off
-  mvc:
-    cors:
-      mappings:
-        "/**":
-          allowed-origins: "http://localhost:5173"
-          allowed-methods: "GET,POST,PUT,DELETE,OPTIONS"
-          allowed-headers: "*"
-          allow-credentials: true
   ai:
     openai:
       api-key: local-secret
       chat:
         base-url: http://localhost:8500/v1
         api-key: local-secret
-        model: qwen-3.6
+        model: qwen-coder
         temperature: 0.7
       embedding:
         base-url: http://localhost:8500/v1
         api-key: local-secret
-        model: qwen-3.6
+        model: qwen-coder
     vectorstore:
       qdrant:
         host: localhost
