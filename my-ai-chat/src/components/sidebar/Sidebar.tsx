@@ -33,7 +33,7 @@ export default function Sidebar({ status }: SidebarProps) {
             </div>
 
             <div className="text-xs text-gray-600 border-t border-gray-800 pt-4">
-                Разработано для демонстрации работы агентов и локальных LLM.
+                Разработано Altro.
             </div>
         </div>
     );

@@ -48,7 +48,6 @@ class MarketingOrchestratorEngine(
         // ШАГ 2: Векторный поиск правил модерации в Qdrant
         val moderationRulesContext = searchAdvertisingRules(
             query = "${analysisResult.audienceDescription} $briefText",
-            platforms = analysisResult.recommendations.map { it.platform }
         )
 
         statusConsumer(
@@ -65,14 +64,30 @@ class MarketingOrchestratorEngine(
         val creativesTypeRef = object : ParameterizedTypeReference<Map<Platform, Creative>>() {}
 
         val creativePrompt = """
-            На основе описания целевой аудитории: '${analysisDescription(analysisResult)}', 
-            сгенерируй рекламные креативы и рассчитай бюджеты в копейках отдельно для каждой платформы: ${analysisResult.recommendations.map { it.platform }.joinToString()}. 
-            
-            ПРАВИЛА И ОГРАНИЧЕНИЯ ИЗ БАЗЫ ЗНАНИЙ QDRANT (Учти их, чтобы креатив прошел валидацию!):
-            $moderationRulesContext
-            
-            Доступные инструменты автоматизации: $mockTools
-        """.trimIndent()
+    На основе описания целевой аудитории: '${analysisDescription(analysisResult)}', 
+    сгенерируй рекламные креативы отдельно для каждой платформы: ${analysisResult.recommendations.map { it.platform }.joinToString()}. 
+    
+    ПРАВИЛА И ОГРАНИЧЕНИЯ ИЗ БАЗЫ ЗНАНИЙ QDRANT (ОБЯЗАТЕЛЬНО учти их при написании текстов):
+    $moderationRulesContext
+    
+    ВЫДАЙ ОТВЕТ СТРОГО В ФОРМАТЕ JSON. 
+    Ответь ТОЛЬКО чистым JSON-объектом, НЕ оборачивай его в markdown-теги типа ```json ... ```. Начни ответ сразу с символа {.
+    
+    Каждый объект Creative в карте должен СТРОГО содержать два текстовых поля: "title" и "bodyText". Никаких других ключей быть не должно.
+    
+    Пример структуры ответа:
+    {
+      "VK_ADS": {
+        "title": "Заголовок объявления для VK",
+        "bodyText": "Основной текст рекламного объявления для VK"
+      },
+      "YANDEX_DIRECT": {
+        "title": "Заголовок для Яндекса",
+        "bodyText": "Текст объявления для Яндекс.Директ"
+      }
+    }
+""".trimIndent()
+
 
         val creatives = chatClient.prompt()
             .user(creativePrompt)
@@ -135,7 +150,7 @@ class MarketingOrchestratorEngine(
 
     private fun analysisDescription(result: AnalysisResult): String = result.audienceDescription
 
-    private fun searchAdvertisingRules(query: String, platforms: List<Platform>): String {
+    private fun searchAdvertisingRules(query: String): String {
         return try {
             val searchRequest = SearchRequest.builder()
                 .query(query)

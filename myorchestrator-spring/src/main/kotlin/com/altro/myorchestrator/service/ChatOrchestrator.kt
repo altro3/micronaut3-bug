@@ -1,103 +1,92 @@
 package com.altro.myorchestrator.service
 
-import com.altro.myorchestrator.api.dto.chat.ChatMessageDto
+import com.altro.myorchestrator.api.dto.OrchestrationState
 import com.altro.myorchestrator.api.dto.chat.ChatRq
-import com.altro.myorchestrator.api.dto.chat.ChatRs
-import com.altro.myorchestrator.api.dto.chat.ChatRs.ChatChoice
+import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.ai.chat.client.ChatClient
-import org.springframework.ai.chat.messages.AssistantMessage
-import org.springframework.ai.chat.messages.Message
-import org.springframework.ai.chat.messages.SystemMessage
-import org.springframework.ai.chat.messages.UserMessage
 import org.springframework.stereotype.Service
 import reactor.core.publisher.Flux
-import java.util.UUID
+import reactor.core.scheduler.Schedulers
 
 @Service
 class ChatOrchestrator(
     chatClientBuilder: ChatClient.Builder,
+    private val marketingEngine: MarketingOrchestratorEngine
 ) {
+
+    private val log = KotlinLogging.logger {}
+
     private val chatClient = chatClientBuilder.build()
 
-    fun orchestrateChatStream(request: ChatRq): Flux<String> {
-        val springAiMessages = ArrayList<Message>(request.messages.size + 1)
-        var hasSystemPrompt = false
+    fun orchestrateChatStream(rq: ChatRq): Flux<String> {
+        val userPrompt = rq.messages.lastOrNull()?.content ?: ""
 
-        for (msg in request.messages) {
-            val role = msg.role.lowercase()
-            if (role == SYSTEM_ROLE) hasSystemPrompt = true
-            val aiMessage = when (role) {
-                SYSTEM_ROLE -> SystemMessage(msg.content)
-                ASSISTANT_ROLE -> AssistantMessage(msg.content)
-                else -> UserMessage(msg.content)
-            }
-            springAiMessages.add(aiMessage)
+        // ТРИГГЕР: Если пользователь просит создать кампанию/бриф — запускаем агентный движок
+        if (userPrompt.contains("кампани", ignoreCase = true) || userPrompt.contains("реклам", ignoreCase = true)) {
+            return Flux.create { sink ->
+                try {
+                    marketingEngine.executeOrchestration(userPrompt) { state ->
+                        // Превращаем стейты в красивый Markdown-текст для фронтенда
+                        val markdownChunk = convertStateToMarkdown(state)
+                        if (markdownChunk.isNotEmpty()) {
+                            sink.next(markdownChunk)
+                        }
+                    }
+                    sink.complete()
+                } catch (e: Exception) {
+                    log.error(e) { "Error" }
+                    sink.next("\n\n❌ **Ошибка оркестратора:** ${e.message}\n")
+                    sink.complete()
+                }
+            }.subscribeOn(Schedulers.boundedElastic()) // Запускаем в пул потоков, чтобы не блокировать Netty/Tomcat
         }
 
-        if (!hasSystemPrompt) {
-            springAiMessages.add(0, SystemMessage(SYSTEM_PROMPT))
-        }
-
-        // Возвращаем чистый Flux. Spring AI сам правильно доставит его в Tomcat
-        return chatClient.prompt()
-            .messages(springAiMessages)
-            .stream()
-            .content()
+        // Старый сквозной чат (fallback), если это обычный вопрос
+        return fallbackStream(rq)
     }
 
-    fun orchestrateChat(request: ChatRq): ChatRs {
-        val aiText = processChat(request.messages)
-        return ChatRs(
-            id = "$ID_PREFIX${UUID.randomUUID()}",
-            `object` = OBJECT_TYPE_COMPLETION,
-            created = System.currentTimeMillis() / 1000,
-            choices = listOf(
-                ChatChoice(
-                    index = 0,
-                    message = ChatMessageDto(role = ASSISTANT_ROLE, content = aiText),
-                    finish_reason = FINISH_REASON_STOP
-                )
-            )
-        )
-    }
-
-    private fun processChat(messages: List<ChatMessageDto>): String {
-        var hasSystemPrompt = false
-        val springAiMessages = ArrayList<Message>(messages.size + 1)
-
-        for (msg in messages) {
-            val role = msg.role.lowercase()
-            if (role == SYSTEM_ROLE) {
-                hasSystemPrompt = true
+    private fun convertStateToMarkdown(state: OrchestrationState): String {
+        return when (state) {
+            is OrchestrationState.Initial -> "🚀 **Запуск маркетингового оркестратора...**\n\n"
+            is OrchestrationState.Analyzing -> "🔍 *Шаг 1: Анализирую бриф и извлекаю сущности (Qwen 27B)...*\n\n"
+            is OrchestrationState.CreativeGeneration -> {
+                """
+            📂 *Шаг 2: Поиск локальных правил модерации в Qdrant...*
+            🎯 *Выделенная аудитория:* `${state.audienceDescription}`
+            📡 *Целевые платформы:* ${state.platforms.joinToString { "`$it`" }}
+            🎨 *Шаг 3: Генерация креативов с учетом ограничений площадок...*
+            
+            """.trimIndent()
             }
 
-            val aiMessage = when (role) {
-                SYSTEM_ROLE -> SystemMessage(msg.content)
-                ASSISTANT_ROLE -> AssistantMessage(msg.content)
-                else -> UserMessage(msg.content)
+            is OrchestrationState.BudgetAndValidation -> {
+                val sb = StringBuilder("\n\n✅ **Креативы успешно сгенерированы!**\n\n")
+                state.creatives.forEach { (platform, creative) ->
+                    sb.append("### 📊 Платформа: `$platform`\n\n")
+                    sb.append("📌 **Заголовок:** ${creative.title ?: "Без заголовка"}\n\n")
+                    sb.append("📝 **Текст креатива:**\n${creative.bodyText ?: "Пусто"}\n\n")
+                }
+                sb.append("⚙️ *Шаг 4: Параллельная отправка кампаний в кабинеты (Loom Virtual Threads)...*\n\n")
+                sb.toString()
             }
-            springAiMessages.add(aiMessage)
+
+            is OrchestrationState.Uploading -> ""
+            is OrchestrationState.Completed -> {
+                val sb = StringBuilder("🎉 **Оркестрация успешно завершена!**\n\n")
+                sb.append("### 📝 Отчет о выполнении (Имитация MCP):\n\n")
+
+                state.logs.forEach { log ->
+                    val prefix = if (log.contains("Ошибка", ignoreCase = true)) "❌" else "🔹"
+                    val cleanLog = log.replace("♦", "").trim()
+                    sb.append("$prefix $cleanLog\n\n")
+                }
+                sb.toString()
+            }
         }
-
-        if (!hasSystemPrompt) {
-            springAiMessages.add(0, SystemMessage(SYSTEM_PROMPT))
-        }
-
-        val rs = chatClient.prompt()
-            .messages(springAiMessages)
-            .call()
-            .content()
-
-        return rs ?: ERROR_RESPONSE
     }
 
-    companion object {
-        private const val SYSTEM_ROLE = "system"
-        private const val ASSISTANT_ROLE = "assistant"
-        private const val FINISH_REASON_STOP = "stop"
-        private const val OBJECT_TYPE_COMPLETION = "chat.completion"
-        private const val ID_PREFIX = "chatcmpl-"
-        private const val SYSTEM_PROMPT = "Ты — умный ассистент рекламного агрегатора. Твоя цель — помочь пользователю сформулировать бриф для будущей рекламы."
-        private const val ERROR_RESPONSE = "Извините, не удалось получить ответ от модели."
+    private fun fallbackStream(rq: ChatRq): Flux<String> {
+        // Здесь ваш старый код сквозного стриминга chatClient.prompt()...stream().content()
+        return chatClient.prompt().user(rq.messages.last().content).stream().content()
     }
 }
