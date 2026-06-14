@@ -5,13 +5,13 @@ import com.altro.myorchestrator.api.dto.Creative
 import com.altro.myorchestrator.api.dto.OrchestrationState
 import com.altro.myorchestrator.api.dto.Platform
 import io.github.oshai.kotlinlogging.KotlinLogging
-import io.modelcontextprotocol.client.McpSyncClient
-import io.modelcontextprotocol.spec.McpSchema
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.runBlocking
 import org.springframework.ai.chat.client.ChatClient
+import org.springframework.ai.vectorstore.SearchRequest
+import org.springframework.ai.vectorstore.VectorStore
 import org.springframework.core.ParameterizedTypeReference
 import org.springframework.stereotype.Service
 import java.time.Instant
@@ -19,10 +19,11 @@ import java.util.UUID
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.Executors
 
-//@Service
+@Service
 class MarketingOrchestratorEngine(
     private val chatClientBuilder: ChatClient.Builder,
-    private val mcpSyncClient: McpSyncClient
+    private val vectorStore: VectorStore // Внедряем Qdrant
+    // Временно убираем из конструктора McpSyncClient, так как сервера еще нет
 ) {
     private val log = KotlinLogging.logger {}
 
@@ -37,11 +38,18 @@ class MarketingOrchestratorEngine(
 
         val chatClient = chatClientBuilder.build()
 
+        // ШАГ 1: Анализ брифа Квеном
         val analysisResult = chatClient.prompt()
             .user("Проанализируй следующий бриф, выдели список целевых площадок (YANDEX_DIRECT, VK_ADS) и текстовое описание аудитории. Бриф: $briefText")
             .call()
             .entity(object : ParameterizedTypeReference<AnalysisResult>() {})
             ?: throw IllegalStateException("Failed to parse analysis result")
+
+        // ШАГ 2: Векторный поиск правил модерации в Qdrant
+        val moderationRulesContext = searchAdvertisingRules(
+            query = "${analysisResult.audienceDescription} $briefText",
+            platforms = analysisResult.recommendations.map { it.platform }
+        )
 
         statusConsumer(
             OrchestrationState.CreativeGeneration(
@@ -50,11 +58,24 @@ class MarketingOrchestratorEngine(
             )
         )
 
-        val tools = mcpSyncClient.listTools()
+        // Имитируем список инструментов, который якобы пришел бы от MCP
+        val mockTools = "[validateAndAddCreative(platform, creative, audience) - инструмент проверки модерации и отправки в кабинет]"
 
+        // ШАГ 3: Генерация креативов с учетом правил из Qdrant
         val creativesTypeRef = object : ParameterizedTypeReference<Map<Platform, Creative>>() {}
+
+        val creativePrompt = """
+            На основе описания целевой аудитории: '${analysisDescription(analysisResult)}', 
+            сгенерируй рекламные креативы и рассчитай бюджеты в копейках отдельно для каждой платформы: ${analysisResult.recommendations.map { it.platform }.joinToString()}. 
+            
+            ПРАВИЛА И ОГРАНИЧЕНИЯ ИЗ БАЗЫ ЗНАНИЙ QDRANT (Учти их, чтобы креатив прошел валидацию!):
+            $moderationRulesContext
+            
+            Доступные инструменты автоматизации: $mockTools
+        """.trimIndent()
+
         val creatives = chatClient.prompt()
-            .user("На основе описания целевой аудитории: '${analysisResult.audienceDescription}', сгенерируй рекламные креативы и рассчитай бюджеты в копейках отдельно для каждой платформы: ${analysisResult.recommendations.map { it.platform }.joinToString()}. Используй доступные инструменты: $tools")
+            .user(creativePrompt)
             .call()
             .entity(creativesTypeRef)
             ?: throw IllegalStateException("Failed to generate creatives")
@@ -66,6 +87,7 @@ class MarketingOrchestratorEngine(
             )
         )
 
+        // ШАГ 4: Имитация параллельного вызова инструментов (заменяем вызов mcpSyncClient на локальный лог)
         val loomDispatcher = Executors.newVirtualThreadPerTaskExecutor().asCoroutineDispatcher()
         val campaignIds = mutableMapOf<Platform, String?>()
         val logs = CopyOnWriteArrayList<String>()
@@ -75,21 +97,15 @@ class MarketingOrchestratorEngine(
                 val jobs = analysisResult.recommendations.map { it.platform }.map { platform ->
                     async {
                         try {
-                            val creative = creatives[platform] ?: throw IllegalStateException("Creative not found for platform: $platform")
-                            val result = mcpSyncClient.callTool(
-                                McpSchema.CallToolRequest(
-                                    "validateAndAddCreative",
-                                    mapOf(
-                                        "platform" to platform.name,
-                                        "creative" to creative,
-                                        "audience" to analysisResult.audienceDescription
-                                    )
-                                )
-                            )
-                            logs.add("Успешно обработана платформа: $platform")
-                            platform to result.content().firstOrNull()?.toString()
+                            // Вместо mcpSyncClient.callTool имитируем успешный ответ и генерируем фейковый ID кампании
+                            val mockGeneratedId = "act_" + UUID.randomUUID().toString().take(8)
+
+                            logs.add("ИМИТАЦИЯ MCP: Платформа $platform успешно прошла валидацию по правилам Qdrant.")
+                            logs.add("ИМИТАЦИЯ MCP: Создана кампания в кабинете. Получен ID: $mockGeneratedId")
+
+                            platform to mockGeneratedId
                         } catch (ex: Exception) {
-                            log.error(ex) { "Ошибка при обработке платформы $platform: ${ex.message}" }
+                            log.error(ex) { "Ошибка при обработке платформы $platform" }
                             logs.add("Ошибка платформы $platform: ${ex.message}")
                             platform to null
                         }
@@ -115,5 +131,30 @@ class MarketingOrchestratorEngine(
             state = completedState,
             updatedAt = Instant.now()
         )
+    }
+
+    private fun analysisDescription(result: AnalysisResult): String = result.audienceDescription
+
+    private fun searchAdvertisingRules(query: String, platforms: List<Platform>): String {
+        return try {
+            val searchRequest = SearchRequest.builder()
+                .query(query)
+                .topK(3)
+                .similarityThreshold(0.5) // Чуть снизим порог для тестов прототипа
+                .build()
+
+            val matchedDocs = vectorStore.similaritySearch(searchRequest)
+
+            if (matchedDocs.isEmpty()) {
+                "Локальная база правил модерации пуста. Сгенерируй стандартный качественный креатив."
+            } else {
+                matchedDocs.joinToString(separator = "\n\n") { doc ->
+                    "[База знаний - ${doc.metadata["platform"] ?: "Общее"}]: ${doc.text}"
+                }
+            }
+        } catch (e: Exception) {
+            log.error(e) { "Ошибка поиска в Qdrant" }
+            "База знаний правил временно недоступна."
+        }
     }
 }

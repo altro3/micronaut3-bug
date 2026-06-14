@@ -6,16 +6,14 @@ import com.altro.myorchestrator.service.ChatOrchestrator
 import jakarta.validation.Valid
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
-import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RestController
 
-@RequestMapping
 @RestController
 class ApiController(
     private val orchestrator: ChatOrchestrator
 ) {
 
-    @PostMapping("/chat/completions")
+    @PostMapping("/api/chat/completions")
     fun chatCompletions(@RequestBody @Valid rq: ChatRq): ChatRs =
         orchestrator.orchestrateChat(rq)
 }

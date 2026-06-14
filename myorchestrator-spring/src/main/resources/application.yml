@@ -20,7 +20,6 @@ app:
       enabled: false
       url: http://localhost:4318/v1/logs
 
-
   integration:
     mcp-server:
       http:
@@ -49,17 +48,36 @@ spring:
       add-mappings: false
   main:
     banner-mode: off
+  mvc:
+    cors:
+      mappings:
+        "/**":
+          allowed-origins: "http://localhost:5173"
+          allowed-methods: "GET,POST,PUT,DELETE,OPTIONS"
+          allowed-headers: "*"
+          allow-credentials: true
   ai:
     openai:
       api-key: local-secret
       chat:
-        base-url: http://localhost:8500
-        model: qwen3.6
+        base-url: http://localhost:8500/v1
+        api-key: local-secret
+        model: qwen-3.6
         temperature: 0.7
+      embedding:
+        base-url: http://localhost:8500/v1
+        api-key: local-secret
+        model: qwen-3.6
+    vectorstore:
+      qdrant:
+        host: localhost
+        port: 6334
+        collection-name: ad_rules_collection
+        initialize-schema: true
 
 management:
   server:
-    port: 9091
+    port: 9083
   observations:
     key-values:
       enabled: true
@@ -93,6 +111,8 @@ logging:
     root: debug
     jdk: warn
     sun: warn
+    io.grpc: info
+    io.qdrant: info
     javax: info
     io.netty: info
     com.zaxxer: warn

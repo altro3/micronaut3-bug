@@ -1,10 +1,10 @@
 [versions]
-spring = "4.1.0-RC1"
-spring-ai = "2.0.0-RC1"
+spring = "4.1.0"
+spring-ai = "2.0.0"
 kotlin = "2.4.0"
 coroutines = "1.11.0"
 kotlin-log = "8.0.4"
-protobuf = "4.35.0"
+protobuf = "4.35.1"
 otel-proto = "1.10.0-alpha"
 wiremock = "3.13.2"
 disruptor = "4.0.0"

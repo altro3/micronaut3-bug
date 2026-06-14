@@ -15,7 +15,7 @@ import java.time.Duration
 @ConfigurationProperties("app.log")
 class LogProperties(
     var enabled: Boolean = true,
-    var order: Int = Ordered.HIGHEST_PRECEDENCE + 1,
+    var order: Int = Ordered.HIGHEST_PRECEDENCE + 10,
     var skipActuator: Boolean = true,
     @field:Positive
     var maxPayloadSize: DataSize = DataSize.ofMegabytes(15),

@@ -20,7 +20,6 @@ class ChatOrchestrator(
 
     fun orchestrateChat(request: ChatRq): ChatRs {
         val aiText = processChat(request.messages)
-
         return ChatRs(
             id = "$ID_PREFIX${UUID.randomUUID()}",
             `object` = OBJECT_TYPE_COMPLETION,

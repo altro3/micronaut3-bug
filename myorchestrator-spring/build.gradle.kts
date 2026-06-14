@@ -16,6 +16,7 @@ dependencies {
     implementation(spring.spring.springBootStarterValidation)
     implementation(spring.spring.springBootStarterActuator)
     implementation(springAi.spring.springAiStarterModelOpenai)
+    implementation(springAi.spring.springAiStarterVectorStoreQdrant)
     implementation(springAi.spring.springAiStarterMcpClient)
     implementation(springAi.spring.mcpSpringWebmvc)
     implementation(spring.micrometer.micrometerRegistryOtlp)

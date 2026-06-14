@@ -8,7 +8,7 @@ data class AnalysisResult(
 ) {
     data class PlatformRecommendation(
         val platform: Platform,
-        val relevanceScore: Int, // от 0 до 100
-        val reasoning: String    // почему ИИ так думает
+        val relevanceScore: Int,
+        val reasoning: String,
     )
 }
