@@ -59,10 +59,8 @@ export async function sendChatCompletionStream(
         }
 
         if (hasUpdates) {
-            // Очищаем кумулятивный текст от возможных оберток ```markdown на лету
             let cleanedContent = unformattedContent;
 
-            // Если текст начинается с открывающего блока кода, срезаем его
             if (cleanedContent.startsWith('```markdown\n')) {
                 cleanedContent = cleanedContent.slice(12);
             } else if (cleanedContent.startsWith('```markdown')) {
