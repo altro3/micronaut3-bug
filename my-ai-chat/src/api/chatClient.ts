@@ -1,4 +1,4 @@
-import type { Message } from '../types/chat';
+import type {Message} from '../types/chat';
 
 const BASE_URL = 'http://localhost:8083';
 
@@ -8,9 +8,9 @@ export async function sendChatCompletionStream(
 ): Promise<void> {
     const response = await fetch(`${BASE_URL}/chat/completions/stream`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({
-            messages: messages.map(({ role, content }) => ({ role, content }))
+            messages: messages.map(({role, content}) => ({role, content}))
         }),
     });
 
@@ -29,42 +29,55 @@ export async function sendChatCompletionStream(
     let unformattedContent = '';
 
     while (true) {
-        const { done, value } = await reader.read();
+        const {done, value} = await reader.read();
         if (done) break;
 
-        chunkBuffer += decoder.decode(value, { stream: true });
+        chunkBuffer += decoder.decode(value, {stream: true});
 
-        // Делим строго по SSE пакетам Spring Boot (\n\n)
-        const packets = chunkBuffer.split('\n\n');
-        chunkBuffer = packets.pop() || '';
+        const lines = chunkBuffer.split('\n');
+        chunkBuffer = lines.pop() || '';
 
         let hasUpdates = false;
 
-        for (const packet of packets) {
-            const cleanPacket = packet.replace(/\r/g, '');
-            const lines = cleanPacket.split('\n');
+        for (const line of lines) {
+            const cleanLine = line.replace(/\r/g, '');
 
-            for (const line of lines) {
-                if (line.startsWith('data:')) {
-                    // Берем абсолютно всё после префикса "data:"
-                    // Никаких срезов пробелов, Spring AI отдает текст "как есть" сразу после двоеточия
-                    const token = line.slice(5);
+            if (cleanLine === '') continue;
 
-                    if (token === '[DONE]') continue;
+            if (cleanLine.startsWith('data:')) {
+                const token = cleanLine.slice(5);
 
-                    // Если пришел пустой токен (data:\n), это явный перенос строки от оркестратора
-                    if (token === '') {
-                        unformattedContent += '\n';
-                    } else {
-                        unformattedContent += token;
-                    }
-                    hasUpdates = true;
+                if (token === '[DONE]') continue;
+
+                if (token === '') {
+                    unformattedContent += '\n';
+                } else {
+                    unformattedContent += token;
                 }
+                hasUpdates = true;
             }
         }
 
         if (hasUpdates) {
-            onChunk(unformattedContent);
+            // Очищаем кумулятивный текст от возможных оберток ```markdown на лету
+            let cleanedContent = unformattedContent;
+
+            // Если текст начинается с открывающего блока кода, срезаем его
+            if (cleanedContent.startsWith('```markdown\n')) {
+                cleanedContent = cleanedContent.slice(12);
+            } else if (cleanedContent.startsWith('```markdown')) {
+                cleanedContent = cleanedContent.slice(11);
+            } else if (cleanedContent.startsWith('```\n')) {
+                cleanedContent = cleanedContent.slice(4);
+            }
+
+            if (cleanedContent.endsWith('\n```')) {
+                cleanedContent = cleanedContent.slice(0, -4);
+            } else if (cleanedContent.endsWith('```')) {
+                cleanedContent = cleanedContent.slice(0, -3);
+            }
+
+            onChunk(cleanedContent);
         }
     }
 
