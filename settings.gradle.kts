@@ -32,7 +32,7 @@ include(
     "myutil",
     "service1",
     "service2",
-    "mcp-server",
+    "mymcp-server",
     "mock-server",
 )
 

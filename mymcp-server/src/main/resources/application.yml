@@ -4,7 +4,7 @@ app:
   trace:
     enabled: true
     export:
-      enabled: true
+      enabled: false
       url: http://localhost:4318/v1/traces
       # Напрямую в викторию
       #url: http://localhost:10428/insert/opentelemetry/v1/traces
@@ -19,7 +19,7 @@ app:
     pretty-print: true
     max-payload-size: 4MB
     export:
-      enabled: true
+      enabled: false
       url: http://localhost:4318/v1/logs
       # Напрямую в викторию
       # url: http://localhost:9428/insert/opentelemetry/v1/logs
@@ -31,7 +31,7 @@ server:
 
 spring:
   application:
-    name: mcp-server
+    name: mymcp-server
   servlet:
     multipart:
       enabled: true
@@ -46,12 +46,13 @@ spring:
     mcp:
       server:
         enabled: true
-        name: adbroker-mcp-server
+        name: adbroker-automation-engine
         version: 1.0.0
-
+        instructions: "Этот сервер предоставляет stateless-инструменты для прямой публикации рекламных кампаний и размещения готовых креативов в кабинетах VK и Яндекс.Директ."
+        protocol: stateless
 management:
   server:
-    port: 9092
+    port: 9090
   observations:
     key-values:
       enabled: true

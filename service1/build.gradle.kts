@@ -12,19 +12,19 @@ plugins {
 val jreImage = "bellsoft/liberica-openjre-alpine:25.0.3-x86_64"
 
 dependencies {
-
-    implementation(projects.mycommon)
-    implementation(projects.myutil)
-    implementation(projects.mytracelog)
-    implementation(projects.myhttp)
-
     implementation(spring.spring.springBootStarterWeb)
     implementation(spring.spring.springBootStarterLog4j2)
     implementation(spring.spring.springBootStarterValidation)
     implementation(spring.spring.springBootStarterActuator)
+    implementation(spring.spring.springBootStarterDataJdbc)
+    implementation(spring.postgresql.postgresql)
     implementation(spring.micrometer.micrometerRegistryOtlp)
     implementation(kot.kotlin.kotlinReflect)
     implementation(libs.kotlin.logging)
+    implementation(projects.mycommon)
+    implementation(projects.myutil)
+    implementation(projects.mytracelog)
+    implementation(projects.myhttp)
 //    implementation(spring.spring.springBootStarterOpenai)
 //    implementation("org.springframework.ai:spring-ai-mcp-client") // Подключится под управление spring-ai-bom
 }

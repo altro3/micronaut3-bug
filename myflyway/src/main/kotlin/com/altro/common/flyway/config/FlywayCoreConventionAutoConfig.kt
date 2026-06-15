@@ -9,8 +9,8 @@ import com.altro.common.flyway.FlywayConventionConst.SEPARATOR_MIGRATION
 import com.altro.common.flyway.FlywayConventionConst.SEPARATOR_PLACEHOLDER
 import com.altro.common.flyway.FlywayMetadataResolver
 import org.flywaydb.core.Flyway
-import org.flywaydb.core.api.Location
 import org.flywaydb.core.api.configuration.ClassicConfiguration
+import org.flywaydb.core.api.locations.LocationParser.parseLocation
 import org.springframework.beans.factory.ObjectProvider
 import org.springframework.boot.autoconfigure.AutoConfiguration
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBooleanProperty
@@ -27,7 +27,7 @@ import javax.sql.DataSource
 
 @AutoConfiguration(
     before = [FlywayAutoConfiguration::class],
-    after = [DataSourceAutoConfiguration::class]
+    after = [DataSourceAutoConfiguration::class],
 )
 @ConditionalOnBooleanProperty("spring.flyway.enabled", matchIfMissing = true)
 @ConditionalOnClass(Flyway::class)
@@ -84,7 +84,7 @@ class FlywayCoreConventionAutoConfig {
 
         // Выставляем динамически отсканированные пути к папкам-листьям
         val allLocations = flywayMetadataResolver.getResolvedLocations()
-        configuration.setLocations(*allLocations.map { Location(it) }.toTypedArray())
+        configuration.setLocations(*allLocations.map { parseLocation(it) }.toTypedArray())
 
         // Собираем финальный инстанс Flyway
         val fluentConfiguration = Flyway.configure(configuration.classLoader)

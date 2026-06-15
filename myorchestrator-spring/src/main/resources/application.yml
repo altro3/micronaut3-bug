@@ -66,6 +66,16 @@ spring:
         port: 6334
         collection-name: ad_rules_collection
         initialize-schema: true
+        connections:
+    mcp:
+      client:
+        enabled: true
+        name: adbroker-orchestrator-client
+        version: 1.0.0
+        streamable-http:
+          connections:
+            adbroker-automation:
+              url: http://localhost:8090
 
 management:
   server:

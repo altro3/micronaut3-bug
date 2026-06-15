@@ -59,7 +59,7 @@ spring:
 
 management:
   server:
-    port: 9091
+    port: 9081
   observations:
     key-values:
       enabled: true
