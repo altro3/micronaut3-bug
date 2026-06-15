@@ -8,7 +8,7 @@ plugins {
     alias(libs.plugins.kotlin.spring)
 }
 
-val jreImage = "bellsoft/liberica-openjre-alpine:25.0.2-x86_64"
+val jreImage = "bellsoft/liberica-openjre-alpine:25.0.3-x86_64"
 
 dependencies {
     implementation(springAi.spring.springAiStarterMcpServerWebmvc)

@@ -9,10 +9,10 @@ plugins {
     alias(libs.plugins.kotlin.kapt)
 }
 
-val jreImage = "bellsoft/liberica-openjre-alpine:25.0.2-x86_64"
+val jreImage = "bellsoft/liberica-openjre-alpine:25.0.3-x86_64"
 
 dependencies {
-    // Внутренние модули проекта через строго верный type-safe синтаксис
+
     implementation(projects.mycommon)
     implementation(projects.myutil)
     implementation(projects.mytracelog)

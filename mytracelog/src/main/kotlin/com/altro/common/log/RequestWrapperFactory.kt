@@ -7,7 +7,11 @@ import jakarta.servlet.ServletInputStream
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletRequestWrapper
 import jakarta.servlet.http.Part
+import org.springframework.http.HttpHeaders.ACCEPT
+import org.springframework.http.HttpHeaders.CONTENT_TYPE
+import org.springframework.http.HttpHeaders.UPGRADE
 import org.springframework.http.MediaType
+import org.springframework.http.MediaType.TEXT_EVENT_STREAM_VALUE
 import org.springframework.util.unit.DataSize
 import java.io.BufferedReader
 import java.io.ByteArrayInputStream
@@ -24,14 +28,14 @@ object RequestWrapperFactory {
     }
 
     fun isStreamingRequest(rq: HttpServletRequest): Boolean {
-        val acceptHeader = rq.getHeader("Accept") ?: ""
-        val contentTypeHeader = rq.getHeader("Content-Type") ?: ""
-        val upgradeHeader = rq.getHeader("Upgrade") ?: ""
+        val acceptHeader = rq.getHeader(ACCEPT) ?: ""
+        val contentTypeHeader = rq.getHeader(CONTENT_TYPE) ?: ""
+        val upgradeHeader = rq.getHeader(UPGRADE) ?: ""
 
-        return acceptHeader.contains("text/event-stream") ||
-                contentTypeHeader.contains("text/event-stream") ||
-                upgradeHeader.equals("websocket", ignoreCase = true) ||
-                rq.requestURI.endsWith("/sse")
+        return acceptHeader.contains(TEXT_EVENT_STREAM_VALUE, ignoreCase = true)
+                || contentTypeHeader.contains(TEXT_EVENT_STREAM_VALUE, ignoreCase = true)
+                || upgradeHeader.equals("websocket", ignoreCase = true)
+                || rq.requestURI.endsWith("/sse")
     }
 
     class CachedBodyRequestWrapper(

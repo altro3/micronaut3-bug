@@ -12,7 +12,7 @@ app:
     jdbc:
       enabled: true
   log:
-    enabled: false
+    enabled: true
     mdc-keys: test
     pretty-print: true
     max-payload-size: 4MB

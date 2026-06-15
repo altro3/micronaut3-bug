@@ -8,7 +8,10 @@ export async function sendChatCompletionStream(
 ): Promise<void> {
     const response = await fetch(`${BASE_URL}/chat/completions/stream`, {
         method: 'POST',
-        headers: {'Content-Type': 'application/json'},
+        headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'text/event-stream',
+        },
         body: JSON.stringify({
             messages: messages.map(({role, content}) => ({role, content}))
         }),
