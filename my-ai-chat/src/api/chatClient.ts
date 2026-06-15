@@ -34,25 +34,32 @@ export async function sendChatCompletionStream(
 
         chunkBuffer += decoder.decode(value, { stream: true });
 
-        const lines = chunkBuffer.split('\n');
-        chunkBuffer = lines.pop() || '';
+        // Делим строго по SSE пакетам Spring Boot (\n\n)
+        const packets = chunkBuffer.split('\n\n');
+        chunkBuffer = packets.pop() || '';
 
         let hasUpdates = false;
 
-        for (const line of lines) {
-            const cleanLine = line.replace(/\r/g, '');
+        for (const packet of packets) {
+            const cleanPacket = packet.replace(/\r/g, '');
+            const lines = cleanPacket.split('\n');
 
-            if (cleanLine.startsWith('data:')) {
-                const token = cleanLine.slice(5);
+            for (const line of lines) {
+                if (line.startsWith('data:')) {
+                    // Берем абсолютно всё после префикса "data:"
+                    // Никаких срезов пробелов, Spring AI отдает текст "как есть" сразу после двоеточия
+                    const token = line.slice(5);
 
-                if (token === '[DONE]') continue;
+                    if (token === '[DONE]') continue;
 
-                if (token === '') {
-                    unformattedContent += '\n';
-                } else {
-                    unformattedContent += token;
+                    // Если пришел пустой токен (data:\n), это явный перенос строки от оркестратора
+                    if (token === '') {
+                        unformattedContent += '\n';
+                    } else {
+                        unformattedContent += token;
+                    }
+                    hasUpdates = true;
                 }
-                hasUpdates = true;
             }
         }
 

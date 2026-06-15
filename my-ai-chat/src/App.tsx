@@ -38,12 +38,16 @@ export default function App() {
             // Передаем логику кумулятивной замены контента
             await sendChatCompletionStream(updatedMessages, (fullCleanText) => {
                 setMessages((prev) => {
-                    const assistantMsg = prev.find(m => m.id === assistantMessageId);
-                    if (!assistantMsg) {
-                        return [...prev, { id: assistantMessageId, role: 'assistant', content: fullCleanText }];
-                    } else {
-                        return prev.map(m => m.id === assistantMessageId ? { ...m, content: fullCleanText } : m);
+                    const exists = prev.some(m => m.id === assistantMessageId);
+                    if (!exists) {
+                        return [
+                            ...prev,
+                            { id: assistantMessageId, role: 'assistant', content: fullCleanText }
+                        ];
                     }
+                    return prev.map(m =>
+                        m.id === assistantMessageId ? { ...m, content: fullCleanText } : m
+                    );
                 });
             });
 
@@ -55,43 +59,6 @@ export default function App() {
             setIsLoading(false);
         }
     };
-
-    // const handleSendMessage = async (text: string) => {
-    //
-    //     if (isLoading) return;
-    //
-    //     const userMessage: Message = {
-    //         id: Date.now().toString(),
-    //         role: 'user',
-    //         content: text,
-    //     };
-    //
-    //     const updatedMessages = [...messages, userMessage];
-    //     setMessages(updatedMessages);
-    //     setIsLoading(true);
-    //
-    //     try {
-    //         // Вызываем изолированный метод клиента
-    //         const aiContent = await sendChatCompletion(updatedMessages);
-    //
-    //         setMessages((prev) => [...prev, {
-    //             id: (Date.now() + 1).toString(),
-    //             role: 'assistant',
-    //             content: aiContent,
-    //         }]);
-    //         setStatus('connected');
-    //     } catch (error) {
-    //         console.error('Failed to orchestrate chat:', error);
-    //         setStatus('error');
-    //         setMessages((prev) => [...prev, {
-    //             id: Date.now().toString(),
-    //             role: 'assistant',
-    //             content: '❌ Ошибка связи с оркестратором. Убедись, что бэкенд запущен на порту 8083.',
-    //         }]);
-    //     } finally {
-    //         setIsLoading(false);
-    //     }
-    // };
 
     return (
         <div className="flex h-screen bg-gray-900 text-gray-100 font-sans">
