@@ -21,28 +21,27 @@ class ChatOrchestrator(
     fun orchestrateChatStream(rq: ChatRq): Flux<String> {
         val userPrompt = rq.messages.lastOrNull()?.content ?: ""
 
-        // ТРИГГЕР: Если пользователь просит создать кампанию/бриф — запускаем агентный движок
         if (userPrompt.contains("кампани", ignoreCase = true) || userPrompt.contains("реклам", ignoreCase = true)) {
             return Flux.create { sink ->
-                try {
-                    marketingEngine.executeOrchestration(userPrompt) { state ->
-                        // Превращаем стейты в красивый Markdown-текст для фронтенда
-                        val markdownChunk = convertStateToMarkdown(state)
-                        if (markdownChunk.isNotEmpty()) {
-                            sink.next(markdownChunk)
+                Schedulers.boundedElastic().schedule {
+                    try {
+                        marketingEngine.executeOrchestration(userPrompt) { state ->
+                            val markdownChunk = convertStateToMarkdown(state)
+                            if (markdownChunk.isNotEmpty()) {
+                                sink.next(markdownChunk)
+                            }
                         }
+                        sink.complete()
+                    } catch (e: Exception) {
+                        log.error(e) { "Error" }
+                        sink.next("\n\n❌ **Ошибка оркестратора:** ${e.message}\n")
+                        sink.complete()
                     }
-                    sink.complete()
-                } catch (e: Exception) {
-                    log.error(e) { "Error" }
-                    sink.next("\n\n❌ **Ошибка оркестратора:** ${e.message}\n")
-                    sink.complete()
                 }
-            }.subscribeOn(Schedulers.boundedElastic()) // Запускаем в пул потоков, чтобы не блокировать Netty/Tomcat
+            }.subscribeOn(Schedulers.boundedElastic())
         }
 
-        // Старый сквозной чат (fallback), если это обычный вопрос
-        return fallbackStream(rq)
+        return chatClient.prompt().user(rq.messages.last().content).stream().content()
     }
 
     private fun convertStateToMarkdown(state: OrchestrationState): String {
@@ -83,10 +82,5 @@ class ChatOrchestrator(
                 sb.toString()
             }
         }
-    }
-
-    private fun fallbackStream(rq: ChatRq): Flux<String> {
-        // Здесь ваш старый код сквозного стриминга chatClient.prompt()...stream().content()
-        return chatClient.prompt().user(rq.messages.last().content).stream().content()
     }
 }

@@ -35,7 +35,6 @@ export default function App() {
         setIsLoading(true);
 
         try {
-            // Передаем логику кумулятивной замены контента
             await sendChatCompletionStream(updatedMessages, (fullCleanText) => {
                 setMessages((prev) => {
                     const exists = prev.some(m => m.id === assistantMessageId);

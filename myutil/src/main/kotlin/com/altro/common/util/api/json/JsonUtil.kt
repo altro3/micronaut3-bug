@@ -13,9 +13,9 @@ import tools.jackson.module.kotlin.KotlinModule
 object JsonUtil {
 
     fun createMapper() =
-        jonBuilder().build()
+        jsonBuilder().build()
 
-    fun jonBuilder() =
+    fun jsonBuilder() =
         JsonMapper.builder()
             .accessorNaming(
                 DefaultAccessorNamingStrategy.Provider()

@@ -6,12 +6,17 @@ import com.altro.myorchestrator.api.dto.OrchestrationState
 import com.altro.myorchestrator.api.dto.Platform
 import io.github.oshai.kotlinlogging.KotlinLogging
 import io.modelcontextprotocol.client.McpSyncClient
+import io.modelcontextprotocol.spec.McpSchema.CallToolRequest
 import org.springframework.ai.chat.client.ChatClient
+import org.springframework.ai.chat.prompt.ChatOptions
 import org.springframework.ai.mcp.SyncMcpToolCallback
 import org.springframework.ai.vectorstore.SearchRequest
 import org.springframework.ai.vectorstore.VectorStore
+import org.springframework.ai.vectorstore.filter.FilterExpressionBuilder
 import org.springframework.core.ParameterizedTypeReference
 import org.springframework.stereotype.Service
+import tools.jackson.databind.json.JsonMapper
+import tools.jackson.module.kotlin.jacksonTypeRef
 import java.time.Instant
 import java.util.UUID
 import java.util.concurrent.CopyOnWriteArrayList
@@ -21,6 +26,7 @@ class MarketingOrchestratorEngine(
     private val chatClientBuilder: ChatClient.Builder,
     private val vectorStore: VectorStore,
     private val mcpClient: McpSyncClient,
+    private val jsonMapper: JsonMapper,
 ) {
     private val log = KotlinLogging.logger {}
     private val chatClient by lazy { chatClientBuilder.build() }
@@ -60,7 +66,7 @@ class MarketingOrchestratorEngine(
         val platforms = analysisResult.recommendations.map { it.platform }
 
         // Шаг 2: Поиск правил в Qdrant
-        val moderationRules = searchAdvertisingRules("${analysisResult.audienceDescription} $briefText")
+        val moderationRules = searchAdvertisingRules("правила модерации и лимиты символов " + platforms.joinToString { it.name }, platforms)
 
         // Шаг 3: Генерация креативов
         statusConsumer(OrchestrationState.CreativeGeneration(platforms, analysisResult.audienceDescription))
@@ -96,21 +102,27 @@ class MarketingOrchestratorEngine(
             ?: throw IllegalStateException("Failed to parse analysis result")
     }
 
-    /**
-     * Шаг 2: RAG поиск по правилам модерации в Qdrant
-     */
-    private fun searchAdvertisingRules(query: String): String =
+    private fun searchAdvertisingRules(query: String, platforms: List<Platform>): String =
         try {
-            val searchRequest = SearchRequest.builder()
+            val requestBuilder = SearchRequest.builder()
                 .query(query)
                 .topK(3)
-                .similarityThreshold(0.5)
-                .build()
+//                .similarityThreshold(0.5)
 
+            if (platforms.isNotEmpty()) {
+                val platformNames = platforms.map { it.name }
+                val b = FilterExpressionBuilder()
+                    .`in`("platform", platformNames)
+                    .build()
+
+                requestBuilder.filterExpression(b)
+            }
+
+            val searchRequest = requestBuilder.build()
             val matchedDocs = vectorStore.similaritySearch(searchRequest)
 
             if (matchedDocs.isEmpty()) {
-                "Локальная база правил модерации пуста. Сгенерируй стандартный качественный креатив."
+                "Локальная база правил модерации пуста для платформ $platforms. Сгенерируй стандартный качественный креатив."
             } else {
                 matchedDocs.joinToString(separator = "\n\n") { doc ->
                     "[База знаний - ${doc.metadata["platform"] ?: "Общее"}]: ${doc.text}"
@@ -121,41 +133,58 @@ class MarketingOrchestratorEngine(
             "База знаний правил временно недоступна."
         }
 
-    /**
-     * Шаг 3: Структурированная генерация креативов с учетом правил RAG
-     */
     private fun generateCreatives(analysisResult: AnalysisResult, moderationRules: String): Map<Platform, Creative> {
-        val creativePrompt = """
-    На основе описания целевой аудитории: '${analysisResult.audienceDescription}', 
-    сгенерируй рекламные креативы отдельно для каждой платформы: ${analysisResult.recommendations.map { it.platform }.joinToString()}. 
-    
-    ПРАВИЛА И ОГРАНИЧЕНИЯ ИЗ БАЗЫ ЗНАНИЙ QDRANT (ОБЯЗАТЕЛЬНО учти их при написании текстов):
-    $moderationRules
-    
-    ВЫДАЙ ОТВЕТ СТРОГО В ФОРМАТЕ JSON. 
-    Ответь ТОЛЬКО чистым JSON-объектом, НЕ оборачивай его в markdown-теги типа ```json ... ```. Начни ответ сразу с символа {.
-    
-    КРИТИЧЕСКОЕ ТРЕБОВАНИЕ: Значением каждой платформы должен быть ОДИН объект JSON с ключами "title" и "bodyText".
-    КАТЕГОРИЧЕСКИ ЗАПРЕЩЕНО использовать квадратные скобки [ ] и массивы внутри платформ! Только фигурные скобки { }.
-    
-    Пример структуры ответа:
-    {
-      "VK_ADS": {
-        "title": "Текст",
-        "bodyText": "Текст"
-      },
-      "YANDEX_DIRECT": {
-        "title": "Текст",
-        "bodyText": "Текст"
-      }
-    }
-""".trimIndent()
+        val platformsList = analysisResult.recommendations.map { it.platform }.joinToString()
 
-        return chatClient.prompt()
-            .user(creativePrompt)
+        val systemInstruction = """
+            Вы — изолированный API-компонент генерации текстов. Вам ЗАПРЕЩЕНО общаться с пользователем, писать пояснения или вступления.
+            Вы должны вернуть ответ СТРОГО в формате валидного JSON-объекта, соответствующего структуре.
+            НЕ используйте markdown-разметку и кавычки ```json. Начните ответ сразу со знака {.
+            
+            Структура JSON:
+            {
+              "VK_ADS": {
+                "title": "текст",
+                "bodyText": "текст"
+              },
+              "YANDEX_DIRECT": {
+                "title": "текст",
+                "bodyText": "текст"
+              }
+            }
+        """.trimIndent()
+
+        val userPrompt = """
+            На основе описания целевой аудитории: '${analysisResult.audienceDescription}', 
+            напиши короткие рекламные тексты (заголовок title и текст объявления bodyText) отдельно для платформ: $platformsList.
+            
+            ПРАВИЛА МОДЕРАЦИИ ИЗ БАЗЫ ЗНАНИЙ (Обязательно примени их к текстам):
+            $moderationRules
+        """.trimIndent()
+
+        log.info { "=== [DEBUG] Шаг 3: Отправка промпта в Qwen-35B. Лимит 400 токенов ===" }
+
+        // Блокирующий вызов с жестким ограничением максимального количества токенов ответа
+        val finalRawJson = chatClient.prompt()
+            .system(systemInstruction)
+            .user(userPrompt)
+//            .options(ChatOptions.builder().maxTokens(4000))
             .call()
-            .entity(object : ParameterizedTypeReference<Map<Platform, Creative>>() {})
-            ?: throw IllegalStateException("Failed to generate creatives")
+            .content()?.trim()
+            ?: throw IllegalStateException("Модель вернула пустой ответ на Шаге 3")
+
+        log.info { "=== [DEBUG] Шаг 3: Ответ от ИИ успешно получен ===" }
+        log.info { "Сырой JSON от модели:\n$finalRawJson" }
+
+        return try {
+            jsonMapper.readValue(
+                finalRawJson,
+                jacksonTypeRef<Map<Platform, Creative>>(),
+            )
+        } catch (e: Exception) {
+            log.error(e) { "Ошибка парсинга JSON на Шаге 3. Текст ответа был:\n$finalRawJson" }
+            throw IllegalStateException("Модель выдала невалидную структуру JSON на Шаге 3", e)
+        }
     }
 
     /**
@@ -166,53 +195,61 @@ class MarketingOrchestratorEngine(
         platforms: List<Platform>,
         creatives: Map<Platform, Creative>,
         logs: CopyOnWriteArrayList<String>,
-        statusConsumer: (OrchestrationState) -> Unit // Прокидываем консьюмер статусов сюда!
+        statusConsumer: (OrchestrationState) -> Unit
     ): Map<Platform, String?> {
         val campaignIds = mutableMapOf<Platform, String?>()
 
         try {
+            // 1. Извлекаем список инструментов напрямую через mcpClient
+            val toolsResult = mcpClient.listTools()
+            val availableTools = toolsResult.tools
+            log.info { "Доступные в системе инструменты MCP: ${availableTools.map { it.name }}" }
+
             platforms.forEach { platform ->
                 val creative = creatives[platform]
                 if (creative != null) {
-                    val startMsg = "🚀 АГЕНТ: Начинаю публикацию и вызов MCP-инструментов для $platform..."
-                    logs.add(startMsg)
-
-                    // СРАЗУ ОТПРАВЛЯЕМ СТАТУС ВО ФРОНТЕНД, чтобы текст мгновенно побежал на экране!
-                    statusConsumer(OrchestrationState.Completed(logs.toList()))
-
-                    val agentPrompt = """
-                        [SYSTEM CONTEXT]
-                        You are an automated API router. You cannot talk to the user. You cannot output Markdown or JSON text.
-                        Your ONLY task is to call the appropriate tool for the platform $platform.
-                        
-                        [DATA]
-                        Campaign ID: $campaignId
-                        Creative Title: '${creative.title}'
-                        Creative Body Text: '${creative.bodyText}'
-                        
-                        [CRITICAL INSTRUCTION]
-                        You must IMMEDIATELY execute either 'createVkCampaign' or 'createYandexCampaign'.
-                        DO NOT generate any text, explanation, or fake JSON outputs. 
-                        EXECUTE THE TOOL DIRECTLY NOW.
-                    """.trimIndent()
-
-                    // Дёргаем твой агентский метод автовызова тулов
-                    val agentResult = executeTrueAgentOrchestration(agentPrompt) {
-                        // Холостой консьюмер для внутренних под-этапов
+                    val toolName = when (platform) {
+                        Platform.VK_ADS -> "createVkCampaign"
+                        Platform.YANDEX_DIRECT -> "createYandexCampaign"
                     }
 
-                    val successMsg = "✅ АГЕНТ ОТВЕТ ($platform): $agentResult"
-                    logs.add(successMsg)
-
-                    // МГНОВЕННО ОПТИМИЗИРУЕМ СТАТУС — пользователь сразу видит успешный ответ от MCP!
+                    val startMsg = "🚀 АГЕНТ: Отправка прямого RPC-запроса в инструмент '$toolName' для $platform..."
+                    logs.add(startMsg)
                     statusConsumer(OrchestrationState.Completed(logs.toList()))
 
-                    campaignIds[platform] = "act_" + UUID.randomUUID().toString().take(8)
+                    // 2. Проверяем, что сервер 8090 отдает этот инструмент
+                    if (availableTools.any { it.name == toolName }) {
+                        // Строим аргументы для вызова Kotlin-метода
+                        val arguments = buildMcpArguments(platform, campaignId, creative)
+
+                        // 3. Собираем объект запроса точно по контракту твоего JSONRPCRequest
+                        val request = CallToolRequest(
+                            toolName,
+                            arguments,
+                            mapOf() // Пустая мапа метаданных _meta
+                        )
+
+                        log.info { "Физический вызов метода MCP: $toolName" }
+
+                        // ХУЯКС! Прямой вызов метода через клиент.
+                        // Никакого ИИ, чистый, быстрый и бесперебойный HTTP запрос!
+                        val mcpResponse = mcpClient.callTool(request)
+
+                        val successMsg = "✅ МСР УСПЕХ ($platform): ${mcpResponse.content}"
+                        logs.add(successMsg)
+                        statusConsumer(OrchestrationState.Completed(logs.toList()))
+
+                        campaignIds[platform] = "act_" + UUID.randomUUID().toString().take(8)
+                    } else {
+                        val errorMsg = "❌ МСР ОШИБКА ($platform): Инструмент '$toolName' не найден на сервере 8090"
+                        logs.add(errorMsg)
+                        statusConsumer(OrchestrationState.Completed(logs.toList()))
+                    }
                 }
             }
         } catch (e: Exception) {
-            log.error(e) { "Сбой автоматизации MCP" }
-            logs.add("❌ Критический сбой автоматизации: ${e.message}")
+            log.error(e) { "Критический сбой выполнения MCP" }
+            logs.add("❌ КРИТИЧЕСКАЯ ОШИБКА АВТОМАТИЗАЦИИ: ${e.message}")
             statusConsumer(OrchestrationState.Completed(logs.toList()))
         }
 

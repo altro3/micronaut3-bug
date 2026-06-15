@@ -96,6 +96,6 @@ logging:
     org.postgresql: info
     org.eclipse: info
     org.hibernate: info
-    org.springframework: info
+    org.springframework: debug
     #    reactor.netty.http.server.HttpServer: DEBUG
     reactor: info
