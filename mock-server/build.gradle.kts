@@ -16,7 +16,7 @@ dependencies {
 
     implementation(spring.spring.springBootStarterWeb)
     implementation(spring.spring.springBootStarterLog4j2)
-    implementation(kot.kotlin.kotlinReflect)
+    implementation(kt.kotlin.kotlinReflect)
     implementation(libs.wiremock)
     implementation(projects.mycommon)
     implementation(projects.myutil)

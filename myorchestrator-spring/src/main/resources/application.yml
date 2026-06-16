@@ -77,6 +77,13 @@ spring:
           connections:
             adbroker-automation:
               url: http://localhost:8090
+  datasource:
+    url: jdbc:postgresql://localhost:5432/orchestrator_spring?currentSchema=target
+    username: orchestrator_spring
+    password: 1
+  flyway:
+    enabled: false
+    schemas: target
 
 management:
   server:

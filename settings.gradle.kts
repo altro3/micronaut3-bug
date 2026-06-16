@@ -15,7 +15,7 @@ dependencyResolutionManagement {
 
     versionCatalogs {
         generate("spring") { fromToml("spring-boot-dependencies") }
-        generate("kot") { fromToml("kotlin") }
+        generate("kt") { fromToml("kotlin") }
         generate("coroutines") { fromToml("coroutines") }
         generate("springAi") { fromToml("spring-ai") }
     }

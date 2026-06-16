@@ -16,7 +16,7 @@ dependencies {
     implementation(spring.spring.springBootStarterValidation)
     implementation(spring.spring.springBootStarterActuator)
     implementation(spring.micrometer.micrometerRegistryOtlp)
-    implementation(kot.kotlin.kotlinReflect)
+    implementation(kt.kotlin.kotlinReflect)
     implementation(libs.kotlin.logging)
     implementation(projects.mycommon)
     implementation(projects.myutil)

@@ -1,22 +1,20 @@
 package com.altro.myorchestrator.api
 
 import com.altro.myorchestrator.api.dto.BriefRequest
-import com.altro.myorchestrator.service.MarketingOrchestratorEngine
+import com.altro.myorchestrator.service.MarketingOrchestratorEngineOld
 import jakarta.validation.Valid
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.launch
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
-import org.springframework.web.bind.annotation.RequestMapping
-import org.springframework.web.bind.annotation.RestController
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter
 import java.util.concurrent.Executors
 
 //@RequestMapping("/api/v1")
 //@RestController
 class InternalApiController(
-    private val engine: MarketingOrchestratorEngine
+    private val engine: MarketingOrchestratorEngineOld
 ) {
 
     @PostMapping("/orchestrate")

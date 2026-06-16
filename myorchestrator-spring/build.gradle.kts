@@ -6,28 +6,37 @@ plugins {
     alias(libs.plugins.spring.boot)
     alias(libs.plugins.kotlin.jvm)
     alias(libs.plugins.kotlin.spring)
+    alias(libs.plugins.kotlin.kapt)
 }
 
 val jreImage = "bellsoft/liberica-openjre-alpine:25.0.3-x86_64"
 
 dependencies {
+
+    kapt(spring.spring.springBootConfigurationProcessor)
+
     implementation(spring.spring.springBootStarterWeb)
     implementation(spring.spring.springBootStarterLog4j2)
     implementation(spring.spring.springBootStarterValidation)
     implementation(spring.spring.springBootStarterActuator)
+    implementation(spring.spring.springBootStarterDataJdbc)
+    implementation(spring.flywaydb.flywayCore)
+    implementation(spring.flywaydb.flywayDatabasePostgresql)
+    implementation(spring.postgresql.postgresql)
+    implementation(spring.micrometer.micrometerRegistryOtlp)
     implementation(springAi.spring.springAiStarterModelOpenai)
     implementation(springAi.spring.springAiStarterVectorStoreQdrant)
     implementation(springAi.spring.springAiStarterMcpClient)
     implementation(springAi.spring.mcpSpringWebmvc)
-    implementation(spring.micrometer.micrometerRegistryOtlp)
     implementation(coroutines.kotlinx.kotlinxCoroutinesCoreJvm)
     implementation(coroutines.kotlinx.kotlinxCoroutinesSlf4j)
-    implementation(kot.kotlin.kotlinReflect)
+    implementation(kt.kotlin.kotlinReflect)
     implementation(libs.kotlin.logging)
     implementation(projects.mycommon)
     implementation(projects.myutil)
     implementation(projects.mytracelog)
     implementation(projects.myhttp)
+    implementation(projects.myflyway)
 }
 configurations.all {
     exclude(group = "org.springframework.boot", module = "spring-boot-starter-logging")
@@ -50,23 +59,8 @@ jib {
             "-XX:+UseStringDeduplication",
             "-XX:MaxRAMPercentage=75.0",
             "-Dfile.encoding=UTF-8",
-//            "-Dspring.aot.enabled=true",
         )
     }
-
-    extraDirectories {
-        paths {
-            path {
-                setFrom("build/classes/java/aot")
-                into = "/app/classes"
-            }
-            path {
-                setFrom("build/generated/aotResources")
-                into = "/app/resources"
-            }
-        }
-    }
-
     setAllowInsecureRegistries(true)
 }
 

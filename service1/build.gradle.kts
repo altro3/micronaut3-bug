@@ -19,7 +19,7 @@ dependencies {
     implementation(spring.spring.springBootStarterDataJdbc)
     implementation(spring.postgresql.postgresql)
     implementation(spring.micrometer.micrometerRegistryOtlp)
-    implementation(kot.kotlin.kotlinReflect)
+    implementation(kt.kotlin.kotlinReflect)
     implementation(libs.kotlin.logging)
     implementation(projects.mycommon)
     implementation(projects.myutil)
