@@ -28,12 +28,12 @@ include(
     "myflyway",
     "myhttp",
     "mytracelog",
-    "myorchestrator-spring",
     "myutil",
-    "service1",
-    "service2",
-    "mymcp-server",
     "mock-server",
+    "myorchestrator-spring",
+    "mymcp-server",
+    "service-vk",
+    "service-yad",
 )
 
 enableFeaturePreview("TYPESAFE_PROJECT_ACCESSORS")

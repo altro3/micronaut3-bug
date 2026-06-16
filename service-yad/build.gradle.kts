@@ -25,12 +25,6 @@ dependencies {
     implementation(spring.postgresql.postgresql)
     implementation(spring.caffeine.caffeine)
     implementation(spring.micrometer.micrometerRegistryOtlp)
-    implementation(springAi.spring.springAiStarterModelOpenai)
-    implementation(springAi.spring.springAiStarterVectorStoreQdrant)
-    implementation(springAi.spring.springAiStarterMcpClient)
-    implementation(springAi.spring.mcpSpringWebmvc)
-    implementation(coroutines.kotlinx.kotlinxCoroutinesCoreJvm)
-    implementation(coroutines.kotlinx.kotlinxCoroutinesSlf4j)
     implementation(kt.kotlin.kotlinReflect)
     implementation(libs.kotlin.logging)
     implementation(projects.mycommon)
@@ -53,7 +47,7 @@ kotlin {
 
 jib {
     from { image = jreImage }
-    to { image = "localhost:5000/myorchestrator-spring:latest" }
+    to { image = "localhost:5000/service-yad:latest" }
     container {
         jvmFlags = listOf(
             "-XX:+UseG1GC",

@@ -16,22 +16,33 @@ data class CampaignSession(
 ) {
 
     data class SessionContext(
-        // Шаг 1: Гео
-        val selectedRegions: List<String> = emptyList(),
+        val selectedPlatform: Platform? = null,
 
-        // Шаг 2: Целевая аудитория
+        val campaignData: MarketingCampaignData = MarketingCampaignData(),
+
+        val mcpAvailableRegions: List<McpDictionaryItem> = emptyList(),
+        val mcpAvailableAges: List<McpDictionaryItem> = emptyList(),
+
         val rawBriefText: String? = null,
-        val targetAudienceDescription: String? = null,
-        val analysisResult: AnalysisResult? = null, // Твой DTO из Части 1
-
-        // Шаг 3: Креативы (Тексты + Картинки)
+        val analysisResult: AnalysisResult? = null,
         val moderationRules: String? = null,
         val generatedCreatives: Map<Platform, CreativeWithImage>? = null,
-
-        // Шаг 4: MCP Паблишинг и логи для биллинга
         val executionLogs: List<String> = emptyList(),
         val platformCampaignIds: Map<Platform, String?> = emptyMap(),
         val paymentInvoiceId: String? = null
+    )
+
+    data class MarketingCampaignData(
+        val name: String? = null,
+        val targetRegionIds: List<String> = emptyList(),
+        val minAge: Int? = null,
+        val maxAge: Int? = null,
+        val budgetLimit: Double? = null
+    )
+
+    data class McpDictionaryItem(
+        val id: String,
+        val name: String,
     )
 
     data class CreativeWithImage(

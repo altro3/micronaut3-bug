@@ -2,6 +2,7 @@ package com.altro.myorchestrator.model
 
 enum class CampaignCreationStep {
     DRAFT, // ШАГ 0: Сессия только создана, бот приветствует и просит регионы
+    PLATFORM_SELECTION,
     REGION_SELECTION,      // Шаг 1: Выбор региона из списка
     AUDIENCE_TARGETING,    // Шаг 2: Выбор и конфигурация аудитории
     CREATIVE_GENERATION,   // Шаг 3: Загрузка или ИИ-генерация креативов (тексты + картинка)

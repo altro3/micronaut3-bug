@@ -6,6 +6,8 @@ app:
     export:
       enabled: false
       url: http://localhost:4318/v1/traces
+      # Напрямую в викторию
+      #url: http://localhost:10428/insert/opentelemetry/v1/traces
       connect-timeout: 2s
     http:
       enabled: true
@@ -19,25 +21,34 @@ app:
     export:
       enabled: false
       url: http://localhost:4318/v1/logs
-
+      # Напрямую в викторию
+      # url: http://localhost:9428/insert/opentelemetry/v1/logs
   integration:
-    mcp-server:
-      http:
-        connect-timeout: 5000
-        read-timeout: 30000
-        max-in-memory-size: 10485760
+    yad:
       endpoints:
-        sse:
-          url: http://localhost:8080/api/v1/mcp
+        get-regions:
+          path: /dict/regions
+          method: GET
+        create-campaign:
+          path: /campaigns/create
+          method: POST
+      http:
+        service-name: yad
+        url: http://localhost:8103
+        type: external
+        compress: true
+        log:
+          pretty-print: true
+          max-payload-size: 4MB
 
 server:
-  port: 8083
+  port: 8081
   tomcat:
     additional-tld-skip-patterns: "*"
 
 spring:
   application:
-    name: myorchestrator-spring
+    name: service1
   servlet:
     multipart:
       enabled: true
@@ -48,38 +59,9 @@ spring:
       add-mappings: false
   main:
     banner-mode: off
-  ai:
-    openai:
-      api-key: local-secret
-      chat:
-        base-url: http://localhost:8500/v1
-        api-key: local-secret
-        model: qwen-35B
-        temperature: 0.7
-      embedding:
-        base-url: http://localhost:8500/v1
-        api-key: local-secret
-        model: qwen-35B
-    vectorstore:
-      qdrant:
-        host: localhost
-        port: 6334
-        collection-name: ad_rules_collection
-        initialize-schema: true
-        connections:
-    mcp:
-      client:
-        enabled: true
-        name: adbroker-orchestrator-client
-        version: 1.0.0
-        requestTimeout: 120s
-        streamable-http:
-          connections:
-            adbroker-automation:
-              url: http://localhost:8090
   datasource:
-    url: jdbc:postgresql://localhost:5432/orchestrator_spring?currentSchema=target
-    username: orchestrator_spring
+    url: jdbc:postgresql://localhost:5432/yad?currentSchema=target
+    username: yad
     password: 1
   flyway:
     enabled: true
@@ -87,7 +69,7 @@ spring:
 
 management:
   server:
-    port: 9083
+    port: 9081
   observations:
     key-values:
       enabled: true
@@ -121,8 +103,6 @@ logging:
     root: debug
     jdk: warn
     sun: warn
-    io.grpc: info
-    io.qdrant: info
     javax: info
     io.netty: info
     com.zaxxer: warn
