@@ -39,35 +39,33 @@ class CreativeGenerationHandler(
         val yadId = session.context.yadCampaignId
             ?: throw IllegalStateException("Критическая ошибка: Сквозной ID service-yad утерян")
 
-        var moderationRules = "Соблюдать стандартные лимиты символов."
+        var moderationRules = "Соблюдать стандартные лимиты символов площадки."
 
-        // 🌟 ИЗВЛЕКАЕМ РЕАЛЬНЫЕ ПРАВИЛА ИЗ АДАПТЕРА ЧЕРЕЗ MCP ПЕРЕД ГЕНЕРАЦИЕЙ
+        // 🌟 ИЗВЛЕКАЕМ АКТУАЛЬНЫЕ ПРАВИЛА ИЗ БАЗЫ АДАПТЕРА ЧЕРЕЗ MCP ПЕРЕД ИНФЕРЕНСОМ
         if (platform == Platform.YANDEX_DIRECT) {
             try {
-                sink.next("📡 Подтягиваю актуальные правила модерации из базы данных адаптера...\n")
+                sink.next("📡 Запрашиваю текущие лимиты и правила модерации из базы данных адаптера...\n")
                 val statusRequest = CallToolRequest("getYandexCampaignStatus", mapOf("campaignId" to yadId), mapOf())
                 val statusResponse = mcpClient.callTool(statusRequest)
 
                 val rootNode = jsonMapper.readTree(statusResponse.content.toString())
-                // Вытаскиваем правила, которые DictService адаптера бережно сохранил в поле errorMessage или колонку таблицы
-                moderationRules = rootNode.path("errorMessage").asString().takeIf { it.isNotBlank() }
+                moderationRules = rootNode.path("errorMessage").asText().takeIf { it.isNotBlank() }
                     ?: "Лимит заголовка — 35 символов, лимит текста объявления — 81 символ."
             } catch (e: Exception) {
-                log.warn { "Не удалось получить правила из адаптера, используем дефолтные лимиты: ${e.message}" }
+                log.warn { "Не удалось получить правила через MCP, используем дефолты: ${e.message}" }
             }
         }
 
-        sink.next("⚡ Запускаю Qwen-35B (n_predict=400). Формирую продающие тексты...\n")
+        sink.next("⚡ Запускаю Qwen-35B (n_predict=400). Формирую рекламный текст объявления...\n")
 
-        // 1. Генерируем чистый текст через локальный инференс, передавая реальные правила модерации
-        val briefContext = session.context.executionLogs.firstOrNull() ?: "Общий бриф"
+        // 1. Генерируем чистый текст через изолированный процессор
+        val briefContext = session.context.executionLogs.firstOrNull() ?: "Общий бриф из истории чата"
         val creative = creativeGeneratorProcessor.generate(platform, briefContext, moderationRules)
 
-        // 2. СРАЗУ пушим готовый текст в service-yad по MCP.
+        // 2. СРАЗУ пушим готовый текст в service-yad через МСР-инструмент
         if (platform == Platform.YANDEX_DIRECT) {
             try {
                 sink.next("📡 Отправляю сгенерированный текст в service-yad через MCP-инструмент submitYandexCreative...\n")
-                // ЖЕЛЕЗОБЕТОННЫЙ ЗАЩИТНЫЙ ЭЛВИС-ОПЕРАТОР ДЛЯ СТРОК С ПЛАТФОРМЫ
                 val mcpRequest = CallToolRequest(
                     "submitYandexCreative",
                     mapOf(
@@ -83,18 +81,18 @@ class CreativeGenerationHandler(
             }
         }
 
-        // 3. Обновляем var-статус шага в оркестраторе
+        // 3. Обновляем var-статус шага в оркестраторе чата
         session.currentStep = CampaignCreationStep.CREATIVE_GENERATION
         session.updatedAt = Instant.now()
         sessionRepository.save(session)
 
-        // 4. Выводим сгенерированные тексты пользователю в React-чат
-        sink.next("✨ **Рекламные тексты успешно сформированы и сохранены:**\n")
+        // 4. Выводим сгенерированные тексты пользователю в чат
+        sink.next("✨ **Рекламные тексты успешно сформированы и сохранены в адаптере:**\n")
         sink.next("\n📢 **ПЛОЩАДКА: [${platform.name}]**\n")
         sink.next("🔹 Заголовок: ${creative.title ?: "Без заголовка"}\n")
         sink.next("🔸 Текст объявления: ${creative.bodyText ?: "Без текста"}\n\n")
 
-        sink.next("🤖 **[Шаг 4/5]**: Проверяем готовность кампании в адаптере и переходим к биллингу? Напишите **'Да'** или **'Публикуй'**.")
+        sink.next("🤖 **[Шаг 5/5]**: Проверяем готовность кампании в адаптере и переходим к биллингу? Напишите **'Да'** или **'Публикуй'**.")
         sink.complete()
     }
 }

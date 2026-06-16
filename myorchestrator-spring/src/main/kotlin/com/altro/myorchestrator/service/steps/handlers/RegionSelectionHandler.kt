@@ -19,33 +19,43 @@ class RegionSelectionHandler(
     private val log = KotlinLogging.logger {}
 
     fun processRegions(session: CampaignSession, userInput: String, sink: FluxSink<String>) {
-        val regions = userInput.split(",").map { it.trim() }
+        // Очищаем ввод от лишних пробелов и разбиваем по запятым
+        val rawRegions = userInput.split(",").map { it.trim() }.filter { it.isNotBlank() }
+
+        if (rawRegions.isEmpty()) {
+            sink.next("⚠️ Пожалуйста, укажите хотя бы один регион или город через запятую (например: *Москва, Нижний Новгород*):")
+            sink.complete()
+            return
+        }
+
         val yadId = session.context.yadCampaignId
 
-        // Если это Яндекс — пушим регионы по сети во внешний service-yad
+        // Если кампания создается под Яндекс — пушим человеческие строки регионов через MCP.
+        // Адаптер service-yad сам внутри себя сопоставит их по ID из Caffeine кэша.
         if (session.context.selectedPlatform == Platform.YANDEX_DIRECT && yadId != null) {
             try {
-                sink.next("📡 Синхронизирую регионы с serviceYad через MCP-инструмент...\n")
+                sink.next("📡 Передаю гео-таргетинг в service-yad через MCP-гейтвей...\n")
+
                 val mcpRequest = CallToolRequest(
                     "bindYandexRegions",
-                    mapOf("campaignId" to yadId, "regionIds" to regions),
+                    mapOf("campaignId" to yadId, "regionIds" to rawRegions),
                     mapOf()
                 )
                 mcpClient.callTool(mcpRequest)
-                log.info { "Успешно вызван MCP bindYandexRegions для ID: $yadId" }
+                log.info { "Успешно выполнен RPC-вызов bindYandexRegions для ID: $yadId" }
             } catch (e: Exception) {
-                log.error(e) { "Сбой отправки регионов в serviceYad" }
-                sink.next("⚠️ Ошибка: Не удалось передать регионы в serviceYad: ${e.message}\n")
+                log.error(e) { "Ошибка синхронизации гео-таргетинга с service-yad" }
+                sink.next("⚠️ Предупреждение: Не удалось автоматически привязать регионы в адаптере Яндекса: ${e.message}\n")
             }
         }
 
-        // Мутируем var свойства напрямую и сохраняем легкий стейт
+        // Чистая мутация var-параметров стейта без оверхеда пересоздания объектов
         session.currentStep = CampaignCreationStep.REGION_SELECTION
         session.updatedAt = Instant.now()
         sessionRepository.save(session)
 
-        sink.next("✅ Регионы таргетинга успешно зафиксированы.\n\n")
-        sink.next("🤖 **[Шаг 3/5]**: Теперь отправьте подробный **текстовый бриф** вашего продукта для ИИ-анализа аудитории:")
+        sink.next("✅ Регионы таргетинга зафиксированы: ${rawRegions.joinToString()}.\n\n")
+        sink.next("🤖 **[Шаг 3/5]**: Теперь отправьте мне подробный **текстовый бриф** вашего продукта (описание, цели, особенности ЦА). ИИ-анализатор изучит его:")
         sink.complete()
     }
 }

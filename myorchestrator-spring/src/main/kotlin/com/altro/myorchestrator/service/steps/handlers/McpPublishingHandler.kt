@@ -18,41 +18,48 @@ class McpPublishingHandler(
         sink: FluxSink<String>,
         isApproved: (String) -> Boolean
     ) {
-        // Проверяем текстовое подтверждение пользователя в чате ("Да"/"Публикуй")
+        // Проверяем текстовый апрув от пользователя ("Да", "Публикуй" и т.д.)
         if (!isApproved(userInput)) {
-            sink.next("⚠️ Ожидаю финального подтверждения. Напишите **'Да'** или **'Публикуй'**, чтобы сформировать счет на оплату.")
+            sink.next("⚠️ Ожидаю финального подтверждения. Напишите **'Да'** или **'Публикуй'**, чтобы выставить счет на оплату кампании.")
             sink.complete()
             return
         }
 
-        sink.next("🚀 АГЕНТ: Кампания уже успешно сформирована и валидирована на стороне service-yad.\n")
-        sink.next("💳 Формирую счет в биллинг-системе...\n")
+        sink.next("🚀 АГЕНТ: Рекламная кампания полностью сформирована и валидирована в service-yad.\n")
+        sink.next("💳 Связываюсь с биллинг-платформой для выставления счета...\n")
 
+        // Генерируем сквозной инвойс
         val invoiceId = "INV-${System.currentTimeMillis()}-${session.campaignId}"
-        val logs = listOf("✅ Кампания полностью укомплектована", "✅ Выставлен инвойс: $invoiceId")
+        val logs = listOf("✅ Кампания укомплектована", "✅ Выставлен инвойс: $invoiceId")
 
-        // ПРАВИЛЬНЫЕ VAR-МУТАЦИИ: Никаких ошибок компиляции, никаких copy() и несуществующих полей!
+        // ЧИСТЫЕ VAR-МУТАЦИИ: Напрямую перезаписываем свойства в твоей модели
         session.currentStep = CampaignCreationStep.PUBLISHING_AND_PAYMENT
         session.context.paymentInvoiceId = invoiceId
         session.context.executionLogs = session.context.executionLogs + logs
         session.updatedAt = Instant.now()
 
-        // Сохраняем мутированный объект в PostgreSQL
+        // Атомарно сохраняем измененный стейт сессии в PostgreSQL
         sessionRepository.save(session)
 
-        sink.next("\n🎉 Отлично! Все этапы автоматизации AdBroker успешно пройдены.\n")
+        sink.next("\n🎉 Поздравляю! Все этапы автоматизации AdBroker успешно завершены.\n")
         sink.next("💳 Сформирован инвойс для оплаты рекламы: **$invoiceId**\n")
-        sink.next("🔗 Перенаправляю вас на платежную платформу...")
+        sink.next("🔗 Перенаправляю ваш интерфейс на платежный шлюз...")
         sink.complete()
     }
 
+    /**
+     * Обработка запросов, когда чат стоит на паузе и ждет оплаты от биллинга
+     */
     fun handleAwaitingPayment(session: CampaignSession, sink: FluxSink<String>) {
-        sink.next("🏁 Реклама уже опубликована. Ожидайте подтверждения транзакции по инвойсу ${session.context.paymentInvoiceId}.")
+        sink.next("🏁 Рекламная кампания уже сформирована. Ожидаю подтверждения транзакции по инвойсу **${session.context.paymentInvoiceId}**.")
         sink.complete()
     }
 
+    /**
+     * Обработка запросов, когда кампания полностью оплачена и закрыта
+     */
     fun handleCompleted(sink: FluxSink<String>) {
-        sink.next("Заказ полностью завершен и оплачен.")
+        sink.next("🏁 Эта кампания полностью оплачена, активна и запущена в рекламной сети.")
         sink.complete()
     }
 }
