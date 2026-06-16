@@ -32,7 +32,6 @@ class McpPublishingHandler(
         val invoiceId = "INV-${System.currentTimeMillis()}-${session.campaignId}"
         val logs = listOf("✅ Кампания укомплектована", "✅ Выставлен инвойс: $invoiceId")
 
-        // ЧИСТЫЕ VAR-МУТАЦИИ: Напрямую перезаписываем свойства в твоей модели
         session.currentStep = CampaignCreationStep.PUBLISHING_AND_PAYMENT
         session.context.paymentInvoiceId = invoiceId
         session.context.executionLogs = session.context.executionLogs + logs

@@ -52,6 +52,22 @@ class InternalCampaignController(
     ): CampaignStepRs =
         internalApiService.submitCreative(id, rq.text).toRs()
 
+    /**
+     * Чтение текущего стейта кампании
+     * GET http://localhost:8090/internal/campaigns/{id}
+     */
+    @GetMapping("/internal/campaigns/{id}")
+    fun getCampaignStatus(@PathVariable id: Long): CampaignStepRs =
+        internalApiService.getCampaign(id).toRs()
+
+    /**
+     * Раздача ГЕО-регионов из Caffeine кэша
+     * GET http://localhost:8090/internal/dictionaries/regions
+     */
+    @GetMapping("/internal/dictionaries/regions")
+    fun getRegions(): List<RegionItemDto> =
+        internalApiService.getCachedRegions()
+
     private fun Campaign.toRs() = CampaignStepRs(
         id = this.id,
         status = this.status,

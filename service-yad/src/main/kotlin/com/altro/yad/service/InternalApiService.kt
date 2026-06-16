@@ -1,12 +1,22 @@
 package com.altro.yad.service
 
+import com.altro.yad.api.dto.RegionItemDto
 import com.altro.yad.model.Campaign
 import org.springframework.stereotype.Service
 
 @Service
 class InternalApiService(
     private val campaignService: CampaignService,
+    private val dictService: DictService,
 ) {
+
+    fun getCachedRegions(): List<RegionItemDto> =
+        dictService.getAvailableRegions().map {
+            RegionItemDto(id = it.id, name = it.name)
+        }
+
+    fun getCampaign(id: Long): Campaign =
+        campaignService.getCampaignById(id)
 
     /**
      * Инициация Шага 1: Создание локального драфта по имени

@@ -1,7 +1,7 @@
 app:
   wiremock:
     enabled: true
-    port: 8083
+    port: 8103
   log:
     enabled: false
   trace:

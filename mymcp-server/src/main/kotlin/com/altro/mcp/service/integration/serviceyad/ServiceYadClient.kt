@@ -2,6 +2,7 @@ package com.altro.mcp.service.integration.serviceyad
 
 import com.altro.common.client.DefaultHttpClient
 import com.altro.mcp.service.integration.serviceyad.config.ServiceYadProperties
+import com.altro.mcp.service.integration.serviceyad.dto.BindAgesRq // Импортируем новое DTO возраста
 import com.altro.mcp.service.integration.serviceyad.dto.BindRegionsRq
 import com.altro.mcp.service.integration.serviceyad.dto.CampaignStepRs
 import com.altro.mcp.service.integration.serviceyad.dto.CreateDraftRq
@@ -19,9 +20,15 @@ class ServiceYadClient(
 ) {
     private val endpoints = props.endpoints
 
+    /**
+     * Шаг 1: Создать черновик кампании (Имя)
+     */
     fun createDraft(request: CreateDraftRq): CampaignStepRs? =
         httpClient.sendRq(endpoints.createDraft, CampaignStepRs::class.java, request)
 
+    /**
+     * Шаг 2: Привязать выбранные ГЕО-регионы к кампании
+     */
     fun bindRegions(id: Long, request: BindRegionsRq): CampaignStepRs? =
         httpClient.sendRq(
             endpoint = endpoints.bindRegions,
@@ -30,6 +37,20 @@ class ServiceYadClient(
             rqBody = request
         )
 
+    /**
+     * Шаг 3: Привязать выбранный возрастной таргетинг к кампании [НОВЫЙ МЕТОД]
+     */
+    fun bindAges(id: Long, request: BindAgesRq): CampaignStepRs? =
+        httpClient.sendRq(
+            endpoint = endpoints.bindAges,
+            responseClass = CampaignStepRs::class.java,
+            pathVars = mapOf("id" to id),
+            rqBody = request
+        )
+
+    /**
+     * Шаг 4: Добавить текст объявления, запустить локальную валидацию и отправить в сеть Яндекса
+     */
     fun submitCreative(id: Long, request: SubmitCreativeRq): CampaignStepRs? =
         httpClient.sendRq(
             endpoint = endpoints.submitCreative,
@@ -38,11 +59,23 @@ class ServiceYadClient(
             rqBody = request,
         )
 
+    /**
+     * Дополнительный шаг: Чтение текущего состояния и технических ошибок из адаптера [НОВЫЙ МЕТОД]
+     */
+    fun getCampaignStatus(id: Long): CampaignStepRs? =
+        httpClient.sendRq(
+            endpoint = endpoints.getCampaignStatus,
+            responseClass = CampaignStepRs::class.java,
+            pathVars = mapOf("id" to id),
+        )
+
+    /**
+     * Получить список доступных регионов из Caffeine-кэша адаптера
+     */
     fun getRegions(): List<RegionItemDto>? =
         httpClient.sendRq(endpoints.getRegions, RS_REGIONS)
 
     companion object {
-
         val RS_REGIONS = object : ParameterizedTypeReference<List<RegionItemDto>>() {}
     }
 }

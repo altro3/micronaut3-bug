@@ -7,6 +7,7 @@ import com.altro.yad.service.integration.yad.YadClient
 import com.altro.yad.service.integration.yad.dto.YadCreateCampaignRq // АКТУАЛЬНЫЙ ПАКЕТ DTO
 import com.altro.yad.service.integration.yad.dto.YadCreateCampaignRq.YadCampaignItem // АКТУАЛЬНЫЙ ПАКЕТ DTO
 import io.github.oshai.kotlinlogging.KotlinLogging
+import org.springframework.data.repository.findByIdOrNull
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.time.Instant
@@ -17,6 +18,9 @@ class CampaignService(
     private val yadClient: YadClient
 ) {
     private val log = KotlinLogging.logger {}
+
+    fun getCampaignById(id: Long): Campaign =
+        campaignRepository.findByIdOrNull(id) ?: throw IllegalArgumentException("Кампания с ID $id не найдена в адаптере Яндекса")
 
     /**
      * ШАГ 1: Создание стартового черновика (Имя)

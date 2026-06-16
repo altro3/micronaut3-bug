@@ -4,58 +4,85 @@ import com.altro.myorchestrator.api.dto.Platform
 import com.altro.myorchestrator.model.CampaignCreationStep
 import com.altro.myorchestrator.model.CampaignSession
 import com.altro.myorchestrator.repository.CampaignSessionRepository
+import com.altro.myorchestrator.service.AiInferenceService
 import io.github.oshai.kotlinlogging.KotlinLogging
 import io.modelcontextprotocol.client.McpSyncClient
 import io.modelcontextprotocol.spec.McpSchema.CallToolRequest
 import org.springframework.stereotype.Component
 import reactor.core.publisher.FluxSink
+import tools.jackson.databind.json.JsonMapper
+import tools.jackson.module.kotlin.jacksonTypeRef
 import java.time.Instant
 
 @Component
 class RegionSelectionHandler(
     private val sessionRepository: CampaignSessionRepository,
-    private val mcpClient: McpSyncClient
+    private val mcpClient: McpSyncClient,
+    private val aiInferenceService: AiInferenceService,
+    private val jsonMapper: JsonMapper
 ) {
     private val log = KotlinLogging.logger {}
 
     fun processRegions(session: CampaignSession, userInput: String, sink: FluxSink<String>) {
-        // Очищаем ввод от лишних пробелов и разбиваем по запятым
-        val rawRegions = userInput.split(",").map { it.trim() }.filter { it.isNotBlank() }
-
-        if (rawRegions.isEmpty()) {
-            sink.next("⚠️ Пожалуйста, укажите хотя бы один регион или город через запятую (например: *Москва, Нижний Новгород*):")
-            sink.complete()
-            return
-        }
-
         val yadId = session.context.yadCampaignId
+        var finalRegionIds = emptyList<String>()
 
-        // Если кампания создается под Яндекс — пушим человеческие строки регионов через MCP.
-        // Адаптер service-yad сам внутри себя сопоставит их по ID из Caffeine кэша.
         if (session.context.selectedPlatform == Platform.YANDEX_DIRECT && yadId != null) {
             try {
-                sink.next("📡 Передаю гео-таргетинг в service-yad через MCP-гейтвей...\n")
+                sink.next("🧠 ИИ-Анализатор [Qwen-35B]: Сопоставляю города со справочником Яндекса...\n")
 
-                val mcpRequest = CallToolRequest(
-                    "bindYandexRegions",
-                    mapOf("campaignId" to yadId, "regionIds" to rawRegions),
-                    mapOf()
-                )
+                // 🌟 ШАГ 1: ЗАПРАШИВАЕМ СПРАВОЧНИК СТРОГО ЧЕРЕЗ МСР-ИНСТРУМЕНТ
+                val regionsRequest = CallToolRequest("getRegionsList", emptyMap(), emptyMap())
+                val regionsResponse = mcpClient.callTool(regionsRequest)
+                val dictionaryJson = regionsResponse.content.toString()
+
+                // ШАГ 2: Просим локальный ИИ сделать нечеткое сопоставление (Fuzzy Matching)
+                val systemInstruction = """
+                    Вы — изолированный API-компонент нечеткого поиска. Вам ЗАПРЕЩЕНО общаться с пользователем.
+                    Вам на вход дан справочник регионов в формате JSON и текстовый ввод пользователя.
+                    Найдите в справочнике регионы, которые упомянул пользователь (учитывайте сокращения, сленг, опечатки, например 'питер' -> 'Санкт-Петербург', 'нск' -> 'Новосибирск').
+                    Вы должны вернуть ответ СТРОГО в формате валидного JSON-массива строк, содержащего только ID найденных регионов.
+                    НЕ используйте markdown-разметку и кавычки ```json. Начните ответ сразу со знака [.
+                    Пример ответа: ["id_1", "id_2"]
+                """.trimIndent()
+
+                val userPrompt = """
+                    Справочник регионов:
+                    $dictionaryJson
+                    
+                    Ввод пользователя: '$userInput'
+                """.trimIndent()
+
+                // Вызов Qwen-35B с жестким n_predict лимитом токенов
+                val rawJsonResult = aiInferenceService.generateCreativesJson(systemInstruction, userPrompt)
+                finalRegionIds = jsonMapper.readValue(rawJsonResult, jacksonTypeRef<List<String>>())
+
+                if (finalRegionIds.isEmpty()) {
+                    sink.next("⚠️ Не удалось распознать указанные города. Пожалуйста, напишите регионы понятнее (например: *Москва, Самара*):")
+                    sink.complete()
+                    return
+                }
+
+                // 🌟 ШАГ 3: ДЕТЕРМИНИРОВАННО ПУШИМ НАЙДЕННЫЕ ID В МСР-ИНСТРУМЕНТ
+                sink.next("📡 Отправляю распознанные ID регионов $finalRegionIds в service-yad...\n")
+                val mcpRequest = CallToolRequest("bindYandexRegions", mapOf("campaignId" to yadId, "regionIds" to finalRegionIds), mapOf())
                 mcpClient.callTool(mcpRequest)
-                log.info { "Успешно выполнен RPC-вызов bindYandexRegions для ID: $yadId" }
+
             } catch (e: Exception) {
-                log.error(e) { "Ошибка синхронизации гео-таргетинга с service-yad" }
-                sink.next("⚠️ Предупреждение: Не удалось автоматически привязать регионы в адаптере Яндекса: ${e.message}\n")
+                log.error(e) { "Ошибка ИИ-сопоставления регионов через MCP" }
+                sink.next("⚠️ Ошибка: Не удалось автоматически распознать регионы: ${e.message}\n")
+                sink.complete()
+                return
             }
         }
 
-        // Чистая мутация var-параметров стейта без оверхеда пересоздания объектов
+        // Чистая мутация var-параметров стейта в PostgreSQL оркестратора
         session.currentStep = CampaignCreationStep.REGION_SELECTION
         session.updatedAt = Instant.now()
         sessionRepository.save(session)
 
-        sink.next("✅ Регионы таргетинга зафиксированы: ${rawRegions.joinToString()}.\n\n")
-        sink.next("🤖 **[Шаг 3/5]**: Теперь отправьте мне подробный **текстовый бриф** вашего продукта (описание, цели, особенности ЦА). ИИ-анализатор изучит его:")
+        sink.next("✅ Регионы таргетинга успешно привязаны по ID.\n\n")
+        sink.next("🤖 **[Шаг 2.5/5]**: Теперь укажите возрастные ограничения для вашей аудитории (например: *18+, 0+*):")
         sink.complete()
     }
 }

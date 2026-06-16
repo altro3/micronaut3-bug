@@ -19,8 +19,12 @@ class ServiceYadProperties(
         @field:Valid
         val bindRegions: Endpoint,
         @field:Valid
+        val bindAges: Endpoint,
+        @field:Valid
         val submitCreative: Endpoint,
         @field:Valid
         val getRegions: Endpoint,
+        @field:Valid
+        val getCampaignStatus: Endpoint,
     )
 }

@@ -23,6 +23,30 @@ app:
       url: http://localhost:4318/v1/logs
       # Напрямую в викторию
       # url: http://localhost:9428/insert/opentelemetry/v1/logs
+  integration:
+    service-yad:
+      endpoints:
+        create-draft:
+          path: /internal/campaigns/draft
+          method: POST
+        bind-regions:
+          path: /internal/campaigns/{id}/regions
+          method: PUT
+        bind-ages:
+          path: /internal/campaigns/{id}/ages
+          method: PUT
+        submit-creative:
+          path: /internal/campaigns/{id}/creative
+          method: PUT
+        get-regions:
+          path: /internal/dictionaries/regions
+          method: GET
+        get-campaign-status:
+          path: /internal/campaigns/{id}
+          method: GET
+      http:
+        service-name: yad
+        url: http://localhost:8103
 
 server:
   port: 8090

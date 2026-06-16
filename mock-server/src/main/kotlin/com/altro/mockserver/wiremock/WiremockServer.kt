@@ -31,5 +31,6 @@ class WiremockServer(
 
     private fun setupStubs() {
         InternalStubs.setupStubs(wireMockServer)
+        YadStubs.setupStubs(wireMockServer)
     }
 }
