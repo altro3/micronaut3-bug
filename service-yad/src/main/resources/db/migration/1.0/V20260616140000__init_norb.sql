@@ -1,9 +1,13 @@
-CREATE TABLE campaign_session
+CREATE TABLE campaign
 (
-    campaign_id BIGSERIAL PRIMARY KEY,
-    current_step VARCHAR(50) NOT NULL,
+    id BIGSERIAL PRIMARY KEY,
+    status VARCHAR(50) NOT NULL,
+    external_id BIGINT,
     context JSONB NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL,
     updated_at TIMESTAMP WITH TIME ZONE NOT NULL
 );
 
-CREATE INDEX idx_campaign_session_updated_at ON campaign_session (updated_at DESC);
+-- Индекс для быстрой фильтрации активных/ошибочных процессов в админке
+CREATE INDEX idx_campaign_status ON campaign (status);
+CREATE INDEX idx_campaign_external_id ON campaign (external_id) WHERE external_id IS NOT NULL;

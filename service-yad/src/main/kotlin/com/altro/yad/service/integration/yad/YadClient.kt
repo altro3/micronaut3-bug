@@ -1,10 +1,10 @@
 package com.altro.yad.service.integration.yad
 
 import com.altro.common.client.DefaultHttpClient
-import com.altro.yad.service.integration.yad.api.YadCreateCampaignRq
-import com.altro.yad.service.integration.yad.api.YadCreateCampaignRs
-import com.altro.yad.service.integration.yad.api.YadRegionsRq
-import com.altro.yad.service.integration.yad.api.YadRegionsRs
+import com.altro.yad.service.integration.yad.dto.YadCreateCampaignRq
+import com.altro.yad.service.integration.yad.dto.YadCreateCampaignRs
+import com.altro.yad.service.integration.yad.dto.YadRegionsRq
+import com.altro.yad.service.integration.yad.dto.YadRegionsRs
 import com.altro.yad.service.integration.yad.config.YadProperties
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.stereotype.Service

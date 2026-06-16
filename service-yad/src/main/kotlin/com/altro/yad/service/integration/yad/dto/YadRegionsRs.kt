@@ -1,4 +1,4 @@
-package com.altro.yad.service.integration.yad.api
+package com.altro.yad.service.integration.yad.dto
 
 data class YadRegionsRs(
     val result: Result?,

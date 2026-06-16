@@ -1,30 +1,45 @@
 package com.altro.yad.api
 
-import com.altro.yad.service.integration.extservice.ExtServiceClient
-import com.altro.yad.service.integration.extservice.api.MyDataRequest
-import com.altro.yad.service.integration.extservice.api.MyDataResponse
-import io.github.oshai.kotlinlogging.KotlinLogging
-import org.springframework.web.bind.annotation.GetMapping
+import com.altro.yad.api.dto.BindAgesRq
+import com.altro.yad.api.dto.BindRegionsRq
+import com.altro.yad.api.dto.CreateDraftRq
+import com.altro.yad.api.dto.SubmitCreativeRq
+import com.altro.yad.model.Campaign
+import com.altro.yad.service.InternalApiService
+import jakarta.validation.Valid
+import org.springframework.web.bind.annotation.PathVariable
+import org.springframework.web.bind.annotation.PostMapping
+import org.springframework.web.bind.annotation.PutMapping
+import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RestController
 
 @RestController
 class InternalApiController(
-    private val extServiceClient: ExtServiceClient,
+    private val internalApiService: InternalApiService,
 ) {
 
-    private val log = KotlinLogging.logger {}
+    @PostMapping("/internal/campaigns/draft")
+    fun createDraft(@RequestBody @Valid rq: CreateDraftRq): Campaign =
+        internalApiService.startNewCampaign(rq.name)
 
-    @GetMapping("/internal/ping")
-    fun process(): MyDataResponse? {
-        log.info { "== Service request == Received call from parent" }
+    @PutMapping("/internal/campaigns/{id}/regions")
+    fun bindRegions(
+        @PathVariable id: Long,
+        @RequestBody @Valid rq: BindRegionsRq,
+    ): Campaign =
+        internalApiService.setCampaignRegions(id, rq.regionIds)
 
-        val updateRs = extServiceClient.updateData(MyDataRequest(name = "Test item"))
+    @PutMapping("/internal/campaigns/{id}/ages")
+    fun bindAges(
+        @PathVariable id: Long,
+        @RequestBody @Valid rq: BindAgesRq,
+    ): Campaign =
+        internalApiService.setCampaignAges(id, rq.ageIds)
 
-        return updateRs
-    }
-
-    @GetMapping("/internal/error")
-    fun error(): MyDataResponse? {
-        throw RuntimeException("Произошла какая-то ошибка")
-    }
+    @PostMapping("/internal/campaigns/{id}/creative")
+    fun submitCreative(
+        @PathVariable id: Long,
+        @RequestBody @Valid rq: SubmitCreativeRq,
+    ): Campaign =
+        internalApiService.submitCreative(id, rq.text)
 }
