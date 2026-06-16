@@ -17,6 +17,14 @@ class AdvertisingMcpTools(
 
     private val log = KotlinLogging.logger {}
 
+    @Tool(description = "Получить актуальное состояние, выбранные поля и статус синхронизации кампании напрямую из базы данных адаптера Яндекса. Требуется локальный ID кампании.")
+    fun getYandexCampaignStatus(campaignId: Long): String {
+        log.info { "MCP Tool 'getYandexCampaignStatus' запрашивает стейт для ID: $campaignId" }
+        // Делаем GET запрос во внутреннее апи адаптера Яндекса (через настроенный ServiceYadClient)
+        // Для простоты примера проксируем как JSON-строку
+        return serviceYadClient.getCampaignStatus(campaignId) ?: "{}"
+    }
+
     /**
      * МСР-Инструмент Шага 1: Инициация черновика в service-yad
      */

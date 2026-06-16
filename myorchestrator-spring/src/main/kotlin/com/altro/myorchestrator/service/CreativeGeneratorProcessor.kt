@@ -1,7 +1,7 @@
 package com.altro.myorchestrator.service
 
+import com.altro.myorchestrator.api.dto.Creative
 import com.altro.myorchestrator.api.dto.Platform
-import com.altro.myorchestrator.model.CampaignSession.CreativeWithImage
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.stereotype.Component
 import tools.jackson.databind.json.JsonMapper
@@ -15,46 +15,52 @@ class CreativeGeneratorProcessor(
 
     private val log = KotlinLogging.logger {}
 
-    fun generate(analysisResult: AnalysisResult, moderationRules: String): Map<Platform, CreativeWithImage> {
-        val platformsList = analysisResult.recommendations.map { it.platform }.joinToString()
+    /**
+     * Генерирует один рекламный текст (Creative) под конкретную выбранную платформу
+     */
+    fun generate(platform: Platform, briefText: String, moderationRules: String): Creative {
+        log.info { "Запуск ИИ-генерации текста креатива для платформы: \${platform.name}" }
 
         val systemInstruction = """
-    Вы — изолированный API-компонент генерации текстов. Вам ЗАПРЕЩЕНО общаться с пользователем.
-    Вы должны вернуть ответ СТРОГО в формате валидного JSON-объекта.
-    НЕ используйте markdown-разметку и кавычки ```json. Начните ответ сразу со знака {.
-    
-    ВАЖНО: Пиши рекламный текст максимально емко и коротко. Общий объем ответа должен строго укладываться в 300 токенов. Сразу после закрытия структуры JSON прекращай генерацию (вызови <|im_end|>).
-    
-    Структура JSON:
-    {
-      "VK_ADS": { "title": "текст", "bodyText": "текст" },
-      "YANDEX_DIRECT": { "title": "текст", "bodyText": "текст" }
-    }
-""".trimIndent()
+            Вы — изолированный API-компонент генерации текстов. Вам ЗАПРЕЩЕНО общаться с пользователем, писать вступления или заключения.
+            Вы должны вернуть ответ СТРОГО в формате валидного JSON-объекта, соответствующего структуре.
+            НЕ используйте markdown-разметку и кавычки ```json. Начните ответ сразу со знака {.
+            
+            ВАЖНО: Пиши рекламный текст максимально емко и коротко. Общий объем ответа должен строго укладываться в 150 токенов. Сразу после закрытия структуры JSON прекращай генерацию (вызови <|im_end|>).
+            
+            Структура JSON:
+            {
+              "title": "сгенерированный заголовок",
+              "bodyText": "сгенерированный текст объявления"
+            }
+        """.trimIndent()
 
         val userPrompt = """
-            На основе описания аудитории: '${analysisResult.audienceDescription}', напиши тексты объявлений для платформ: $platformsList.
-            Обязательно учти правила модерации:
+            Рекламная платформа: ${platform.name}
+            На основе следующего брифа/описания продукта: '$briefText',
+            напиши короткий рекламный текст (заголовок title и текст объявления bodyText).
+            
+            ОБЯЗАТЕЛЬНО ПРИМЕНИ ПРАВИЛА МОДЕРАЦИИ ИЗ БАЗЫ ЗНАНИЙ (лимиты символов):
             $moderationRules
         """.trimIndent()
 
+        // Вызов Qwen-35B с нашим намертво вшитым n_predict лимитом токенов в кастомных атрибутах
         val finalRawJson = aiInferenceService.generateCreativesJson(systemInstruction, userPrompt)
 
         return try {
+            // Десериализуем плоскую мапу прямо в твой базовый класс Creative
             val rawMap = jsonMapper.readValue(
                 finalRawJson,
-                jacksonTypeRef<Map<Platform, Map<String, String>>>()
+                jacksonTypeRef<Map<String, String>>()
             )
-            rawMap.mapValues { (_, value) ->
-                CreativeWithImage(
-                    title = value["title"] ?: "",
-                    bodyText = value["bodyText"] ?: "",
-                    imageUrl = "http://localhost:8083/api/v1/images/default-stub.jpg"
-                )
-            }
+
+            Creative(
+                title = rawMap["title"] ?: "Специальное предложение",
+                bodyText = rawMap["bodyText"] ?: "Узнайте подробности на нашем сайте."
+            )
         } catch (e: Exception) {
-            log.error(e) { "Ошибка десериализации креативов ИИ. Ответ: $finalRawJson" }
-            throw IllegalStateException("Модель выдала невалидную JSON структуру на Шаге 3", e)
+            log.error(e) { "Ошибка десериализации креатива ИИ. Ответ от модели был:\n$finalRawJson" }
+            throw IllegalStateException("Модель выдала невалидную JSON структуру рекламного объявления на Шаге 3", e)
         }
     }
 }
