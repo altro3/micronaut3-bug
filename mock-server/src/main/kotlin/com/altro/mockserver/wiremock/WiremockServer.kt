@@ -8,7 +8,7 @@ import jakarta.annotation.PostConstruct
 import jakarta.annotation.PreDestroy
 
 class WiremockServer(
-    private val wiremockProps: WiremockProperties,
+    wiremockProps: WiremockProperties,
 ) {
 
     private val wireMockServer = WireMockServer(

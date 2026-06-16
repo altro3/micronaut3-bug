@@ -1,100 +1,89 @@
 package com.altro.mcp.service
 
+import com.altro.mcp.service.integration.serviceyad.ServiceYadClient
+import com.altro.mcp.service.integration.serviceyad.dto.BindRegionsRq
+import com.altro.mcp.service.integration.serviceyad.dto.CreateDraftRq
+import com.altro.mcp.service.integration.serviceyad.dto.SubmitCreativeRq
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.ai.tool.annotation.Tool
 import org.springframework.stereotype.Component
+import tools.jackson.databind.json.JsonMapper
 
 @Component
-class AdvertisingMcpTools {
+class AdvertisingMcpTools(
+    private val serviceYadClient: ServiceYadClient,
+    private val jsonMapper: JsonMapper
+) {
 
     private val log = KotlinLogging.logger {}
 
     /**
-     * Инструмент публикации в VK
+     * МСР-Инструмент Шага 1: Инициация черновика в service-yad
+     */
+    @Tool(description = "Инициировать новый черновик рекламной кампании в Яндекс.Директ. Вызывать строго на самом первом шаге, когда пользователь определился с именем кампании.")
+    fun initYandexDraft(name: String): String {
+        log.info { "MCP Tool 'initYandexDraft' вызван для имени: $name" }
+        return try {
+            val res = serviceYadClient.createDraft(CreateDraftRq(name = name))
+                ?: return "❌ Ошибка serviceYad: не удалось создать черновик"
+
+            jsonMapper.writeValueAsString(res)
+        } catch (e: Exception) {
+            "❌ Сетевой сбой при инициации черновика в serviceYad: ${e.message}"
+        }
+    }
+
+    /**
+     * МСР-Инструмент Шага 2: Привязка регионов таргетинга в service-yad
+     */
+    @Tool(description = "Привязать выбранные географические регионы (список ID) к существующей кампании в Яндекс.Директ. Требуется локальный числовой ID кампании.")
+    fun bindYandexRegions(campaignId: Long, regionIds: List<String>): String {
+        log.info { "MCP Tool 'bindYandexRegions' вызван для ID $campaignId и регионов $regionIds" }
+        return try {
+            val res = serviceYadClient.bindRegions(campaignId, BindRegionsRq(regionIds = regionIds))
+                ?: return "❌ Ошибка serviceYad: не удалось привязать регионы"
+
+            jsonMapper.writeValueAsString(res)
+        } catch (e: Exception) {
+            "❌ Сетевой сбой при привязке регионов в serviceYad: ${e.message}"
+        }
+    }
+
+    /**
+     * МСР-Инструмент Шага 4: Добавление креатива, валидация и автоматический уход в сеть
+     */
+    @Tool(description = "Отправить финальный рекламный текст объявления в кампанию Яндекс.Директ. Этот инструмент запускает автоматическую внутреннюю валидацию лимитов и синхронизирует кампанию с сетью.")
+    fun submitYandexCreative(campaignId: Long, text: String): String {
+        log.info { "MCP Tool 'submitYandexCreative' вызван для ID $campaignId" }
+        return try {
+            val res = serviceYadClient.submitCreative(campaignId, SubmitCreativeRq(text = text))
+                ?: return "❌ Ошибка serviceYad: не удалось отправить объявление"
+
+            jsonMapper.writeValueAsString(res)
+        } catch (e: Exception) {
+            "❌ Сетевой сбой при отправке креатива в serviceYad: ${e.message}"
+        }
+    }
+
+    /**
+     * МСР-Инструмент получения справочника ГЕО-регионов
+     */
+    @Tool(description = "Получить актуальный справочник доступных географических регионов для таргетинга в Яндекс.Директ.")
+    fun getRegionsList(): String {
+        log.info { "MCP Tool 'getRegionsList' запрашивает кэшированную коллекцию из serviceYad" }
+        return try {
+            val regionsList = serviceYadClient.getRegions() ?: emptyList()
+            jsonMapper.writeValueAsString(regionsList)
+        } catch (e: Exception) {
+            "[]"
+        }
+    }
+
+    /**
+     * Холостой инструмент для VK Ads
      */
     @Tool(description = "Создать рекламную кампанию на платформе ВКонтакте (VK). Требуется название, заголовок и текст баннера.")
-    fun createVkCampaign(
-        name: String,
-        title: String,
-        text: String
-    ): String {
-        log.info { "MCP Tool 'createVkCampaign' вызван. Параметры: name='$name', title='$title'" }
-        return "Успешно. Кампания в VK инициирована (Холостой режим)."
-    }
-
-    /**
-     * Инструмент публикации в Яндекс
-     */
-    @Tool(description = "Создать текстово-графическую кампанию в Яндекс.Директ. Требуется название, текст объявления и список ключевых слов.")
-    fun createYandexCampaign(
-        name: String,
-        text: String,
-        keywords: List<String>
-    ): String {
-        log.info { "MCP Tool 'createYandexCampaign' вызван. Параметры: name='$name', keywords=$keywords" }
-        return "Успешно. Кампания в Яндекс.Директ инициирована (Холостой режим)."
-    }
-
-    /**
-     * НОВЫЙ ИНСТРУМЕНТ: Раздача справочников регионов для оркестратора
-     * Возвращает валидный JSON-массив с ID и названиями
-     */
-    @Tool(description = "Получить актуальный справочник доступных географических регионов для таргетинга. Требуется указать платформу (VK_ADS или YANDEX_DIRECT).")
-    fun getRegionsList(platform: String): String {
-        log.info { "MCP Tool 'getRegionsList' вызван для платформы: $platform" }
-
-        // В будущем здесь будет сетевой поход в vk-adapter или yandex-adapter за реальными гео-базами.
-        // Сейчас возвращаем жестко структурированный валидный JSON-массив, который Jackson-мапер оркестратора сможет распарсить.
-        return when (platform.uppercase().trim()) {
-            "VK_ADS" -> """
-                [
-                  {"id": "vk_1", "name": "Москва и Московская область"},
-                  {"id": "vk_2", "name": "Санкт-Петербург и ЛО"},
-                  {"id": "vk_3", "name": "Новосибирск"}
-                ]
-            """.trimIndent()
-
-            "YANDEX_DIRECT" -> """
-                [
-                  {"id": "yam_1", "name": "Россия (Центр)"},
-                  {"id": "yam_2", "name": "Россия (Сибирь)"},
-                  {"id": "yam_3", "name": "Россия (Урал)"}
-                ]
-            """.trimIndent()
-
-            else -> "[]"
-        }
-    }
-
-    /**
-     * НОВЫЙ ИНСТРУМЕНТ: Раздача возрастных маркировок и таргетингов
-     * Возвращает валидный JSON-массив
-     */
-    @Tool(description = "Получить список доступных опций возрастных ограничений и возрастного таргетинга для выбранной платформы (VK_ADS или YANDEX_DIRECT).")
-    fun getAgeTargetingOptions(platform: String): String {
-        log.info { "MCP Tool 'getAgeTargetingOptions' вызван для платформы: $platform" }
-
-        // Кабинеты требуют разные структуры маркировок (у Яндекса — жесткие дискретные метки, у ВК — ползунки от-до)
-        return when (platform.uppercase().trim()) {
-            "VK_ADS" -> """
-                [
-                  {"id": "vk_age_all", "name": "Без ограничений"},
-                  {"id": "vk_age_12", "name": "Рекомендовано от 12 лет"},
-                  {"id": "vk_age_18", "name": "Строго 18+"}
-                ]
-            """.trimIndent()
-
-            "YANDEX_DIRECT" -> """
-                [
-                  {"id": "ya_age_0", "name": "0+"},
-                  {"id": "ya_age_6", "name": "6+"},
-                  {"id": "ya_age_12", "name": "12+"},
-                  {"id": "ya_age_16", "name": "16+"},
-                  {"id": "ya_age_18", "name": "18+"}
-                ]
-            """.trimIndent()
-
-            else -> "[]"
-        }
+    fun createVkCampaign(name: String, title: String, text: String): String {
+        return "Успешно. Кампания в VK Ads инициирована (Холостой режим)."
     }
 }

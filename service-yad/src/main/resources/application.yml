@@ -27,10 +27,10 @@ app:
     yad:
       endpoints:
         get-regions:
-          path: /dict/regions
+          path: /yad/dict/regions
           method: GET
         create-campaign:
-          path: /campaigns/create
+          path: /yad/campaigns/create
           method: POST
       http:
         service-name: yad
