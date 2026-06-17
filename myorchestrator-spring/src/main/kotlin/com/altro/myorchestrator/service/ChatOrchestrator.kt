@@ -10,6 +10,7 @@ import com.altro.myorchestrator.service.steps.handlers.CreativeGenerationHandler
 import com.altro.myorchestrator.service.steps.handlers.McpPublishingHandler
 import com.altro.myorchestrator.service.steps.handlers.PlatformSelectionHandler
 import com.altro.myorchestrator.service.steps.handlers.RegionSelectionHandler
+import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.stereotype.Service
 import reactor.core.publisher.Flux
 import reactor.core.publisher.FluxSink
@@ -26,6 +27,8 @@ class ChatOrchestrator(
     private val mcpPublishingHandler: McpPublishingHandler,
     private val dynamicAiOrchestrator: DynamicAiOrchestrator
 ) {
+
+    private val log = KotlinLogging.logger {}
 
     fun orchestrateChatStream(rq: ChatRq): Flux<String> =
         Flux.create { sink ->
@@ -65,18 +68,28 @@ class ChatOrchestrator(
         when (session.currentStep) {
             CampaignCreationStep.DRAFT -> platformSelectionHandler.initializeSession(session.context.executionLogs.first(), userInput, sink)
             CampaignCreationStep.PLATFORM_SELECTION -> regionSelectionHandler.processRegions(session, userInput, sink)
-
-            // СВЯЗУЮЩЕЕ ЗВЕНО: Теперь шаг регионов перенаправляет поток на обработку возраста
             CampaignCreationStep.REGION_SELECTION -> ageSelectionHandler.processAgeTargeting(session, userInput, sink)
-
-            // После возраста переходим к анализу брифа
             CampaignCreationStep.AUDIENCE_TARGETING -> audienceTargetingHandler.processAudience(session, userInput, sink)
-
             CampaignCreationStep.CREATIVE_GENERATION -> creativeGenerationHandler.processCreatives(session, userInput, sink, ::isUserApproved)
             CampaignCreationStep.PUBLISHING_AND_PAYMENT -> mcpPublishingHandler.processPublish(session, userInput, sink, ::isUserApproved)
             CampaignCreationStep.COMPLETED -> mcpPublishingHandler.handleCompleted(sink)
+
+            // НОВАЯ СОВРЕМЕННАЯ ВЕТКА: Если сессия уже идет по ИИ-пути
+            CampaignCreationStep.AI_DYNAMIC_COLLECTING,
+            CampaignCreationStep.AI_DYNAMIC_CONFIRMATION -> {
+                log.info { "Перенаправляю запрос в динамический ИИ-оркестратор для сессии: ${session.campaignId}" }
+
+                // Вызываем новый оркестратор, который возвращает Flux<String>
+                dynamicAiOrchestrator.orchestrateDynamicStream(session, userInput)
+                    .subscribe(
+                        { chunk -> sink.next(chunk) },     // Передаем каждый ИИ-токен в текущий веб-сокет/SSE
+                        { error -> sink.error(error) },    // Пробрасываем ошибку в пайплайн чата
+                        { sink.complete() }                // Закрываем стрим, когда ИИ закончил говорить
+                    )
+            }
         }
     }
+
 
     private fun isUserApproved(input: String): Boolean {
         val clean = input.lowercase().trim()

@@ -4,8 +4,8 @@ import com.altro.yad.model.Campaign
 import com.altro.yad.model.CampaignStatus
 import com.altro.yad.repository.CampaignRepository
 import com.altro.yad.service.integration.yad.YadClient
-import com.altro.yad.service.integration.yad.dto.YadCreateCampaignRq // АКТУАЛЬНЫЙ ПАКЕТ DTO
-import com.altro.yad.service.integration.yad.dto.YadCreateCampaignRq.YadCampaignItem // АКТУАЛЬНЫЙ ПАКЕТ DTO
+import com.altro.yad.service.integration.yad.dto.YadCreateCampaignRq
+import com.altro.yad.service.integration.yad.dto.YadCreateCampaignRq.YadCampaignItem
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.data.repository.findByIdOrNull
 import org.springframework.stereotype.Service
@@ -74,10 +74,11 @@ class CampaignService(
     }
 
     /**
-     * ШАГ 4: Добавление текста креатива и запуск локальной проверки лимитов
+     * ШАГ 4 (СКОРРЕКТИРОВАН): Только добавление текста креатива в базу данных.
+     * Мы БОЛЬШЕ НЕ ВЫЗЫВАЕМ автоматическую синхронизацию с Яндексом.
      */
     @Transactional
-    fun addCreativeAndValidate(id: Long, text: String): Campaign {
+    fun addCreativeText(id: Long, text: String): Campaign {
         val campaign = campaignRepository.findById(id)
             .orElseThrow { IllegalArgumentException("Кампания с ID $id не найдена") }
 
@@ -85,21 +86,35 @@ class CampaignService(
         campaign.status = CampaignStatus.CREATIVE_ADDED
         campaign.updatedAt = Instant.now()
 
-        val saved = campaignRepository.save(campaign)
-        log.info { "💾 [ЯД-Адаптер] Шаг 4: Добавлен текст креатива для ID ${saved.id}. Запуск валидации..." }
-
-        return validateAndSync(saved)
+        return campaignRepository.save(campaign).also {
+            log.info { "💾 [ЯД-Адаптер] Шаг 4: Текст креатива для ID ${it.id} успешно сохранен в JSONB. Кампания ждет публикации." }
+        }
     }
 
     /**
-     * ШАГ 5: Внутренняя валидация лимитов Яндекса (не более 81 символа)
+     * ШАГ 5 (НОВЫЙ ПУБЛИЧНЫЙ ТРИГГЕР): Валидация накопленных данных и отправка в сеть Яндекса.
+     * Вызывается оркестратором или кнопкой "Запустить рекламу".
+     */
+    @Transactional
+    fun validateAndPublishToExternalNetwork(id: Long): Campaign {
+        val campaign = campaignRepository.findById(id)
+            .orElseThrow { IllegalArgumentException("Кампания с ID $id не найдена") }
+
+        log.info { "💾 [ЯД-Адаптер] Шаг 5: Инициирован паблишинг для ID ${campaign.id}. Запуск локальной валидации..." }
+
+        // Запускаем вашу цепочку внутренней проверки и физического вызова API
+        return validateAndSync(campaign)
+    }
+
+    /**
+     * Внутренняя валидация лимитов Яндекса (не более 81 символа)
      */
     private fun validateAndSync(campaign: Campaign): Campaign {
         val campaignText = campaign.data.text ?: ""
 
         if (campaignText.length > 81) {
             campaign.status = CampaignStatus.SYNC_ERROR
-            campaign.errorMessage = "Локальная валидация провалена: Текст объявления длиннее 81 символа"
+            campaign.data.errorMessage = "Локальная валидация провалена: Текст объявления длиннее 81 символа"
             campaign.updatedAt = Instant.now()
             return campaignRepository.save(campaign).also {
                 log.warn { "❌ [ЯД-Адаптер] ID ${it.id} не прошел лимиты символов" }
@@ -109,17 +124,17 @@ class CampaignService(
         campaign.status = CampaignStatus.VALIDATED
         campaign.updatedAt = Instant.now()
         val validated = campaignRepository.save(campaign)
-        log.info { "💾 [ЯД-Адаптер] Шаг 5: Локальная валидация ID ${validated.id} пройдена. Уходим в сеть..." }
+        log.info { "💾 [ЯД-Адаптер] Локальная валидация ID ${validated.id} пройдена. Уходим в сеть..." }
 
         return executeExternalSync(validated)
     }
 
     /**
-     * ШАГ 6: Физический HTTP-вызов через YadClient к API Яндекс.Директ
+     * Физический HTTP-вызов через YadClient к API Яндекс.Директ
      */
     private fun executeExternalSync(campaign: Campaign): Campaign {
         campaign.status = CampaignStatus.SYNCING
-        campaign.errorMessage = null
+        campaign.data.errorMessage = null
         campaign.updatedAt = Instant.now()
         val syncingCampaign = campaignRepository.save(campaign)
 
@@ -143,16 +158,16 @@ class CampaignService(
             if (addResult?.Id != null) {
                 syncingCampaign.externalId = addResult.Id
                 syncingCampaign.status = CampaignStatus.SYNCED
-                syncingCampaign.errorMessage = null
+                syncingCampaign.data.errorMessage = null
             } else {
                 val errorDetails = addResult?.Errors?.joinToString { "${it.Code}: ${it.Message}" } ?: "Ошибка API"
                 syncingCampaign.status = CampaignStatus.SYNC_ERROR
-                syncingCampaign.errorMessage = errorDetails
+                syncingCampaign.data.errorMessage = errorDetails
             }
             campaignRepository.save(syncingCampaign)
         } catch (e: Exception) {
             syncingCampaign.status = CampaignStatus.SYNC_ERROR
-            syncingCampaign.errorMessage = "Сетевой критический сбой: ${e.message}"
+            syncingCampaign.data.errorMessage = "Сетевой критический сбой: ${e.message}"
             syncingCampaign.updatedAt = Instant.now()
             campaignRepository.save(syncingCampaign)
         }

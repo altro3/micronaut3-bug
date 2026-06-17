@@ -44,16 +44,23 @@ class InternalCampaignController(
         internalApiService.setCampaignAges(id, rq.ageIds).toRs()
 
     /**
-     * Шаг 4: Добавить рекламный текст креатива, провести валидацию и отправить в сеть Яндекса
-     * POST http://localhost:8090/internal/campaigns/{id}/creative
+     * Шаг 4: Добавить рекламный текст креатива БЕЗ отправки в сеть
+     * POST http://localhost:8081/internal/campaigns/{id}/creative
      */
     @PostMapping("/internal/campaigns/{id}/creative")
-    fun submitCreative(
+    fun saveCreative(
         @PathVariable id: Long,
         @RequestBody @Valid rq: SubmitCreativeRq
     ): CampaignStepRs =
-        internalApiService.submitCreative(id, rq.text).toRs()
+        internalApiService.saveCampaignCreative(id, rq.text).toRs()
 
+    /**
+     * Шаг 5: Финальный триггер публикации собранной кампании в Яндекс
+     * POST http://localhost:8081/internal/campaigns/{id}/publish
+     */
+    @PostMapping("/internal/campaigns/{id}/publish")
+    fun publishCampaign(@PathVariable id: Long): CampaignStepRs =
+        internalApiService.publishCampaignToYandex(id).toRs()
     /**
      * Чтение текущего стейта кампании
      * GET http://localhost:8090/internal/campaigns/{id}
@@ -74,6 +81,6 @@ class InternalCampaignController(
         id = this.id,
         status = this.status,
         externalId = this.externalId,
-        errorMessage = this.errorMessage
+        errorMessage = this.data.errorMessage
     )
 }

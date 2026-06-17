@@ -2,7 +2,7 @@ package com.altro.mcp.service.integration.serviceyad
 
 import com.altro.common.client.DefaultHttpClient
 import com.altro.mcp.service.integration.serviceyad.config.ServiceYadProperties
-import com.altro.mcp.service.integration.serviceyad.dto.BindAgesRq // Импортируем новое DTO возраста
+import com.altro.mcp.service.integration.serviceyad.dto.BindAgesRq
 import com.altro.mcp.service.integration.serviceyad.dto.BindRegionsRq
 import com.altro.mcp.service.integration.serviceyad.dto.CampaignStepRs
 import com.altro.mcp.service.integration.serviceyad.dto.CreateDraftRq
@@ -38,7 +38,7 @@ class ServiceYadClient(
         )
 
     /**
-     * Шаг 3: Привязать выбранный возрастной таргетинг к кампании [НОВЫЙ МЕТОД]
+     * Шаг 3: Привязать выбранный возрастной таргетинг к кампании
      */
     fun bindAges(id: Long, request: BindAgesRq): CampaignStepRs? =
         httpClient.sendRq(
@@ -49,7 +49,8 @@ class ServiceYadClient(
         )
 
     /**
-     * Шаг 4: Добавить текст объявления, запустить локальную валидацию и отправить в сеть Яндекса
+     * Шаг 4: Сохранить текст объявления в локальном черновике адаптера.
+     * В сеть Яндекса на этом этапе ничего не отправляется.
      */
     fun submitCreative(id: Long, request: SubmitCreativeRq): CampaignStepRs? =
         httpClient.sendRq(
@@ -60,7 +61,18 @@ class ServiceYadClient(
         )
 
     /**
-     * Дополнительный шаг: Чтение текущего состояния и технических ошибок из адаптера [НОВЫЙ МЕТОД]
+     * Шаг 5: Финальная публикация готовой кампании.
+     * Запускает внутреннюю проверку лимитов и отправляет пакет в сеть Яндекс.Директ.
+     */
+    fun publishCampaign(id: Long): CampaignStepRs? =
+        httpClient.sendRq(
+            endpoint = endpoints.publishCampaign,
+            responseClass = CampaignStepRs::class.java,
+            pathVars = mapOf("id" to id),
+        )
+
+    /**
+     * Дополнительный шаг: Чтение текущего состояния и технических ошибок из адаптера
      */
     fun getCampaignStatus(id: Long): CampaignStepRs? =
         httpClient.sendRq(

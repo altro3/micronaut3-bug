@@ -38,6 +38,9 @@ app:
         submit-creative:
           path: /internal/campaigns/{id}/creative
           method: PUT
+        publish-campaign:
+          path: /internal/campaigns/{id}/publish
+          method: PUT
         get-regions:
           path: /internal/dictionaries/regions
           method: GET

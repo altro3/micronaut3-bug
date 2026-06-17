@@ -23,8 +23,10 @@ import com.altro.common.trace.TraceUtil.MDC_SOURCE
 import com.altro.common.trace.TraceUtil.MDC_SPAN_ID
 import com.altro.common.trace.TraceUtil.MDC_SUB_TITLE
 import io.github.oshai.kotlinlogging.KotlinLogging
+import io.netty.util.internal.BoundedInputStream
 import org.slf4j.MDC
 import org.springframework.http.HttpHeaders
+import org.springframework.http.HttpHeaders.TRANSFER_ENCODING
 import org.springframework.http.HttpRequest
 import org.springframework.http.MediaType
 import org.springframework.http.client.ClientHttpRequestExecution
@@ -32,6 +34,7 @@ import org.springframework.http.client.ClientHttpRequestInterceptor
 import org.springframework.http.client.ClientHttpResponse
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
+import java.io.InputStream
 import java.util.zip.GZIPInputStream
 
 class LoggingInterceptor(
@@ -171,48 +174,56 @@ class LoggingInterceptor(
         }
     }
 
+
     private fun extractResponseBody(rs: ClientHttpResponse, skipLogging: Boolean, isStream: Boolean): ByteArray {
         if (isStream) return BODY_STREAM.toByteArray()
         if (skipLogging) return BODY_LOG_DISABLED.toByteArray()
 
-        val maxAllowed = logProps.maxPayloadSize.toBytes()
+        val maxAllowed = logProps.maxPayloadSize.toBytes() // например, 1024 * 100 (100 КБ)
         val contentLength = rs.headers.contentLength
 
+        // 1. Быстрая проверка по заголовку
         if (contentLength > maxAllowed) return BODY_TOO_LARGE.toByteArray()
 
-        val rawBytes = if (contentLength in 1..maxAllowed) {
-            rs.body.readAllBytes()
-        } else {
+        return try {
             val buffer = ByteArray(1024)
             val outputStream = ByteArrayOutputStream()
-            var bytesRead = 0
+            var bytesRead: Int
             var totalBytes = 0L
-            while (totalBytes < maxAllowed && rs.body.read(buffer).also { bytesRead = it } != -1) {
+
+            val decompressedStream = decompressStreamIfNeeded(rs, rs.body)
+
+            while (decompressedStream.read(buffer).also { bytesRead = it } != -1) {
+                // Вычисляем, сколько байт МЫ ИМЕЕМ ПРАВО записать до переполнения
+                val remainingSpace = maxAllowed - totalBytes
+
+                if (bytesRead > remainingSpace) {
+                    // Прилетел кусок, который взрывает наш лимит лога!
+                    return BODY_TOO_LARGE.toByteArray()
+                }
+
                 outputStream.write(buffer, 0, bytesRead)
                 totalBytes += bytesRead
             }
-            if (totalBytes >= maxAllowed) {
-                return BODY_TOO_LARGE.toByteArray()
-            }
             outputStream.toByteArray()
+        } catch (e: Exception) {
+            log.error(e) { "Ошибка вычитывания тела ответа в интерцепторе" }
+            "❌ [Ошибка чтения лога payload]".toByteArray()
         }
-        
-        if (rawBytes.size > maxAllowed) return BODY_TOO_LARGE.toByteArray()
-
-        return decompressIfNeeded(rs, rawBytes)
     }
 
-    private fun decompressIfNeeded(response: ClientHttpResponse, bytes: ByteArray): ByteArray {
+    private fun decompressStreamIfNeeded(response: ClientHttpResponse, stream: InputStream): InputStream {
         val encoding = response.headers.getFirst(HttpHeaders.CONTENT_ENCODING)
         val isGzip = encoding?.contains(ENCODING_GZIP, ignoreCase = true) == true
 
-        if (!isGzip || bytes.isEmpty()) return bytes
+        if (!isGzip) return stream
 
-        return runCatching {
-            GZIPInputStream(ByteArrayInputStream(bytes)).use { it.readBytes() }
-        }.getOrElse { e ->
-            log.warn { "Failed to decompress GZIP body, logging raw data. Error: ${e.message}" }
-            bytes
+        return try {
+            // Оборачиваем сам поток. Теперь данные будут распаковываться на лету по 1024 байта
+            GZIPInputStream(stream)
+        } catch (e: Exception) {
+            log.warn { "Не удалось обернуть поток в GZIPInputStream, читаем как есть: ${e.message}" }
+            stream
         }
     }
 
@@ -227,9 +238,12 @@ class LoggingInterceptor(
 
     private fun isStreamingResponse(rs: ClientHttpResponse): Boolean {
         val contentType = rs.headers.contentType?.toString() ?: ""
-        val transferEncoding = rs.headers[HttpHeaders.TRANSFER_ENCODING]?.joinToString() ?: ""
-
-        return contentType.contains(MediaType.TEXT_EVENT_STREAM_VALUE) ||
-                transferEncoding.contains("chunked")
+        if (contentType.contains(MediaType.APPLICATION_JSON_VALUE)) {
+            return false
+        }
+        val transferEncoding =  rs.headers.getFirst(TRANSFER_ENCODING)?.lowercase() ?: ""
+        return contentType.contains(MediaType.TEXT_EVENT_STREAM_VALUE)
+                || contentType.contains("application/stream+json")
+                || transferEncoding.contains("chunked")
     }
 }

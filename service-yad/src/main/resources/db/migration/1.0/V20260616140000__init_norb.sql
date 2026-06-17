@@ -3,7 +3,7 @@ CREATE TABLE campaign
     id BIGSERIAL PRIMARY KEY,
     status VARCHAR(50) NOT NULL,
     external_id BIGINT,
-    context JSONB NOT NULL,
+    data JSONB NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE NOT NULL,
     updated_at TIMESTAMP WITH TIME ZONE NOT NULL
 );

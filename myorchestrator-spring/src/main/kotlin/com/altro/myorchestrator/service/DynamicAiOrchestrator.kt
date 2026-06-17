@@ -9,7 +9,7 @@ import org.springframework.ai.chat.messages.AssistantMessage
 import org.springframework.ai.chat.messages.Message
 import org.springframework.ai.chat.messages.SystemMessage
 import org.springframework.ai.chat.messages.UserMessage
-import org.springframework.ai.mcp.SyncMcpToolCallbackProvider // ОФИЦИАЛЬНЫЙ КЛАСС-МОСТ
+import org.springframework.ai.mcp.SyncMcpToolCallbackProvider
 import org.springframework.stereotype.Service
 import reactor.core.publisher.Flux
 import reactor.core.scheduler.Schedulers
@@ -25,13 +25,32 @@ class DynamicAiOrchestrator(
     fun orchestrateDynamicStream(session: CampaignSession, userInput: String): Flux<String> {
         session.currentStep = CampaignCreationStep.AI_DYNAMIC_COLLECTING
 
-        val moderationRules = vectorStoreService.searchAdvertisingRules(emptyList())
+        val currentPlatforms = listOfNotNull(session.context.selectedPlatform)
+
+        val moderationRules = vectorStoreService.searchAdvertisingRules(
+            platforms = currentPlatforms,
+            userBriefText = userInput,
+        )
 
         val systemPrompt = """
-            Ты — ИИ-оркестратор. Твоя цель — настроить кампанию в Яндекс.Директ через доступные MCP-инструменты.
-            Извлекай ГЕО, возраст, тексты и сразу вызывай тулы. Не мучай юзера пошаговыми вопросами, если он дал всё в одной фразе.
-            Если нет ID кампании — начни с 'initYandexDraft'. Если юзер назвал регион словом — сначала найди его ID через 'searchYandexRegions'.
-            Правила сетей: $moderationRules
+            Ты — ИИ-оркестратор рекламного агрегатора. Твоя цель — помочь пользователю настроить кампанию в Яндекс.Директ или VK Ads, используя доступные тебе MCP-инструменты.
+            Ты ведешь живой диалог, извлекаешь параметры и управляешь состоянием бэкенда.
+            
+            СТРОГИЕ ПРАВИЛА ИСПОЛЬЗОВАНИЯ ИНСТРУМЕНТОВ:
+            1. Платформа: Если пользователь не указал, где именно он хочет запустить рекламу (Яндекс или VK), ты ОБЯЗАН сначала вежливо уточнить у него целевую платформу.
+            2. Свободный ввод (Slot Filling): Извлекай из реплик ГЕО, возраст, имя, тексты и СРАЗУ вызывай соответствующие тулы. Не задавай пошаговых вопросов на то, что пользователь уже назвал.
+            3. Инициация: Если у тебя в контексте нет ID кампании (campaignId), ты ОБЯЗАН начать с вызова 'initYandexDraft' (для Яндекса) или соответствующего тула для VK. Полученный ID используй во всех остальных тулах.
+            4. Работа с ГЕО: Если пользователь назвал регион текстом (например, 'Москва'), ты НЕ ИМЕЕШЬ ПРАВА гадать ID. Сначала вызови 'searchYandexRegions', найди точный ID из ответа бэкенда, и только потом вызови 'bindYandexRegions'.
+            
+            КРИТИЧЕСКОЕ ПРАВИЛО РАЗДЕЛЕНИЯ КРЕАТИВА И ПУБЛИКАЦИИ:
+            5. Сохранение креатива: Когда пользователь дает текст объявления или просит его придумать, вызывай ИНСТРУМЕНТ 'submitYandexCreative'. Это ТОЛЬКО сохраняет текст в черновик.
+               - После этого покажи текст пользователю и спроси явное согласие на запуск (например: "Я сохранил текст. Запускаем рекламу в сеть?").
+            6. Финальная публикация: Вызывай инструмент 'publishYandexCampaign' СТРОГО тогда, когда текст уже сохранен, ВСЕ поля заполнены, и пользователь дал прямое согласие (написал 'Да', 'Запускай', 'Публикуй', 'Ок'). Никогда не публикуй кампанию в сеть автоматически без команды подтверждения!
+            
+            Если какой-то инструмент возвращает ошибку (например, ошибка валидации Яндекса в JSON), прочитай её, объясни пользователю человеческим языком и предложи исправление.
+            
+            Правила сетей и лимиты символов для генерации (с учетом ниши бизнеса):
+            $moderationRules
         """.trimIndent()
 
         val historyMessages = mutableListOf<Message>().apply {
@@ -51,7 +70,6 @@ class DynamicAiOrchestrator(
         return chatClientBuilder.build()
             .prompt()
             .messages(historyMessages)
-            // Передаем провайдер. Он сам заберет у service-yad список тулов и свяжет их с LLM!
             .tools(toolProvider)
             .stream()
             .content()

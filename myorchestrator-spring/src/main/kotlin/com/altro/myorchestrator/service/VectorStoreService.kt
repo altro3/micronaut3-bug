@@ -8,18 +8,31 @@ import org.springframework.ai.vectorstore.filter.FilterExpressionBuilder
 import org.springframework.stereotype.Service
 
 @Service
-class VectorStoreService(private val vectorStore: VectorStore) {
+class VectorStoreService(
+    private val vectorStore: VectorStore,
+) {
+
     private val log = KotlinLogging.logger {}
 
-    fun searchAdvertisingRules(platforms: List<Platform>): String = try {
-        val query = "правила модерации и лимиты символов " + platforms.joinToString { it.name }
-        val requestBuilder = SearchRequest.builder().query(query).topK(3)
-        
+    /**
+     * Ищет правила модерации на основе выбранных платформ и текста брифа/сообщения пользователя.
+     * @param platforms список целевых платформ
+     * @param userBriefText текст сообщения пользователя для семантического поиска ниши бизнеса
+     */
+    fun searchAdvertisingRules(platforms: List<Platform>, userBriefText: String): String = try {
+        // 1. Формируем поисковый запрос, подмешивая бриф для поиска по категориям бизнеса
+        val finalQuery = "Правила модерации, лимиты и ограничения для бизнеса: $userBriefText"
+
+        // Берем чуть больше документов (например, topK = 5), так как теперь ищем и лимиты, и ниши
+        val requestBuilder = SearchRequest.builder().query(finalQuery).topK(5)
+
         if (platforms.isNotEmpty()) {
-            val filter = FilterExpressionBuilder().`in`("platform", platforms.map { it.name }).build()
+            val allowedPlatformNames = platforms.map { it.name } + "ALL"
+
+            val filter = FilterExpressionBuilder().`in`("platform", allowedPlatformNames).build()
             requestBuilder.filterExpression(filter)
         }
-        
+
         val matchedDocs = vectorStore.similaritySearch(requestBuilder.build())
         if (matchedDocs.isEmpty()) {
             "Локальная база правил пуста. Сгенерируй стандартный качественный креатив."

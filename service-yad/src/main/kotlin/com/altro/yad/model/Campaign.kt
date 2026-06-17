@@ -10,10 +10,9 @@ class Campaign(
     var id: Long = 0,
     var status: CampaignStatus = CampaignStatus.DRAFT,
     var externalId: Long? = null,
-    var errorMessage: String? = null,
     var data: CampaignData = CampaignData(),
-    var createdAt: Instant,
-    var updatedAt: Instant,
+    var createdAt: Instant = Instant.now(),
+    var updatedAt: Instant = Instant.now(),
 ) {
 
     class CampaignData(
@@ -22,5 +21,6 @@ class Campaign(
         var targetRegionIds: List<String> = emptyList(),
         var targetAgeIds: List<String> = emptyList(),
         var budgetLimit: Double? = null,
+        var errorMessage: String? = null,
     )
 }

@@ -21,24 +21,32 @@ class InternalApiService(
     /**
      * Инициация Шага 1: Создание локального драфта по имени
      */
-    fun startNewCampaign(name: String): Campaign = 
+    fun startNewCampaign(name: String): Campaign =
         campaignService.createDraft(name)
 
     /**
      * Инициация Шага 2: Привязка списка идентификаторов ГЕО-регионов
      */
-    fun setCampaignRegions(id: Long, regionIds: List<String>): Campaign = 
+    fun setCampaignRegions(id: Long, regionIds: List<String>): Campaign =
         campaignService.bindRegions(id, regionIds)
 
     /**
      * Инициация Шага 3: Привязка списка идентификаторов возрастных ограничений
      */
-    fun setCampaignAges(id: Long, ageIds: List<String>): Campaign = 
+    fun setCampaignAges(id: Long, ageIds: List<String>): Campaign =
         campaignService.bindAges(id, ageIds)
 
     /**
-     * Инициация Шага 4: Добавление текста, автоматический запуск валидации и отправка в API Яндекса
+     * Инициация Шага 4: Только сохранение текста рекламного креатива в JSONB.
+     * Кампания переходит в статус CREATIVE_ADDED, но в сеть Яндекса пока ничего не отправляется.
      */
-    fun submitCreative(id: Long, text: String): Campaign = 
-        campaignService.addCreativeAndValidate(id, text)
+    fun saveCampaignCreative(id: Long, text: String): Campaign =
+        campaignService.addCreativeText(id, text)
+
+    /**
+     * Инициация Шага 5: Финальная публикация собранной кампании.
+     * Запускает локальную валидацию лимитов и делает физический вызов к API Яндекс.Директ.
+     */
+    fun publishCampaignToYandex(id: Long): Campaign =
+        campaignService.validateAndPublishToExternalNetwork(id)
 }

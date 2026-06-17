@@ -45,22 +45,25 @@ class AdvertisingMcpTools(
         serviceYadClient.bindAges(campaignId, BindAgesRq(ageIds = ageIds))
     }
 
-    @Tool(description = "Отправить финальный рекламный текст объявления в кампанию Яндекс.Директ. Этот инструмент запускает автоматическую внутреннюю валидацию лимитов и синхронизирует кампанию с сетью.")
+    @Tool(description = "Сохранить рекламный текст объявления в локальный черновик кампании Яндекс.Директ. Этот инструмент НЕ отправляет кампанию в сеть Яндекса, а только фиксирует текст в базе. Требуется локальный числовой ID кампании.")
     fun submitYandexCreative(campaignId: Long, text: String): String = executeMcpStep("submitYandexCreative") {
         serviceYadClient.submitCreative(campaignId, SubmitCreativeRq(text = text))
+    }
+
+    @Tool(description = "Опубликовать готовую рекламную кампанию напрямую в сеть Яндекс.Директ. Вызывать СТРОГО на самом финальном этапе, когда текст сохранен и пользователь дал явное текстовое согласие на запуск рекламы (например, сказал 'Запускай' или 'Публикуй'). Требуется локальный числовой ID кампании.")
+    fun publishYandexCampaign(campaignId: Long): String = executeMcpStep("publishYandexCampaign") {
+        serviceYadClient.publishCampaign(campaignId)
     }
 
     @Tool(description = "Поиск ID географических регионов по текстовому названию (например, 'мос', 'новосиб', 'питер'). Запрос должен быть не менее 3 символов. Обязательно вызывай этот инструмент перед привязкой регионов, чтобы узнать их точные ID.")
     fun searchYandexRegions(query: String): String {
         log.info { "MCP Tool 'searchYandexRegions' выполняет поиск по запросу: $query" }
 
-        // Дополнительная валидация на уровне MCP-слоя для защиты контекста
         if (query.trim().length < 3) {
             return "{\"error\": \"Запрос слишком короткий. Передай минимум 3 символа названия региона (например, 'моск').\"}"
         }
 
         return try {
-            // Вызываем эндпоинт, который мы ранее оптимизировали в контроллере/сервисе
             val matchedRegions = serviceYadClient.getRegions(query) ?: emptyList()
             jsonMapper.writeValueAsString(matchedRegions)
         } catch (e: Exception) {
@@ -78,7 +81,6 @@ class AdvertisingMcpTools(
             val responseBody = action()
                 ?: return "❌ Ошибка serviceYad: Внутреннее API адаптера вернуло пустой ответ при вызове инструмента '$toolName'"
 
-            // Если вызов успешен — намертво пакуем DTO в JSON-строку для ИИ-модели
             jsonMapper.writeValueAsString(responseBody)
         } catch (e: Exception) {
             log.error(e) { "Критический сетевой сбой в МСР при вызове инструмента '$toolName'" }

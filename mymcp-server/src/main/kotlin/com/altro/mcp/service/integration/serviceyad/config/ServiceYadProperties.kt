@@ -23,6 +23,8 @@ class ServiceYadProperties(
         @field:Valid
         val submitCreative: Endpoint,
         @field:Valid
+        val publishCampaign: Endpoint,
+        @field:Valid
         val getRegions: Endpoint,
         @field:Valid
         val getCampaignStatus: Endpoint,
