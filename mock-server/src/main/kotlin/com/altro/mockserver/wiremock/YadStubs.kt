@@ -18,16 +18,18 @@ object YadStubs {
     fun setupStubs(wireMockServer: WireMockServer) {
 
         val regionsRs = """
-    {
-      "result": {
-        "GeoRegions": [
-          { "RegionId": 1, "RegionName": "Москва и Московская область" },
-          { "RegionId": 2, "RegionName": "Санкт-Петербург и Ленинградская область" },
-          { "RegionId": 3, "RegionName": "Новосибирская область (Сибирь)" }
-        ]
-      }
-    }
-""".trimIndent()
+            {
+              "result": {
+                "GeoRegions": [
+                  { "RegionId": 1, "RegionName": "Москва и Московская область" },
+                  { "RegionId": 2, "RegionName": "Санкт-Петербург и Ленинградская область" },
+                  { "RegionId": 3, "RegionName": "Новосибирская область (Сибирь)" },
+                  { "RegionId": 4, "RegionName": "Бердск" }
+                ]
+              }
+            }
+        """.trimIndent()
+
         // 1. Заглушка для получения регионов: GET /yad/dict/regions
         wireMockServer.stubFor(
             get(urlEqualTo("/yad/dict/regions"))

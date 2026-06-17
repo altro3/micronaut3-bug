@@ -1,7 +1,6 @@
 CREATE TABLE campaign_session
 (
     id BIGSERIAL PRIMARY KEY,
-    current_step VARCHAR(50) NOT NULL,
     context JSONB NOT NULL,
     updated_at TIMESTAMP WITH TIME ZONE NOT NULL
 );

@@ -70,12 +70,12 @@ spring:
     mcp:
       client:
         enabled: true
-        name: adbroker-orchestrator-client
+        name: ad-broker-orchestrator-client
         version: 1.0.0
         requestTimeout: 120s
         streamable-http:
           connections:
-            adbroker-automation:
+            ad-broker-automation:
               url: http://localhost:8090
   datasource:
     url: jdbc:postgresql://localhost:5432/orchestrator_spring?currentSchema=target

@@ -37,10 +37,10 @@ app:
           method: PUT
         submit-creative:
           path: /internal/campaigns/{id}/creative
-          method: PUT
+          method: POST
         publish-campaign:
           path: /internal/campaigns/{id}/publish
-          method: PUT
+          method: POST
         get-regions:
           path: /internal/dictionaries/regions
           method: GET

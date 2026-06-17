@@ -9,7 +9,6 @@ import java.time.Instant
 class CampaignSession(
     @Id
     var id: Long = 0,
-    var currentStep: CampaignCreationStep = CampaignCreationStep.DRAFT,
     var context: SessionContext = SessionContext(),
     var updatedAt: Instant = Instant.now(),
 ) {

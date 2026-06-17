@@ -14,16 +14,9 @@ class VectorStoreService(
 
     private val log = KotlinLogging.logger {}
 
-    /**
-     * Ищет правила модерации на основе выбранных платформ и текста брифа/сообщения пользователя.
-     * @param platforms список целевых платформ
-     * @param userBriefText текст сообщения пользователя для семантического поиска ниши бизнеса
-     */
     fun searchAdvertisingRules(platforms: List<Platform>, userBriefText: String): String = try {
-        // 1. Формируем поисковый запрос, подмешивая бриф для поиска по категориям бизнеса
         val finalQuery = "Правила модерации, лимиты и ограничения для бизнеса: $userBriefText"
 
-        // Берем чуть больше документов (например, topK = 5), так как теперь ищем и лимиты, и ниши
         val requestBuilder = SearchRequest.builder().query(finalQuery).topK(5)
 
         if (platforms.isNotEmpty()) {
