@@ -18,15 +18,11 @@ class DictService(
 
     private val log = KotlinLogging.logger {}
 
-    // Ключом будет просто статическая строка "ALL_REGIONS"
     private val regionsCache: Cache<String, List<DictionaryItem>> = Caffeine.newBuilder()
         .maximumSize(1)
-        .expireAfterWrite(12, TimeUnit.HOURS) // Обновляем раз в 12 часов
+        .expireAfterWrite(12, TimeUnit.HOURS)
         .build()
 
-    /**
-     * Автоматический прогрев кэша ГЕО-регионов при старте приложения
-     */
     @Async
     @EventListener(ApplicationReadyEvent::class)
     fun coldStartWarmup() {
@@ -39,13 +35,41 @@ class DictService(
         }
     }
 
-    /**
-     * Быстрая отдача списка регионов из Caffeine
-     */
     fun getAvailableRegions(): List<DictionaryItem> {
         return regionsCache.get("ALL_REGIONS") { _ ->
             fetchRegionsFromYandex()
         }
+    }
+
+    /**
+     * Умный поиск регионов для ИИ-оркестратора (через MCP инструмент).
+     * Фильтрует локальный кэш Caffeine без обращений к внешнему API.
+     */
+    fun searchRegionsByQuery(query: String?, maxResults: Int = 10): List<DictionaryItem> {
+        // Защита от пустых запросов и слишком коротких фраз (минимум 3 символа)
+        if (query == null || query.trim().length < 3) {
+            return emptyList()
+        }
+
+        val cleanedQuery = query.trim().lowercase()
+        val allRegions = getAvailableRegions()
+
+        return allRegions
+            .asSequence()
+            // Ищем вхождение строки без учета регистра
+            .filter { it.name.lowercase().contains(cleanedQuery) }
+            // Сортируем: точное совпадение или начало строки идет выше, чем вхождение в середине
+            .sortedByDescending {
+                val lowerName = it.name.lowercase()
+                when {
+                    lowerName == cleanedQuery -> 3
+                    lowerName.startsWith(cleanedQuery) -> 2
+                    else -> 1
+                }
+            }
+            // Ограничиваем размер JSON-ответа для экономии контекста (токенов) LLM
+            .take(maxResults)
+            .toList()
     }
 
     private fun fetchRegionsFromYandex(): List<DictionaryItem> {

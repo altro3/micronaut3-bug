@@ -10,8 +10,8 @@ class InternalApiService(
     private val dictService: DictService,
 ) {
 
-    fun getCachedRegions(): List<RegionItemDto> =
-        dictService.getAvailableRegions().map {
+    fun getCachedRegions(query: String): List<RegionItemDto> =
+        dictService.searchRegionsByQuery(query).map {
             RegionItemDto(id = it.id, name = it.name)
         }
 

@@ -4,6 +4,8 @@ import com.altro.yad.api.dto.*
 import com.altro.yad.model.Campaign
 import com.altro.yad.service.InternalApiService
 import jakarta.validation.Valid
+import jakarta.validation.constraints.NotBlank
+import jakarta.validation.constraints.Size
 import org.springframework.web.bind.annotation.*
 
 @RestController
@@ -65,8 +67,8 @@ class InternalCampaignController(
      * GET http://localhost:8090/internal/dictionaries/regions
      */
     @GetMapping("/internal/dictionaries/regions")
-    fun getRegions(): List<RegionItemDto> =
-        internalApiService.getCachedRegions()
+    fun getRegions(@RequestParam @NotBlank @Size(min = 3) query: String): List<RegionItemDto> =
+        internalApiService.getCachedRegions(query)
 
     private fun Campaign.toRs() = CampaignStepRs(
         id = this.id,

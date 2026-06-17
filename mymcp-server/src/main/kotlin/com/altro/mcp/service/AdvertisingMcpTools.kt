@@ -18,9 +18,6 @@ class AdvertisingMcpTools(
 
     private val log = KotlinLogging.logger {}
 
-    /**
-     * МСР-Инструмент Инспекции: Получить текущее состояние кампании из адаптера Яндекса
-     */
     @Tool(description = "Получить актуальное состояние, выбранные поля и статус синхронизации кампании напрямую из базы данных адаптера Яндекса. Требуется локальный числовой ID кампании.")
     fun getYandexCampaignStatus(campaignId: Long): String {
         log.info { "MCP Tool 'getYandexCampaignStatus' запрашивает стейт для ID: $campaignId" }
@@ -33,67 +30,49 @@ class AdvertisingMcpTools(
         }
     }
 
-    /**
-     * МСР-Инструмент Шага 1: Инициация черновика в service-yad
-     */
     @Tool(description = "Инициировать новый черновик рекламной кампании в Яндекс.Директ. Вызывать строго на самом первом шаге, когда пользователь определился с именем кампании.")
     fun initYandexDraft(name: String): String = executeMcpStep("initYandexDraft") {
         serviceYadClient.createDraft(CreateDraftRq(name = name))
     }
 
-    /**
-     * МСР-Инструмент Шага 2: Привязка регионов таргетинга в service-yad
-     */
     @Tool(description = "Привязать выбранные географические регионы (список ID) к существующей кампании в Яндекс.Директ. Требуется локальный числовой ID кампании.")
     fun bindYandexRegions(campaignId: Long, regionIds: List<String>): String = executeMcpStep("bindYandexRegions") {
         serviceYadClient.bindRegions(campaignId, BindRegionsRq(regionIds = regionIds))
     }
 
-    /**
-     * МСР-Инструмент Шага 3: Привязка возрастного таргетинга в service-yad
-     */
     @Tool(description = "Привязать выбранные возрастные ограничения (список ID возрастных меток) к существующей кампании в Яндекс.Директ. Требуется локальный числовой ID кампании.")
     fun bindYandexAges(campaignId: Long, ageIds: List<String>): String = executeMcpStep("bindYandexAges") {
         serviceYadClient.bindAges(campaignId, BindAgesRq(ageIds = ageIds))
     }
 
-    /**
-     * МСР-Инструмент Шага 4: Добавление креатива, валидация и автоматический уход в сеть Яндекса
-     */
     @Tool(description = "Отправить финальный рекламный текст объявления в кампанию Яндекс.Директ. Этот инструмент запускает автоматическую внутреннюю валидацию лимитов и синхронизирует кампанию с сетью.")
     fun submitYandexCreative(campaignId: Long, text: String): String = executeMcpStep("submitYandexCreative") {
         serviceYadClient.submitCreative(campaignId, SubmitCreativeRq(text = text))
     }
 
-    /**
-     * МСР-Инструмент получения справочника ГЕО-регионов
-     */
-    @Tool(description = "Получить актуальный справочник доступных географических регионов для таргетинга в Яндекс.Директ.")
-    fun getRegionsList(): String {
-        log.info { "MCP Tool 'getRegionsList' запрашивает кэшированную коллекцию из serviceYad" }
+    @Tool(description = "Поиск ID географических регионов по текстовому названию (например, 'мос', 'новосиб', 'питер'). Запрос должен быть не менее 3 символов. Обязательно вызывай этот инструмент перед привязкой регионов, чтобы узнать их точные ID.")
+    fun searchYandexRegions(query: String): String {
+        log.info { "MCP Tool 'searchYandexRegions' выполняет поиск по запросу: $query" }
+
+        // Дополнительная валидация на уровне MCP-слоя для защиты контекста
+        if (query.trim().length < 3) {
+            return "{\"error\": \"Запрос слишком короткий. Передай минимум 3 символа названия региона (например, 'моск').\"}"
+        }
+
         return try {
-            val regionsList = serviceYadClient.getRegions() ?: emptyList()
-            jsonMapper.writeValueAsString(regionsList)
+            // Вызываем эндпоинт, который мы ранее оптимизировали в контроллере/сервисе
+            val matchedRegions = serviceYadClient.getRegions(query) ?: emptyList()
+            jsonMapper.writeValueAsString(matchedRegions)
         } catch (e: Exception) {
             "[]"
         }
     }
 
-    /**
-     * Холостой инструмент для VK Ads
-     */
     @Tool(description = "Создать рекламную кампанию на платформе ВКонтакте (VK). Требуется название, заголовок и текст баннера.")
     fun createVkCampaign(name: String, title: String, text: String): String {
         return "Успешно. Кампания в VK Ads инициирована (Холостой режим)."
     }
 
-    // ==========================================================================================
-    // ВЫДЕЛЕННЫЙ ОБЩИЙ МЕТОД ОБРАБОТКИ СЕТЕВЫХ ШАГОВ
-    // ==========================================================================================
-
-    /**
-     * Универсальный инкапсулятор сетевого транспорта и Jackson-сериализации ответов
-     */
     private fun <T : Any> executeMcpStep(toolName: String, action: () -> T?): String {
         return try {
             val responseBody = action()

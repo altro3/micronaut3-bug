@@ -72,8 +72,8 @@ class ServiceYadClient(
     /**
      * Получить список доступных регионов из Caffeine-кэша адаптера
      */
-    fun getRegions(): List<RegionItemDto>? =
-        httpClient.sendRq(endpoints.getRegions, RS_REGIONS)
+    fun getRegions(query: String): List<RegionItemDto>? =
+        httpClient.sendRq(endpoints.getRegions, RS_REGIONS, queryParams = mapOf("query" to query))
 
     companion object {
         val RS_REGIONS = object : ParameterizedTypeReference<List<RegionItemDto>>() {}

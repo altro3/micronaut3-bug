@@ -23,7 +23,8 @@ class ChatOrchestrator(
     private val ageSelectionHandler: AgeSelectionHandler,
     private val audienceTargetingHandler: AudienceTargetingHandler,
     private val creativeGenerationHandler: CreativeGenerationHandler,
-    private val mcpPublishingHandler: McpPublishingHandler
+    private val mcpPublishingHandler: McpPublishingHandler,
+    private val dynamicAiOrchestrator: DynamicAiOrchestrator
 ) {
 
     fun orchestrateChatStream(rq: ChatRq): Flux<String> =
@@ -36,13 +37,22 @@ class ChatOrchestrator(
 
                 val firstMessage = rq.messages.first().content.trim()
                 val userInput = rq.messages.last().content.trim()
-
                 val session = sessionRepository.findByFirstMessage(firstMessage)
 
                 if (session == null) {
-                    platformSelectionHandler.initializeSession(firstMessage, userInput, sink)
+                    if (userInput.contains("умный", ignoreCase = true) || userInput.contains("ии", ignoreCase = true)) {
+                        val newSession = CampaignSession(currentStep = CampaignCreationStep.AI_DYNAMIC_COLLECTING)
+                        dynamicAiOrchestrator.orchestrateDynamicStream(newSession, userInput)
+                            .subscribe(sink::next, sink::error, sink::complete)
+                    } else {
+                        platformSelectionHandler.initializeSession(firstMessage, userInput, sink) // Старый путь
+                    }
                 } else {
-                    executeSessionStep(session, userInput, sink)
+                    if (session.currentStep == CampaignCreationStep.AI_DYNAMIC_COLLECTING) {
+                        dynamicAiOrchestrator.orchestrateDynamicStream(session, userInput).subscribe(sink::next, sink::error, sink::complete)
+                    } else {
+                        executeSessionStep(session, userInput, sink)
+                    }
                 }
 
             } catch (e: Exception) {

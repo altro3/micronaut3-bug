@@ -7,5 +7,8 @@ enum class CampaignCreationStep {
     AUDIENCE_TARGETING,    // Шаг 2: Выбор и конфигурация аудитории
     CREATIVE_GENERATION,   // Шаг 3: Загрузка или ИИ-генерация креативов (тексты + картинка)
     PUBLISHING_AND_PAYMENT,// Шаг 4: Паблишинг через MCP и переход к оплате
-    COMPLETED              // Финал: Кампания оплачена и активна в кабинетах
+    COMPLETED,              // Финал: Кампания оплачена и активна в кабинетах
+
+    AI_DYNAMIC_COLLECTING,
+    AI_DYNAMIC_CONFIRMATION,
 }
