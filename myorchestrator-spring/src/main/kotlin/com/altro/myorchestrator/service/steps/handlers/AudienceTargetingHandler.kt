@@ -19,7 +19,7 @@ class AudienceTargetingHandler(
     private val log = KotlinLogging.logger {}
 
     fun processAudience(session: CampaignSession, userInput: String, sink: FluxSink<String>) {
-        val platform = session.context.selectedPlatform
+        val platform = session.context.platform
             ?: throw IllegalStateException("Критическая ошибка: Рекламная платформа не задана в сессии")
 
         if (userInput.blankOrTooShort()) {
@@ -47,7 +47,7 @@ class AudienceTargetingHandler(
             platforms = listOf(platform),
             userBriefText = userInput
         )
-        log.info { "Для кампании ${session.campaignId} из Qdrant извлечены правила модерации." }
+        log.info { "Для кампании ${session.context.campaignId} из Qdrant извлечены правила модерации." }
 
         // 3. Добавляем ответ ИИ и извлеченные правила в историю логов сессии,
         // чтобы на Шаге 4 CreativeGeneratorProcessor смог их прочитать из базы.

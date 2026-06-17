@@ -15,6 +15,7 @@ import org.springframework.stereotype.Service
 import reactor.core.publisher.Flux
 import reactor.core.publisher.FluxSink
 import reactor.core.scheduler.Schedulers
+import java.time.Instant
 
 @Service
 class ChatOrchestrator(
@@ -43,18 +44,33 @@ class ChatOrchestrator(
                 val session = sessionRepository.findByFirstMessage(firstMessage)
 
                 if (session == null) {
-                    if (userInput.contains("умный", ignoreCase = true) || userInput.contains("ии", ignoreCase = true)) {
-                        val newSession = CampaignSession(currentStep = CampaignCreationStep.AI_DYNAMIC_COLLECTING)
-                        dynamicAiOrchestrator.orchestrateDynamicStream(newSession, userInput)
+                    val isSmartMode = userInput.contains("умн", ignoreCase = true) ||
+                            userInput.contains("ии", ignoreCase = true)
+
+                    if (isSmartMode) {
+                        log.info { "Инициализирую новую ДИНАМИЧЕСКУЮ ИИ-сессию для первого сообщения" }
+
+                        val newSession = CampaignSession(
+                            currentStep = CampaignCreationStep.AI_DYNAMIC_COLLECTING,
+                        ).apply {
+                            context.rawBriefText = userInput
+                            context.executionLogs = listOf(userInput)
+                        }
+
+                        val savedSession = sessionRepository.save(newSession)
+
+                        dynamicAiOrchestrator.orchestrateDynamicStream(savedSession, userInput)
                             .subscribe(sink::next, sink::error, sink::complete)
                     } else {
                         platformSelectionHandler.initializeSession(firstMessage, userInput, sink) // Старый путь
-                    }
-                } else {
+                    }                } else {
+                    // Если сессия найдена и она в статусе ИИ — гарантированно гоним её в динамический оркестратор
                     if (session.currentStep == CampaignCreationStep.AI_DYNAMIC_COLLECTING) {
-                        dynamicAiOrchestrator.orchestrateDynamicStream(session, userInput).subscribe(sink::next, sink::error, sink::complete)
+                        log.info { "Сессия найдена. Продолжаю динамический ИИ-стрим для ID: ${session.id}" }
+                        dynamicAiOrchestrator.orchestrateDynamicStream(session, userInput)
+                            .subscribe(sink::next, sink::error, sink::complete)
                     } else {
-                        executeSessionStep(session, userInput, sink)
+                        executeSessionStep(session, userInput, sink) // Старый пошаговый путь
                     }
                 }
 
@@ -71,26 +87,21 @@ class ChatOrchestrator(
             CampaignCreationStep.REGION_SELECTION -> ageSelectionHandler.processAgeTargeting(session, userInput, sink)
             CampaignCreationStep.AUDIENCE_TARGETING -> audienceTargetingHandler.processAudience(session, userInput, sink)
             CampaignCreationStep.CREATIVE_GENERATION -> creativeGenerationHandler.processCreatives(session, userInput, sink, ::isUserApproved)
-            CampaignCreationStep.PUBLISHING_AND_PAYMENT -> mcpPublishingHandler.processPublish(session, userInput, sink, ::isUserApproved)
+            CampaignCreationStep.PUBLISHING_AND_PAYMENT -> mcpPublishingHandler.handleAwaitingPayment(session, sink)
             CampaignCreationStep.COMPLETED -> mcpPublishingHandler.handleCompleted(sink)
 
-            // НОВАЯ СОВРЕМЕННАЯ ВЕТКА: Если сессия уже идет по ИИ-пути
             CampaignCreationStep.AI_DYNAMIC_COLLECTING,
             CampaignCreationStep.AI_DYNAMIC_CONFIRMATION -> {
-                log.info { "Перенаправляю запрос в динамический ИИ-оркестратор для сессии: ${session.campaignId}" }
-
-                // Вызываем новый оркестратор, который возвращает Flux<String>
+                log.info { "Перенаправляю запрос в динамический ИИ-оркестратор для сессии: ${session.id}" }
                 dynamicAiOrchestrator.orchestrateDynamicStream(session, userInput)
                     .subscribe(
-                        { chunk -> sink.next(chunk) },     // Передаем каждый ИИ-токен в текущий веб-сокет/SSE
-                        { error -> sink.error(error) },    // Пробрасываем ошибку в пайплайн чата
-                        { sink.complete() }                // Закрываем стрим, когда ИИ закончил говорить
+                        { chunk -> sink.next(chunk) },
+                        { error -> sink.error(error) },
+                        { sink.complete() }
                     )
             }
         }
     }
-
-
 
     private fun isUserApproved(input: String): Boolean {
         val clean = input.lowercase().trim()

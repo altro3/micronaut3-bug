@@ -24,10 +24,10 @@ class RegionSelectionHandler(
     private val log = KotlinLogging.logger {}
 
     fun processRegions(session: CampaignSession, userInput: String, sink: FluxSink<String>) {
-        val yadId = session.context.yadCampaignId
+        val campaignId = session.context.campaignId
         var finalRegionIds = emptyList<String>()
 
-        if (session.context.selectedPlatform == Platform.YANDEX_DIRECT && yadId != null) {
+        if (session.context.platform == Platform.YANDEX_DIRECT && campaignId != null) {
             try {
                 sink.next("🧠 ИИ-Анализатор [Qwen-35B]: Сопоставляю города со справочником Яндекса...\n")
 
@@ -70,7 +70,7 @@ class RegionSelectionHandler(
 
                 // ШАГ 3: ДЕТЕРМИНИРОВАННО ПУШИМ НАЙДЕННЫЕ ID В МСР-ИНСТРУМЕНТ
                 sink.next("📡 Отправляю распознанные ID регионов $finalRegionIds в service-yad...\n")
-                val mcpRequest = CallToolRequest("bindYandexRegions", mapOf("campaignId" to yadId, "regionIds" to finalRegionIds), mapOf())
+                val mcpRequest = CallToolRequest("bindYandexRegions", mapOf("campaignId" to campaignId, "regionIds" to finalRegionIds), mapOf())
                 mcpClient.callTool(mcpRequest).block()
 
             } catch (e: Exception) {

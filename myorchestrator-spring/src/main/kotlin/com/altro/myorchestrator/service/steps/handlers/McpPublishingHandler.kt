@@ -31,9 +31,9 @@ class McpPublishingHandler(
             return
         }
 
-        val platform = session.context.selectedPlatform
+        val platform = session.context.platform
             ?: throw IllegalStateException("Критическая ошибка: Рекламная платформа не задана в сессии")
-        val yadId = session.context.yadCampaignId
+        val campaignId = session.context.campaignId
             ?: throw IllegalStateException("Критическая ошибка: Сквозной ID service-yad утерян")
 
         // 🌟 ШАГ 1: ТРИГГЕРИМ ФИНАЛЬНУЮ ПУБЛИКАЦИЮ В СЕТЬ ЯНДЕКСА ЧЕРЕЗ MCP
@@ -43,7 +43,7 @@ class McpPublishingHandler(
 
                 val mcpRequest = CallToolRequest(
                     "publishYandexCampaign",
-                    mapOf("campaignId" to yadId),
+                    mapOf("campaignId" to campaignId),
                     mapOf()
                 )
 
@@ -52,7 +52,7 @@ class McpPublishingHandler(
                     .block() ?: throw IllegalStateException("Пустой ответ от сервера публикации")
 
                 sink.next("✅ Адаптер Яндекса подтвердил успешную валидацию и отправку пакета в сеть!\n")
-                log.info { "Успешно выполнен паблишинг через инструмент publishYandexCampaign для ID: $yadId. Ответ: ${mcpResponse.content}" }
+                log.info { "Успешно выполнен паблишинг через инструмент publishYandexCampaign для ID: $campaignId. Ответ: ${mcpResponse.content}" }
             } catch (e: Exception) {
                 log.error(e) { "Критическая ошибка финальной публикации через MCP" }
                 sink.next("❌ Сбой публикации в Яндекс.Директ: ${e.message}\n")
@@ -64,7 +64,7 @@ class McpPublishingHandler(
         // ШАГ 2: БИЛЛИНГ (Выставляем счет только после успешной отправки в сеть)
         sink.next("💳 Связываюсь с биллинг-платформой для выставления счета...\n")
 
-        val invoiceId = "INV-${System.currentTimeMillis()}-${session.campaignId}"
+        val invoiceId = "INV-${System.currentTimeMillis()}-${session.context.campaignId}"
         val logs = listOf("✅ Кампания успешно опубликована в сеть", "✅ Выставлен инвойс: $invoiceId")
 
         // Переводим сессию в статус ожидания оплаты

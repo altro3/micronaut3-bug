@@ -27,10 +27,10 @@ class AgeSelectionHandler(
             return
         }
 
-        val yadId = session.context.yadCampaignId
+        val yadId = session.context.campaignId
 
         // Если это Яндекс — пушим ID возрастных категорий во внешний service-yad через MCP
-        if (session.context.selectedPlatform == Platform.YANDEX_DIRECT && yadId != null) {
+        if (session.context.platform == Platform.YANDEX_DIRECT && yadId != null) {
             try {
                 sink.next("📡 Синхронизирую возрастной таргетинг с service-yad через MCP-инструмент...\n")
 

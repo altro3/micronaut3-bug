@@ -34,9 +34,9 @@ class CreativeGenerationHandler(
             return
         }
 
-        val platform = session.context.selectedPlatform
+        val platform = session.context.platform
             ?: throw IllegalStateException("Критическая ошибка: Рекламная платформа не задана в сессии")
-        val yadId = session.context.yadCampaignId
+        val campaignId = session.context.campaignId
             ?: throw IllegalStateException("Критическая ошибка: Сквозной ID service-yad утерян")
 
         var moderationRules = "Соблюдать стандартные лимиты символов площадки."
@@ -45,7 +45,7 @@ class CreativeGenerationHandler(
         if (platform == Platform.YANDEX_DIRECT) {
             try {
                 sink.next("📡 Запрашиваю текущие лимиты и правила модерации из базы данных адаптера...\n")
-                val statusRequest = CallToolRequest("getYandexCampaignStatus", mapOf("campaignId" to yadId), mapOf())
+                val statusRequest = CallToolRequest("getYandexCampaignStatus", mapOf("campaignId" to campaignId), mapOf())
 
                 // 🎯 ИСПРАВЛЕНО: Добавляем .block() для ожидания сетевого ответа статуса
                 val statusResponse = mcpClient.callTool(statusRequest)
@@ -72,7 +72,7 @@ class CreativeGenerationHandler(
                 val mcpRequest = CallToolRequest(
                     "submitYandexCreative",
                     mapOf(
-                        "campaignId" to yadId,
+                        "campaignId" to campaignId,
                         "text" to (creative.bodyText ?: "Специальное предложение от AdBroker")
                     ),
                     mapOf()

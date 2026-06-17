@@ -37,7 +37,7 @@ class PlatformSelectionHandler(
         }
 
         sink.next("⚙️ Инициирую сессию в service-yad через MCP-гейтвей...\n")
-        var yadId = System.currentTimeMillis() // Фолбэк
+        var campaignId = System.currentTimeMillis() // Фолбэк
 
         if (platform == Platform.YANDEX_DIRECT) {
             try {
@@ -49,8 +49,8 @@ class PlatformSelectionHandler(
                     .block() ?: throw IllegalStateException("MCP-сервер вернул пустой ответ при инициализации драфта")
 
                 val rootNode = jsonMapper.readTree(mcpResponse.content.toString())
-                yadId = rootNode.get("id")?.asLong() ?: throw IllegalStateException("ID утерян в ответе service-yad")
-                log.info { "Успешно вызван MCP initYandexDraft. Локальный ID в адаптере: $yadId" }
+                campaignId = rootNode.get("id")?.asLong() ?: throw IllegalStateException("ID утерян в ответе service-yad")
+                log.info { "Успешно вызван MCP initYandexDraft. Локальный ID в адаптере: $campaignId" }
             } catch (e: Exception) {
                 log.error(e) { "Ошибка МСР-транспорта на Шаге 1" }
                 sink.next("❌ Ошибка МСР-транспорта: ${e.message}\n")
@@ -61,12 +61,11 @@ class PlatformSelectionHandler(
 
         // Создаем и мутируем var-модель сессии оркестратора чата
         val session = CampaignSession(
-            campaignId = yadId, // Сквозной ID становится первичным ключом сессии оркестратора
             currentStep = CampaignCreationStep.PLATFORM_SELECTION,
             updatedAt = Instant.now()
         ).apply {
-            context.selectedPlatform = platform
-            context.yadCampaignId = yadId
+            context.platform = platform
+            context.campaignId = campaignId
             context.executionLogs = listOf(firstMessage)
         }
 
