@@ -5,7 +5,7 @@ import com.altro.myorchestrator.model.CampaignCreationStep
 import com.altro.myorchestrator.model.CampaignSession
 import com.altro.myorchestrator.repository.CampaignSessionRepository
 import io.github.oshai.kotlinlogging.KotlinLogging
-import io.modelcontextprotocol.client.McpSyncClient
+import io.modelcontextprotocol.client.McpAsyncClient // 🎯 ИСПРАВЛЕНО: Инжектим асинхронный клиент
 import io.modelcontextprotocol.spec.McpSchema.CallToolRequest
 import org.springframework.stereotype.Component
 import reactor.core.publisher.FluxSink
@@ -14,7 +14,7 @@ import java.time.Instant
 @Component
 class AgeSelectionHandler(
     private val sessionRepository: CampaignSessionRepository,
-    private val mcpClient: McpSyncClient
+    private val mcpClient: McpAsyncClient,
 ) {
     private val log = KotlinLogging.logger {}
 
@@ -40,7 +40,8 @@ class AgeSelectionHandler(
                     mapOf("campaignId" to yadId, "ageIds" to rawAges),
                     mapOf()
                 )
-                mcpClient.callTool(mcpRequest)
+                mcpClient.callTool(mcpRequest).block()
+
                 log.info { "Успешно выполнен RPC-вызов bindYandexAges для ID: $yadId" }
             } catch (e: Exception) {
                 log.error(e) { "Ошибка отправки возрастного таргетинга в service-yad" }

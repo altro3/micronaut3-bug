@@ -5,7 +5,7 @@ import com.altro.myorchestrator.model.CampaignCreationStep
 import com.altro.myorchestrator.model.CampaignSession
 import com.altro.myorchestrator.repository.CampaignSessionRepository
 import io.github.oshai.kotlinlogging.KotlinLogging
-import io.modelcontextprotocol.client.McpSyncClient
+import io.modelcontextprotocol.client.McpAsyncClient // 🎯 ИСПРАВЛЕНО: Инжектим асинхронный клиент
 import io.modelcontextprotocol.spec.McpSchema.CallToolRequest
 import org.springframework.stereotype.Component
 import reactor.core.publisher.FluxSink
@@ -15,7 +15,7 @@ import java.time.Instant
 @Component
 class PlatformSelectionHandler(
     private val sessionRepository: CampaignSessionRepository,
-    private val mcpClient: McpSyncClient,
+    private val mcpClient: McpAsyncClient,
     private val jsonMapper: JsonMapper
 ) {
     private val log = KotlinLogging.logger {}
@@ -43,7 +43,10 @@ class PlatformSelectionHandler(
             try {
                 // Создаем драфт в адаптере Яндекса через МСР
                 val mcpRequest = CallToolRequest("initYandexDraft", mapOf("name" to "Кампания_${System.currentTimeMillis() / 1000}"), mapOf())
+
+                // 🎯 ИСПРАВЛЕНО: Вызываем асинхронный инструмент и принудительно блокируем поток до получения ответа через .block()
                 val mcpResponse = mcpClient.callTool(mcpRequest)
+                    .block() ?: throw IllegalStateException("MCP-сервер вернул пустой ответ при инициализации драфта")
 
                 val rootNode = jsonMapper.readTree(mcpResponse.content.toString())
                 yadId = rootNode.get("id")?.asLong() ?: throw IllegalStateException("ID утерян в ответе service-yad")

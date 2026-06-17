@@ -11,7 +11,7 @@ class CampaignSession(
     var campaignId: Long = 0,                         // Локальный ID сессии чата (Primary Key)
     var currentStep: CampaignCreationStep = CampaignCreationStep.DRAFT, // Текущий шаг (старый или новый макро-статус)
     var context: SessionContext = SessionContext(),    // Контекст со всеми сквозными ID
-    var updatedAt: Instant,
+    var updatedAt: Instant = Instant.now(),
 ) {
 
     class SessionContext(

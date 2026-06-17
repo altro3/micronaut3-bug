@@ -48,8 +48,8 @@ app:
           path: /internal/campaigns/{id}
           method: GET
       http:
-        service-name: yad
-        url: http://localhost:8103
+        service-name: service-yad
+        url: http://localhost:8081
 
 server:
   port: 8090

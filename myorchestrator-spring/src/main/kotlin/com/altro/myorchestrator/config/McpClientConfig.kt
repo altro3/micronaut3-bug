@@ -1,7 +1,7 @@
 package com.altro.myorchestrator.config
 
+import io.modelcontextprotocol.client.McpAsyncClient
 import io.modelcontextprotocol.client.McpClient
-import io.modelcontextprotocol.client.McpSyncClient
 import io.modelcontextprotocol.spec.McpSchema.Implementation
 import org.springframework.ai.mcp.client.common.autoconfigure.NamedClientMcpTransport
 import org.springframework.ai.mcp.client.common.autoconfigure.properties.McpClientCommonProperties
@@ -13,15 +13,16 @@ import org.springframework.context.annotation.Configuration
 class McpClientConfig {
 
     @Bean
-    fun adbrokerMcpClient(
+    fun adBrokerMcpClient(
         mcpProps: McpClientCommonProperties,
         @Qualifier("streamableHttpHttpClientTransports")
         namedTransports: List<NamedClientMcpTransport>,
-    ): McpSyncClient {
+    ): McpAsyncClient {
         val transport = namedTransports.find { it.name() == "adbroker-automation" }
             ?: error("McpTransport 'adbroker-automation' не найден в контексте")
 
-        val client = McpClient.sync(transport.transport())
+        // 🎯 КЛЮЧЕВОЕ ИСПРАВЛЕНИЕ: Переключаем фабрику с .sync() на .async()
+        val client = McpClient.async(transport.transport())
             .requestTimeout(mcpProps.requestTimeout)
             .clientInfo(
                 Implementation(
@@ -36,9 +37,41 @@ class McpClientConfig {
             .build()
 
         if (mcpProps.isInitialized) {
-            client.initialize()
+            client.initialize().subscribe()
         }
 
         return client
     }
+
+    /*
+        @Bean
+        fun adbrokerMcpClient(
+            mcpProps: McpClientCommonProperties,
+            @Qualifier("streamableHttpHttpClientTransports")
+            namedTransports: List<NamedClientMcpTransport>,
+        ): McpSyncClient {
+            val transport = namedTransports.find { it.name() == "adbroker-automation" }
+                ?: error("McpTransport 'adbroker-automation' не найден в контексте")
+
+            val client = McpClient.sync(transport.transport())
+                .requestTimeout(mcpProps.requestTimeout)
+                .clientInfo(
+                    Implementation(
+                        mcpProps.name,
+                        mcpProps.name,
+                        mcpProps.version,
+                        null,
+                        null,
+                        null,
+                    )
+                )
+                .build()
+
+            if (mcpProps.isInitialized) {
+                client.initialize()
+            }
+
+            return client
+        }
+    */
 }

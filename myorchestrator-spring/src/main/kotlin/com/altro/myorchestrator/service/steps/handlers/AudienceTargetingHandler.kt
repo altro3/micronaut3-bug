@@ -31,15 +31,33 @@ class AudienceTargetingHandler(
         val platformNameReadable = if (platform.name == "YANDEX_DIRECT") "Яндекс.Директ" else "ВКонтакте"
         sink.next("🧠 ИИ-Анализатор [Qwen-35B]: Изучаю ваш бриф под требования площадки $platformNameReadable...\n")
 
+        // 1. Сохраняем текст брифа в историю (первое сообщение юзера на этом шаге)
+        // Чтобы модель на следующем шаге генерации креативов видела, про что писать рекламу
+        val updatedLogs = session.context.executionLogs.toMutableList().apply {
+            add(userInput)
+        }
+
         // Вызов локального инференса Qwen-35B для анализа ЦА
         val analysisResult = aiInferenceService.analyzeBrief(userInput)
 
         sink.next("📡 Qdrant [Размерность 2048]: Извлекаю актуальные правила модерации из базы знаний...\n")
-        // Подтягиваем правила через gRPC-фильтр
-        vectorStoreService.searchAdvertisingRules(listOf(platform))
 
-        // Мутируем var свойства напрямую и сохраняем легкий стейт
-        session.currentStep = CampaignCreationStep.AUDIENCE_TARGETING
+        // 2. 🎯 ИСПРАВЛЕНО: Передаем платформу и живой бриф (userInput) для поиска категории бизнеса (ALL)
+        val extractedRules = vectorStoreService.searchAdvertisingRules(
+            platforms = listOf(platform),
+            userBriefText = userInput
+        )
+        log.info { "Для кампании ${session.campaignId} из Qdrant извлечены правила модерации." }
+
+        // 3. Добавляем ответ ИИ и извлеченные правила в историю логов сессии,
+        // чтобы на Шаге 4 CreativeGeneratorProcessor смог их прочитать из базы.
+        updatedLogs.add(analysisResult.audienceDescription)
+        // Пакуем скрытый системный контекст правил в логи, чтобы передать его на следующий шаг
+        updatedLogs.add("SYSTEM_RULES_CONTEXT: $extractedRules")
+        session.context.executionLogs = updatedLogs
+
+        // 4. 🎯 ИСПРАВЛЕНО: Переводим сессию на ШАГ КРЕАТИВОВ, убирая вечный цикл
+        session.currentStep = CampaignCreationStep.CREATIVE_GENERATION
         session.updatedAt = Instant.now()
         sessionRepository.save(session)
 

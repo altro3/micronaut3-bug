@@ -91,6 +91,7 @@ class ChatOrchestrator(
     }
 
 
+
     private fun isUserApproved(input: String): Boolean {
         val clean = input.lowercase().trim()
         return clean in listOf("да", "ок", "публикуй", "подтверждаю", "yes", "ok", "генерируй")

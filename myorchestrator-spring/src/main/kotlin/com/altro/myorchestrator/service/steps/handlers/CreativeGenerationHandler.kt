@@ -6,7 +6,7 @@ import com.altro.myorchestrator.model.CampaignSession
 import com.altro.myorchestrator.repository.CampaignSessionRepository
 import com.altro.myorchestrator.service.CreativeGeneratorProcessor
 import io.github.oshai.kotlinlogging.KotlinLogging
-import io.modelcontextprotocol.client.McpSyncClient
+import io.modelcontextprotocol.client.McpAsyncClient
 import io.modelcontextprotocol.spec.McpSchema.CallToolRequest
 import org.springframework.stereotype.Component
 import reactor.core.publisher.FluxSink
@@ -17,7 +17,7 @@ import java.time.Instant
 class CreativeGenerationHandler(
     private val sessionRepository: CampaignSessionRepository,
     private val creativeGeneratorProcessor: CreativeGeneratorProcessor,
-    private val mcpClient: McpSyncClient,
+    private val mcpClient: McpAsyncClient,
     private val jsonMapper: JsonMapper
 ) {
     private val log = KotlinLogging.logger {}
@@ -46,7 +46,10 @@ class CreativeGenerationHandler(
             try {
                 sink.next("📡 Запрашиваю текущие лимиты и правила модерации из базы данных адаптера...\n")
                 val statusRequest = CallToolRequest("getYandexCampaignStatus", mapOf("campaignId" to yadId), mapOf())
+
+                // 🎯 ИСПРАВЛЕНО: Добавляем .block() для ожидания сетевого ответа статуса
                 val statusResponse = mcpClient.callTool(statusRequest)
+                    .block() ?: throw IllegalStateException("Пустой ответ статуса")
 
                 val rootNode = jsonMapper.readTree(statusResponse.content.toString())
                 moderationRules = rootNode.path("errorMessage").asText().takeIf { it.isNotBlank() }
@@ -74,7 +77,10 @@ class CreativeGenerationHandler(
                     ),
                     mapOf()
                 )
+
                 val mcpResponse = mcpClient.callTool(mcpRequest)
+                    .block() ?: throw IllegalStateException("Пустой ответ сохранения креатива")
+
                 sink.next("✅ Адаптер успешно принял креатив: ${mcpResponse.content}\n\n")
             } catch (e: Exception) {
                 sink.next("⚠️ Ошибка синхронизации с адаптером Яндекса: ${e.message}\n")

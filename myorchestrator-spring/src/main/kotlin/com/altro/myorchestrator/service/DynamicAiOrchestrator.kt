@@ -3,24 +3,30 @@ package com.altro.myorchestrator.service
 import com.altro.myorchestrator.model.CampaignCreationStep
 import com.altro.myorchestrator.model.CampaignSession
 import com.altro.myorchestrator.repository.CampaignSessionRepository
-import io.modelcontextprotocol.client.McpSyncClient
+import io.github.oshai.kotlinlogging.KotlinLogging
+import io.modelcontextprotocol.client.McpAsyncClient
 import org.springframework.ai.chat.client.ChatClient
 import org.springframework.ai.chat.messages.AssistantMessage
 import org.springframework.ai.chat.messages.Message
 import org.springframework.ai.chat.messages.SystemMessage
 import org.springframework.ai.chat.messages.UserMessage
-import org.springframework.ai.mcp.SyncMcpToolCallbackProvider
+import org.springframework.ai.mcp.AsyncMcpToolCallbackProvider
 import org.springframework.stereotype.Service
 import reactor.core.publisher.Flux
 import reactor.core.scheduler.Schedulers
+import java.util.concurrent.Executors
 
 @Service
 class DynamicAiOrchestrator(
     private val sessionRepository: CampaignSessionRepository,
-    private val mcpClient: McpSyncClient,
+    private val mcpClient: McpAsyncClient,
     private val chatClientBuilder: ChatClient.Builder,
     private val vectorStoreService: VectorStoreService,
 ) {
+
+    private val mcpScheduler = Schedulers.fromExecutor(Executors.newFixedThreadPool(4))
+
+    private val log = KotlinLogging.logger {}
 
     fun orchestrateDynamicStream(session: CampaignSession, userInput: String): Flux<String> {
         session.currentStep = CampaignCreationStep.AI_DYNAMIC_COLLECTING
@@ -61,8 +67,8 @@ class DynamicAiOrchestrator(
             add(UserMessage(userInput))
         }
 
-        val toolProvider = SyncMcpToolCallbackProvider.builder()
-            .addMcpClient(mcpClient)
+        val toolProvider = AsyncMcpToolCallbackProvider.builder()
+            .mcpClients(listOf(mcpClient))
             .build()
 
         val stringBuffer = StringBuilder()
@@ -79,9 +85,20 @@ class DynamicAiOrchestrator(
                     add(userInput)
                     add(stringBuffer.toString())
                 }
+                val extractedId = regexFindId(stringBuffer.toString())
+                if (extractedId != null) {
+                    log.info { "🎯 [ИИ-Оркестратор] Нашел сквозной ID кампании Яндекса: $extractedId. Фиксирую в сессию." }
+                    session.context.yadCampaignId = extractedId
+                }
                 session.context.executionLogs = updatedLogs
                 sessionRepository.save(session)
             }
-            .subscribeOn(Schedulers.boundedElastic())
+            .subscribeOn(mcpScheduler)
+    }
+
+    private fun regexFindId(text: String): Long? {
+        val regex = "\"id\"\\s*:\\s*(\\d+)".toRegex()
+        val matchResult = regex.find(text)
+        return matchResult?.groupValues?.get(1)?.toLongOrNull()
     }
 }
