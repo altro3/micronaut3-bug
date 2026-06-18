@@ -15,20 +15,17 @@ class VectorStoreService(
     private val log = KotlinLogging.logger {}
 
     fun searchAdvertisingRules(platforms: List<Platform>, userBriefText: String): String = try {
-        // Упрощенный, максимально плоский поисковый запрос
         val finalQuery = "Лимиты символов, модерация текста и маркировка рекламы"
 
         val requestBuilder = SearchRequest.builder()
             .query(finalQuery)
-            .topK(2) // Нам нужно максимум 2 документа (правило площадки + закон о маркировке)
+            .topK(2)
 
-        // Простая фильтрация без перегрузки gRPC
         if (platforms.isNotEmpty() && !platforms.contains(Platform.CHAT)) {
             val allowedPlatformNames = platforms.map { it.name } + "ALL"
             val filter = FilterExpressionBuilder().`in`("platform", allowedPlatformNames).build()
             requestBuilder.filterExpression(filter)
         } else {
-            // Если мы в CHAT, принудительно забираем только закон о маркировке
             val filter = FilterExpressionBuilder().eq("platform", "ALL").build()
             requestBuilder.filterExpression(filter)
         }

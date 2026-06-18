@@ -12,6 +12,8 @@ import java.util.UUID
 class CampaignSession(
     @Id
     private var id: UUID? = null,
+    var platform: Platform? = null,
+    var campaignId: Long? = null,
     var context: SessionContext = SessionContext(),
     var updatedAt: Instant = Instant.now(),
 ) : Persistable<UUID> {
@@ -25,8 +27,6 @@ class CampaignSession(
 
     class SessionContext(
         var rawBriefText: String? = null,
-        var platform: Platform? = null,
-        var campaignId: Long? = null,
-        var executionLogs: List<String> = emptyList()
+        var executionLogs: List<String> = emptyList(),
     )
 }

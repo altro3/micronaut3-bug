@@ -56,47 +56,66 @@ export async function sendChatCompletionStream(
 
                 if (token === '[DONE]') continue;
 
-                // Перехват ID сессии
+                // 1. ПЕРЕХВАТ ТЕХНИЧЕСКОГО МАРКЕРА СЕССИИ
                 if (!sessionCaptured && token.includes('[SESSION_ID:')) {
                     const match = token.match(/\[SESSION_ID:([a-f0-9-]+)]/i);
-                    if (match && match) {
-                        onSessionId(match[1]);
+                    if (match && match[1]) {
+                        const pureUuid = match[1];
+                        console.log("✈️ Перехвачен UUID сессии с бэка:", pureUuid);
+                        onSessionId(pureUuid);
                         sessionCaptured = true;
                     }
                     token = token.replace(/\[SESSION_ID:.+?]/, '');
                 }
 
+                // 2. ЖЕСТКИЙ РАЗДЕЛИТЕЛЬ ДЛЯ MD-ФОРМАТА (ДВЕ СТРОКИ)
                 if (token === '') {
-                    unformattedContent += '\n';
+                    // Если пришла пустая строка data:, гарантируем честный пустой абзац (\n\n)
+                    if (!unformattedContent.endsWith('\n\n')) {
+                        unformattedContent = unformattedContent.replace(/\n*$/, '') + '\n\n';
+                    }
                 } else {
+                    // Если это новый элемент списка, заголовок или маркер, форсируем ДВА переноса перед ним
+                    const trimToken = token.trim();
+                    const isNewBlock = trimToken.startsWith('•') ||
+                        trimToken.startsWith('*') ||
+                        /^\d+\./.test(trimToken); // Проверка на "1.", "2." и т.д.
+
+                    if (unformattedContent.length > 0) {
+                        if (isNewBlock) {
+                            // Перед заголовками и списками всегда бахаем двойной перенос
+                            if (!unformattedContent.endsWith('\n\n')) {
+                                unformattedContent = unformattedContent.replace(/\n*$/, '') + '\n\n';
+                            }
+                        } else if (!unformattedContent.endsWith('\n')) {
+                            // Перед обычным текстом — один
+                            unformattedContent += '\n';
+                        }
+                    }
                     unformattedContent += token;
                 }
                 hasUpdates = true;
             } else {
-                // КРИТИЧЕСКИЙ ФИКС: Если строка НЕ начинается с 'data:', но мы уже в процессе
-                // получения контента — это внутренний перенос строки \n от локальной модели!
-                // Не пропускаем его, а честно добавляем в Markdown
-                if (unformattedContent.length > 0) {
-                    unformattedContent += '\n' + cleanLine;
-                    hasUpdates = true;
+                // Фолбек для сырых строк без data:
+                if (unformattedContent.length > 0 && !unformattedContent.endsWith('\n')) {
+                    unformattedContent += '\n';
                 }
+                unformattedContent += cleanLine;
+                hasUpdates = true;
             }
         }
 
         if (hasUpdates) {
+            // Безопасная очистка Markdown-обертки без удаления внутренних \n
             let cleanedContent = unformattedContent;
 
-            if (cleanedContent.startsWith('```markdown\n')) {
-                cleanedContent = cleanedContent.slice(12);
-            } else if (cleanedContent.startsWith('```markdown')) {
+            if (cleanedContent.startsWith('```markdown')) {
                 cleanedContent = cleanedContent.slice(11);
-            } else if (cleanedContent.startsWith('```\n')) {
-                cleanedContent = cleanedContent.slice(4);
+            } else if (cleanedContent.startsWith('```')) {
+                cleanedContent = cleanedContent.slice(3);
             }
 
-            if (cleanedContent.endsWith('\n```')) {
-                cleanedContent = cleanedContent.slice(0, -4);
-            } else if (cleanedContent.endsWith('```')) {
+            if (cleanedContent.endsWith('```')) {
                 cleanedContent = cleanedContent.slice(0, -3);
             }
 

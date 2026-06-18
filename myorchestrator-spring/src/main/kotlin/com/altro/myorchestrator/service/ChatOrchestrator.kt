@@ -39,7 +39,7 @@ class ChatOrchestrator(
                 }
 
                 if (session == null) {
-                    log.info { "🎯 [Оркестратор] Сессия не найдена или это первый запуск. Инициирую новую долгоживущую ИИ-сессию..." }
+                    log.info { "🎯 [Orchestrator] Сессия не найдена или это первый запуск. Инициирую новую долгоживущую ИИ-сессию..." }
 
                     val newSession = CampaignSession(
                         id = UUID.randomUUID(), // Нативная генерация UUID (или оставь null, если Postgres генерирует сам через Persistable)
@@ -59,7 +59,7 @@ class ChatOrchestrator(
                     // чтобы фронт зафиксировал его и присылал в следующих запросах.
                     sink.next("[SESSION_ID:${session.id}]")
                 } else {
-                    log.info { "🎯 [Оркестратор] Сессия успешно найдена по UUID: ${session.id}. Текущая платформа: ${session.context.platform}. Продолжаю стрим..." }
+                    log.info { "🎯 [Orchestrator] Сессия успешно найдена по UUID: ${session.id}. Текущая платформа: ${session.platform}. Продолжаю стрим..." }
                 }
 
                 // ФИКС №2: Нативно подписываемся на Flux токенов от DynamicAiOrchestrator

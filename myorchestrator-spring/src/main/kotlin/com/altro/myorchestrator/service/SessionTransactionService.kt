@@ -12,10 +12,6 @@ class SessionTransactionService(
     private val sessionRepository: CampaignSessionRepository
 ) {
 
-    /**
-     * PROPAGATION.REQUIRES_NEW принудительно открывает новую физическую транзакцию 
-     * в любом стороннем потоке (включая потоки ИИ-генерации)
-     */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     fun saveSessionForce(session: CampaignSession): CampaignSession {
         return sessionRepository.save(session)
