@@ -4,4 +4,8 @@ export interface Message {
     content: string;
 }
 
-export type OrchestratorStatus = 'connected' | 'error';
+export type OrchestratorStatus = 'connected' | 'error' | 'initializing';
+
+export interface InitSessionResponse {
+    sessionId: string;
+}

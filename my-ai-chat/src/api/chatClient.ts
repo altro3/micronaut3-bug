@@ -1,8 +1,24 @@
-import type {Message} from '../types/chat';
+import type { Message, InitSessionResponse } from '../types/chat';
 
 const BASE_URL = 'http://localhost:8083';
 
+export async function initOrchestratorSession(): Promise<InitSessionResponse> {
+    const response = await fetch(`${BASE_URL}/chat/session/init`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+    });
+
+    if (!response.ok) {
+        throw new Error(`Ошибка генерации сессии на бэкенде: ${response.status}`);
+    }
+
+    return response.json();
+}
+
 export async function sendChatCompletionStream(
+    sessionId: string, // Добавляем обязательный UUID аргумент
     messages: Message[],
     onChunk: (fullCleanText: string) => void
 ): Promise<void> {
@@ -13,6 +29,7 @@ export async function sendChatCompletionStream(
             'Accept': 'text/event-stream',
         },
         body: JSON.stringify({
+            sessionId: sessionId,
             messages: messages.map(({role, content}) => ({role, content}))
         }),
     });

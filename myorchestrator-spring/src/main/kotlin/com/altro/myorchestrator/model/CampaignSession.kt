@@ -4,11 +4,12 @@ import com.altro.myorchestrator.api.dto.Platform
 import org.springframework.data.annotation.Id
 import org.springframework.data.relational.core.mapping.Table
 import java.time.Instant
+import java.util.UUID
 
 @Table("campaign_session")
 class CampaignSession(
     @Id
-    var id: Long = 0,
+    var id: UUID,
     var context: SessionContext = SessionContext(),
     var updatedAt: Instant = Instant.now(),
 ) {

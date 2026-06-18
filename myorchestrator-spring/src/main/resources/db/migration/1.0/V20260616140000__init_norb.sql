@@ -1,9 +1,8 @@
 CREATE TABLE campaign_session
 (
-    id BIGSERIAL PRIMARY KEY,
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     context JSONB NOT NULL,
-    updated_at TIMESTAMP WITH TIME ZONE NOT NULL
+    updated_at TIMESTAMP NOT NULL
 );
 
 CREATE INDEX idx_campaign_session_updated_at ON campaign_session (updated_at DESC);
-CREATE INDEX idx_campaign_session_raw_brief ON campaign_session ((context ->> 'rawBriefText'));
