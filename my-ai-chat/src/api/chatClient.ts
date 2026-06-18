@@ -4,7 +4,9 @@ const BASE_URL = 'http://localhost:8083';
 
 export async function sendChatCompletionStream(
     messages: Message[],
-    onChunk: (fullCleanText: string) => void
+    sessionId: string | null,
+    onChunk: (fullCleanText: string) => void,
+    onSessionId: (id: string) => void
 ): Promise<void> {
     const response = await fetch(`${BASE_URL}/chat/completions/stream`, {
         method: 'POST',
@@ -13,6 +15,7 @@ export async function sendChatCompletionStream(
             'Accept': 'text/event-stream',
         },
         body: JSON.stringify({
+            sessionId: sessionId,
             messages: messages.map(({role, content}) => ({role, content}))
         }),
     });
@@ -30,6 +33,7 @@ export async function sendChatCompletionStream(
 
     let chunkBuffer = '';
     let unformattedContent = '';
+    let sessionCaptured = false;
 
     while (true) {
         const {done, value} = await reader.read();
@@ -48,9 +52,19 @@ export async function sendChatCompletionStream(
             if (cleanLine === '') continue;
 
             if (cleanLine.startsWith('data:')) {
-                const token = cleanLine.slice(5);
+                let token = cleanLine.slice(5);
 
                 if (token === '[DONE]') continue;
+
+                // Перехват ID сессии
+                if (!sessionCaptured && token.includes('[SESSION_ID:')) {
+                    const match = token.match(/\[SESSION_ID:([a-f0-9-]+)]/i);
+                    if (match && match) {
+                        onSessionId(match[1]);
+                        sessionCaptured = true;
+                    }
+                    token = token.replace(/\[SESSION_ID:.+?]/, '');
+                }
 
                 if (token === '') {
                     unformattedContent += '\n';
@@ -58,6 +72,14 @@ export async function sendChatCompletionStream(
                     unformattedContent += token;
                 }
                 hasUpdates = true;
+            } else {
+                // КРИТИЧЕСКИЙ ФИКС: Если строка НЕ начинается с 'data:', но мы уже в процессе
+                // получения контента — это внутренний перенос строки \n от локальной модели!
+                // Не пропускаем его, а честно добавляем в Markdown
+                if (unformattedContent.length > 0) {
+                    unformattedContent += '\n' + cleanLine;
+                    hasUpdates = true;
+                }
             }
         }
 

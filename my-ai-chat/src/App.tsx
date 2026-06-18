@@ -8,10 +8,12 @@ import type {Message, OrchestratorStatus} from './types/chat';
 
 export default function App() {
     const [messages, setMessages] = useState<Message[]>([
-        {id: '1', role: 'assistant', content: 'Привет! Я твой локальный ИИ. Мой оркестратор готов к работе.'}
+        {id: '1', role: 'assistant', content: 'Привет! Я твой автономный ИИ-маркетолог AdBroker. Опиши свой бизнес и какую рекламу мы запускаем?'}
     ]);
     const [isLoading, setIsLoading] = useState(false);
     const [status, setStatus] = useState<OrchestratorStatus>('connected');
+
+    const [sessionId, setSessionId] = useState<string | null>(null);
 
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -35,20 +37,29 @@ export default function App() {
         setIsLoading(true);
 
         try {
-            await sendChatCompletionStream(updatedMessages, (fullCleanText) => {
-                setMessages((prev) => {
-                    const exists = prev.some(m => m.id === assistantMessageId);
-                    if (!exists) {
-                        return [
-                            ...prev,
-                            { id: assistantMessageId, role: 'assistant', content: fullCleanText }
-                        ];
-                    }
-                    return prev.map(m =>
-                        m.id === assistantMessageId ? { ...m, content: fullCleanText } : m
-                    );
-                });
-            });
+            // <-- ФИКС 2: Передаем текущий sessionId и функцию его сохранения setSessionId
+            await sendChatCompletionStream(
+                updatedMessages,
+                sessionId,
+                (fullCleanText) => {
+                    setMessages((prev) => {
+                        const exists = prev.some(m => m.id === assistantMessageId);
+                        if (!exists) {
+                            return [
+                                ...prev,
+                                { id: assistantMessageId, role: 'assistant', content: fullCleanText }
+                            ];
+                        }
+                        return prev.map(m =>
+                            m.id === assistantMessageId ? { ...m, content: fullCleanText } : m
+                        );
+                    });
+                },
+                (id) => {
+                    console.log(`🎯 [Фронтенд] Сессия успешно привязана к бэкенду. UUID: ${id}`);
+                    setSessionId(id); // Сохраняем ID, теперь все шаги будут идти в одну сессию Postgres
+                }
+            );
 
             setStatus('connected');
         } catch (error) {
@@ -61,11 +72,15 @@ export default function App() {
 
     return (
         <div className="flex h-screen bg-gray-900 text-gray-100 font-sans">
+            {/* Дополнительно можно прокинуть sessionId в сидбар для красоты / дебага демо */}
             <Sidebar status={status}/>
 
             <div className="flex-1 flex flex-col h-full bg-gray-900">
                 <div className="h-16 border-b border-gray-800 px-8 flex items-center justify-between bg-gray-900/50 backdrop-blur">
-                    <div className="font-medium">Локальная сессия ассистента</div>
+                    <div className="font-medium">
+                        Локальная сессия ассистента
+                        {sessionId && <span className="text-xs text-gray-500 ml-2">({sessionId})</span>}
+                    </div>
                 </div>
 
                 <div className="flex-1 overflow-y-auto p-8 space-y-6">

@@ -1,6 +1,6 @@
 CREATE TABLE campaign_session
 (
-    id BIGSERIAL PRIMARY KEY,
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     context JSONB NOT NULL,
     updated_at TIMESTAMP WITH TIME ZONE NOT NULL
 );

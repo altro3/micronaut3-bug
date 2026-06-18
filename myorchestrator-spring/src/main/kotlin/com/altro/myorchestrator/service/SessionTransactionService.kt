@@ -1,0 +1,23 @@
+package com.altro.myorchestrator.service
+
+import com.altro.myorchestrator.model.CampaignSession
+import com.altro.myorchestrator.repository.CampaignSessionRepository
+import org.springframework.stereotype.Service
+import org.springframework.transaction.annotation.Propagation
+import org.springframework.transaction.annotation.Transactional
+import java.util.UUID
+
+@Service
+class SessionTransactionService(
+    private val sessionRepository: CampaignSessionRepository
+) {
+
+    /**
+     * PROPAGATION.REQUIRES_NEW принудительно открывает новую физическую транзакцию 
+     * в любом стороннем потоке (включая потоки ИИ-генерации)
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    fun saveSessionForce(session: CampaignSession): CampaignSession {
+        return sessionRepository.save(session)
+    }
+}

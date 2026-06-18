@@ -3,6 +3,7 @@ package com.altro.myorchestrator.api.dto.chat
 import jakarta.validation.constraints.NotEmpty
 
 data class ChatRq(
+    val sessionId: String? = null,
     @field:NotEmpty
     val messages: List<ChatMessageDto>
 ) {
