@@ -46,7 +46,7 @@ class ChatOrchestrator(
                         updatedAt = Instant.now()
                     ).apply {
                         // Фиксируем стартовое описание бизнеса в контекст
-                        context.rawBriefText = rq.messages.first().content.trim()
+                        context.rawBriefText = userInput
                         // В историю укладываем первое пользовательское сообщение (без системных промптов роутера)
                         context.executionLogs = emptyList()
                         isNewEntity = true

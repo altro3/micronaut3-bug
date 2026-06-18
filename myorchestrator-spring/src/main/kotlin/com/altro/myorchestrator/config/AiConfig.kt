@@ -1,6 +1,7 @@
 package com.altro.myorchestrator.config
 
 import org.springframework.ai.chat.client.ChatClient
+import org.springframework.ai.chat.client.advisor.ToolCallingAdvisor
 import org.springframework.ai.mcp.SyncMcpToolCallbackProvider
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
@@ -47,6 +48,7 @@ class AiConfig {
     ): ChatClient {
         return chatClientBuilder
             .defaultTools(yandexMcpToolProvider)
+            .defaultAdvisors(ToolCallingAdvisor.builder().build())
             .build()
     }
 

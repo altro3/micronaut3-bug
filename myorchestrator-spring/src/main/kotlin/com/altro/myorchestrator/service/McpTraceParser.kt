@@ -6,6 +6,7 @@ import org.springframework.ai.chat.messages.Message
 import org.springframework.ai.chat.messages.SystemMessage
 import org.springframework.ai.chat.messages.ToolResponseMessage
 import org.springframework.ai.chat.messages.UserMessage
+import org.springframework.ai.chat.model.ChatResponse
 import org.springframework.stereotype.Component
 import tools.jackson.databind.json.JsonMapper
 
@@ -15,52 +16,33 @@ class McpTraceParser(
 ) {
     private val log = KotlinLogging.logger {}
 
-    fun extractCampaignIdFromToolResponses(messages: List<Message>): Long? {
-        for (msg in messages) {
-            if (msg is ToolResponseMessage) {
-                try {
-                    val resp = msg.responses.firstOrNull()
-                    var rawJson = msg.text ?: ""
+    fun extractCampaignIdFromChatResponse(chatResponse: ChatResponse?): Long? {
+        if (chatResponse == null) return null
 
-                    if (rawJson.isBlank() && resp?.responseData != null) {
-                        rawJson = jsonMapper.writeValueAsString(resp.responseData)
-                    }
+        val generations = chatResponse.results ?: emptyList()
+        for (generation in generations) {
+            val assistantMsg = generation.output
 
-                    if (rawJson.isBlank()) continue
+            if (assistantMsg != null && assistantMsg.hasToolCalls()) {
+                for (toolCall in assistantMsg.toolCalls) {
 
-                    if (rawJson.startsWith("\"") && rawJson.endsWith("\"") && rawJson.length > 2) {
+                    if (toolCall.name == "initYandexDraft") {
                         try {
-                            rawJson = jsonMapper.readValue(rawJson, String::class.java)
+                            val rawJson = toolCall.arguments ?: ""
+                            if (rawJson.isBlank()) continue
+
+                            val rootNode = jsonMapper.readTree(rawJson)
+
+                            val idNode = rootNode.get("id") ?: rootNode.get("campaignId") ?: rootNode.get("campaign_id")
+                            if (idNode != null && idNode.isNumber) {
+                                val foundId = idNode.asLong()
+                                log.info { "🎯 [McpTraceParser] Извлечен валидный ID кампании напрямую из ToolCall: $foundId" }
+                                return foundId
+                            }
                         } catch (e: Exception) {
+                            log.warn { "Ошибка парсинга JSON внутри toolCall: ${e.message}" }
                         }
                     }
-
-                    val rootNode = jsonMapper.readTree(rawJson)
-                    val idNode = rootNode.get("id") ?: rootNode.get("campaignId") ?: rootNode.get("campaign_id")
-
-                    if (idNode != null && idNode.isNumber) {
-                        return idNode.asLong()
-                    }
-                } catch (e: Exception) {
-                    log.warn { "Не удалось пропарсить JSON-след инструмента для сбора ID: ${e.message}" }
-                }
-            }
-        }
-        return null
-    }
-
-    fun extractCampaignIdFromTextFallback(text: String): Long? {
-        if (text.isBlank()) return null
-        val regexes = listOf(
-            Regex("""(?:ID|id|идентификатор|кампании|черновика|номером)\s*(?:равен|ориентир|:\s*|=)?\s*(\d+)"""),
-            Regex("""\b(\d{2,18})\b""")
-        )
-        for (regex in regexes) {
-            val match = regex.find(text)
-            if (match != null) {
-                try {
-                    return match.groupValues[1].toLong()
-                } catch (e: Exception) {
                 }
             }
         }

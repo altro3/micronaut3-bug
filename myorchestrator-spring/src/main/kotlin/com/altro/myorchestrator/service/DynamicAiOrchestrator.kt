@@ -92,20 +92,12 @@ class DynamicAiOrchestrator(
         val chatResponse = clientPrompt.call().chatResponse()
         val finalResponseText = chatResponse?.result?.output?.text ?: "Агент не смог сформировать ответ."
 
-        val pagedMessages = tempMemory.get(conversationId)
-        val newTechnicalMessages = if (pagedMessages.size > startCount) pagedMessages.subList(startCount, pagedMessages.size) else emptyList()
-
         val currentSession = sessionRepository.findByIdOrNull(session.id ?: error("ID сессии равен null")) ?: session
 
-        // 1. Попытка вытащить ID из истории памяти
-        var finalCampaignId = mcpTraceParser.extractCampaignIdFromToolResponses(newTechnicalMessages)
+        val extractedId = mcpTraceParser.extractCampaignIdFromChatResponse(chatResponse)
+        val finalCampaignId = extractedId ?: currentSession.campaignId
 
-        // 2. Гарантированный фолбек на текст (если память отфильтровала TOOL чанки)
-        if (finalCampaignId == null) {
-            finalCampaignId = mcpTraceParser.extractCampaignIdFromTextFallback(finalResponseText) ?: currentSession.campaignId
-        } else {
-            log.info { "🎯 [Orchestrator] ID кампании успешно извлечен из трейса инструментов: $finalCampaignId" }
-        }
+        log.info { "🔍 [Orchestrator] Сверка ID кампании: извлечено=$extractedId, итоговый=$finalCampaignId" }
 
         val nextPlatform = if (currentPlatform == Platform.CHAT && agentPromptProvider.isTriggerTextToStartAutomation(finalResponseText)) {
             if (finalResponseText.contains("Яндекс", ignoreCase = true)) Platform.YANDEX_DIRECT else Platform.VK_ADS
@@ -113,6 +105,8 @@ class DynamicAiOrchestrator(
             currentPlatform
         }
 
+        val pagedMessages = tempMemory.get(conversationId)
+        val newTechnicalMessages = if (pagedMessages.size > startCount) pagedMessages.subList(startCount, pagedMessages.size) else emptyList()
         val serializedNewLogs = mcpTraceParser.serializeMessagesToLogs(newTechnicalMessages)
         currentSession.context.executionLogs += serializedNewLogs
 
