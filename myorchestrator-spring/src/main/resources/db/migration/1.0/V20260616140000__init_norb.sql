@@ -1,12 +1,24 @@
-CREATE TABLE campaign_session
+CREATE TABLE ai_session
 (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    platform VARCHAR(50),
-    campaign_id BIGINT,
-    context JSONB NOT NULL,
-    updated_at TIMESTAMP WITH TIME ZONE NOT NULL
+    id VARCHAR(36) PRIMARY KEY,
+    user_id VARCHAR(50),
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    expires_at TIMESTAMP WITH TIME ZONE,
+    metadata TEXT,
+    event_version BIGINT NOT NULL DEFAULT 0
 );
 
-CREATE INDEX idx_campaign_session_updated_at ON campaign_session (updated_at DESC);
-CREATE INDEX idx_campaign_session_platform ON campaign_session (platform);
-CREATE INDEX idx_campaign_session_campaign_id ON campaign_session (campaign_id) WHERE campaign_id IS NOT NULL;
+CREATE TABLE ai_session_event
+(
+    id VARCHAR(36) PRIMARY KEY,
+    session_id VARCHAR(36) NOT NULL REFERENCES ai_session (id) ON DELETE CASCADE,
+    timestamp TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    message_type VARCHAR(50) NOT NULL,
+    message_content TEXT,
+    message_data TEXT,
+    synthetic BOOLEAN NOT NULL DEFAULT FALSE,
+    branch VARCHAR(100),
+    metadata TEXT
+);
+
+CREATE INDEX idx_ai_session_event_session_id ON ai_session_event (session_id);

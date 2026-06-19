@@ -1,6 +1,6 @@
 package com.altro.myorchestrator.config
 
-import com.altro.myorchestrator.api.dto.Platform
+import com.altro.myorchestrator.model.Platform
 import org.springframework.ai.document.Document
 import org.springframework.ai.vectorstore.VectorStore
 import org.springframework.boot.CommandLineRunner

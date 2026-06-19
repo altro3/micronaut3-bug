@@ -77,6 +77,12 @@ spring:
           connections:
             ad-broker-automation:
               url: http://localhost:8090
+    chat:
+      memory:
+        repository:
+          jdbc:
+            schema:
+
   datasource:
     url: jdbc:postgresql://localhost:5432/orchestrator_spring?currentSchema=target
     username: orchestrator_spring

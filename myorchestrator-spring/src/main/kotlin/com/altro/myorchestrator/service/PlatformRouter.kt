@@ -1,7 +1,6 @@
 package com.altro.myorchestrator.service
 
-import com.altro.myorchestrator.api.dto.Platform
-import com.altro.myorchestrator.model.CampaignSession
+import com.altro.myorchestrator.model.Platform
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.ai.chat.client.ChatClient
 import org.springframework.beans.factory.annotation.Qualifier
@@ -9,40 +8,36 @@ import org.springframework.stereotype.Service
 
 @Service
 class PlatformRouter(
-    @Qualifier("routerAgentClient") private val routerAgentClient: ChatClient
+    @Qualifier("routerAgentClient")
+    private val routerAgentClient: ChatClient
 ) {
     private val log = KotlinLogging.logger {}
 
-    fun determineTargetPlatform(session: CampaignSession, userInput: String): Platform {
-        var currentPlatform = session.platform
+    fun determineTargetPlatform(currentPlatform: Platform?, userInput: String): Platform? {
         val isUserForcingSwitch = isUserAskingForPlatformSwitch(userInput)
 
         log.info { "🧩 [Router] Входной стейт: $currentPlatform, принудительный триггер: $isUserForcingSwitch" }
 
-        if (currentPlatform == null || (currentPlatform == Platform.CHAT && isUserForcingSwitch)) {
+        if (currentPlatform == null || isUserForcingSwitch) {
             log.info { "🧩 [Router] Запуск ИИ-классификатора намерений..." }
-            val newPlatform = routeUserInputToPlatform(userInput)
+            val determined = routeUserInputToPlatform(userInput)
 
-            if (newPlatform != currentPlatform) {
-                log.info { "🔄 [Router] МГНОВЕННАЯ ДЕЛЕГАЦИЯ: Смена агента на $newPlatform" }
-                session.platform = newPlatform
-                if (newPlatform != Platform.CHAT) {
-                    session.campaignId = null
-                }
-                return newPlatform
+            if (determined != currentPlatform && determined != null) {
+                log.info { "🔄 [Router] МГНОВЕННАЯ ДЕЛЕГАЦИЯ: Смена платформы на $determined" }
+                return determined
             }
         }
-        return currentPlatform ?: Platform.CHAT
+        return currentPlatform
     }
 
-    private fun routeUserInputToPlatform(userInput: String): Platform {
+    private fun routeUserInputToPlatform(userInput: String): Platform? {
         return try {
             val routerPrompt = """
                 Проанализируй сообщение пользователя и классифицируй его намерение.
                 Выдай в ответ строго одно слово из трех вариантов:
                 1. YANDEX_DIRECT — если пользователь явно просит настроить, запустить или создать рекламу в Яндекс.Директ.
                 2. VK_ADS — если пользователь явно просит настроить, запустить или создать рекламу во ВКонтакте (VK Ads).
-                3. CHAT — если пользователь просто здоровается, задает общие вопросы, просит совета или просто общается.
+                3. NONE — если пользователь просто здоровается, задает общие вопросы, просит совета или просто общается.
                 
                 Сообщение пользователя: '$userInput'
                 Твой ответ (строго одно слово из трех вариантов):
@@ -52,21 +47,27 @@ class PlatformRouter(
                 .user(routerPrompt)
                 .call()
                 .content()
-                ?.trim()?.uppercase() ?: "CHAT"
+                ?.trim() ?: "NONE"
 
             when {
-                response.contains("YANDEX") -> Platform.YANDEX_DIRECT
-                response.contains("VK") -> Platform.VK_ADS
-                else -> Platform.CHAT
+                response.contains("yandex", ignoreCase = true) -> Platform.YANDEX_DIRECT
+                response.contains("vk", ignoreCase = true) -> Platform.VK_ADS
+                else -> null
             }
         } catch (e: Exception) {
-            log.error(e) { "Ошибка ИИ-маршрутизации трафика, фолбек на Platform.CHAT" }
-            Platform.CHAT
+            log.error(e) { "Ошибка ИИ-маршрутизации трафика, фолбек на null" }
+            null
         }
     }
 
     private fun isUserAskingForPlatformSwitch(text: String): Boolean {
-        val lower = text.lowercase()
-        return lower.contains("яндекс") || lower.contains("директ") || lower.contains("вк ") || lower.contains("vk") || lower.contains("вконтакте") || lower.contains("янде")
+        return PLATFORM_SWITCH_REGEX.containsMatchIn(text)
+    }
+
+    companion object {
+        private val PLATFORM_SWITCH_REGEX = Regex(
+            "яндекс|директ|вк|vk|вконтакте",
+            RegexOption.IGNORE_CASE
+        )
     }
 }

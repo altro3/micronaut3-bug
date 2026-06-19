@@ -3,6 +3,8 @@ package com.altro.myorchestrator.config
 import org.springframework.ai.chat.client.ChatClient
 import org.springframework.ai.chat.client.advisor.ToolCallingAdvisor
 import org.springframework.ai.mcp.SyncMcpToolCallbackProvider
+import org.springframework.ai.session.SessionService
+import org.springframework.ai.session.advisor.SessionMemoryAdvisor
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 
@@ -10,7 +12,11 @@ import org.springframework.context.annotation.Configuration
 class AiConfig {
 
     @Bean
-    fun consultantAgentClient(chatClientBuilder: ChatClient.Builder): ChatClient {
+    fun sharedSessionMemoryAdvisor(sessionService: SessionService) =
+        SessionMemoryAdvisor.builder(sessionService).build()
+
+    @Bean
+    fun consultantAgentClient(chatClientBuilder: ChatClient.Builder, sessionMemoryAdvisor: SessionMemoryAdvisor): ChatClient {
         return chatClientBuilder
             .defaultSystem(
                 """
@@ -23,6 +29,7 @@ class AiConfig {
             3. Как только в процессе разговора пользователь четко скажет: "Давай настраивать Яндекс" или "Давай сделаем кампанию в ВК", вежливо зафиксируй это и передай, что ты готов начать.
         """.trimIndent()
             )
+            .defaultAdvisors(sessionMemoryAdvisor)
             .build()
     }
 
@@ -34,7 +41,7 @@ class AiConfig {
                 Ты — диспетчер рекламного агрегатора. Твоя задача — понять, какую платформу выбрал юзер.
                 Если речь про Яндекс, Директ, Поиск — ответь словом: YANDEX.
                 If про ВК, ВКонтакте, VK, таргет, паблики — ответь словом: VK.
-                Если интент не ясен — ответь словом: CHAT.
+                Если интент не ясен — ответь словом: NONE.
                 Будь лаконичен, пиши только одно слово.
             """.trimIndent()
             )
@@ -44,18 +51,22 @@ class AiConfig {
     @Bean
     fun yandexAgentClient(
         chatClientBuilder: ChatClient.Builder,
-        yandexMcpToolProvider: SyncMcpToolCallbackProvider
+        yandexMcpToolProvider: SyncMcpToolCallbackProvider,
+        sessionMemoryAdvisor: SessionMemoryAdvisor,
     ): ChatClient {
         return chatClientBuilder
             .defaultTools(yandexMcpToolProvider)
-            .defaultAdvisors(ToolCallingAdvisor.builder().build())
+            .defaultAdvisors(
+                ToolCallingAdvisor.builder().build(),
+                sessionMemoryAdvisor,
+            )
             .build()
     }
 
     @Bean
-    fun vkAgentClient(chatClientBuilder: ChatClient.Builder): ChatClient {
+    fun vkAgentClient(chatClientBuilder: ChatClient.Builder, sessionMemoryAdvisor: SessionMemoryAdvisor): ChatClient {
         return chatClientBuilder
+            .defaultAdvisors(sessionMemoryAdvisor)
             .build()
     }
-
 }

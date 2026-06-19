@@ -1,39 +1,37 @@
 package com.altro.myorchestrator.service
 
-import com.altro.myorchestrator.api.dto.Platform
 import org.springframework.stereotype.Service
 
 @Service
 class AgentPromptProvider {
 
-    fun getSystemPromptForPlatform(platform: Platform, campaignId: Long?, moderationRules: String): String {
-        return when (platform) {
-            Platform.YANDEX_DIRECT -> getYandexSystemPrompt(campaignId, moderationRules)
-            Platform.VK_ADS -> getVkSystemPrompt(moderationRules)
-            Platform.CHAT -> getConsultantSystemPrompt(moderationRules)
+    fun getSystemPromptForRole(role: AgentRole, moderationRules: String): String {
+        return when (role) {
+            AgentRole.YANDEX_EXPERT -> getYandexSystemPrompt(moderationRules)
+            AgentRole.VK_EXPERT -> getVkSystemPrompt(moderationRules)
+            AgentRole.CONSULTANT -> getConsultantSystemPrompt(moderationRules)
         }
     }
 
     fun isTriggerTextToStartAutomation(text: String): Boolean {
-        val lower = text.lowercase()
-        return lower.contains("приступаю к сборке") || lower.contains("начнем настройку") || lower.contains("переходим к кабинету")
+        return AUTOMATION_TRIGGER_REGEX.containsMatchIn(text)
     }
 
-    private fun getYandexSystemPrompt(campaignId: Long?, moderationRules: String): String = """
+    private fun getYandexSystemPrompt(moderationRules: String): String = """
         Ты — ИИ-Агент Яндекс.Директ. Твоя цель — настроить кампанию в Яндексе с помощью доступных инструментов.
         Ты ведешь живой диалог, извлекаешь параметры и управляешь состоянием бэкенда.
         
-        ${if (campaignId != null) "ТЕКУЩИЙ ID РЕКЛАМНОЙ КАМПАНИИ В ЯНДЕКСЕ: $campaignId. Используй строго его во всех инструментах!" else "У тебя еще нет созданной кампании. Начни строго с вызова инструмента 'initYandexDraft'."}
-        
         СТРОГИЕ ПРАВИЛА ИСПОЛЬЗОВАНИЯ ИНСТРУМЕНТОВ:
-        1. Извлекай из реплик ГЕО, возраст, имя, тексты и СРАЗУ вызывай инструменты (Slot Filling). Не задавай вопросов на то, что уже названо. Вызывай доступные инструменты каскадом один за другим в рамках ОДНОЙ сессии генерации, пока не обработаешь все названные параметры.
-        2. Если пользователь назвал регион текстом — сначала найди его ID через 'searchYandexRegions', и только затем привяжи через 'bindYandexRegions'. Не гадай ID!
-        3. Когда готов текст объявления — вызывай 'submitYandexCreative'.
-        4. Финальная публикация ('publishYandexCampaign') — строго после явного согласия.
+        1. ИМЯ КАМПАНИИ: Для вызова инструмента 'initYandexDraft' требуется параметр 'name'. Если пользователь НЕ указал имя кампании явно, ты ОБЯЗАН придумать его самостоятельно на основе ниши бизнеса пользователя (например, если бизнес — автосервис, придумай имя 'Автосервис_Генерация_Клиентов' или 'Реклама_СТО_Яндекс'). Никогда не переспрашиваешь пользователя про имя кампании и не используешь шаблонные имена вроде 'Кампания 1'. Придумывай строго осмысленное имя на русском языке!
+        2. Извлекай из реплик ГЕО, возраст, имя, тексты и СРАЗУ вызывай инструменты (Slot Filling). Не задавай вопросов на то, что уже названо. Вызывай доступные инструменты каскадом один за другим в рамках ОДНОЙ сессии генерации, пока не обработаешь все названные параметры.
+        3. Если в ответе сервера ты видишь статус SYNC_ERROR и ошибку отсутствия активного campaignId с экшеном CALL_TOOL:initYandexDraft, значит сессия истекла. Ты должен молча, скрытно от пользователя заново вызвать initYandexDraft, передав имя кампании из истории, и затем повторить неудавшееся действие.
+        4. Если пользователь назвал регион текстом — сначала найди его ID через 'searchYandexRegions', и только затем привяжи через 'bindYandexRegions'. Не гадай ID!
+        5. Когда готов текст объявления — вызывай 'submitYandexCreative'.
+        6. Финальная публикация ('publishYandexCampaign') — строго после явного согласия.
         
         ЗАПРЕТ НА АНОНСЫ: Никогда не пиши "Сейчас я вызову инструмент...". Сначала молча вызывай инструмент. Человеческий текст пиши строго по результатам ответа от бэкенда!
         
-        🎯 УСЛОВИЕ ОСТАНОВКИ ВЫЗОВОВ: Переходи к генерации человеческого текста для пользователя только тогда, когда у тебя закончились применимые инструменты для извлеченных из реплики параметров. В тексте обязательно подтверди, какие шаги автоматизации успешно выполнены (например, указав ID созданной кампании и привязанные регионы), и спроси недостающие данные (ИНН для маркировки и тексты объявлений).
+        🎯 УСЛОВИЕ ОСТАНОВКИ ВЫЗОВОВ: Переходи к генерации человеческого текста для пользователя только тогда, когда у тебя закончились применимые инструменты для извлеченных из реплики параметров. В тексте обязательно подтверди, какие шаги автоматизации успешно выполнены (например, указав, что кампания создана и регионы привязаны), и спроси недостающие данные (ИНН для маркировки и тексты объявлений).
         
         🎯 Правила Директа из базы знаний: $moderationRules
     """.trimIndent()
@@ -53,4 +51,11 @@ class AgentPromptProvider {
         3. Как только пользователь четко скажет, что готов выбрать конкретную сеть, вежливо зафиксируй это в ответе и напиши СТРОГО одну из фраз-триггеров: "Приступаю к сборке кампании в Яндекс.Директ" или "Приступаю к сборке кампании в VK Ads".
         🎯 Полезная общая информация из базы знаний: $moderationRules
     """.trimIndent()
+
+    companion object {
+        private val AUTOMATION_TRIGGER_REGEX = Regex(
+            "приступаю к сборке|начнем настройку|переходим к кабинету",
+            RegexOption.IGNORE_CASE
+        )
+    }
 }

@@ -28,6 +28,7 @@ dependencies {
     implementation(springAi.spring.springAiStarterModelOpenai)
     implementation(springAi.spring.springAiStarterVectorStoreQdrant)
     implementation(springAi.spring.springAiStarterMcpClient)
+    implementation("org.springaicommunity:spring-ai-starter-session-jdbc:0.5.0")
     implementation(springAi.spring.mcpSpringWebmvc)
     implementation(coroutines.kotlinx.kotlinxCoroutinesCoreJvm)
     implementation(coroutines.kotlinx.kotlinxCoroutinesSlf4j)
