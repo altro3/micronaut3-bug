@@ -1,6 +1,6 @@
 package com.altro.myorchestrator.service
 
-import com.altro.myorchestrator.api.dto.Platform
+import com.altro.myorchestrator.model.Platform
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.ai.vectorstore.SearchRequest
 import org.springframework.ai.vectorstore.VectorStore
@@ -15,13 +15,11 @@ class VectorStoreService(
     private val log = KotlinLogging.logger {}
 
     fun searchAdvertisingRules(platforms: List<Platform>, userBriefText: String): String = try {
-        val finalQuery = "Лимиты символов, модерация текста и маркировка рекламы"
-
         val requestBuilder = SearchRequest.builder()
-            .query(finalQuery)
+            .query(userBriefText)
             .topK(2)
 
-        if (platforms.isNotEmpty() && !platforms.contains(Platform.CHAT)) {
+        if (platforms.isNotEmpty()) {
             val allowedPlatformNames = platforms.map { it.name } + "ALL"
             val filter = FilterExpressionBuilder().`in`("platform", allowedPlatformNames).build()
             requestBuilder.filterExpression(filter)
@@ -37,7 +35,7 @@ class VectorStoreService(
             matchedDocs.joinToString(separator = "\n") { doc -> "- ${doc.text}" }
         }
     } catch (e: Exception) {
-        log.error(e) { "Ошибка поиска в Qdrant" }
+        log.error(e) { "Ошибка поиска в векторном хранилище" }
         "Обязательно добавь в текст объявления маркировку: 'Реклама. ИНН ...'"
     }
 }

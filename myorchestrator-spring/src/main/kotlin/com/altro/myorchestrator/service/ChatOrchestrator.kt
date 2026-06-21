@@ -19,65 +19,45 @@ class ChatOrchestrator(
 
     private val log = KotlinLogging.logger {}
 
-    fun orchestrateChatStream(rq: ChatRq): Flux<String> =
-        Flux.create { sink ->
-            try {
-                if (rq.messages.isEmpty()) {
-                    sink.next("👋 Привет! Я твой автономный ИИ-маркетолог AdBroker. Опиши свой бизнес и какую рекламу мы запускаем?")
-                    sink.complete()
-                    return@create
-                }
-
-                val userInput = rq.messages.last().content.trim()
-
-                val sessionIdStr = rq.sessionId
-                val parsedSessionId = if (!sessionIdStr.isNullOrBlank()) UUID.fromString(sessionIdStr) else null
-
-                var session: CampaignSession? = null
-                if (parsedSessionId != null) {
-                    session = sessionRepository.findByIdOrNull(parsedSessionId)
-                }
-
-                if (session == null) {
-                    log.info { "🎯 [Orchestrator] Сессия не найдена или это первый запуск. Инициирую новую долгоживущую ИИ-сессию..." }
-
-                    val newSession = CampaignSession(
-                        id = UUID.randomUUID(), // Нативная генерация UUID (или оставь null, если Postgres генерирует сам через Persistable)
-                        updatedAt = Instant.now()
-                    ).apply {
-                        // Фиксируем стартовое описание бизнеса в контекст
-                        context.rawBriefText = userInput
-                        // В историю укладываем первое пользовательское сообщение (без системных промптов роутера)
-                        context.executionLogs = emptyList()
-                        isNewEntity = true
-                    }
-
-                    // Сохраняем сессию, чтобы получить валитный UUID перед запуском стрима
-                    session = sessionTransactionService.saveSessionForce(newSession)
-
-                    // ХАК ДЛЯ ДЕМО: Отправляем UUID сессии первым техническим чанком на фронтенд,
-                    // чтобы фронт зафиксировал его и присылал в следующих запросах.
-                    sink.next("[SESSION_ID:${session.id}]")
-                } else {
-                    log.info { "🎯 [Orchestrator] Сессия успешно найдена по UUID: ${session.id}. Текущая платформа: ${session.platform}. Продолжаю стрим..." }
-                }
-
-                // ФИКС №2: Нативно подписываемся на Flux токенов от DynamicAiOrchestrator
-                // Нам больше не нужно нарезать текст через split, токены летят прямо из LLM
-                dynamicAiOrchestrator.orchestrateDynamicStream(session, userInput)
-                    .subscribe(
-                        { chunk -> sink.next(chunk) },
-                        { error ->
-                            log.error(error) { "Ошибка внутри реактивного стрима агента" }
-                            sink.error(error)
-                        },
-                        { sink.complete() }
-                    )
-
-            } catch (e: Exception) {
-                log.error(e) { "Критический сбой в основном распределителе чата" }
-                sink.next("❌ Критический сбой пайплайна чата: ${e.message}")
-                sink.error(e)
-            }
+    fun orchestrateChatStream(rq: ChatRq): Flux<String> {
+        if (rq.messages.isEmpty()) {
+            return Flux.just("👋 Привет! Я твой автономный ИИ-маркетолог AdBroker. Опиши свой бизнес и какую рекламу мы запускаем?")
         }
+
+        val userInput = rq.messages.last().content.trim()
+
+        return Flux.defer {
+            val sessionIdStr = rq.sessionId
+            val parsedSessionId = if (!sessionIdStr.isNullOrBlank()) UUID.fromString(sessionIdStr) else null
+
+            var session: CampaignSession? = null
+            if (parsedSessionId != null) {
+                session = sessionRepository.findByIdOrNull(parsedSessionId)
+            }
+
+            val sessionInitFlux = if (session == null) {
+                log.info { "🎯 [ChatOrchestrator] Сессия не найдена или это первый запуск. Инициирую новую долгоживущую ИИ-сессию..." }
+
+                val newSession = CampaignSession(
+                    id = UUID.randomUUID(),
+                    updatedAt = Instant.now()
+                ).apply { isNewEntity = true }
+
+                val savedSession = sessionTransactionService.saveSessionForce(newSession)
+                session = savedSession
+
+                Flux.just("[SESSION_ID:${savedSession.id}]")
+            } else {
+                log.info { "🎯 [ChatOrchestrator] Сессия успешно найдена по UUID: ${session.id}. Текущая платформа: ${session.platform}. Продолжаю стрим..." }
+                Flux.empty()
+            }
+
+            val agentResponseFlux = dynamicAiOrchestrator.orchestrateDynamicStream(session!!, userInput)
+
+            Flux.concat(sessionInitFlux, agentResponseFlux)
+        }.onErrorResume { error ->
+            log.error(error) { "Критический сбой в основном распределителе чата" }
+            Flux.just("❌ Критический сбой пайплайна чата: ${error.message}")
+        }
+    }
 }

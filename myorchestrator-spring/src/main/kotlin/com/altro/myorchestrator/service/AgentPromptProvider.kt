@@ -1,56 +1,36 @@
 package com.altro.myorchestrator.service
 
-import com.altro.myorchestrator.api.dto.Platform
-import org.springframework.stereotype.Service
+object AgentPromptProvider {
 
-@Service
-class AgentPromptProvider {
+    private val AUTOMATION_TRIGGER_REGEX = Regex(
+        "приступаю к сборке|начнем настройку|переходим к кабинету",
+        RegexOption.IGNORE_CASE,
+    )
 
-    fun getSystemPromptForPlatform(platform: Platform, campaignId: Long?, moderationRules: String): String {
-        return when (platform) {
-            Platform.YANDEX_DIRECT -> getYandexSystemPrompt(campaignId, moderationRules)
-            Platform.VK_ADS -> getVkSystemPrompt(moderationRules)
-            Platform.CHAT -> getConsultantSystemPrompt(moderationRules)
+    fun getDynamicTechnicalContext(role: AgentRole, campaignId: Long?, moderationRules: String): String {
+        return when (role) {
+            AgentRole.YANDEX_EXPERT -> """
+                TECHNICAL CONTEXT FOR THIS TURN (YANDEX):
+                - Числовой ID кампании в системе: ${campaignId ?: 0L}. (Если ID > 0, инструмент initYandexDraft УЖЕ выполнен успешно, тебе строго запрещено вызывать его заново! Используй этот ID).
+                - Актуальные правила Директа из базы знаний (RAG): 
+                $moderationRules
+            """.trimIndent()
+
+            AgentRole.VK_EXPERT -> """
+                TECHNICAL CONTEXT FOR THIS TURN (VK):
+                - Актуальные правила VK Ads из базы знаний (RAG): 
+                $moderationRules
+            """.trimIndent()
+
+            AgentRole.CONSULTANT -> """
+                CONTEXT FOR THIS TURN (CONSULTANT):
+                - Полезная общая информация из базы знаний (RAG): 
+                $moderationRules
+            """.trimIndent()
         }
     }
 
     fun isTriggerTextToStartAutomation(text: String): Boolean {
-        val lower = text.lowercase()
-        return lower.contains("приступаю к сборке") || lower.contains("начнем настройку") || lower.contains("переходим к кабинету")
+        return AUTOMATION_TRIGGER_REGEX.containsMatchIn(text)
     }
-
-    private fun getYandexSystemPrompt(campaignId: Long?, moderationRules: String): String = """
-        Ты — ИИ-Агент Яндекс.Директ. Твоя цель — настроить кампанию в Яндексе с помощью доступных инструментов.
-        Ты ведешь живой диалог, извлекаешь параметры и управляешь состоянием бэкенда.
-        
-        ${if (campaignId != null) "ТЕКУЩИЙ ID РЕКЛАМНОЙ КАМПАНИИ В ЯНДЕКСЕ: $campaignId. Используй строго его во всех инструментах!" else "У тебя еще нет созданной кампании. Начни строго с вызова инструмента 'initYandexDraft'."}
-        
-        СТРОГИЕ ПРАВИЛА ИСПОЛЬЗОВАНИЯ ИНСТРУМЕНТОВ:
-        1. Извлекай из реплик ГЕО, возраст, имя, тексты и СРАЗУ вызывай инструменты (Slot Filling). Не задавай вопросов на то, что уже названо. Вызывай доступные инструменты каскадом один за другим в рамках ОДНОЙ сессии генерации, пока не обработаешь все названные параметры.
-        2. Если пользователь назвал регион текстом — сначала найди его ID через 'searchYandexRegions', и только затем привяжи через 'bindYandexRegions'. Не гадай ID!
-        3. Когда готов текст объявления — вызывай 'submitYandexCreative'.
-        4. Финальная публикация ('publishYandexCampaign') — строго после явного согласия.
-        
-        ЗАПРЕТ НА АНОНСЫ: Никогда не пиши "Сейчас я вызову инструмент...". Сначала молча вызывай инструмент. Человеческий текст пиши строго по результатам ответа от бэкенда!
-        
-        🎯 УСЛОВИЕ ОСТАНОВКИ ВЫЗОВОВ: Переходи к генерации человеческого текста для пользователя только тогда, когда у тебя закончились применимые инструменты для извлеченных из реплики параметров. В тексте обязательно подтверди, какие шаги автоматизации успешно выполнены (например, указав ID созданной кампании и привязанные регионы), и спроси недостающие данные (ИНН для маркировки и тексты объявлений).
-        
-        🎯 Правила Директа из базы знаний: $moderationRules
-    """.trimIndent()
-
-    private fun getVkSystemPrompt(moderationRules: String): String = """
-        Ты — ИИ-Агент VK Ads. Твоя цель — создавать рекламные кампании на платформе ВКонтакте.
-        Используй инструмент 'createVkCampaign' для инициации рекламного процесса.
-        🎯 Правила VK Ads: $moderationRules
-    """.trimIndent()
-
-    private fun getConsultantSystemPrompt(moderationRules: String): String = """
-        Ты — опытный и дружелюбный ИИ-маркетолог рекламного агрегатора AdBroker.
-        Твоя цель — вести свободный диалог, отвечать на вопросы про маркетинг, помогать придумывать стратегии, креативы и анализировать ниши.
-        ПРАВИЛА ПОВЕДЕНИЯ:
-        1. Если пользователь просто приветствует тебя или общается на свободные темы — поддерживай диалог как высококлассный эксперт.
-        2. Если пользователь сомневается, какую сеть выбрать, объясни разницу.
-        3. Как только пользователь четко скажет, что готов выбрать конкретную сеть, вежливо зафиксируй это в ответе и напиши СТРОГО одну из фраз-триггеров: "Приступаю к сборке кампании в Яндекс.Директ" или "Приступаю к сборке кампании в VK Ads".
-        🎯 Полезная общая информация из базы знаний: $moderationRules
-    """.trimIndent()
 }

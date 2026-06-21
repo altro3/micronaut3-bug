@@ -1,7 +1,6 @@
-package com.altro.myorchestrator.api.dto
+package com.altro.myorchestrator.model
 
 enum class Platform {
     YANDEX_DIRECT,
     VK_ADS,
-    CHAT,
 }

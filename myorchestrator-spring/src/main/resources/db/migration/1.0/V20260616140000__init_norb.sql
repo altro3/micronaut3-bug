@@ -3,7 +3,6 @@ CREATE TABLE campaign_session
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     platform VARCHAR(50),
     campaign_id BIGINT,
-    context JSONB NOT NULL,
     updated_at TIMESTAMP WITH TIME ZONE NOT NULL
 );
 
