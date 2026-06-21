@@ -7,7 +7,7 @@ import com.altro.myorchestrator.service.AgentPromptProvider.getDynamicTechnicalC
 import com.altro.myorchestrator.service.AgentPromptProvider.isTriggerTextToStartAutomation
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.ai.chat.client.ChatClient
-import org.springframework.ai.chat.memory.ChatMemory
+import org.springframework.ai.chat.memory.ChatMemory.CONVERSATION_ID
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.data.repository.findByIdOrNull
 import org.springframework.stereotype.Service
@@ -41,7 +41,7 @@ class DynamicAiOrchestrator(
         val selectedAgent = when (currentRole) {
             AgentRole.YANDEX_EXPERT -> yandexAgentClient
             AgentRole.VK_EXPERT -> vkAgentClient
-            AgentRole.CONSULTANT -> consultantAgentClient
+            else -> consultantAgentClient
         }
         val dynamicQuadrantContext = getDynamicTechnicalContext(
             role = currentRole,
@@ -54,9 +54,9 @@ class DynamicAiOrchestrator(
         val chatResponse = selectedAgent.prompt()
             .user(userInput)
             .system(dynamicQuadrantContext)
+            .advisors { it.param(CONVERSATION_ID, conversationId) }
             .toolContext(
                 mapOf(
-                    ChatMemory.CONVERSATION_ID to conversationId,
                     "sessionId" to conversationId,
                     "campaignId" to (session.campaignId ?: 0L),
                     "currentSession" to session,
@@ -83,7 +83,7 @@ class DynamicAiOrchestrator(
         session.platform = saved.platform
 
         log.info { "💾 [Orchestrator УСПЕХ] Жесткий UPDATE закоммичен! Платформа в БД: ${saved.platform}, campaignId в БД: ${saved.campaignId}" }
-
-        return Flux.just(finalResponseText)
+        val cleanedResponseText = finalResponseText.replace("\\n", "\n").replace("\r", "")
+        return Flux.just(cleanedResponseText)
     }
 }

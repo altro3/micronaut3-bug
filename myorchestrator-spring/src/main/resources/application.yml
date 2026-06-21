@@ -126,7 +126,7 @@ logging:
     javax: info
     io.netty: info
     okhttp3: info
-    io.modelcontextprotocol: info
+#    io.modelcontextprotocol: info
     com.zaxxer: warn
     org.apache: warn
     org.flywaydb: info

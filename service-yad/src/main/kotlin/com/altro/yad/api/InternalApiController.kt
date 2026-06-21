@@ -78,7 +78,7 @@ class InternalCampaignController(
         internalApiService.getCachedRegions(query)
 
     private fun Campaign.toRs() = CampaignStepRs(
-        campignId = this.id,
+        campaignId = this.id,
         status = this.status,
         externalId = this.externalId,
         errorMessage = this.data.errorMessage
