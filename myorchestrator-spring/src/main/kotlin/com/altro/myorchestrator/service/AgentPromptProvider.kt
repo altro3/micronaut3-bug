@@ -10,9 +10,11 @@ object AgentPromptProvider {
     fun getDynamicTechnicalContext(role: AgentRole, campaignId: Long?, moderationRules: String): String {
         return when (role) {
             AgentRole.YANDEX_EXPERT -> """
-                TECHNICAL CONTEXT FOR THIS TURN (YANDEX):
-                - Числовой ID кампании в системе: ${campaignId ?: 0L}. (Если ID > 0, инструмент initYandexDraft УЖЕ выполнен успешно, тебе строго запрещено вызывать его заново! Используй этот ID).
-                - Актуальные правила Директа из базы знаний (RAG): 
+                [ТЕХНИЧЕСКИЙ СРЕЗ ТЕКУЩЕЙ СЕССИИ (КВАДРАНТ)]
+                - Числовой ID кампании в системе Postgres: ${campaignId ?: 0L}. (Если ID > 0, инструмент initYandexDraft УЖЕ выполнен успешно, тебе строго запрещено вызывать его заново! Используй этот ID для привязки регионов и остальных действий).
+
+                [ПРАВИЛА МОДЕРАЦИИ И ЗАКОНОДАТЕЛЬСТВО ДЛЯ ГЕНЕРАЦИИ КОНТЕНТА (RAG)]
+                Используй эти правила для проверки текстов объявлений и соблюдения ограничений площадки:
                 $moderationRules
             """.trimIndent()
 

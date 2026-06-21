@@ -4,7 +4,6 @@ import com.altro.myorchestrator.model.CampaignSession
 import com.altro.myorchestrator.model.Platform
 import com.altro.myorchestrator.repository.CampaignSessionRepository
 import com.altro.myorchestrator.service.AgentPromptProvider.getDynamicTechnicalContext
-import com.altro.myorchestrator.service.AgentPromptProvider.isTriggerTextToStartAutomation
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.ai.chat.client.ChatClient
 import org.springframework.ai.chat.memory.ChatMemory.CONVERSATION_ID
@@ -12,6 +11,7 @@ import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.data.repository.findByIdOrNull
 import org.springframework.stereotype.Service
 import reactor.core.publisher.Flux
+import reactor.core.scheduler.Schedulers
 import java.time.Instant
 
 @Service
@@ -51,9 +51,11 @@ class DynamicAiOrchestrator(
 
         log.info { "🚀 [Orchestrator] Вызов ИИ-Агента: роль [$currentRole] | платформа [$currentPlatform] | сессия $conversationId" }
 
-        val chatResponse = selectedAgent.prompt()
+        return selectedAgent.prompt()
             .user(userInput)
-            .system(dynamicQuadrantContext)
+            .system { systemSpec ->
+                systemSpec.param("moderationRules", dynamicQuadrantContext)
+            }
             .advisors { it.param(CONVERSATION_ID, conversationId) }
             .toolContext(
                 mapOf(
@@ -62,28 +64,24 @@ class DynamicAiOrchestrator(
                     "currentSession" to session,
                 )
             )
-            .call()
-            .chatResponse()
-        val currentSession = sessionRepository.findByIdOrNull(session.id) ?: session
-        val finalResponseText = chatResponse?.result?.output?.text ?: "Агент не смог сформировать ответ."
+            .stream()
+            .content()
+            .doOnComplete {
+                val dbSession = sessionRepository.findByIdOrNull(session.id) ?: session
 
-        val nextPlatform = if (currentPlatform == null && isTriggerTextToStartAutomation(finalResponseText)) {
-            if (finalResponseText.contains("Яндекс", ignoreCase = true)) Platform.YANDEX_DIRECT else Platform.VK_ADS
-        } else {
-            currentPlatform
-        }
+                dbSession.platform = currentPlatform
+                dbSession.updatedAt = Instant.now()
 
-        currentSession.platform = nextPlatform
-        currentSession.updatedAt = Instant.now()
+                log.info { "⏳ [Orchestrator] Фиксация сессии. Платформа: ${dbSession.platform}" }
+                val saved = sessionTransactionService.saveSessionForce(dbSession)
 
-        log.info { "⏳ [Orchestrator] Отправляю плоские поля на физический SQL UPDATE в Postgres..." }
-        val saved = sessionTransactionService.saveSessionForce(currentSession)
-
-        session.campaignId = saved.campaignId
-        session.platform = saved.platform
-
-        log.info { "💾 [Orchestrator УСПЕХ] Жесткий UPDATE закоммичен! Платформа в БД: ${saved.platform}, campaignId в БД: ${saved.campaignId}" }
-        val cleanedResponseText = finalResponseText.replace("\\n", "\n").replace("\r", "")
-        return Flux.just(cleanedResponseText)
+                session.campaignId = saved.campaignId
+                session.platform = saved.platform
+            }
+            .publishOn(Schedulers.boundedElastic())
+            .onErrorResume { error ->
+                log.error(error) { "Ошибка стриминга" }
+                Flux.just("\n❌ [Ошибка]: ${error.message}")
+            }
     }
 }
