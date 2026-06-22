@@ -26,38 +26,38 @@ class ChatOrchestrator(
 
         val userInput = rq.messages.last().content.trim()
 
-        return Flux.defer {
-            val sessionIdStr = rq.sessionId
-            val parsedSessionId = if (!sessionIdStr.isNullOrBlank()) UUID.fromString(sessionIdStr) else null
+        val sessionIdStr = rq.sessionId
+        val parsedSessionId = if (!sessionIdStr.isNullOrBlank()) UUID.fromString(sessionIdStr) else null
 
-            var session: CampaignSession? = null
-            if (parsedSessionId != null) {
-                session = sessionRepository.findByIdOrNull(parsedSessionId)
-            }
-
-            val sessionInitFlux = if (session == null) {
-                log.info { "🎯 [ChatOrchestrator] Сессия не найдена или это первый запуск. Инициирую новую долгоживущую ИИ-сессию..." }
-
-                val newSession = CampaignSession(
-                    id = UUID.randomUUID(),
-                    updatedAt = Instant.now()
-                ).apply { isNewEntity = true }
-
-                val savedSession = sessionTransactionService.saveSessionForce(newSession)
-                session = savedSession
-
-                Flux.just("[SESSION_ID:${savedSession.id}]")
-            } else {
-                log.info { "🎯 [ChatOrchestrator] Сессия успешно найдена по UUID: ${session.id}. Текущая платформа: ${session.platform}. Продолжаю стрим..." }
-                Flux.empty()
-            }
-
-            val agentResponseFlux = dynamicAiOrchestrator.orchestrateDynamicStream(session!!, userInput)
-
-            Flux.concat(sessionInitFlux, agentResponseFlux)
-        }.onErrorResume { error ->
-            log.error(error) { "Критический сбой в основном распределителе чата" }
-            Flux.just("❌ Критический сбой пайплайна чата: ${error.message}")
+        var session: CampaignSession? = null
+        if (parsedSessionId != null) {
+            session = sessionRepository.findByIdOrNull(parsedSessionId)
         }
+
+        val sessionInitFlux = if (session == null) {
+            log.info { "🎯 [ChatOrchestrator] Сессия не найдена или это первый запуск. Инициирую новую долгоживущую ИИ-сессию..." }
+
+            val newSession = CampaignSession(
+                id = UUID.randomUUID(),
+                updatedAt = Instant.now()
+            ).apply { isNewEntity = true }
+
+            val savedSession = sessionTransactionService.saveSessionForce(newSession)
+            session = savedSession
+
+            Flux.just("[SESSION_ID:${savedSession.id}]")
+        } else {
+            log.info { "🎯 [ChatOrchestrator] Сессия успешно найдена по UUID: ${session.id}. Текущая платформа: ${session.platform}. Продолжаю стрим..." }
+            Flux.empty()
+        }
+
+        val agentResponseFlux = dynamicAiOrchestrator.orchestrateDynamicStream(session!!, userInput)
+
+        return Flux.concat(sessionInitFlux, agentResponseFlux)
+            .onErrorResume { error ->
+                log.error(error) { "Критический сбой в основном распределителе чата" }
+                Flux.just("❌ Критический сбой пайплайна чата: ${error.message}")
+            }
+            .cache()
     }
 }

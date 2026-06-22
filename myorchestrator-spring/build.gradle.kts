@@ -28,6 +28,7 @@ dependencies {
     implementation(springAi.spring.springAiStarterModelOpenai)
     implementation(springAi.spring.springAiStarterVectorStoreQdrant)
     implementation(springAi.spring.springAiStarterMcpClient)
+    implementation(springAi.spring.springAiVectorStoreAdvisor)
     implementation(springAi.spring.mcpSpringWebmvc)
     implementation(coroutines.kotlinx.kotlinxCoroutinesCoreJvm)
     implementation(coroutines.kotlinx.kotlinxCoroutinesSlf4j)

@@ -47,7 +47,7 @@ export async function sendChatCompletionStream(
         let hasUpdates = false;
 
         for (const line of lines) {
-            const cleanLine = line.replace(/\r/g, '')
+            const cleanLine = line.replace(/\r/g, '');
 
             if (cleanLine === '') continue;
 
@@ -56,12 +56,12 @@ export async function sendChatCompletionStream(
 
                 if (token === '[DONE]') continue;
 
+                // Перехват SESSION_ID
                 if (!sessionCaptured && token.includes('[SESSION_ID:')) {
                     const match = token.match(/\[SESSION_ID:([a-f0-9-]+)]/i);
                     if (match && match[1]) {
-                        const pureUuid = match[1];
-                        console.log("✈️ Перехвачен UUID сессии с бэка:", pureUuid);
-                        onSessionId(pureUuid);
+                        console.log("✈️ Перехвачен UUID сессии с бэка:", match[1]);
+                        onSessionId(match[1]);
                         sessionCaptured = true;
                     }
                     token = token.replace(/\[SESSION_ID:.+?]/, '');
@@ -72,31 +72,38 @@ export async function sendChatCompletionStream(
                         unformattedContent += '\n';
                     }
                 } else {
-                    unformattedContent += token;
+                    unformattedContent += token.replace(/\\n/g, '\n');
                 }
                 hasUpdates = true;
             } else {
-                unformattedContent += cleanLine;
+                unformattedContent += cleanLine.replace(/\\n/g, '\n');
                 hasUpdates = true;
             }
         }
 
         if (hasUpdates) {
-            let cleanedContent = unformattedContent;
-            cleanedContent = cleanedContent.replace(/\\n/g, '\n').replace(/\r/g, '');
-            if (cleanedContent.startsWith('```markdown')) {
-                cleanedContent = cleanedContent.slice(11);
-            } else if (cleanedContent.startsWith('```')) {
-                cleanedContent = cleanedContent.slice(3);
-            }
-
-            if (cleanedContent.endsWith('```')) {
-                cleanedContent = cleanedContent.slice(0, -3);
-            }
-
+            const cleanedContent = unformattedContent.replace(/\r/g, '');
             onChunk(cleanedContent);
         }
     }
 
-    console.log('%c[FINAL MD CONTENT]:', 'color: #fbbf24; font-weight: bold;\n', unformattedContent);
+    let finalContent = unformattedContent.replace(/\r/g, '');
+
+    if (finalContent.startsWith('```markdown')) {
+        finalContent = finalContent.slice(11).trim();
+    } else if (finalContent.startsWith('```')) {
+        finalContent = finalContent.slice(3).trim();
+    }
+
+    if (finalContent.endsWith('```')) {
+        finalContent = finalContent.slice(0, -3).trim();
+    }
+
+    onChunk(finalContent);
+
+    console.log(
+        '%c[FINAL CLEAN MD CONTENT]:',
+        'color: #fbbf24; font-weight: bold;\n',
+        finalContent
+    );
 }

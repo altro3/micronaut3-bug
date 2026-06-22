@@ -3,7 +3,6 @@ package com.altro.myorchestrator.service
 import com.altro.myorchestrator.model.CampaignSession
 import com.altro.myorchestrator.model.Platform
 import com.altro.myorchestrator.repository.CampaignSessionRepository
-import com.altro.myorchestrator.service.AgentPromptProvider.getDynamicTechnicalContext
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.ai.chat.client.ChatClient
 import org.springframework.ai.chat.memory.ChatMemory.CONVERSATION_ID
@@ -18,7 +17,6 @@ import java.time.Instant
 class DynamicAiOrchestrator(
     private val sessionRepository: CampaignSessionRepository,
     private val sessionTransactionService: SessionTransactionService,
-    private val vectorStoreService: VectorStoreService,
     private val platformRouter: PlatformRouter,
 
     @Qualifier("yandexAgentClient") private val yandexAgentClient: ChatClient,
@@ -31,7 +29,6 @@ class DynamicAiOrchestrator(
     fun orchestrateDynamicStream(session: CampaignSession, userInput: String): Flux<String> {
         val conversationId = session.id.toString()
         val currentPlatform = platformRouter.determineTargetPlatform(session.platform, userInput)
-        val moderationRules = vectorStoreService.searchAdvertisingRules(listOfNotNull(currentPlatform), userInput)
 
         val currentRole = when (currentPlatform) {
             Platform.YANDEX_DIRECT -> AgentRole.YANDEX_EXPERT
@@ -43,24 +40,27 @@ class DynamicAiOrchestrator(
             AgentRole.VK_EXPERT -> vkAgentClient
             else -> consultantAgentClient
         }
-        val dynamicQuadrantContext = getDynamicTechnicalContext(
-            role = currentRole,
-            campaignId = session.campaignId,
-            moderationRules = moderationRules
-        )
 
         log.info { "🚀 [Orchestrator] Вызов ИИ-Агента: роль [$currentRole] | платформа [$currentPlatform] | сессия $conversationId" }
 
+        val sessionCampaignId = session.campaignId ?: 0L
+        val anchoredUserInput = """
+        [SYSTEM MEMORY: active_campaign_id=$sessionCampaignId]
+        $userInput
+    """.trimIndent()
+
+        log.info { "🚀 [Orchestrator] Вызов ИИ-Агента. Фиксированный ID в якоре: $sessionCampaignId" }
+
         return selectedAgent.prompt()
-            .user(userInput)
-            .system { systemSpec ->
-                systemSpec.param("moderationRules", dynamicQuadrantContext)
+            .user(anchoredUserInput)
+            .advisors {
+                it.param(CONVERSATION_ID, conversationId)
+                    .param("technicalSessionContext", "ID Кампании в системе: $sessionCampaignId")
             }
-            .advisors { it.param(CONVERSATION_ID, conversationId) }
             .toolContext(
                 mapOf(
                     "sessionId" to conversationId,
-                    "campaignId" to (session.campaignId ?: 0L),
+                    "campaignId" to sessionCampaignId,
                     "currentSession" to session,
                 )
             )
