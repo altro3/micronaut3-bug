@@ -9,7 +9,6 @@ import org.springframework.ai.chat.client.advisor.vectorstore.QuestionAnswerAdvi
 import org.springframework.ai.chat.memory.ChatMemoryRepository
 import org.springframework.ai.chat.memory.InMemoryChatMemoryRepository
 import org.springframework.ai.chat.memory.MessageWindowChatMemory
-import org.springframework.ai.chat.prompt.ChatOptions
 import org.springframework.ai.chat.prompt.PromptTemplate
 import org.springframework.ai.mcp.SyncMcpToolCallbackProvider
 import org.springframework.ai.vectorstore.SearchRequest

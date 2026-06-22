@@ -5,7 +5,6 @@ import com.altro.mcp.service.integration.serviceyad.dto.BindAgesRq
 import com.altro.mcp.service.integration.serviceyad.dto.BindRegionsRq
 import com.altro.mcp.service.integration.serviceyad.dto.CampaignStepRs
 import com.altro.mcp.service.integration.serviceyad.dto.CreateDraftRq
-import com.altro.mcp.service.integration.serviceyad.dto.RegionItemDto
 import com.altro.mcp.service.integration.serviceyad.dto.SubmitCreativeRq
 import org.springframework.ai.tool.annotation.Tool
 import org.springframework.ai.tool.annotation.ToolParam
@@ -24,10 +23,12 @@ class AdvertisingMcpTools(
         return serviceYadClient.createDraft(CreateDraftRq(name = name))
     }
 
-    @Tool(description = """
+    @Tool(
+        description = """
         Поиск внутренних числовых ID географических регионов по их текстовому названию (например, 'Москва', 'Новосибирск'). 
         Обязательно вызывай этот инструмент ПЕРЕД bindYandexRegions.
-    """)
+    """
+    )
     fun searchYandexRegions(
         @ToolParam(description = "Уникальный числовой идентификатор текущей кампании (campaignId).")
         campaignId: Long, // <--- ДОБАВЛЯЕМ ОБЯЗАТЕЛЬНЫЙ АРГУМЕНТ ДЛЯ ИИ!
@@ -56,11 +57,13 @@ class AdvertisingMcpTools(
         """.trimIndent()
     }
 
-    @Tool(description = """
+    @Tool(
+        description = """
         Привязать выбранные географические регионы к созданной кампании Яндекс.Директ. 
         ⚠️ КАТЕГОРИЧЕСКИ ЗАПРЕЩЕНО придумывать ID регионов от себя! 
         Передавай в поле regionIds только те строковые ID, которые ты СТРОГО ТОЛЬКО ЧТО получил из ответа инструмента 'searchYandexRegions'.
-    """)
+    """
+    )
     fun bindYandexRegions(
         @ToolParam(description = "Уникальный числовой идентификатор кампании (campaignId).") campaignId: Long,
         @ToolParam(description = "Список строковых ID регионов, полученных строго из searchYandexRegions.") regionIds: List<String>
@@ -68,12 +71,14 @@ class AdvertisingMcpTools(
         return serviceYadClient.bindRegions(campaignId, BindRegionsRq(regionIds = regionIds))
     }
 
-    @Tool(description = """
+    @Tool(
+        description = """
         Привязать возрастные ограничения целевой аудитории (возрастной ценз) к созданной кампании Яндекс.Директ. 
         🔥 ИНСТРУКЦИЯ ДЛЯ АГЕНТА: Как только пользователь явно или косвенно указывает возраст (например: "для взрослых", "не для детей", "маркировка 18+", "0+"), ты ОБЯЗАН НЕМЕДЛЕННО запустить этот инструмент! 
         Ты не имеешь права просто написать текстовый ответ в чат. Ты обязан сгенерировать вызов функции 'bindYandexAges'. 
         В параметр campaignId передавай строго текущий ID кампании. В ageIds передавай массив строковых меток (например, для 'не для детей' или 'для взрослых' передай ["18_PLUS"]).
-    """)
+    """
+    )
     fun bindYandexAges(
         @ToolParam(description = "Уникальный числовой идентификатор кампании (campaignId).") campaignId: Long,
         @ToolParam(description = "Список строковых ID возрастных меток (например: '0_PLUS', '12_PLUS', '16_PLUS', '18_PLUS').") ageIds: List<String>
@@ -81,12 +86,14 @@ class AdvertisingMcpTools(
         return serviceYadClient.bindAges(campaignId, BindAgesRq(ageIds = ageIds))
     }
 
-    @Tool(description = """
+    @Tool(
+        description = """
     Сохранить рекламный текст объявления в черновик кампании Яндекс.Директ. 
     🔥 ВАЖНО ДЛЯ АГЕНТА: Этот инструмент является ключевым для настройки кампании. 
     Если у тебя еще нет текста объявления от пользователя, ты имеешь право в любой момент диалога спросить его: 'Какой текст рекламы мы напишем?' 
     или предложить свой готовый продающий вариант на основе его ниши бизнеса, чтобы как можно скорее вызвать этот инструмент.
-""")
+"""
+    )
     fun submitYandexCreative(
         @ToolParam(description = "Уникальный числовой идентификатор кампании.") campaignId: Long,
         @ToolParam(description = "Готовый продающий текст объявления.") text: String
@@ -94,12 +101,14 @@ class AdvertisingMcpTools(
         return serviceYadClient.submitCreative(campaignId, SubmitCreativeRq(text = text))
     }
 
-    @Tool(description = """
+    @Tool(
+        description = """
     Опубликовать готовую рекламную кампанию и отправить её на модерацию в сеть Яндекс.Директ. 
     🔥 ИНСТРУКЦИЯ ДЛЯ АГЕНТА: Этот инструмент вызывается ТОЛЬКО когда кампания полностью собрана (есть гео, возраст, ИНН и текст) И пользователь дал команду на запуск.
     Критерием согласия пользователя являются слова: 'давай', 'запускай', 'публикуй', 'отправляй', 'ок', 'согласен', 'GO'. 
     Как только пользователь написал любое из этих слов в ответ на твой финальный отчет — ты ОБЯЗАН немедленно сгенерировать вызов функции 'publishYandexCampaign'. Не пиши текст, сначала вызови инструмент!
-""")
+"""
+    )
     fun publishYandexCampaign(
         @ToolParam(description = "Уникальный числовой идентификатор кампании (campaignId).") campaignId: Long
     ): CampaignStepRs? {
