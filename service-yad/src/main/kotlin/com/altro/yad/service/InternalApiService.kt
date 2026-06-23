@@ -1,6 +1,7 @@
 package com.altro.yad.service
 
 import com.altro.yad.api.dto.RegionItemDto
+import com.altro.yad.api.dto.SaveAndPublishCampaignRq
 import com.altro.yad.model.Campaign
 import org.springframework.stereotype.Service
 
@@ -49,4 +50,8 @@ class InternalApiService(
      */
     fun publishCampaignToYandex(id: Long): Campaign =
         campaignService.validateAndPublishToExternalNetwork(id)
+
+    fun createAndPublishCampaign(rq: SaveAndPublishCampaignRq): Campaign =
+        campaignService.createAndPublishCampaign(rq)
+
 }

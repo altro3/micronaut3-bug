@@ -25,6 +25,8 @@ class ServiceYadProperties(
         @field:Valid
         val publishCampaign: Endpoint,
         @field:Valid
+        val saveAndPublishCampaign: Endpoint,
+        @field:Valid
         val getRegions: Endpoint,
         @field:Valid
         val getCampaignStatus: Endpoint,

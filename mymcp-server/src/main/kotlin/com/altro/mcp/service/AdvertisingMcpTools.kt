@@ -5,6 +5,7 @@ import com.altro.mcp.service.integration.serviceyad.dto.BindAgesRq
 import com.altro.mcp.service.integration.serviceyad.dto.BindRegionsRq
 import com.altro.mcp.service.integration.serviceyad.dto.CampaignStepRs
 import com.altro.mcp.service.integration.serviceyad.dto.CreateDraftRq
+import com.altro.mcp.service.integration.serviceyad.dto.SaveAndPublishCampaignRq
 import com.altro.mcp.service.integration.serviceyad.dto.SubmitCreativeRq
 import org.springframework.ai.tool.annotation.Tool
 import org.springframework.ai.tool.annotation.ToolParam
@@ -122,5 +123,31 @@ class AdvertisingMcpTools(
         @ToolParam(description = "Основной рекламный текст для баннера.") text: String
     ): String {
         return "Успешно. Кампания в VK Ads инициирована (Холостой режим)."
+    }
+
+    @Tool(
+        description = """
+        ФИНАЛЬНЫЙ СБОР ДАННЫХ И ЗАПУСК: Вызывай этот инструмент ТОЛЬКО тогда, когда собраны абсолютно ВСЕ параметры (Название, Город, Возраст, ИНН, Текст) И пользователь дал согласие (сказал 'да', 'отправляй'). 
+        Тебе КАТЕГОРИЧЕСКИ ЗАПРЕЩЕНО вызывать этот инструмент, если хотя бы одного параметра не хватает в диалоге!
+    """
+    )
+    fun saveAndPublishCampaign(
+        @ToolParam(description = "Название рекламной кампании на русском.") name: String,
+        @ToolParam(description = "Список названий городов или регионов, которые назвал пользователь. Например: ['Новосибирск', 'Бердск'].") regionNames: List<String>,
+        @ToolParam(description = "Возрастная маркировка строго в формате: '18_PLUS', '16_PLUS', '12_PLUS' или '0_PLUS'.") ageLimit: String,
+        @ToolParam(description = "Реальный ИНН рекламодателя (12 цифр).") inn: String,
+        @ToolParam(description = "Готовый продающий текст объявления.") creativeText: String,
+        @ToolParam(description = "Флаг немедленной публикации. Если пользователь согласился запустить, всегда передавай true.") autoPublish: Boolean = true
+    ): CampaignStepRs? {
+        return serviceYadClient.saveAndPublish(
+            SaveAndPublishCampaignRq(
+                name = name,
+                regionNames = regionNames,
+                ageLimit = ageLimit,
+                inn = inn,
+                creativeText = creativeText,
+                autoPublish = autoPublish,
+            )
+        )
     }
 }

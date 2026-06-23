@@ -1,12 +1,24 @@
 package com.altro.yad.api
 
-import com.altro.yad.api.dto.*
+import com.altro.yad.api.dto.BindAgesRq
+import com.altro.yad.api.dto.BindRegionsRq
+import com.altro.yad.api.dto.CampaignStepRs
+import com.altro.yad.api.dto.CreateDraftRq
+import com.altro.yad.api.dto.RegionItemDto
+import com.altro.yad.api.dto.SaveAndPublishCampaignRq
+import com.altro.yad.api.dto.SubmitCreativeRq
 import com.altro.yad.model.Campaign
 import com.altro.yad.service.InternalApiService
 import jakarta.validation.Valid
 import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.Size
-import org.springframework.web.bind.annotation.*
+import org.springframework.web.bind.annotation.GetMapping
+import org.springframework.web.bind.annotation.PathVariable
+import org.springframework.web.bind.annotation.PostMapping
+import org.springframework.web.bind.annotation.PutMapping
+import org.springframework.web.bind.annotation.RequestBody
+import org.springframework.web.bind.annotation.RequestParam
+import org.springframework.web.bind.annotation.RestController
 
 @RestController
 class InternalCampaignController(
@@ -61,6 +73,7 @@ class InternalCampaignController(
     @PostMapping("/internal/campaigns/{id}/publish")
     fun publishCampaign(@PathVariable id: Long): CampaignStepRs =
         internalApiService.publishCampaignToYandex(id).toRs()
+
     /**
      * Чтение текущего стейта кампании
      * GET http://localhost:8090/internal/campaigns/{id}
@@ -76,6 +89,13 @@ class InternalCampaignController(
     @GetMapping("/internal/dictionaries/regions")
     fun getRegions(@RequestParam @NotBlank @Size(min = 3) query: String): List<RegionItemDto> =
         internalApiService.getCachedRegions(query)
+
+    /**
+     * Создание и публикация одним запросом
+     */
+    @PostMapping("/internal/campaigns")
+    fun saveAndPublish(@RequestBody rq: SaveAndPublishCampaignRq): CampaignStepRs =
+        internalApiService.createAndPublishCampaign(rq).toRs()
 
     private fun Campaign.toRs() = CampaignStepRs(
         campaignId = this.id,

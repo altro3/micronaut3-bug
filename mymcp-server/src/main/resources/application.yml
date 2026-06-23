@@ -41,6 +41,9 @@ app:
         publish-campaign:
           path: /internal/campaigns/{id}/publish
           method: POST
+        save-and-publish-campaign:
+          path: /internal/campaigns
+          method: POST
         get-regions:
           path: /internal/dictionaries/regions
           method: GET

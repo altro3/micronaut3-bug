@@ -1,5 +1,6 @@
 package com.altro.yad.service
 
+import com.altro.yad.api.dto.SaveAndPublishCampaignRq
 import com.altro.yad.model.Campaign
 import com.altro.yad.model.CampaignStatus
 import com.altro.yad.repository.CampaignRepository
@@ -14,6 +15,7 @@ import java.time.Instant
 
 @Service
 class CampaignService(
+    private val dictService: DictService,
     private val campaignRepository: CampaignRepository,
     private val yadClient: YadClient
 ) {
@@ -171,5 +173,27 @@ class CampaignService(
             syncingCampaign.updatedAt = Instant.now()
             campaignRepository.save(syncingCampaign)
         }
+    }
+
+    fun createAndPublishCampaign(rq: SaveAndPublishCampaignRq): Campaign {
+        val campaign = Campaign(
+            createdAt = Instant.now(),
+            updatedAt = Instant.now()
+        ).apply {
+            status = CampaignStatus.DRAFT
+            data.name = rq.name
+            data.text = rq.creativeText
+            data.targetAgeIds = listOf(rq.ageLimit)
+            data.targetRegionIds = rq.regionNames.mapNotNull { dictService.searchRegionsByQuery(it, 1).firstOrNull()?.id }
+        }
+        val savedCampaign = campaignRepository.save(campaign).also {
+            log.info { "💾 [ЯД-Адаптер] Шаг 1: Создан черновик кампании. ID: ${it.id}" }
+        }
+
+        if (rq.autoPublish) {
+            return validateAndSync(savedCampaign)
+        }
+
+        return savedCampaign
     }
 }

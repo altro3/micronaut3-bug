@@ -7,6 +7,7 @@ import com.altro.mcp.service.integration.serviceyad.dto.BindRegionsRq
 import com.altro.mcp.service.integration.serviceyad.dto.CampaignStepRs
 import com.altro.mcp.service.integration.serviceyad.dto.CreateDraftRq
 import com.altro.mcp.service.integration.serviceyad.dto.RegionItemDto
+import com.altro.mcp.service.integration.serviceyad.dto.SaveAndPublishCampaignRq
 import com.altro.mcp.service.integration.serviceyad.dto.SubmitCreativeRq
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.core.ParameterizedTypeReference
@@ -86,6 +87,9 @@ class ServiceYadClient(
      */
     fun getRegions(query: String): List<RegionItemDto>? =
         httpClient.sendRq(endpoints.getRegions, RS_REGIONS, queryParams = mapOf("query" to query))
+
+    fun saveAndPublish(rq: SaveAndPublishCampaignRq): CampaignStepRs? =
+        httpClient.sendRq(endpoints.saveAndPublishCampaign, CampaignStepRs::class.java, rqBody = rq)
 
     companion object {
         val RS_REGIONS = object : ParameterizedTypeReference<List<RegionItemDto>>() {}
