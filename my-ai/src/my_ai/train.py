@@ -1,8 +1,10 @@
 import math
 import pickle
+
 from my_ai.dataset import CharacterTokenizer, get_pure_batch
 from my_ai.models.transformer import PureTransformerLM
 from my_ai.utils.matrix_math import create_zero_matrix
+
 
 class PureAdam:
     def __init__(self, model: PureTransformerLM, lr=0.001):
@@ -66,9 +68,6 @@ def stable_cross_entropy_loss(logits: list[list[float]], targets: list[int]) -> 
             grad_logits[t][j] = probs[j]
         grad_logits[t][target_id] -= 1.0
 
-        for j in range(vocab_size):
-            grad_logits[t][j] /= T
-
     return loss / T, grad_logits
 
 
@@ -77,50 +76,40 @@ def main():
     tokenizer = CharacterTokenizer(text)
     data = tokenizer.encode(text)
 
-    block_size = 6
+    block_size = 8
     batch_size = 4
-    max_iters = 5000
+    max_iters = 3000
+    n_embd = 32
 
-    model = PureTransformerLM(vocab_size=tokenizer.vocab_size, block_size=block_size, n_embd=16)
-    optimizer = PureAdam(model, lr=0.002)
+    model = PureTransformerLM(vocab_size=tokenizer.vocab_size, block_size=block_size, n_embd=n_embd)
+    optimizer = PureAdam(model, lr=0.003)  # Слегка подняли LR для Adam
 
     print("=" * 50)
-    print(" ЗАПУСК ПРОМЫШЛЕННОГО РУЧНОГО ТРАНСФОРМЕРА ")
+    print(" ЗАПУСК ИСПРАВЛЕННОГО РУЧНОГО ТРАНСФОРМЕРА ")
     print("=" * 50)
 
     total_step_loss = 0.0
 
     for step in range(max_iters):
         x_batch, y_batch = get_pure_batch(data, block_size, batch_size)
-
         total_step_loss = 0.0
 
-        for _, grad_w in model.get_parameters():
-            for i in range(len(grad_w)):
-                for j in range(len(grad_w[0])):
-                    grad_w[i][j] = 0.0
-        for _, grad_b in model.get_biases():
-            for j in range(len(grad_b)):
-                grad_b[j] = 0.0
+        model.zero_grad()
 
         for b in range(batch_size):
             logits = model.forward(x_batch[b])
             loss, grad_logits = stable_cross_entropy_loss(logits, y_batch[b])
             total_step_loss += loss
 
-            model.backward(grad_logits)
+            for t in range(len(grad_logits)):
+                for j in range(len(grad_logits[0])):
+                    grad_logits[t][j] /= batch_size
 
-        for _, grad_w in model.get_parameters():
-            for i in range(len(grad_w)):
-                for j in range(len(grad_w[0])):
-                    grad_w[i][j] /= batch_size
-        for _, grad_b in model.get_biases():
-            for j in range(len(grad_b)):
-                grad_b[j] /= batch_size
+            model.backward(grad_logits)
 
         optimizer.step()
 
-        if step % 500 == 0:
+        if step % 200 == 0:
             print(f"Шаг {step:4d} | Ошибка (Loss): {total_step_loss / batch_size:.4f}")
 
     print(f"Шаг {max_iters} | Ошибка (Loss): {total_step_loss / batch_size:.4f}")
@@ -128,6 +117,7 @@ def main():
     print("Обучение полностью завершено!")
     with open('pure_model.pkl', 'wb') as f:
         pickle.dump(model, f)
+
 
 if __name__ == '__main__':
     main()

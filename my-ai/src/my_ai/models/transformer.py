@@ -56,34 +56,34 @@ class PureSelfAttention:
         v_T = transpose(self.last_v)
         dwei_from_v = matmul(grad_output, v_T)
 
+        for i in range(T):
+            for j in range(T):
+                if j > i:
+                    dwei_from_v[i][j] = 0.0
+
         grad_wei = create_zero_matrix(T, T)
         for r in range(T):
             row_p = self.last_wei[r]
             row_g = dwei_from_v[r]
-            for i in range(T):
-                s = 0.0
-                for j in range(T):
-                    if i == j:
-                        s += row_g[j] * row_p[i] * (1.0 - row_p[j])
-                    else:
-                        s += row_g[j] * (-row_p[i] * row_p[j])
-                grad_wei[r][i] = s
 
-        for i in range(T):
-            for j in range(T):
-                if j > i:
-                    grad_wei[i][j] = 0.0
-                else:
-                    grad_wei[i][j] *= scale
+            dot_product = sum(g * p for g, p in zip(row_g, row_p))
+
+            for i in range(T):
+                grad_wei[r][i] = row_p[i] * (row_g[i] - dot_product) * scale
 
         grad_q = matmul(grad_wei, self.last_k)
         grad_wei_T = transpose(grad_wei)
         grad_k = matmul(grad_wei_T, self.last_q)
 
-        self.query_layer.backward(grad_q)
-        self.key_layer.backward(grad_k)
+        grad_x_from_q = self.query_layer.backward(grad_q)
+        grad_x_from_k = self.key_layer.backward(grad_k)
+        grad_x_from_v = self.value_layer.backward(grad_v)
 
-        grad_x = self.value_layer.backward(grad_v)
+        grad_x = create_zero_matrix(T, self.n_embd)
+        for i in range(T):
+            for j in range(self.n_embd):
+                grad_x[i][j] = grad_x_from_q[i][j] + grad_x_from_k[i][j] + grad_x_from_v[i][j]
+
         return grad_x
 
 
@@ -96,13 +96,28 @@ class PureTransformerLM:
         self.position_embeddings = PureEmbedding(block_size, n_embd)
 
         self.attention = PureSelfAttention(n_embd, head_size=n_embd, block_size=block_size)
+
+        from my_ai.models.pure_layers import PureReLU
+        self.mlp_fc1 = PureLinear(n_embd, n_embd * 4)
+        self.mlp_relu = PureReLU()
+        self.mlp_fc2 = PureLinear(n_embd * 4, n_embd)
+
         self.lm_head = PureLinear(n_embd, vocab_size)
+
+    def zero_grad(self) -> None:
+        self.token_embeddings.zero_grad()
+        self.position_embeddings.zero_grad()
+        self.attention.query_layer.zero_grad()
+        self.attention.key_layer.zero_grad()
+        self.attention.value_layer.zero_grad()
+        self.mlp_fc1.zero_grad()
+        self.mlp_fc2.zero_grad()
+        self.lm_head.zero_grad()
 
     def forward(self, input_ids: list[int]) -> list[list[float]]:
         T = len(input_ids)
 
         tok_emb = self.token_embeddings.forward(input_ids)
-
         pos_ids = list(range(T))
         pos_emb = self.position_embeddings.forward(pos_ids)
 
@@ -112,11 +127,21 @@ class PureTransformerLM:
                 x[i][j] = tok_emb[i][j] + pos_emb[i][j]
 
         x = self.attention.forward(x)
+
+        x = self.mlp_fc1.forward(x)
+        x = self.mlp_relu.forward(x)
+        x = self.mlp_fc2.forward(x)
+
         logits = self.lm_head.forward(x)
         return logits
 
     def backward(self, grad_output: list[list[float]]) -> None:
         grad_x = self.lm_head.backward(grad_output)
+
+        grad_x = self.mlp_fc2.backward(grad_x)
+        grad_x = self.mlp_relu.backward(grad_x)
+        grad_x = self.mlp_fc1.backward(grad_x)
+
         grad_x = self.attention.backward(grad_x)
 
         self.token_embeddings.backward(grad_x)
@@ -129,6 +154,8 @@ class PureTransformerLM:
             (self.attention.query_layer.weights, self.attention.query_layer.grad_weights),
             (self.attention.key_layer.weights, self.attention.key_layer.grad_weights),
             (self.attention.value_layer.weights, self.attention.value_layer.grad_weights),
+            (self.mlp_fc1.weights, self.mlp_fc1.grad_weights),
+            (self.mlp_fc2.weights, self.mlp_fc2.grad_weights),
             (self.lm_head.weights, self.lm_head.grad_weights)
         ]
 
@@ -137,5 +164,7 @@ class PureTransformerLM:
             (self.attention.query_layer.bias, self.attention.query_layer.grad_bias),
             (self.attention.key_layer.bias, self.attention.key_layer.grad_bias),
             (self.attention.value_layer.bias, self.attention.value_layer.grad_bias),
+            (self.mlp_fc1.bias, self.mlp_fc1.grad_bias),
+            (self.mlp_fc2.bias, self.mlp_fc2.grad_bias),
             (self.lm_head.bias, self.lm_head.grad_bias)
         ]
