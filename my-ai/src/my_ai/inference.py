@@ -5,7 +5,7 @@ from my_ai.utils.matrix_math import softmax_row
 
 
 def ask_ai_direct(fact: str, question: str, max_new_tokens: int = 15) -> str:
-    block_size = 32
+    block_size = 16
     temperature = 0.1
 
     with open('tokenizer.pkl', 'rb') as f:
@@ -37,7 +37,9 @@ def ask_ai_direct(fact: str, question: str, max_new_tokens: int = 15) -> str:
                 next_id = idx
                 break
 
-        if tokenizer.itos[next_id] == '\n':
+        predicted_token = tokenizer.itos[next_id]
+
+        if predicted_token == "[EOS]":
             break
 
         context.append(next_id)

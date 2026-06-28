@@ -2,23 +2,23 @@ import random
 
 
 class CharacterTokenizer:
-
-    def __init__(self, text: str, num_merges: int = 40):
+    def __init__(self, text: str, num_merges: int = 150):
         self.num_merges = num_merges
 
         self.vocab = sorted(list(set(text)))
 
-        if "[UNK]" not in self.vocab:
-            self.vocab.append("[UNK]")
+        if "[UNK]" not in self.vocab: self.vocab.append("[UNK]")
+        if "[EOS]" not in self.vocab: self.vocab.append("[EOS]")
 
         current_tokens = list(text)
-
         self.merges = {}
 
         for _ in range(num_merges):
             pairs = {}
             for i in range(len(current_tokens) - 1):
                 p = (current_tokens[i], current_tokens[i + 1])
+                if "[EOS]" in p or "[UNK]" in p:
+                    continue
                 pairs[p] = pairs.get(p, 0) + 1
 
             if not pairs:
@@ -29,6 +29,7 @@ class CharacterTokenizer:
                 break
 
             new_token = best_pair[0] + best_pair[1]
+
             self.merges[best_pair] = new_token
             self.vocab.append(new_token)
 

@@ -88,7 +88,7 @@ class PureSelfAttention:
 
 
 class PureTransformerLM:
-    def __init__(self, vocab_size: int, block_size: int, n_embd: int = 16):
+    def __init__(self, vocab_size: int, block_size: int, n_embd: int = 32):
         self.vocab_size = vocab_size
         self.block_size = block_size
 
