@@ -1,53 +1,141 @@
-import torch
-import torch.nn as nn
-from torch.nn import functional as F
+import math
 
-from my_ai.models.attention import MultiHeadAttention
+from my_ai.models.pure_layers import PureEmbedding, PureLinear, PureSoftmax
+from my_ai.utils.matrix_math import matmul, transpose, create_zero_matrix
 
 
-class MiniTransformerLM(nn.Module):
-    """ Финальный класс нашей языковой модели """
-
-    def __init__(self, vocab_size, block_size, n_embd=32, num_heads=4):
-        super().__init__()
+class PureSelfAttention:
+    def __init__(self, n_embd: int, head_size: int, block_size: int):
+        self.n_embd = n_embd
+        self.head_size = head_size
         self.block_size = block_size
 
-        # 1. Таблица эмбеддингов символов (букв)
-        self.token_embedding_table = nn.Embedding(vocab_size, n_embd)
+        self.query_layer = PureLinear(n_embd, head_size)
+        self.key_layer = PureLinear(n_embd, head_size)
+        self.value_layer = PureLinear(n_embd, head_size)
+        self.softmax = PureSoftmax()
 
-        # 2. Позиционные эмбеддинги (чтобы ИИ знал, где какая буква стоит по счету)
-        self.position_embedding_table = nn.Embedding(block_size, n_embd)
+        self.last_x = None
+        self.last_q = None
+        self.last_k = None
+        self.last_v = None
+        self.last_wei = None
 
-        # 3. Наш блок многоголового внимания (4 головы по 8 каналов каждая = 32 скрытых признака)
-        self.sa_heads = MultiHeadAttention(num_heads, head_size=n_embd // num_heads, n_embd=n_embd, block_size=block_size)
+    def forward(self, x: list[list[float]]) -> list[list[float]]:
+        T = len(x)
+        self.last_x = x
 
-        # 4. Выходной слой для генерации предсказаний букв
-        self.lm_head = nn.Linear(n_embd, vocab_size)
+        self.last_q = self.query_layer.forward(x)
+        self.last_k = self.key_layer.forward(x)
+        self.last_v = self.value_layer.forward(x)
 
-    def forward(self, idx, targets=None):
-        B, T = idx.shape
+        k_T = transpose(self.last_k)
+        wei = matmul(self.last_q, k_T)
 
-        # Переводим ID букв в смысловые векторы
-        tok_emb = self.token_embedding_table(idx)  # (B, T, n_embd)
-        # Создаем векторы позиций от 0 до T-1 и превращаем их в позиционные эмбеддинги
-        pos_emb = self.position_embedding_table(torch.arange(T, device=idx.device))  # (T, n_embd)
+        scale = 1.0 / math.sqrt(self.head_size)
+        for i in range(T):
+            for j in range(T):
+                wei[i][j] *= scale
 
-        # Складываем смысл букв с их позициями в предложении!
-        x = tok_emb + pos_emb  # (B, T, n_embd)
+        for i in range(T):
+            for j in range(T):
+                if j > i:
+                    wei[i][j] = float('-inf')
 
-        # Пропускаем данные через механизм внимания (ИИ анализирует контекст)
-        x = self.sa_heads(x)  # (B, T, n_embd)
+        self.last_wei = self.softmax.forward(wei)
+        out = matmul(self.last_wei, self.last_v)
+        return out
 
-        # Считаем финальные оценки (логиты) для следующей буквы
-        logits = self.lm_head(x)  # (B, T, vocab_size)
+    def backward(self, grad_output: list[list[float]]) -> list[list[float]]:
+        T = len(grad_output)
+        scale = 1.0 / math.sqrt(self.head_size)
 
-        if targets is None:
-            loss = None
-        else:
-            # Меняем форму матриц для расчета Cross-Entropy ошибки в PyTorch
-            B, T, C = logits.shape
-            logits_flat = logits.view(B * T, C)
-            targets_flat = targets.view(B * T)
-            loss = F.cross_entropy(logits_flat, targets_flat)
+        wei_T = transpose(self.last_wei)
+        grad_v = matmul(wei_T, grad_output)
 
-        return logits, loss
+        v_T = transpose(self.last_v)
+        dwei_from_v = matmul(grad_output, v_T)
+
+        grad_wei = create_zero_matrix(T, T)
+        for r in range(T):
+            row_p = self.last_wei[r]
+            row_g = dwei_from_v[r]
+            for i in range(T):
+                s = 0.0
+                for j in range(T):
+                    if i == j:
+                        s += row_g[j] * row_p[i] * (1.0 - row_p[j])
+                    else:
+                        s += row_g[j] * (-row_p[i] * row_p[j])
+                grad_wei[r][i] = s
+
+        for i in range(T):
+            for j in range(T):
+                if j > i:
+                    grad_wei[i][j] = 0.0
+                else:
+                    grad_wei[i][j] *= scale
+
+        grad_q = matmul(grad_wei, self.last_k)
+        grad_wei_T = transpose(grad_wei)
+        grad_k = matmul(grad_wei_T, self.last_q)
+
+        self.query_layer.backward(grad_q)
+        self.key_layer.backward(grad_k)
+
+        grad_x = self.value_layer.backward(grad_v)
+        return grad_x
+
+
+class PureTransformerLM:
+    def __init__(self, vocab_size: int, block_size: int, n_embd: int = 16):
+        self.vocab_size = vocab_size
+        self.block_size = block_size
+
+        self.token_embeddings = PureEmbedding(vocab_size, n_embd)
+        self.position_embeddings = PureEmbedding(block_size, n_embd)
+
+        self.attention = PureSelfAttention(n_embd, head_size=n_embd, block_size=block_size)
+        self.lm_head = PureLinear(n_embd, vocab_size)
+
+    def forward(self, input_ids: list[int]) -> list[list[float]]:
+        T = len(input_ids)
+
+        tok_emb = self.token_embeddings.forward(input_ids)
+
+        pos_ids = list(range(T))
+        pos_emb = self.position_embeddings.forward(pos_ids)
+
+        x = create_zero_matrix(T, self.token_embeddings.embedding_dim)
+        for i in range(T):
+            for j in range(self.token_embeddings.embedding_dim):
+                x[i][j] = tok_emb[i][j] + pos_emb[i][j]
+
+        x = self.attention.forward(x)
+        logits = self.lm_head.forward(x)
+        return logits
+
+    def backward(self, grad_output: list[list[float]]) -> None:
+        grad_x = self.lm_head.backward(grad_output)
+        grad_x = self.attention.backward(grad_x)
+
+        self.token_embeddings.backward(grad_x)
+        self.position_embeddings.backward(grad_x)
+
+    def get_parameters(self) -> list[tuple[list[list[float]], list[list[float]]]]:
+        return [
+            (self.token_embeddings.weights, self.token_embeddings.grad_weights),
+            (self.position_embeddings.weights, self.position_embeddings.grad_weights),
+            (self.attention.query_layer.weights, self.attention.query_layer.grad_weights),
+            (self.attention.key_layer.weights, self.attention.key_layer.grad_weights),
+            (self.attention.value_layer.weights, self.attention.value_layer.grad_weights),
+            (self.lm_head.weights, self.lm_head.grad_weights)
+        ]
+
+    def get_biases(self) -> list[tuple[list[float], list[float]]]:
+        return [
+            (self.attention.query_layer.bias, self.attention.query_layer.grad_bias),
+            (self.attention.key_layer.bias, self.attention.key_layer.grad_bias),
+            (self.attention.value_layer.bias, self.attention.value_layer.grad_bias),
+            (self.lm_head.bias, self.lm_head.grad_bias)
+        ]
