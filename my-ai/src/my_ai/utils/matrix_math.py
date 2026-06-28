@@ -1,5 +1,8 @@
 import math
 import random
+from array import array
+
+Matrix = tuple[array, int, int]
 
 
 def create_xavier_matrix(inputs: int, outputs: int) -> list[list[float]]:
@@ -13,17 +16,22 @@ def create_zero_matrix(rows: int, cols: int) -> list[list[float]]:
 
 
 def matmul(A: list[list[float]], B: list[list[float]]) -> list[list[float]]:
+    if not A or not B or not B:
+        return []
+
     rows_A = len(A)
-    cols_A = len(A[0]) if rows_A > 0 else 0
-    cols_B = len(B[0]) if len(B) > 0 else 0
+
+    B_T = [list(x) for x in zip(*B)]
+    cols_B = len(B_T)
 
     result = [[0.0 for _ in range(cols_B)] for _ in range(rows_A)]
+
     for i in range(rows_A):
+        row_A = A[i]
         for j in range(cols_B):
-            s = 0.0
-            for k in range(cols_A):
-                s += A[i][k] * B[k][j]
-            result[i][j] = s
+            col_B = B_T[j]
+            result[i][j] = sum(a * b for a, b in zip(row_A, col_B))
+
     return result
 
 
@@ -39,11 +47,3 @@ def softmax_row(row: list[float]) -> list[float]:
     sum_exps = sum(exps)
     if sum_exps == 0: sum_exps = 1e-15
     return [e / sum_exps for e in exps]
-
-
-def relu(x: float) -> float:
-    return max(0.0, x)
-
-
-def relu_derivative(x: float) -> float:
-    return 1.0 if x > 0 else 0.0

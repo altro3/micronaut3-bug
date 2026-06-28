@@ -23,14 +23,12 @@ class PureAdam:
 
     def step(self):
         self.t += 1
-
         for idx, (w, grad_w) in enumerate(self.model.get_parameters()):
             for i in range(len(w)):
                 for j in range(len(w[0])):
                     g = grad_w[i][j]
                     self.m_w[idx][i][j] = self.beta1 * self.m_w[idx][i][j] + (1 - self.beta1) * g
                     self.v_w[idx][i][j] = self.beta2 * self.v_w[idx][i][j] + (1 - self.beta2) * (g ** 2)
-
                     m_corrected = self.m_w[idx][i][j] / (1 - self.beta1 ** self.t)
                     v_corrected = self.v_w[idx][i][j] / (1 - self.beta2 ** self.t)
                     w[i][j] -= self.lr * m_corrected / (math.sqrt(v_corrected) + self.eps)
@@ -40,7 +38,6 @@ class PureAdam:
                 g = grad_b[j]
                 self.m_b[idx][j] = self.beta1 * self.m_b[idx][j] + (1 - self.beta1) * g
                 self.v_b[idx][j] = self.beta2 * self.v_b[idx][j] + (1 - self.beta2) * (g ** 2)
-
                 m_corrected = self.m_b[idx][j] / (1 - self.beta1 ** self.t)
                 v_corrected = self.v_b[idx][j] / (1 - self.beta2 ** self.t)
                 b[j] -= self.lr * m_corrected / (math.sqrt(v_corrected) + self.eps)
@@ -63,9 +60,9 @@ def stable_cross_entropy_loss(logits: list[list[float]], targets: list[int]) -> 
         loss += log_sum_exp - row[target_id]
 
         probs = [math.exp(x - max_val) / sum_exps for x in row]
-
         for j in range(vocab_size):
             grad_logits[t][j] = probs[j]
+
         grad_logits[t][target_id] -= 1.0
 
     return loss / T, grad_logits
@@ -76,16 +73,15 @@ def main():
     tokenizer = CharacterTokenizer(text)
     data = tokenizer.encode(text)
 
-    block_size = 8
+    block_size = 6
     batch_size = 4
-    max_iters = 3000
-    n_embd = 32
+    max_iters = 5000
 
-    model = PureTransformerLM(vocab_size=tokenizer.vocab_size, block_size=block_size, n_embd=n_embd)
-    optimizer = PureAdam(model, lr=0.003)  # Слегка подняли LR для Adam
+    model = PureTransformerLM(vocab_size=tokenizer.vocab_size, block_size=block_size, n_embd=16)
+    optimizer = PureAdam(model, lr=0.002)
 
     print("=" * 50)
-    print(" ЗАПУСК ИСПРАВЛЕННОГО РУЧНОГО ТРАНСФОРМЕРА ")
+    print(" ЗАПУСК НАДЕЖНОГО ТРАНСФОРМЕРА С НАКОПЛЕНИЕМ ГРАДИЕНТОВ ")
     print("=" * 50)
 
     total_step_loss = 0.0
@@ -98,11 +94,11 @@ def main():
 
         for b in range(batch_size):
             logits = model.forward(x_batch[b])
-            loss, grad_logits = stable_cross_entropy_loss(logits, y_batch[b])
-            total_step_loss += loss
+            current_loss, grad_logits = stable_cross_entropy_loss(logits, y_batch[b])
+            total_step_loss += current_loss
 
             for t in range(len(grad_logits)):
-                for j in range(len(grad_logits[0])):
+                for j in range(len(grad_logits[t])):
                     grad_logits[t][j] /= batch_size
 
             model.backward(grad_logits)

@@ -97,7 +97,7 @@ class PureTransformerLM:
 
         self.attention = PureSelfAttention(n_embd, head_size=n_embd, block_size=block_size)
 
-        from my_ai.models.pure_layers import PureReLU
+        from my_ai.models.pure_layers import PureReLU, PureLinear
         self.mlp_fc1 = PureLinear(n_embd, n_embd * 4)
         self.mlp_relu = PureReLU()
         self.mlp_fc2 = PureLinear(n_embd * 4, n_embd)
@@ -114,19 +114,38 @@ class PureTransformerLM:
         self.mlp_fc2.zero_grad()
         self.lm_head.zero_grad()
 
-    def forward(self, input_ids: list[int]) -> list[list[float]]:
-        T = len(input_ids)
+    def forward(self, input_ids: list) -> list[list[float]]:
+        if input_ids and isinstance(input_ids[0], list):
+            B = len(input_ids)
+            T = len(input_ids[0])
 
-        tok_emb = self.token_embeddings.forward(input_ids)
-        pos_ids = list(range(T))
-        pos_emb = self.position_embeddings.forward(pos_ids)
+            tok_emb = []
+            pos_emb = []
+            for b in range(B):
+                tok_emb.extend(self.token_embeddings.forward(input_ids[b]))
+                pos_emb.extend(self.position_embeddings.forward(list(range(T))))
+            total_tokens = B * T
+        else:
+            T = len(input_ids)
+            tok_emb = self.token_embeddings.forward(input_ids)
+            pos_emb = self.position_embeddings.forward(list(range(T)))
+            total_tokens = T
 
-        x = create_zero_matrix(T, self.token_embeddings.embedding_dim)
-        for i in range(T):
+        x = create_zero_matrix(total_tokens, self.token_embeddings.embedding_dim)
+        for i in range(total_tokens):
             for j in range(self.token_embeddings.embedding_dim):
                 x[i][j] = tok_emb[i][j] + pos_emb[i][j]
 
-        x = self.attention.forward(x)
+        if input_ids and isinstance(input_ids[0], list):
+            B = len(input_ids)
+            T = len(input_ids[0])
+            attention_out = []
+            for b in range(B):
+                sub_x = x[b * T: (b + 1) * T]
+                attention_out.extend(self.attention.forward(sub_x))
+            x = attention_out
+        else:
+            x = self.attention.forward(x)
 
         x = self.mlp_fc1.forward(x)
         x = self.mlp_relu.forward(x)
@@ -142,8 +161,10 @@ class PureTransformerLM:
         grad_x = self.mlp_relu.backward(grad_x)
         grad_x = self.mlp_fc1.backward(grad_x)
 
-        grad_x = self.attention.backward(grad_x)
+        if hasattr(self, 'last_input_is_batch') and self.last_input_is_batch:
+            pass
 
+        grad_x = self.attention.backward(grad_x)
         self.token_embeddings.backward(grad_x)
         self.position_embeddings.backward(grad_x)
 

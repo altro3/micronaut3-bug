@@ -12,8 +12,16 @@ class PureEmbedding:
     def zero_grad(self) -> None:
         self.grad_weights = create_zero_matrix(self.vocab_size, self.embedding_dim)
 
-    def forward(self, input_ids: list[int]) -> list[list[float]]:
+    def forward(self, input_ids: list) -> list[list[float]]:
         self.last_input = input_ids
+
+        if input_ids and isinstance(input_ids[0], list):
+            output = []
+            for batch_row in input_ids:
+                for char_id in batch_row:
+                    output.append([num for num in self.weights[char_id]])
+            return output
+
         return [[num for num in self.weights[char_id]] for char_id in input_ids]
 
     def backward(self, grad_output: list[list[float]]) -> None:
@@ -45,11 +53,14 @@ class PureLinear:
             for j in range(self.out_features):
                 self.grad_bias[j] += grad_output[i][j]
 
-        X_T = transpose(self.last_input)
-        new_grad_weights = matmul(X_T, grad_output)
-        for i in range(self.in_features):
-            for j in range(self.out_features):
-                self.grad_weights[i][j] += new_grad_weights[i][j]
+        in_feat = self.in_features
+        out_feat = self.out_features
+        for i in range(in_feat):
+            for j in range(out_feat):
+                s = 0.0
+                for k in range(len(grad_output)):
+                    s += self.last_input[k][i] * grad_output[k][j]
+                self.grad_weights[i][j] += s
 
         W_T = transpose(self.weights)
         return matmul(grad_output, W_T)
