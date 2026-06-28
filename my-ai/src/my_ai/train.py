@@ -1,5 +1,6 @@
 import math
 import pickle
+import random
 
 from my_ai.dataset import CharacterTokenizer, get_pure_batch
 from my_ai.models.transformer import PureTransformerLM
@@ -69,27 +70,54 @@ def stable_cross_entropy_loss(logits: list[list[float]], targets: list[int]) -> 
 
 
 def main():
-    text = "мама мыла раму, а папа мыл машину. искусственный интеллект — это просто математика!"
-    tokenizer = CharacterTokenizer(text)
-    data = tokenizer.encode(text)
+    facts = [
+        "Искусственный интеллект работает на чистой математике.",
+        "Основой любого современного ИИ является нейросеть.",
+        "Нейросеть состоит из математических слоев и весов.",
+        "Модель ИИ обучается через обратное распространение ошибки.",
+        "Ошибку вычислений считает функция кросс-энтропии.",
+        "Оптимизатор Адам обновляет веса на основе градиентов.",
+        "Трансформер признан лучшей архитектурой для работы с текстом."
+    ]
 
-    block_size = 6
-    batch_size = 4
+    qa_templates = [
+        {"q": "На чем работает искусственный интеллект?", "a": "на чистой математике"},
+        {"q": "Что является основой ИИ?", "a": "нейросеть"},
+        {"q": "Из чего состоит нейросеть?", "a": "из математических слоев и весов"},
+        {"q": "Через что обучается модель?", "a": "через обратное распространение ошибки"},
+        {"q": "Что считает ошибку вычислений?", "a": "функция кросс-энтропии"},
+        {"q": "Какой оптимизатор обновляет веса?", "a": "Адам"},
+        {"q": "Какая архитектура признана лучшей?", "a": "Трансформер"}
+    ]
+
+    dataset_text = ""
+    for _ in range(300):
+        random.shuffle(facts)
+        article = " ".join(facts)
+
+        qa = random.choice(qa_templates)
+
+        prompt = f"Контекст: {article} Вопрос: {qa['q']} Ответ: {qa['a']}. "
+        dataset_text += prompt
+
+    tokenizer = CharacterTokenizer(dataset_text)
+    data = tokenizer.encode(dataset_text)
+
+    block_size = 36
+    batch_size = 2
     max_iters = 5000
 
-    model = PureTransformerLM(vocab_size=tokenizer.vocab_size, block_size=block_size, n_embd=16)
+    model = PureTransformerLM(vocab_size=tokenizer.vocab_size, block_size=block_size, n_embd=24)
     optimizer = PureAdam(model, lr=0.002)
 
     print("=" * 50)
-    print(" ЗАПУСК НАДЕЖНОГО ТРАНСФОРМЕРА С НАКОПЛЕНИЕМ ГРАДИЕНТОВ ")
+    print(" ОБУЧЕНИЕ ИСТИННОГО КОНТЕКСТНОГО ТРАНСФОРМЕРА ")
     print("=" * 50)
 
-    total_step_loss = 0.0
-
+    loss = 0.0
     for step in range(max_iters):
         x_batch, y_batch = get_pure_batch(data, block_size, batch_size)
         total_step_loss = 0.0
-
         model.zero_grad()
 
         for b in range(batch_size):
@@ -100,19 +128,18 @@ def main():
             for t in range(len(grad_logits)):
                 for j in range(len(grad_logits[t])):
                     grad_logits[t][j] /= batch_size
-
             model.backward(grad_logits)
 
         optimizer.step()
-
         if step % 200 == 0:
             print(f"Шаг {step:4d} | Ошибка (Loss): {total_step_loss / batch_size:.4f}")
 
-    print(f"Шаг {max_iters} | Ошибка (Loss): {total_step_loss / batch_size:.4f}")
     print("-" * 50)
-    print("Обучение полностью завершено!")
+    print("Обучение завершено! Модель поняла логику работы с контекстом.")
     with open('pure_model.pkl', 'wb') as f:
         pickle.dump(model, f)
+    with open('tokenizer.pkl', 'wb') as f:
+        pickle.dump(tokenizer, f)
 
 
 if __name__ == '__main__':

@@ -36,9 +36,7 @@ def matmul(A: list[list[float]], B: list[list[float]]) -> list[list[float]]:
 
 
 def transpose(A: list[list[float]]) -> list[list[float]]:
-    if not A or not A[0]: return []
-    return [list(item) for item in zip(*A)]
-
+    return [list(x) for x in zip(*A)]
 
 def softmax_row(row: list[float]) -> list[float]:
     if not row: return []

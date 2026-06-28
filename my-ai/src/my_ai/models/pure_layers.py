@@ -1,4 +1,4 @@
-from my_ai.utils.matrix_math import create_xavier_matrix, create_zero_matrix, matmul, transpose, softmax_row
+from my_ai.utils.matrix_math import create_xavier_matrix, create_zero_matrix, matmul, softmax_row
 
 
 class PureEmbedding:
@@ -53,16 +53,14 @@ class PureLinear:
             for j in range(self.out_features):
                 self.grad_bias[j] += grad_output[i][j]
 
-        in_feat = self.in_features
-        out_feat = self.out_features
-        for i in range(in_feat):
-            for j in range(out_feat):
-                s = 0.0
-                for k in range(len(grad_output)):
-                    s += self.last_input[k][i] * grad_output[k][j]
-                self.grad_weights[i][j] += s
+        X_T = [list(x) for x in zip(*self.last_input)]
+        new_gw = matmul(X_T, grad_output)
 
-        W_T = transpose(self.weights)
+        self.grad_weights = [[self.grad_weights[i][j] + new_gw[i][j]
+                              for j in range(self.out_features)]
+                             for i in range(self.in_features)]
+
+        W_T = [list(x) for x in zip(*self.weights)]
         return matmul(grad_output, W_T)
 
 

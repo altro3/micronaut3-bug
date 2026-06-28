@@ -98,9 +98,9 @@ class PureTransformerLM:
         self.attention = PureSelfAttention(n_embd, head_size=n_embd, block_size=block_size)
 
         from my_ai.models.pure_layers import PureReLU, PureLinear
-        self.mlp_fc1 = PureLinear(n_embd, n_embd * 4)
+        self.mlp_fc1 = PureLinear(n_embd, n_embd * 2)
         self.mlp_relu = PureReLU()
-        self.mlp_fc2 = PureLinear(n_embd * 4, n_embd)
+        self.mlp_fc2 = PureLinear(n_embd * 2, n_embd)
 
         self.lm_head = PureLinear(n_embd, vocab_size)
 
