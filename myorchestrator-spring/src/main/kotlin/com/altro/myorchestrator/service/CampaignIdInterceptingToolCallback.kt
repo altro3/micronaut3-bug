@@ -9,6 +9,7 @@ import org.springframework.ai.tool.definition.ToolDefinition
 import org.springframework.ai.tool.metadata.ToolMetadata
 import org.springframework.data.repository.findByIdOrNull
 import tools.jackson.databind.json.JsonMapper
+import java.time.Instant
 
 class CampaignIdInterceptingToolCallback(
     private val delegate: ToolCallback,
@@ -23,52 +24,29 @@ class CampaignIdInterceptingToolCallback(
     override fun call(toolInput: String): String = delegate.call(toolInput)
 
     override fun call(toolInput: String, toolContext: ToolContext?): String {
-        val result = delegate.call(toolInput, toolContext)
+        val result = delegate.call(toolInput, toolContext) // Сырой JSON от Адаптера
 
         if (result.isBlank() || result.contains("❌")) return result
 
-        if (delegate.toolDefinition.name() == "initYandexDraft") {
+        val session = toolContext?.context["currentSession"] as? CampaignSession
+        if (session != null) {
             try {
+                val currentSession = sessionRepository.findByIdOrNull(session.id) ?: session
                 val rootNode = jsonMapper.readTree(result)
-                val targetNode = if (rootNode.isArray && rootNode.size() > 0) {
-                    val firstElement = rootNode.get(0)
-                    val escapedJsonText = firstElement.get("text")?.asString()
-                    if (!escapedJsonText.isNullOrBlank()) jsonMapper.readTree(escapedJsonText) else firstElement
-                } else {
-                    rootNode
+
+                // Вытаскиваем сгенерированный campaignId для плоской связи
+                rootNode.get("campaignId")?.let {
+                    if (it.isNumber && it.asLong() != 0L) currentSession.campaignId = it.asLong()
                 }
 
-                if (toolContext != null) {
-                    val session = toolContext.context["currentSession"] as? CampaignSession
+                currentSession.updatedAt = Instant.now()
 
-                    if (session != null) {
-                        val idNode = targetNode.get("campaignId")
-                        if (idNode != null && idNode.isNumber) {
-                            val foundId = idNode.asLong()
-                            if (foundId != 0L) {
-                                log.info { "🎯 [MCP-Interceptor] Перехвачен первый ответ initYandexDraft. Найдено campaignId=$foundId для сессии ${session.id}" }
+                val saved = sessionRepository.save(currentSession)
+                session.campaignId = saved.campaignId
 
-                                val currentSession = sessionRepository.findByIdOrNull(session.id) ?: session
-                                currentSession.campaignId = foundId
-                                sessionRepository.save(currentSession)
-
-                                session.campaignId = foundId
-                                log.info { "固 [MCP-Interceptor УСПЕХ] campaignId=$foundId жестко сохранен в Postgres!" }
-                            }
-                        }
-
-                        val statusNode = targetNode.get("status")
-                        if (statusNode?.asString() == "SYNC_ERROR" && targetNode.get("errorAction") != null && !targetNode.get("errorAction").isNull) {
-                            log.warn { "⚠️ [MCP-Interceptor] Сбой сессии. Сбрасываю контекст в СУБД..." }
-                            val currentSession = sessionRepository.findByIdOrNull(session.id) ?: session
-                            currentSession.campaignId = null
-                            sessionRepository.save(currentSession)
-                            session.campaignId = null
-                        }
-                    }
-                }
+                log.info { "🎯 [Interceptor УСПЕХ] Вся кампания атомарно сохранена в сессию под ID: ${saved.campaignId}" }
             } catch (e: Exception) {
-                log.error(e) { "Ошибка асинхронного парсинга ответа от initYandexDraft внутри ToolCallback" }
+                log.error(e) { "Ошибка авто-сохранения contextData" }
             }
         }
         return result
