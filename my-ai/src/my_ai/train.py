@@ -91,30 +91,31 @@ def main():
     ]
 
     dataset_text = ""
-    for _ in range(300):
+    for _ in range(400):
         random.shuffle(facts)
         article = " ".join(facts)
-
         qa = random.choice(qa_templates)
 
-        prompt = f"Контекст: {article} Вопрос: {qa['q']} Ответ: {qa['a']}. "
+        # ВАЖНО: В конце каждого примера ставим \n, чтобы изолировать их друг от друга!
+        prompt = f"Контекст: {article} Вопрос: {qa['q']} Ответ: {qa['a']}.\n"
         dataset_text += prompt
 
     tokenizer = CharacterTokenizer(dataset_text)
     data = tokenizer.encode(dataset_text)
 
-    block_size = 36
-    batch_size = 2
-    max_iters = 5000
+    # Увеличиваем контекст до 32 токенов (теперь статья и вопрос влезут на 100%)
+    block_size = 32
+    batch_size = 4
+    max_iters = 4000
 
-    model = PureTransformerLM(vocab_size=tokenizer.vocab_size, block_size=block_size, n_embd=24)
+    model = PureTransformerLM(vocab_size=tokenizer.vocab_size, block_size=block_size, n_embd=32)
     optimizer = PureAdam(model, lr=0.002)
 
     print("=" * 50)
-    print(" ОБУЧЕНИЕ ИСТИННОГО КОНТЕКСТНОГО ТРАНСФОРМЕРА ")
+    print(" ОБУЧЕНИЕ ИСТИННОГО BPE ТРАНСФОРМЕРА ")
     print("=" * 50)
 
-    loss = 0.0
+    total_step_loss = 0.0
     for step in range(max_iters):
         x_batch, y_batch = get_pure_batch(data, block_size, batch_size)
         total_step_loss = 0.0
@@ -131,11 +132,12 @@ def main():
             model.backward(grad_logits)
 
         optimizer.step()
-        if step % 200 == 0:
+        if step % 400 == 0:
             print(f"Шаг {step:4d} | Ошибка (Loss): {total_step_loss / batch_size:.4f}")
 
+    print(f"Шаг {max_iters} | Ошибка (Loss): {total_step_loss / batch_size:.4f}")
     print("-" * 50)
-    print("Обучение завершено! Модель поняла логику работы с контекстом.")
+    print("Обучение завершено успешно!")
     with open('pure_model.pkl', 'wb') as f:
         pickle.dump(model, f)
     with open('tokenizer.pkl', 'wb') as f:

@@ -4,18 +4,18 @@ import random
 from my_ai.utils.matrix_math import softmax_row
 
 
-def ask_ai_with_context(article: str, question: str, max_new_tokens: int = 30) -> str:
-    block_size = 36
-    temperature = 0.2
+def ask_ai_direct(fact: str, question: str, max_new_tokens: int = 15) -> str:
+    block_size = 32
+    temperature = 0.1
 
     with open('tokenizer.pkl', 'rb') as f:
         tokenizer = pickle.load(f)
     with open('pure_model.pkl', 'rb') as f:
         model = pickle.load(f)
 
-    prompt = f"Контекст: {article} Вопрос: {question} Ответ: "
+    prompt = f"Контекст: {fact} Вопрос: {question} Ответ: "
 
-    context = tokenizer.encode(prompt)
+    context = tokenizer.encode(prompt)[-block_size:]
     generated_ids = []
 
     for _ in range(max_new_tokens):
@@ -37,7 +37,7 @@ def ask_ai_with_context(article: str, question: str, max_new_tokens: int = 30) -
                 next_id = idx
                 break
 
-        if tokenizer.itos[next_id] == '.':
+        if tokenizer.itos[next_id] == '\n':
             break
 
         context.append(next_id)
@@ -47,24 +47,24 @@ def ask_ai_with_context(article: str, question: str, max_new_tokens: int = 30) -
 
 
 if __name__ == '__main__':
-    custom_article = (
-        "Трансформер признан лучшей архитектурой для работы с текстом. "
-        "Оптимизатор Адам обновляет веса на основе градиентов. "
-        "Искусственный интеллект работает на чистой математике."
-    )
+    print("=" * 50)
+    print(" ФИНАЛЬНЫЙ ТЕСТ IN-CONTEXT LEARNING ")
+    print("=" * 50)
 
-    test_questions = [
-        "На чем работает искусственный интеллект?",
-        "Какая архитектура признана лучшей?"
+    tests = [
+        {
+            "fact": "Искусственный интеллект работает на чистой математике.",
+            "q": "На чем работает искусственный интеллект?"
+        },
+        {
+            "fact": "Трансформер признан лучшей архитектурой для работы с текстом.",
+            "q": "Какая архитектура признана лучшей?"
+        }
     ]
 
-    print("=" * 50)
-    print(" ТЕСТИРОВАНИЕ НАСТОЯЩЕГО IN-CONTEXT LEARNING ")
-    print("=" * 50)
-
-    for q in test_questions:
-        answer = ask_ai_with_context(custom_article, q)
-        print(f"Статья в промпте: {custom_article}")
-        print(f"Вопрос: {q}")
+    for test in tests:
+        answer = ask_ai_direct(test["fact"], test["q"])
+        print(f"Контекст: {test['fact']}")
+        print(f"Вопрос:   {test['q']}")
         print(f"Ответ ИИ: {answer}")
         print("-" * 50)
