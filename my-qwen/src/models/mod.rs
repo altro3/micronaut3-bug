@@ -1,7 +1,8 @@
 // 1. Говорим компилятору: "В этой папке есть файл layers.rs"
 pub mod layers;
-mod swiglu;
+pub mod swiglu;
+pub mod kv_cache;
 
-// 2. Делаем re-export (перепривязку), чтобы из main.rs можно было написать
-//    "use models::RmsNorm", а не пробиваться через "models::layers::RmsNorm"
 pub use layers::RmsNorm;
+pub use swiglu::SwiGlu;
+pub use kv_cache::KvCache;

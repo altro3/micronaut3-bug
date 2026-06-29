@@ -61,9 +61,9 @@ __global__ void rms_norm_kernel(float *const output,
 }
 
 extern "C" {
-void launch_rms_norm(float *const output,
-                     const float *const input,
-                     const float *const weight,
+void launch_rms_norm(float *output,
+                     const float *input,
+                     const float *weight,
                      const int batch_size,
                      const int hidden_size,
                      const float epsilon) {

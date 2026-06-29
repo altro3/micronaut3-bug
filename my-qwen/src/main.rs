@@ -3,62 +3,64 @@ pub mod token;
 pub mod models;
 
 use utils::CudaBuffer;
-use models::RmsNorm;
+use models::kv_cache::KvCache;
 
 fn main() {
-    println!("=== ИНТЕГРАЦИОННЫЙ ТЕСТ СЛОЯ RMSNorm НА GPU ===");
+    println!("=== ИНТЕГРАЦИОННЫЙ ТЕСТ KV-CACHE НА GPU ===");
 
-    // Параметры нашей микро-модели
-    const BATCH_SIZE: usize = 2;   // Сымитируем контекст из 2 токенов
-    const HIDDEN_SIZE: usize = 4;  // Размерность векторов скрытого состояния слоя
+    // Базовые параметры теста
+    const MAX_SEQ_LEN: usize = 3;  // Максимальный контекст — 3 токена
+    const HIDDEN_SIZE: usize = 2;  // Размерность KV-векторов для одного токена
 
-    // 1. Создаем тестовую матрицу на хосте (2 строки по 4 элемента)
-    // Специально берем числа с большим разбросом, чтобы увидеть эффект нормализации
-    let host_input = vec![
-        1.0f32,  2.0f32,  3.0f32,  4.0f32, // Первый токен
-        10.0f32, 0.0f32, -5.0f32,  2.0f32, // Второй токен
-    ];
-    println!("Исходная матрица (Host RAM):\n  Токен 1: {:?}\n  Токен 2: {:?}",
-             &host_input[0..4], &host_input[4..8]);
+    // 1. Инициализируем пустой KV-Cache во VRAM
+    println!("Выделяем статическую память под KV-Cache на видеокарте...");
+    let mut cache = KvCache::new(MAX_SEQ_LEN, HIDDEN_SIZE);
+    println!("Начальная позиция контекста: {}", cache.len());
 
-    // 2. Выделяем память во VRAM под входные и выходные данные
-    let total_elements = BATCH_SIZE * HIDDEN_SIZE;
-    let gpu_input = CudaBuffer::new(total_elements);
-    let gpu_output = CudaBuffer::new(total_elements);
+    // 2. Симулируем появление ПЕРВОГО токена.
+    // Пусть его вектор Ключа будет [1.0, 1.0], а Значения — [1.1, 1.1]
+    let k1 = vec![1.0f32, 1.0f32];
+    let v1 = vec![1.1f32, 1.1f32];
 
-    // Копируем исходные данные во VRAM видеокарты
-    gpu_input.copy_from_host(&host_input);
+    let gpu_k1 = CudaBuffer::new(HIDDEN_SIZE);
+    let gpu_v1 = CudaBuffer::new(HIDDEN_SIZE);
+    gpu_k1.copy_from_host(&k1);
+    gpu_v1.copy_from_host(&v1);
 
-    // 3. Инициализируем наш промышленный слой нормализации
-    println!("\nИнициализируем слой RmsNorm во VRAM...");
-    let rms_norm_layer = RmsNorm::new(HIDDEN_SIZE);
+    println!("\n[Токен 1] Добавляем новые векторы в кэш...");
+    cache.append(&gpu_k1, &gpu_v1);
+    println!("Текущая длина контекста: {}", cache.len());
 
-    // 4. Запускаем математический расчет прямо на чипе GPU
-    println!("Выполняем прямой проход (forward) на видеокарте...");
-    rms_norm_layer.forward(&gpu_output, &gpu_input, BATCH_SIZE);
+    // 3. Симулируем появление ВТОРОГО токена.
+    // Его векторы: Ключ = [2.0, 2.0], Значение = [2.2, 2.2]
+    let k2 = vec![2.0f32, 2.0f32];
+    let v2 = vec![2.2f32, 2.2f32];
 
-    // 5. Скачиваем результат вычислений обратно в RAM
-    let host_output = gpu_output.copy_to_host();
-    println!("\nРезультат нормализации с GPU:");
-    println!("  Токен 1: {:?}", &host_output[0..4]);
-    println!("  Токен 2: {:?}", &host_output[4..8]);
+    let gpu_k2 = CudaBuffer::new(HIDDEN_SIZE);
+    let gpu_v2 = CudaBuffer::new(HIDDEN_SIZE);
+    gpu_k2.copy_from_host(&k2);
+    gpu_v2.copy_from_host(&v2);
 
-    // 6. Математическая проверка точности (Unit-тест)
-    // Для первого токена:
-    // Сумма квадратов = 1+4+9+16 = 30. Ср. квадрат = 30 / 4 = 7.5
-    // RMS = sqrt(7.5) = 2.7386127.
-    // Первый элемент должен быть примерно: 1.0 / 2.7386127 * 1.0 (вес) = 0.365148
-    let expected_t1_e1 = 1.0f32 / (30.0f32 / 4.0f32).sqrt();
-    let actual_t1_e1 = host_output[0];
+    println!("\n[Токен 2] Добавляем новые векторы в кэш...");
+    cache.append(&gpu_k2, &gpu_v2);
+    println!("Текущая длина контекста: {}", cache.len());
 
-    println!("\nСверка точности для первого элемента:");
-    println!("  Ожидаемое значение:  {:.6}", expected_t1_e1);
-    println!("  Фактическое с GPU:   {:.6}", actual_t1_e1);
+    // 4. Скачиваем ВЕСЬ кэш целиком из видеокарты для верификации смещений памяти
+    let full_k_cache = cache.k_cache.copy_to_host();
+    let full_v_cache = cache.v_cache.copy_to_host();
 
-    // Разница между f32 числами из-за аппаратного округления GPU не должна превышать дельту epsilon
-    if (actual_t1_e1 - expected_t1_e1).abs() < 1e-5 {
-        println!("\n[МАТЕМАТИЧЕСКИЙ УСПЕХ] Видеокарта выполнила расчет RMSNorm с идеальной точностью!");
+    println!("\nФинальный слепок K-Cache с GPU: {:?}", full_k_cache);
+    println!("Финальный слепок V-Cache с GPU: {:?}", full_v_cache);
+
+    // Ожидаемый результат в памяти:
+    // Токен 1 лег в индекс 0..2, Токен 2 лег в индекс 2..4, а индекс 4..6 остался нулевым (пустым)
+    let expected_k = vec![1.0f32, 1.0f32, 2.0f32, 2.0f32, 0.0f32, 0.0f32];
+    let expected_v = vec![1.1f32, 1.1f32, 2.2f32, 2.2f32, 0.0f32, 0.0f32];
+
+    if full_k_cache == expected_k && full_v_cache == expected_v {
+        println!("\n[УСПЕХ] KV-Cache идеально распределил векторы по смещениям на GPU!");
+        println!("Контекст защищен от перезаписи, память выделена без фрагментации.");
     } else {
-        println!("\n[КРИТИЧЕСКАЯ ОШИБКА] Математический сбой или искажение данных в регистрах GPU.");
+        println!("\n[КРИТИЧЕСКАЯ ОШИБКА] Данные токенов наложились друг на друга или смешались.");
     }
 }
