@@ -56,6 +56,19 @@ void launch_residual(float *input_output, const float *residual_data, int size);
 
 // Поиск индекса максимального логита ArgMax (Файл: softmax.cu)
 void launch_argmax(int *output_index, const float *logits, int vocab_size);
+
+// Шаг оптимизатора AdamW (Файл: adam.cu)
+__declspec(dllexport) void launch_adamw(float *weights,
+                                        float *gradients,
+                                        float *m_buffer,
+                                        float *v_buffer,
+                                        int size,
+                                        float lr,
+                                        float beta1,
+                                        float beta2,
+                                        float epsilon,
+                                        float weight_decay,
+                                        float step);
 }
 
 #endif

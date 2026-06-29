@@ -1,3 +1,3 @@
-mod buffers;
+mod buffer;
 
-pub use crate::utils::buffers::CudaBuffer;
+pub use crate::utils::buffer::CudaBuffer;

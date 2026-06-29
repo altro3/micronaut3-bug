@@ -1,33 +1,16 @@
-pub mod models;
-pub mod token;
-pub mod utils;
-
-use models::KvCache;
-use models::TransformerBlock;
+use my_llama::models::KvCache;
+use my_llama::models::TransformerBlock;
+use my_llama::token::BpeTokenizer;
+use my_llama::utils::CudaBuffer;
 use std::ffi::c_void;
-use token::BpeTokenizer;
-use utils::CudaBuffer;
 
 unsafe extern "C" {
     fn launch_argmax(output_index: *mut i32, logits: *const c_void, vocab_size: i32);
 }
 
 fn main() {
-    // Жесткий хак для Windows PowerShell: Переключаем терминал в режим UTF-8
-    #[cfg(target_os = "windows")]
-    if let Err(e) = std::process::Command::new("cmd")
-        .args(&["/C", "chcp 65001"])
-        .output()
-    {
-        eprintln!(
-            "Предупреждение: Не удалось переключить консоль в UTF-8: {:?}",
-            e
-        );
-    }
+    println!("=== ЗАПУСК ДВИЖКА ИНФЕРЕНСА (GENERATION LOOP) MY-LLAMA ===");
 
-    println!("=== ЗАПУСК ДВИЖКА ИНФЕРЕНСА (GENERATION LOOP) MY-QWEN ===");
-
-    // 1. Конфигурация модели и словаря
     const HIDDEN_SIZE: usize = 4;
     const NUM_HEADS: usize = 2;
     const NUM_KV_HEADS: usize = 1;
@@ -35,7 +18,6 @@ fn main() {
     const MAX_SEQ_LEN: usize = 32;
     const VOCAB_SIZE: usize = 260;
 
-    // Инициализируем наш восстановленный микро-токенизатор
     let tokenizer = BpeTokenizer::new_micro();
 
     let prompt = "привет";
@@ -47,13 +29,11 @@ fn main() {
     }
     println!("Стартовые ID токенов: {:?}", input_ids);
 
-    // 2. Аллокация памяти во VRAM
     let mut kv_cache = KvCache::new(MAX_SEQ_LEN, HIDDEN_SIZE);
     let transformer_block =
         TransformerBlock::new(HIDDEN_SIZE, NUM_HEADS, NUM_KV_HEADS, HIDDEN_FEATURES);
     let d_output_token_idx = CudaBuffer::new_int_scalar();
 
-    // Предзаполняем KV-Cache стартовым контекстом
     for _ in 0..input_ids.len() {
         let dummy_k = CudaBuffer::new(HIDDEN_SIZE);
         let dummy_v = CudaBuffer::new(HIDDEN_SIZE);
@@ -77,11 +57,11 @@ fn main() {
         let mut mock_logits = vec![-100.0f32; VOCAB_SIZE];
 
         let next_mock_id = match step {
-            0 => 208,                    // 'п'
-            1 => 159,                    // 'П'
-            2 => 209,                    // 'р'
-            3 => 128,                    // 'р' часть 2
-            _ => tokenizer.eos_token_id, // Легитимный токен останова [EOS] (256)
+            0 => 208, // 'п'
+            1 => 159, // 'П'
+            2 => 209, // 'р'
+            3 => 128, // 'р' часть 2
+            _ => tokenizer.eos_token_id,
         };
         mock_logits[next_mock_id as usize] = 50.0f32;
         logits_buffer.copy_from_host(&mock_logits);
@@ -112,7 +92,6 @@ fn main() {
         }
     }
 
-    // Выводим результат: декодируем всю пачку сгенерированных байт разом
     let final_generated_text = tokenizer.decode(&generated_tokens);
     println!("{}{}[EOS]", prompt, final_generated_text);
 
