@@ -50,6 +50,15 @@ __global__ void update_kv_cache_kernel(float *const k_cache,
     }
 }
 
+// Кернел остаточной связи (Residual Connection): поэлементное сложение двух векторов прямо во VRAM
+__global__ void residual_kernel(float *const input_output, const float *const residual_data, const int size) {
+    const int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < size) {
+        // Прибавляем к основному потоку данных результат работы слоя
+        input_output[idx] += residual_data[idx];
+    }
+}
+
 extern "C" {
 // Возвращаем const для локальных копий примитивов, чтобы порадовать статический анализатор IDEA
 void launch_matmul(float *output_matrix,
@@ -82,5 +91,13 @@ void launch_update_kv_cache(float *k_cache,
     const int blocks = (hidden_size + threads - 1) / threads;
 
     update_kv_cache_kernel<<<blocks, threads>>>(k_cache, v_cache, new_k, new_v, token_index, hidden_size);
+}
+
+// Безопасная Си-обертка для Rust
+void launch_residual(float *input_output, const float *residual_data, const int size) {
+    constexpr int threads = 256;
+    const int blocks = (size + threads - 1) / threads;
+
+    residual_kernel<<<blocks, threads>>>(input_output, residual_data, size);
 }
 }

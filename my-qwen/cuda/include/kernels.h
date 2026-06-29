@@ -23,7 +23,6 @@ void launch_swish_glu(float *output,
                       const float *gate_input,
                       const float *up_input,
                       int size);
-}
 
 void launch_attention_scores(float *output_scores,
                              const float *query,
@@ -51,5 +50,12 @@ void launch_attention_values(float *output,
                              int num_kv_heads,
                              int head_dim,
                              int current_seq_len);
+
+// Операция поэлементного сложения Residual Connection (Файл: matmul.cu)
+void launch_residual(float *input_output, const float *residual_data, int size);
+
+// Поиск индекса максимального логита ArgMax (Файл: softmax.cu)
+void launch_argmax(int *output_index, const float *logits, int vocab_size);
+}
 
 #endif

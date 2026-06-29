@@ -29,7 +29,7 @@ pub struct CudaBuffer {
 impl CudaBuffer {
     /// Конструктор: выделяет память на видеокарте под заданное количество элементов float (f32)
     pub fn new(elements: usize) -> Self {
-        let size_in_bytes = elements * std::mem::size_of::<f32>();
+        let size_in_bytes = elements * size_of::<f32>();
         let mut raw_ptr = std::ptr::null_mut();
 
         // Вызываем Си-функцию cudaMalloc. В Rust работа с сырыми указателями
@@ -54,7 +54,7 @@ impl CudaBuffer {
     /// Копирует плоский вектор Vec<f32> из оперативной памяти (Host) на видеокарту (Device)
     pub fn copy_from_host(&self, host_data: &[f32]) {
         assert_eq!(
-            host_data.len() * std::mem::size_of::<f32>(),
+            host_data.len() * size_of::<f32>(),
             self.size_in_bytes,
             "Размер входящих данных не совпадает с размером буфера GPU!"
         );
@@ -77,7 +77,7 @@ impl CudaBuffer {
 
     /// Скачивает данные обратно с видеокарты (Device) в обычный вектор Rust (Host)
     pub fn copy_to_host(&self) -> Vec<f32> {
-        let elements = self.size_in_bytes / std::mem::size_of::<f32>();
+        let elements = self.size_in_bytes / size_of::<f32>();
         // Создаем пустой вектор нужного размера, заполненный нулями
         let mut host_data = vec![0.0f32; elements];
 
@@ -101,6 +101,32 @@ impl CudaBuffer {
     /// Метод, позволяющий безопасно получить сырой указатель для передачи в наши CUDA .cu кернелы
     pub fn as_raw_ptr(&self) -> *mut c_void {
         self.raw_ptr
+    }
+
+    /// Выделяет на GPU память под один i32 скаляр (например, для вывода ArgMax)
+    pub fn new_int_scalar() -> *mut c_void {
+        let mut raw_ptr = std::ptr::null_mut();
+        unsafe {
+            let status = cudaMalloc(&mut raw_ptr, size_of::<i32>());
+            if status != 0 {
+                panic!("CUDA malloc for int scalar failed!");
+            }
+        }
+        raw_ptr
+    }
+
+    /// Скачивает одиночное i32 число из VRAM в RAM хоста
+    pub fn copy_int_to_host(device_ptr: *mut c_void) -> i32 {
+        let mut host_val: i32 = 0;
+        unsafe {
+            cudaMemcpy(
+                &mut host_val as *mut i32 as *mut c_void,
+                device_ptr,
+                size_of::<i32>(),
+                CUDA_MEMCPY_DEVICE_TO_HOST,
+            );
+        }
+        host_val
     }
 }
 
