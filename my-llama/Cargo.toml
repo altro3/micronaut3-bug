@@ -1,5 +1,5 @@
 [package]
-name = "my-qwen"
+name = "my-llama"
 version = "0.1.0"
 edition = "2024"
 
@@ -9,3 +9,11 @@ base64 = "0.22"
 
 [build-dependencies]
 cc = "1.2"
+
+#[lib]
+#name = "my_llama"
+#path = "src/lib.rs"
+
+#[[bin]]
+#name = "infer"
+#path = "src/bin/infer.rs
