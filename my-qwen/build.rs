@@ -10,6 +10,7 @@ fn main() {
         .flag("-arch=sm_90") // Указываем архитектуру Blackwell для вашей RTX 5090
         .file("cuda/src/matmul.cu") // Файлы, которые нужно скомпилировать
         .file("cuda/src/softmax.cu")
+        .file("cuda/src/attention.cu")
         .file("cuda/src/adam.cu")
         .include("cuda/include")    // Где искать заголовочные файлы (.h)
         .compile("cuda_kernels");   // Имя итоговой библиотеки, которую мы получим
