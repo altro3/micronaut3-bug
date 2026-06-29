@@ -1,28 +1,61 @@
-#include "kernels.h"
-#include <cuda_runtime.h>
 
-// Это кернел — функция, которая будет параллельно выполняться прямо на чипе GPU
-__global__ void set_ones_kernel(float *d_array, const int size) {
-    // Вычисляем глобальный уникальный индекс потока (Thread ID)
+
+// 1. Кернел поэлементного перемножения Swish(Gate) * Up (Fused Activation)
+// Каждый поток обрабатывает один элемент векторов
+__global__ void swish_glu_fused_kernel(float *const output,
+                                       const float *const gate_input,
+                                       const float *const up_input,
+                                       const int size) {
     const int idx = blockIdx.x * blockDim.x + threadIdx.x;
 
-    // Защита от выхода за границы массива
     if (idx < size) {
-        d_array[idx] = 1.0f; // Видеокарта пишет единицу в ячейку памяти
+        const float g = gate_input[idx];
+        const float u = up_input[idx];
+
+        // Формула SiLU (Swish): g / (1.0f + expf(-g))
+        const float swish = g / (1.0f + expf(-g));
+
+        // Поэлементное умножение (Gated Linear Unit)
+        output[idx] = swish * u;
     }
 }
 
-// Обертка на чистом Си, которую без проблем вызовет наш Rust
+// 2. Классический параллельный кернел матричного умножения (C = A * B)
+// Адаптирован под плоские непрерывные массивы f32
+__global__ void matmul_kernel(float *const C,
+                              const float *const A,
+                              const float *const B,
+                              const int M, const int N, const int K) {
+    // Вычисляем строку и столбец матрицы, за которые отвечает данный поток
+    const int row = blockIdx.y * blockDim.y + threadIdx.y;
+    const int col = blockIdx.x * blockDim.x + threadIdx.x;
+
+    if (row < M && col < N) {
+        float sum = 0.0f;
+        for (int i = 0; i < K; ++i) {
+            sum += A[row * K + i] * B[i * N + col];
+        }
+        C[row * N + col] = sum;
+    }
+}
+
 extern "C" {
-void test_cuda_setup(float *d_array, const int size) {
-    int threads_per_block = 256;
-    // Считаем, сколько блоков потоков нужно запустить, чтобы обработать весь массив
-    int blocks_per_grid = (size + threads_per_block - 1) / threads_per_block;
+// Обертка матричного умножения для Rust
+void launch_matmul(float *const C, const float *const A, const float *const B,
+                   const int M, const int N, const int K) {
+    // Настраиваем двумерную сетку потоков для оптимальной утилизации ядер Blackwell
+    dim3 threads_per_block(16, 16);
+    dim3 blocks_per_grid((N + 15) / 16, (M + 15) / 16);
 
-    // Запуск параллельного кернела на видеокарте с помощью специального синтаксиса <<< >>>
-    set_ones_kernel<<<blocks_per_grid, threads_per_block>>>(d_array, size);
+    matmul_kernel<<<blocks_per_grid, threads_per_block>>>(C, A, B, M, N, K);
+}
 
-    // Барьер синхронизации: заставляем процессор подождать, пока GPU закончит всю работу
-    cudaDeviceSynchronize();
+// Обертка слияния Swish-GLU для Rust
+void launch_swish_glu(float *const output, const float *const gate_input,
+                      const float *const up_input, const int size) {
+    constexpr int threads = 256;
+    const int blocks = (size + threads - 1) / threads;
+
+    swish_glu_fused_kernel<<<blocks, threads>>>(output, gate_input, up_input, size);
 }
 }
