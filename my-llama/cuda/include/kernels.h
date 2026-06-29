@@ -2,10 +2,8 @@
 #define KERNELS_H
 
 extern "C" {
-// Отладочный кернел
 void test_cuda_setup(float *d_array, int size);
 
-// Ядро слоя нормализации
 void launch_rms_norm(float *output,
                      const float *input,
                      const float *weight,
@@ -13,7 +11,6 @@ void launch_rms_norm(float *output,
                      int hidden_size,
                      float epsilon);
 
-// Полноценные инженерные имена с абсолютной константностью для SwiGLU
 void launch_matmul(float *output_matrix,
                    const float *matrix_a,
                    const float *matrix_b,
@@ -32,17 +29,8 @@ void launch_attention_scores(float *output_scores,
                              int head_dim,
                              int current_seq_len);
 
-// Запись новых векторов в статический буфер KV-Cache
-void launch_update_kv_cache(float *k_cache,
-                            float *v_cache,
-                            const float *new_k,
-                            const float *new_v,
-                            int token_index, int hidden_size);
-
-// Расчет вероятностей Softmax для матрицы внимания (Файл: attention.cu)
 void launch_softmax_attention(float *scores, int num_heads, int current_seq_len);
 
-// Финальная сборка векторов Value на основе вероятностей (Файл: attention.cu)
 void launch_attention_values(float *output,
                              const float *probabilities,
                              const float *v_cache,
@@ -51,24 +39,35 @@ void launch_attention_values(float *output,
                              int head_dim,
                              int current_seq_len);
 
-// Операция поэлементного сложения Residual Connection (Файл: matmul.cu)
-void launch_residual(float *input_output, const float *residual_data, int size);
+void launch_update_kv_cache(float *k_cache,
+                            float *v_cache,
+                            const float *new_k,
+                            const float *new_v,
+                            int token_index, int hidden_size);
 
-// Поиск индекса максимального логита ArgMax (Файл: softmax.cu)
 void launch_argmax(int *output_index, const float *logits, int vocab_size);
 
-// Шаг оптимизатора AdamW (Файл: adam.cu)
-__declspec(dllexport) void launch_adamw(float *weights,
-                                        float *gradients,
-                                        float *m_buffer,
-                                        float *v_buffer,
-                                        int size,
-                                        float lr,
-                                        float beta1,
-                                        float beta2,
-                                        float epsilon,
-                                        float weight_decay,
-                                        float step);
+void launch_adamw(float *weights,
+                  float *gradients,
+                  float *m_buffer,
+                  float *v_buffer,
+                  int size,
+                  float lr,
+                  float beta1,
+                  float beta2,
+                  float epsilon,
+                  float weight_decay,
+                  float step);
+
+void launch_matmul_backward_weights(float *d_weights,
+                                    const float *input,
+                                    const float *d_output,
+                                    int batch_size, int out_features, int in_features);
+
+void launch_matmul_backward_input(float *d_input,
+                                  const float *d_output,
+                                  const float *weights,
+                                  int batch_size, int out_features, int in_features);
 }
 
 #endif

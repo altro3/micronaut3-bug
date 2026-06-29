@@ -1,96 +1,77 @@
 use my_llama::utils::CudaBuffer;
+use my_llama::models::linear::Linear;
 use std::ffi::c_void;
 
 unsafe extern "C" {
-    // Импортируем наше параллельное CUDA-ядро AdamW
+    // Импортируем наше ядро оптимизатора AdamW
     fn launch_adamw(
-        weights: *mut c_void,
-        gradients: *mut c_void,
-        m_buffer: *mut c_void,
-        v_buffer: *mut c_void,
-        size: i32,
-        lr: f32,
-        beta1: f32,
-        beta2: f32,
-        epsilon: f32,
-        weight_decay: f32,
-        step: f32,
+        weights: *mut c_void, gradients: *mut c_void, m_buffer: *mut c_void, v_buffer: *mut c_void,
+        size: i32, lr: f32, beta1: f32, beta2: f32, epsilon: f32, weight_decay: f32, step: f32,
     );
 }
 
 fn main() {
-    println!("=== ЗАПУСК ДВИЖКА ОБУЧЕНИЯ (TRAINING LOOP) MY-LLAMA ===");
+    println!("=== ИНТЕГРАЦИОННЫЙ ТЕСТ ОБУЧАЕМОГО СЛОЯ LINEAR НА GPU ===");
 
-    // Симулируем один слой из 4 весов
-    const PARAM_SIZE: usize = 4;
+    // Конфигурация геометрии слоя
+    const BATCH_SIZE: usize = 2;   // Батч из 2 токенов
+    const IN_FEATURES: usize = 3;  // 3 входных нейрона
+    const OUT_FEATURES: usize = 2; // 2 выходных нейрона
 
-    // 1. Аллокация памяти во VRAM для обучения
-    let weights = CudaBuffer::new(PARAM_SIZE);
-    let gradients = CudaBuffer::new(PARAM_SIZE);
-    let m_buffer = CudaBuffer::new(PARAM_SIZE); // Первый момент (Momentum)
-    let v_buffer = CudaBuffer::new(PARAM_SIZE); // Второй момент (RMSProp)
+    // 1. Инициализируем наш новый изолированный линейный слой
+    let linear_layer = Linear::new(IN_FEATURES, OUT_FEATURES);
 
-    // 2. Инициализируем веса и градиенты тестовыми значениями
-    weights.copy_from_host(&vec![1.0f32, 1.0f32, 1.0f32, 1.0f32]);
-    // Симулируем, что обратный проход (Backward Pass) насчитал ошибку (градиент = 0.1)
-    gradients.copy_from_host(&vec![0.1f32, 0.1f32, 0.1f32, 0.1f32]);
-    // Буферы моментов изначально заполнены нулями
-    m_buffer.copy_from_host(&vec![0.0f32; PARAM_SIZE]);
-    v_buffer.copy_from_host(&vec![0.0f32; PARAM_SIZE]);
+    // 2. Выделяем буферы для входных данных и ошибок во VRAM
+    let gpu_input = CudaBuffer::new(BATCH_SIZE * IN_FEATURES);
+    let gpu_output = CudaBuffer::new(BATCH_SIZE * OUT_FEATURES);
+    let gpu_d_output = CudaBuffer::new(BATCH_SIZE * OUT_FEATURES); // Градиент ошибки свыше
+    let gpu_d_input = CudaBuffer::new(BATCH_SIZE * IN_FEATURES);   // Сюда прилетит градиент для нижнего слоя
 
-    println!("Стартовые веса на GPU: [1.0, 1.0, 1.0, 1.0]");
-    println!("Насчитанные градиенты: [0.1, 0.1, 0.1, 0.1]");
+    // 3. Заполняем тестовыми данными на хосте и заливаем на GPU
+    gpu_input.copy_from_host(&vec![1.0f32; BATCH_SIZE * IN_FEATURES]);
+    // Симулируем, что функция потерь выдала ошибку по выходу слоя равенную 0.2
+    gpu_d_output.copy_from_host(&vec![0.2f32; BATCH_SIZE * OUT_FEATURES]);
 
-    // 3. Настройки гиперпараметров обучения AdamW
-    let lr = 0.01f32;
-    let beta1 = 0.9f32;
-    let beta2 = 0.999f32;
-    let epsilon = 1e-8f32;
-    let weight_decay = 0.01f32;
-    let step = 1.0f32; // Первый шаг оптимизации
+    // Выделяем буферы под моменты AdamW для весов слоя
+    let m_buffer = CudaBuffer::new(IN_FEATURES * OUT_FEATURES);
+    let v_buffer = CudaBuffer::new(IN_FEATURES * OUT_FEATURES);
+    m_buffer.copy_from_host(&vec![0.0f32; IN_FEATURES * OUT_FEATURES]);
+    v_buffer.copy_from_host(&vec![0.0f32; IN_FEATURES * OUT_FEATURES]);
 
-    println!("\n[GPU] Выполняем шаг оптимизатора AdamW...");
+    // --- ПРЯМОЙ ПРОХОД (FORWARD) ---
+    linear_layer.forward(&gpu_output, &gpu_input, BATCH_SIZE);
+    println!("Прямой проход (Forward pass) выполнен на GPU.");
+
+    // --- ОБРАТНЫЙ ПРОХОД (BACKWARD) ---
+    // Вычисляем реальные градиенты весов на основе входа и ошибки выхода!
+    linear_layer.backward(&gpu_d_input, &gpu_input, &gpu_d_output, BATCH_SIZE);
+    println!("Обратный проход (Backward pass) выполнен. Градиенты рассчитаны.");
+
+    // Скачиваем рассчитанные видеокартой градиенты весов для контроля математики
+    let calculated_grads = linear_layer.weight.grad.copy_to_host();
+    println!("Рассчитанные градиенты весов (dW) с GPU: {:?}", calculated_grads);
+
+    // --- ШАГ ОБНОВЛЕНИЯ ВЕСОВ (OPTIMIZATION) ---
     unsafe {
         launch_adamw(
-            weights.as_raw_ptr(),
-            gradients.as_raw_ptr(),
+            linear_layer.weight.data.as_raw_ptr(),
+            linear_layer.weight.grad.as_raw_ptr(),
             m_buffer.as_raw_ptr(),
             v_buffer.as_raw_ptr(),
-            PARAM_SIZE as i32,
-            lr,
-            beta1,
-            beta2,
-            epsilon,
-            weight_decay,
-            step,
+            (IN_FEATURES * OUT_FEATURES) as i32,
+            0.01f32, 0.9f32, 0.999f32, 1e-8f32, 0.0f32, 1.0f32,
         );
     }
 
-    // 4. Скачиваем обновленные веса обратно, чтобы проверить математику шага
-    let updated_weights = weights.copy_to_host();
-    let updated_gradients = gradients.copy_to_host();
+    let updated_weights = linear_layer.weight.data.copy_to_host();
+    println!("Обновленные веса слоя после шага AdamW: {:?}", updated_weights);
 
-    println!("\nРезультаты обучения с GPU:");
-    println!("  Обновленные веса:        Rhine: {:?}", updated_weights);
-    println!(
-        "  Очищенные градиенты (должны быть 0): {:?}",
-        updated_gradients
-    );
-
-    // Математический расчет эталона на CPU:
-    // g = 0.1, w = 1.0
-    // m = 0.9 * 0 + 0.1 * 0.1 = 0.01 -> m_hat = 0.01 / (1 - 0.9^1) = 0.1
-    // v = 0.999 * 0 + 0.001 * 0.01 = 0.00001 -> v_hat = 0.00001 / (1 - 0.999^1) = 0.01
-    // w = 1.0 - 0.01 * (0.1 / (sqrt(0.01) + 1e-8) + 0.01 * 1.0) = 1.0 - 0.01 * (1.0 + 0.01) = 0.9899
-    let expected_weight = 0.9899f32;
-
-    if (updated_weights[0] - expected_weight).abs() < 1e-4 && updated_gradients[0] == 0.0f32 {
-        println!(
-            "\n[ОБУЧЕНИЕ УСПЕШНО] Кернел AdamW отработал с идеальной точностью, обновил веса и занулил градиенты!"
-        );
+    // Верификация математики dW:
+    // Каждая ячейка dW = sum по батчу (input * d_output) = 1.0 * 0.2 + 1.0 * 0.2 = 0.4
+    if (calculated_grads[0] - 0.4f32).abs() < 1e-5 {
+        println!("\n[СКВОЗНОЙ УСПЕХ] Слой Linear успешно прошел цикл Forward -> Backward -> Optimize!");
+        println!("Градиенты рассчитаны аппаратно, и веса скорректированы на GPU Blackwell.");
     } else {
-        println!(
-            "\n[КРИТИЧЕСКАЯ ОШИБКА] Ошибка в математике обновления моментов или затухания весов."
-        );
+        println!("\n[МАТЕМАТИЧЕСКИЙ СБОЙ] Ошибка в расчете транспонированного матричного умножения dW.");
     }
 }

@@ -10,6 +10,8 @@ fn main() {
         .cudart("static")
         .flag("-arch=sm_90")
         .file("cuda/src/matmul.cu")
+        .file("cuda/src/swiglu.cu")
+        .file("cuda/src/linear_backward.cu")
         .file("cuda/src/softmax.cu")
         .file("cuda/src/attention.cu")
         .file("cuda/src/adam.cu")

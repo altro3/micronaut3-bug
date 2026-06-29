@@ -1,6 +1,6 @@
 use crate::models::attention::SelfAttention;
 use crate::models::kv_cache::KvCache;
-use crate::models::layers::RmsNorm;
+use crate::models::rmsnorm::RmsNorm;
 use crate::models::swiglu::SwiGlu;
 use crate::utils::CudaBuffer;
 use std::ffi::c_void;
@@ -18,7 +18,6 @@ pub struct TransformerBlock {
 }
 
 impl TransformerBlock {
-
     pub fn new(
         hidden_size: usize,
         num_heads: usize,
@@ -50,9 +49,11 @@ impl TransformerBlock {
         let scores_buffer = CudaBuffer::new(self.attention.num_heads * kv_cache.len());
         let dummy_query = CudaBuffer::new(batch_size * self.hidden_size);
 
-        self.attention.compute_attention_scores(&scores_buffer, &dummy_query, kv_cache);
+        self.attention
+            .compute_attention_scores(&scores_buffer, &dummy_query, kv_cache);
         self.attention.forward_softmax(&scores_buffer, kv_cache);
-        self.attention.forward_values(&attn_out, &scores_buffer, kv_cache);
+        self.attention
+            .forward_values(&attn_out, &scores_buffer, kv_cache);
 
         unsafe {
             launch_residual(x.as_raw_ptr(), attn_out.as_raw_ptr(), total_elements);

@@ -1,18 +1,5 @@
 #include <cuda_runtime.h>
 
-__global__ void swish_glu_fused_kernel(float *const output,
-                                       const float *const gate_input,
-                                       const float *const up_input,
-                                       const int size) {
-    const int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    if (idx < size) {
-        const float g = gate_input[idx];
-        const float u = up_input[idx];
-        const float swish = g / (1.0f + expf(-g));
-        output[idx] = swish * u;
-    }
-}
-
 __global__ void matmul_kernel(float *const matrix_c,
                               const float *const matrix_a,
                               const float *const matrix_b,
@@ -61,16 +48,6 @@ void launch_matmul(float *output_matrix,
     dim3 blocks_per_grid((out_features + 15) / 16, (batch_size + 15) / 16);
 
     matmul_kernel<<<blocks_per_grid, threads_per_block>>>(output_matrix, matrix_a, matrix_b, batch_size, out_features, in_features);
-}
-
-void launch_swish_glu(float *output,
-                      const float *gate_input,
-                      const float *up_input,
-                      const int size) {
-    constexpr int threads = 256;
-    const int blocks = (size + threads - 1) / threads;
-
-    swish_glu_fused_kernel<<<blocks, threads>>>(output, gate_input, up_input, size);
 }
 
 void launch_update_kv_cache(float *k_cache,
