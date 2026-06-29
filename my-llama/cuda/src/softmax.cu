@@ -11,7 +11,6 @@ __global__ void rms_norm_kernel(float *const output,
     const float *const x = input + row_idx * hidden_size;
     float *const y = output + row_idx * hidden_size;
 
-    // Выделяем shared-память только под массив редукции сумм квадратов
     extern __shared__ float s_data[];
     const int tid = threadIdx.x;
 
@@ -22,7 +21,6 @@ __global__ void rms_norm_kernel(float *const output,
     s_data[tid] = sum;
     __syncthreads();
 
-    // Параллельное снижение (Reduction) внутри блока
     for (int s = blockDim.x / 2; s > 0; s >>= 1) {
         if (tid < s) {
             s_data[tid] += s_data[tid + s];
@@ -30,40 +28,29 @@ __global__ void rms_norm_kernel(float *const output,
         __syncthreads();
     }
 
-    // Каждый поток заводит СВОЮ локальную переменную в РЕГИСТРАХ (гарантия инициализации!)
     float rms_inv = 0.0f;
 
-    // Поток 0 рассчитывает финальный коэффициент в свой личный регистр
     if (tid == 0) {
         rms_inv = 1.0f / sqrtf(s_data[0] / hidden_size + epsilon);
     }
 
-    // АППАРАТНАЯ МАГИЯ: Поток 0 транслирует (broadcast) значение своего регистра rms_inv
-    // во все остальные потоки блока.
-    // 0xFFFFFFFF — маска, говорящая, что участвуют все 32 потока варпа.
-    // 0 — индекс потока-источника данных.
     rms_inv = __shfl_sync(0xFFFFFFFF, rms_inv, 0);
 
-    // Если блок потоков больше 32 (больше одного варпа), то для передачи
-    // между варпами используем первую ячейку s_data, которая уже освободилась!
     if (blockDim.x > 32) {
         if (tid == 0) {
             s_data[0] = rms_inv;
         }
-        __syncthreads(); // Гарантируем запись потоком 0
-        rms_inv = s_data[0]; // Все остальные потоки безопасно читают чистые данные
+        __syncthreads();
+        rms_inv = s_data[0];
     }
 
-    // Теперь rms_inv железно инициализирована у каждого потока без риска прочесть мусор
     for (int i = tid; i < hidden_size; i += blockDim.x) {
         y[i] = x[i] * rms_inv * weight[i];
     }
 }
 
-// Кернел ArgMax: ищет индекс максимального элемента в массиве логитов
 __global__ void argmax_kernel(int *const output_index, const float *const logits, const int vocab_size) {
     extern __shared__ float s_max_val[];
-    // Выделяем вторую половину shared-памяти под индексы
     const auto s_max_idx = reinterpret_cast<int *>(&s_max_val[blockDim.x]);
 
     const int tid = threadIdx.x;
@@ -83,7 +70,6 @@ __global__ void argmax_kernel(int *const output_index, const float *const logits
     s_max_idx[tid] = max_idx;
     __syncthreads();
 
-    // Редукция внутри блока потоков
     for (int s = blockDim.x / 2; s > 0; s >>= 1) {
         if (tid < s) {
             if (s_max_val[tid + s] > s_max_val[tid]) {
@@ -94,7 +80,6 @@ __global__ void argmax_kernel(int *const output_index, const float *const logits
         __syncthreads();
     }
 
-    // Поток 0 записывает финальный индекс-победитель в глобальную память
     if (tid == 0) {
         *output_index = s_max_idx[0];
     }

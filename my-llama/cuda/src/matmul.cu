@@ -1,6 +1,5 @@
 #include <cuda_runtime.h>
 
-// Кернел поэлементного перемножения Swish(Gate) * Up
 __global__ void swish_glu_fused_kernel(float *const output,
                                        const float *const gate_input,
                                        const float *const up_input,
@@ -14,7 +13,6 @@ __global__ void swish_glu_fused_kernel(float *const output,
     }
 }
 
-// Параллельный кернел матричного умножения
 __global__ void matmul_kernel(float *const matrix_c,
                               const float *const matrix_a,
                               const float *const matrix_b,
@@ -31,7 +29,6 @@ __global__ void matmul_kernel(float *const matrix_c,
     }
 }
 
-// Кернел копирования текущих KV-векторов в глобальный статический кэш
 __global__ void update_kv_cache_kernel(float *const k_cache,
                                        float *const v_cache,
                                        const float *const new_k,
@@ -41,26 +38,21 @@ __global__ void update_kv_cache_kernel(float *const k_cache,
     const int idx = blockIdx.x * blockDim.x + threadIdx.x;
 
     if (idx < hidden_size) {
-        // Вычисляем глобальное смещение в кэше для текущего токена
         const int cache_offset = token_index * hidden_size + idx;
 
-        // Переносим данные из временного локального вектора в статический буфер кэша
         k_cache[cache_offset] = new_k[idx];
         v_cache[cache_offset] = new_v[idx];
     }
 }
 
-// Кернел остаточной связи (Residual Connection): поэлементное сложение двух векторов прямо во VRAM
 __global__ void residual_kernel(float *const input_output, const float *const residual_data, const int size) {
     const int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx < size) {
-        // Прибавляем к основному потоку данных результат работы слоя
         input_output[idx] += residual_data[idx];
     }
 }
 
 extern "C" {
-// Возвращаем const для локальных копий примитивов, чтобы порадовать статический анализатор IDEA
 void launch_matmul(float *output_matrix,
                    const float *matrix_a,
                    const float *matrix_b,
@@ -93,7 +85,6 @@ void launch_update_kv_cache(float *k_cache,
     update_kv_cache_kernel<<<blocks, threads>>>(k_cache, v_cache, new_k, new_v, token_index, hidden_size);
 }
 
-// Безопасная Си-обертка для Rust
 void launch_residual(float *input_output, const float *residual_data, const int size) {
     constexpr int threads = 256;
     const int blocks = (size + threads - 1) / threads;

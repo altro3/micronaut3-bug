@@ -1,4 +1,3 @@
-// 1. Говорим компилятору: "В этой папке есть файл layers.rs"
 pub mod layers;
 pub mod swiglu;
 pub mod kv_cache;

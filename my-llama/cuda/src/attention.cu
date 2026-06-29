@@ -1,6 +1,5 @@
 #include <cuda_runtime.h>
 
-// Хай-энд GQA кернел: расчет скалярного произведения Query и Key_cache
 __global__ void attention_scores_kernel(float *const scores,
                                         const float *const query,
                                         const float *const k_cache,
@@ -43,14 +42,12 @@ __global__ void attention_scores_kernel(float *const scores,
     }
 }
 
-// Safe Softmax кернел для строк матрицы внимания [num_heads x current_seq_len]
 __global__ void softmax_attention_kernel(float *const scores, const int current_seq_len) {
-    const int head_idx = blockIdx.x; // Каждый блок обрабатывает строку одной головы
+    const int head_idx = blockIdx.x;
     float *const row = scores + head_idx * current_seq_len;
 
     const int tid = threadIdx.x;
 
-    // Шаг 1: Находим максимальный элемент в строке (Защита от взрыва экспоненты)
     extern __shared__ float s_mem[];
     float local_max = -INFINITY;
 
@@ -62,7 +59,6 @@ __global__ void softmax_attention_kernel(float *const scores, const int current_
     s_mem[tid] = local_max;
     __syncthreads();
 
-    // Редукция для поиска глобального максимума строки
     for (int s = blockDim.x / 2; s > 0; s >>= 1) {
         if (tid < s) {
             if (s_mem[tid + s] > s_mem[tid]) {
@@ -72,9 +68,8 @@ __global__ void softmax_attention_kernel(float *const scores, const int current_
         __syncthreads();
     }
     const float row_max = s_mem[0];
-    __syncthreads(); // Освобождаем shared-память под следующий шаг
+    __syncthreads();
 
-    // Шаг 2: Считаем сумму экспонент (знаменатель Softmax)
     float local_sum = 0.0f;
     for (int i = tid; i < current_seq_len; i += blockDim.x) {
         local_sum += expf(row[i] - row_max);
@@ -82,7 +77,6 @@ __global__ void softmax_attention_kernel(float *const scores, const int current_
     s_mem[tid] = local_sum;
     __syncthreads();
 
-    // Редукция для вычисления общей суммы
     for (int s = blockDim.x / 2; s > 0; s >>= 1) {
         if (tid < s) {
             s_mem[tid] += s_mem[tid + s];
@@ -91,13 +85,11 @@ __global__ void softmax_attention_kernel(float *const scores, const int current_
     }
     const float sum_total = s_mem[0];
 
-    // Шаг 3: Вычисляем финальную вероятность для каждого элемента
     for (int i = tid; i < current_seq_len; i += blockDim.x) {
         row[i] = expf(row[i] - row_max) / sum_total;
     }
 }
 
-// Кернел взвешенного суммирования векторов Value на основе вероятностей внимания
 __global__ void attention_values_kernel(float *const output,
                                         const float *const probabilities,
                                         const float *const v_cache,
@@ -111,19 +103,12 @@ __global__ void attention_values_kernel(float *const output,
     if (tid < head_dim) {
         const int kv_head_ratio = num_heads / num_kv_heads;
         const int kv_head_idx = head_idx / kv_head_ratio;
-
-        // Вычисляем полный размер скрытого слоя (Hidden Size)
         const int hidden_size = num_heads * head_dim;
 
         float sum = 0.0f;
 
         for (int tok = 0; tok < current_seq_len; ++tok) {
             const float prob = probabilities[head_idx * current_seq_len + tok];
-
-            // ИСПРАВЛЕННАЯ АДРЕСАЦИЯ:
-            // tok * hidden_size -> прыгаем на нужный токен в истории
-            // kv_head_idx * head_dim -> прыгаем на нужную голову внутри этого токена
-            // tid -> берем конкретный элемент
             const int v_offset = tok * hidden_size + kv_head_idx * head_dim + tid;
             const float v_val = v_cache[v_offset];
 
@@ -166,10 +151,8 @@ void launch_attention_values(float *output,
                              const int num_kv_heads,
                              const int head_dim,
                              const int current_seq_len) {
-    // Запускаем столько потоков в блоке, какова размерность головы (например, 64 или 128)
     const int threads = head_dim < 256 ? head_dim : 256;
 
-    // Сетка блоков: одномерная, по количеству голов внимания
     attention_values_kernel<<<num_heads, threads>>>(
         output, probabilities, v_cache, num_heads, num_kv_heads, head_dim, current_seq_len
     );

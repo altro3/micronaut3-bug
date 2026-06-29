@@ -1,9 +1,9 @@
-use crate::utils::CudaBuffer;
 use crate::models::kv_cache::KvCache;
+use crate::utils::CudaBuffer;
 use std::ffi::c_void;
 
 unsafe extern "C" {
-    // 1. Скалярное произведение Q * K
+
     fn launch_attention_scores(
         output_scores: *mut c_void,
         query: *const c_void,
@@ -14,10 +14,8 @@ unsafe extern "C" {
         current_seq_len: i32,
     );
 
-    // 2. Нормализация Softmax
     fn launch_softmax_attention(scores: *mut c_void, num_heads: i32, current_seq_len: i32);
 
-    // 3. Сборка взвешенных векторов Value
     fn launch_attention_values(
         output: *mut c_void,
         probabilities: *const c_void,
@@ -37,19 +35,20 @@ pub struct SelfAttention {
 
     pub num_heads: usize,
     pub num_kv_heads: usize,
-    pub head_dim: usize, // Явно храним размерность головы в структуре
+    pub head_dim: usize,
 }
 
 impl SelfAttention {
     pub fn new(hidden_size: usize, num_heads: usize, num_kv_heads: usize) -> Self {
-        // Жесткая проверка геометрии тензоров: hidden_size обязан делиться на num_heads нацело
         assert_eq!(
-            hidden_size % num_heads, 0,
+            hidden_size % num_heads,
+            0,
             "Критическая ошибка: hidden_size ({}) должен делиться на num_heads ({}) без остатка!",
-            hidden_size, num_heads
+            hidden_size,
+            num_heads
         );
 
-        let head_dim = hidden_size / num_heads; // Тот самый HEAD_DIM теперь рассчитывается и задействован!
+        let head_dim = hidden_size / num_heads;
         let kv_dim = num_kv_heads * head_dim;
 
         let w_query = CudaBuffer::new(hidden_size * hidden_size);
@@ -72,15 +71,20 @@ impl SelfAttention {
             w_out,
             num_heads,
             num_kv_heads,
-            head_dim, // Сохраняем задействованный параметр
+            head_dim,
         }
     }
 
-    pub fn compute_attention_scores(&self, scores_output: &CudaBuffer, query_input: &CudaBuffer, kv_cache: &KvCache) {
+    pub fn compute_attention_scores(
+        &self,
+        scores_output: &CudaBuffer,
+        query_input: &CudaBuffer,
+        kv_cache: &KvCache,
+    ) {
         let current_seq_len = kv_cache.len() as i32;
         let n_heads = self.num_heads as i32;
         let n_kv_heads = self.num_kv_heads as i32;
-        let h_dim = self.head_dim as i32; // Явно передаем задействованный head_dim на GPU!
+        let h_dim = self.head_dim as i32;
 
         unsafe {
             launch_attention_scores(
@@ -104,10 +108,15 @@ impl SelfAttention {
         }
     }
 
-    pub fn forward_values(&self, attention_output: &CudaBuffer, probabilities: &CudaBuffer, kv_cache: &KvCache) {
+    pub fn forward_values(
+        &self,
+        attention_output: &CudaBuffer,
+        probabilities: &CudaBuffer,
+        kv_cache: &KvCache,
+    ) {
         let n_heads = self.num_heads as i32;
         let n_kv_heads = self.num_kv_heads as i32;
-        let h_dim = self.head_dim as i32; // Явно передаем задействованный head_dim на GPU!
+        let h_dim = self.head_dim as i32;
         let current_seq_len = kv_cache.len() as i32;
 
         unsafe {

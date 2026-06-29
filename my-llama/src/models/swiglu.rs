@@ -6,7 +6,6 @@ unsafe extern "C" {
     fn launch_swish_glu(output: *mut c_void, gate_input: *const c_void, up_input: *const c_void, size: i32);
 }
 
-/// Промышленный слой SwiGLU MLP-блока (Архитектура Qwen)
 pub struct SwiGlu {
     pub w_gate: CudaBuffer,
     pub w_up: CudaBuffer,
