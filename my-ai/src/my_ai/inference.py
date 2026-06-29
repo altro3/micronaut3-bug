@@ -39,13 +39,23 @@ def ask_ai_direct(fact: str, question: str, max_new_tokens: int = 15) -> str:
 
         predicted_token = tokenizer.itos[next_id]
 
-        if predicted_token == "[EOS]":
+        if "[EOS]" in predicted_token or "Контекст" in predicted_token or "Модель" in predicted_token:
             break
 
         context.append(next_id)
         generated_ids.append(next_id)
 
-    return tokenizer.decode(generated_ids).strip()
+    # Декодируем весь сгенерированный текст целиком
+    full_generation = tokenizer.decode(generated_ids).strip()
+
+    if "[EOS]" in full_generation:
+        full_generation = full_generation.split("[EOS]")[0]
+
+    for stop_word in ["Контекст:", "Модель", "Вопрос:", "Оптимизато"]:
+        if stop_word in full_generation:
+            full_generation = full_generation.split(stop_word)[0]
+
+    return full_generation.strip()
 
 
 if __name__ == '__main__':
