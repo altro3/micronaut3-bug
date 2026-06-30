@@ -43,11 +43,10 @@ unsafe extern "C" {
 }
 
 // -------------------------------------------------------------------------
-// 1. ТЕСТ: Проверяем асинхронный cuBLAS на Tensor Cores (Row-Major трюк)
+// 1. ТЕСТ: Проверяем асинхронный cuBLAS на Tensor Cores
 // -------------------------------------------------------------------------
 #[test]
 fn test_cublas_tensor_cores_forward() {
-    // Матрица A [2x3], Матрица B [3x2] -> Выход C [2x2]
     const BATCH_SIZE: usize = 2;
     const IN_FEATURES: usize = 3;
     const OUT_FEATURES: usize = 2;
@@ -57,23 +56,10 @@ fn test_cublas_tensor_cores_forward() {
     let gpu_b = CudaBuffer::new(IN_FEATURES * OUT_FEATURES);
     let gpu_c = CudaBuffer::new(BATCH_SIZE * OUT_FEATURES);
 
-    // Загружаем асимметричные данные, чтобы проверить правильность индексов cuBLAS
-    gpu_a.copy_from_host_async(
-        &vec![
-            1.0, 2.0, 3.0, // Строка 0
-            4.0, 5.0, 6.0, // Строка 1
-        ],
-        &stream,
-    );
+    // ИСПРАВЛЕНИЕ 1: Явно размечаем f32
+    gpu_a.copy_from_host_async(&vec![1.0f32, 2.0, 3.0, 4.0, 5.0, 6.0], &stream);
 
-    gpu_b.copy_from_host_async(
-        &vec![
-            0.5, 0.1, // Строка 0
-            0.2, 0.4, // Строка 1
-            0.3, 0.6, // Строка 2
-        ],
-        &stream,
-    );
+    gpu_b.copy_from_host_async(&vec![0.5f32, 0.1, 0.2, 0.4, 0.3, 0.6], &stream);
 
     unsafe {
         launch_matmul(
@@ -91,10 +77,7 @@ fn test_cublas_tensor_cores_forward() {
     gpu_c.copy_to_host_async(&mut host_c, &stream);
     stream.synchronize();
 
-    // Математический расчет на CPU для проверки:
-    // Строка 0: [1*0.5 + 2*0.2 + 3*0.3, 1*0.1 + 2*0.4 + 3*0.6] = [1.8, 2.7]
-    // Строка 1: [4*0.5 + 5*0.2 + 6*0.3, 4*0.1 + 5*0.4 + 6*0.6] = [4.8, 6.0]
-    let expected_c = vec![1.8, 2.7, 4.8, 6.0];
+    let expected_c = vec![1.8f32, 2.7, 4.8, 6.0];
 
     for i in 0..host_c.len() {
         assert!(
@@ -108,7 +91,7 @@ fn test_cublas_tensor_cores_forward() {
 }
 
 // -------------------------------------------------------------------------
-// 2. ТЕСТ: Проверяем асинхронную линковку cuBLAS Backward (Градиент весов)
+// 2. ТЕСТ: Проверяем асинхронную линковку cuBLAS Backward
 // -------------------------------------------------------------------------
 #[test]
 fn test_cublas_backward_weights_math() {
@@ -121,9 +104,9 @@ fn test_cublas_backward_weights_math() {
     let gpu_d_output = CudaBuffer::new(BATCH_SIZE * OUT_FEATURES);
     let gpu_d_weights = CudaBuffer::new(IN_FEATURES * OUT_FEATURES);
 
-    gpu_input.copy_from_host_async(&vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0], &stream);
+    gpu_input.copy_from_host_async(&vec![1.0f32, 2.0, 3.0, 4.0, 5.0, 6.0], &stream);
 
-    gpu_d_output.copy_from_host_async(&vec![0.5, -0.2, 0.1, 0.4], &stream);
+    gpu_d_output.copy_from_host_async(&vec![0.5f32, -0.2, 0.1, 0.4], &stream);
 
     unsafe {
         launch_matmul_backward_weights(
@@ -141,17 +124,15 @@ fn test_cublas_backward_weights_math() {
     gpu_d_weights.copy_to_host_async(&mut host_dw, &stream);
     stream.synchronize();
 
-    // Математический расчет dW = X^T * dY на Tensor Cores:
-    // Ячейка 0: 1.0 * 0.5 + 4.0 * 0.1 = 0.9
     assert!(
-        (host_dw[0] - 0.9).abs() < 1e-4,
-        "Ошибка в dW[0]: получили {}",
+        (host_dw[0] - 0.9f32).abs() < 1e-4,
+        "Ошибка в dW: получили {}",
         host_dw[0]
     );
 }
 
 // -------------------------------------------------------------------------
-// 3. ТЕСТ: Проверяем асинхронный ArgMax (Поиск лучшего токена)
+// 3. ТЕСТ: Проверяем асинхронный ArgMax
 // -------------------------------------------------------------------------
 #[test]
 fn test_argmax_kernel_async() {
@@ -159,12 +140,9 @@ fn test_argmax_kernel_async() {
     let stream = CudaStream::new();
 
     let gpu_logits = CudaBuffer::new(VOCAB_SIZE);
-
-    // Выделяем 1 ячейку i32 во VRAM под результат индекса
     let gpu_output_idx = CudaBuffer::new_int(1);
 
-    // Загружаем логиты, где максимальный элемент (99.9) сидит на индексе 3
-    gpu_logits.copy_from_host_async(&vec![-1.2, 0.5, 3.14, 99.9, -0.01], &stream);
+    gpu_logits.copy_from_host_async(&vec![-1.2f32, 0.5, 3.14, 99.9, -0.01], &stream);
 
     unsafe {
         launch_argmax(
@@ -186,6 +164,9 @@ fn test_argmax_kernel_async() {
     );
 }
 
+// -------------------------------------------------------------------------
+// 4. ТЕСТ: Проверяем асинхронный AdamW оптимизатор
+// -------------------------------------------------------------------------
 #[test]
 fn test_adamw_optimizer_step_async() {
     const SIZE: usize = 2;
@@ -196,11 +177,10 @@ fn test_adamw_optimizer_step_async() {
     let gpu_m = CudaBuffer::new(SIZE);
     let gpu_v = CudaBuffer::new(SIZE);
 
-    // Инициализируем тестовое состояние весов, градиентов и моментов
-    gpu_w.copy_from_host_async(&vec![1.0, 2.0], &stream);
-    gpu_g.copy_from_host_async(&vec![0.1, 0.2], &stream);
-    gpu_m.copy_from_host_async(&vec![0.0, 0.0], &stream);
-    gpu_v.copy_from_host_async(&vec![0.0, 0.0], &stream);
+    gpu_w.copy_from_host_async(&vec![1.0f32, 2.0], &stream);
+    gpu_g.copy_from_host_async(&vec![0.1f32, 0.2], &stream);
+    gpu_m.copy_from_host_async(&vec![0.0f32; SIZE], &stream);
+    gpu_v.copy_from_host_async(&vec![0.0f32; SIZE], &stream);
 
     unsafe {
         launch_adamw(
@@ -209,12 +189,12 @@ fn test_adamw_optimizer_step_async() {
             gpu_m.as_raw_ptr(),
             gpu_v.as_raw_ptr(),
             SIZE as i32,
-            0.1f32,   // lr
-            0.9f32,   // beta1
-            0.999f32, // beta2
-            1e-8f32,  // epsilon
-            0.0f32,   // weight_decay
-            1.0f32,   // step = 1
+            0.1f32,
+            0.9f32,
+            0.999f32,
+            1e-8f32,
+            0.0f32,
+            1.0f32,
             stream.as_raw(),
         );
     }
@@ -226,24 +206,16 @@ fn test_adamw_optimizer_step_async() {
     gpu_g.copy_to_host_async(&mut cleared_grads, &stream);
     stream.synchronize();
 
-    // Математическая проверка: при m=0, v=0 и step=1:
-    // m_new = 0.1 * g, v_new = 0.001 * g^2
-    // bias_correction1 = 0.1, bias_correction2 = 0.001
-    // m_hat = g, v_hat = g^2 -> m_hat / sqrt(v_hat) = g / g = 1.0
-    // w_new = w - lr * 1.0 = w - 0.1
-    // Ожидаем: [1.0 - 0.1, 2.0 - 0.1] = [0.9, 1.9]
     assert!(
-        (updated_weights[0] - 0.9).abs() < 1e-4,
+        (updated_weights[0] - 0.9f32).abs() < 1e-4,
         "Ошибка в весе 0: получили {}",
         updated_weights[0]
     );
     assert!(
-        (updated_weights[1] - 1.9).abs() < 1e-4,
+        (updated_weights[1] - 1.9f32).abs() < 1e-4,
         "Ошибка в весе 1: получили {}",
         updated_weights[1]
     );
-
-    // Проверяем, что встроенное зануление градиентов отработало честно
     assert_eq!(
         cleared_grads,
         vec![0.0f32; SIZE],

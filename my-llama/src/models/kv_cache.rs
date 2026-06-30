@@ -107,9 +107,6 @@ impl KvCacheManager {
     }
 }
 
-// =========================================================================
-// ИЗОЛИРОВАННЫЕ АСИНХРОННЫЕ ЮНИТ-ТЕСТЫ KV-КЭША
-// =========================================================================
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -122,35 +119,35 @@ mod tests {
         let stream = CudaStream::new();
 
         // 1. Инициализируем менеджер кэша
-        let mut manager = KvCacheManager::new(MAX_SEQ_LEN, HIDDEN_SIZE);
-        assert_eq!(manager.len(), 0);
-        assert!(!manager.is_full());
+        let mut kv_manager = KvCacheManager::new(MAX_SEQ_LEN, HIDDEN_SIZE);
+        assert_eq!(kv_manager.len(), 0);
+        assert!(!kv_manager.is_full());
 
-        // 2. Создаем временные буферы под новый прилетевший токен
+        // 2. Создаем временные буферы под один новый прилетевший токен
         let token_k = CudaBuffer::new(HIDDEN_SIZE);
         let token_v = CudaBuffer::new(HIDDEN_SIZE);
 
-        // Используем универсальный дженерик-метод асинхронной загрузки
-        token_k.copy_from_host_async(&vec![10.0, 20.0, 30.0], &stream);
-        token_v.copy_from_host_async(&vec![0.1, 0.2, 0.3], &stream);
+        // ИСПРАВЛЕНИЕ 1: Явно размечаем тип f32 для векторов
+        token_k.copy_from_host_async(&vec![10.0f32, 20.0, 30.0], &stream);
+        token_v.copy_from_host_async(&vec![0.1f32, 0.2, 0.3], &stream);
 
         // 3. Добавляем токен в кэш через стрим
-        manager.append_async(&token_k, &token_v, &stream);
-        assert_eq!(manager.len(), 1);
+        kv_manager.append_async(&token_k, &token_v, &stream);
+        assert_eq!(kv_manager.len(), 1);
 
         // 4. Проверяем генерацию View-слайса
-        let view = manager.get_view();
+        let view = kv_manager.get_view();
         assert_eq!(view.len(), 1);
         assert_eq!(view.k_cache.len(), HIDDEN_SIZE);
 
-        // Буфер слайса не должен зачищать чужую физическую память при уничтожении
-        assert_eq!(view.k_cache.as_raw_ptr(), manager.k_storage.as_raw_ptr());
+        // ИСПРАВЛЕНИЕ 2: Исправляем имя переменной на kv_manager
+        assert_eq!(view.k_cache.as_raw_ptr(), kv_manager.k_storage.as_raw_ptr());
 
         // 5. Тестируем асинхронную очистку
-        manager.clear_async(&stream);
-        assert_eq!(manager.len(), 0);
+        kv_manager.clear_async(&stream);
+        assert_eq!(kv_manager.len(), 0);
 
-        // Финальная синхронизация для страховки от сбоев железа NVIDIA
+        // Финальная синхронизация
         stream.synchronize();
         println!("[ЮНИТ-ТЕСТ УСПЕШЕН] Декомпозиция KV-Cache на Manager и View работает идеально.");
     }

@@ -52,9 +52,6 @@ impl RmsNorm {
     }
 }
 
-// =========================================================================
-// АСИНХРОННЫЙ ЮНИТ-ТЕСТ МАТЕМАТИКИ СЛОЯ RMSNORM
-// =========================================================================
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -70,8 +67,8 @@ mod tests {
         let gpu_input = CudaBuffer::new(BATCH_SIZE * HIDDEN_SIZE);
         let gpu_output = CudaBuffer::new(BATCH_SIZE * HIDDEN_SIZE);
 
-        // Задаем тестовый вектор [1.0, 2.0, 3.0]
-        gpu_input.copy_from_host_async(&vec![1.0, 2.0, 3.0], &stream);
+        // ИСПРАВЛЕНИЕ 1: Явно указываем тип f32 для входных данных
+        gpu_input.copy_from_host_async(&vec![1.0f32, 2.0, 3.0], &stream);
 
         // Запускаем асинхронный RMSNorm
         norm.forward(&gpu_output, &gpu_input, BATCH_SIZE, &stream);
@@ -82,13 +79,11 @@ mod tests {
         // Синхронизация перед ассертами
         stream.synchronize();
 
-        // Математика RMSNorm:
-        // Средний квадрат (MS) = (1^2 + 2^2 + 3^2) / 3 = (1 + 4 + 9) / 3 = 14 / 3 = 4.666667
-        // RMS = sqrt(4.666667 + epsilon) = 2.160247
-        // Ожидаемый выход x / RMS:
-        // [1.0 / 2.160247, 2.0 / 2.160247, 3.0 / 2.160247] = [0.46291, 0.92582, 1.38873]
-        let expected = vec![0.46291, 0.92582, 1.38873];
+        // Ожидаемый эталонный ответ на CPU
+        let expected = vec![0.46291f32, 0.92582, 1.38873];
 
+        // ИСПРАВЛЕНИЕ 2: Проверяем данные строго поэлементно с дельтой,
+        // убирая ошибочный assert_eq! массивов целиком
         for i in 0..HIDDEN_SIZE {
             assert!(
                 (host_output[i] - expected[i]).abs() < 1e-4,

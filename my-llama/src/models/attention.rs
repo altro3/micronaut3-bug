@@ -171,13 +171,9 @@ impl SelfAttention {
     }
 }
 
-// =========================================================================
-// ИЗОЛИРОВАННЫЕ АСИНХРОННЫЕ ЮНИТ-ТЕСТЫ ДЕКОМПОЗИРОВАННОГО МЕХАНИЗМА ВНИМАНИЯ
-// =========================================================================
 #[cfg(test)]
 mod tests {
     use super::*;
-    // Импортируем оригинальный менеджер кэша из вашего проекта
     use crate::models::kv_cache::KvCacheManager;
 
     #[test]
@@ -185,6 +181,7 @@ mod tests {
         const HIDDEN_SIZE: usize = 4;
         const NUM_HEADS: usize = 2;
         const NUM_KV_HEADS: usize = 1;
+        const HEAD_DIM: usize = 2;     // 4 / 2 = 2
         const CURRENT_SEQ_LEN: usize = 2;
         const MAX_SEQ_LEN: usize = 10;
 
@@ -193,17 +190,18 @@ mod tests {
         // 1. Инициализация реального слоя внимания
         let attention = SelfAttention::new(HIDDEN_SIZE, NUM_HEADS, NUM_KV_HEADS, &stream);
 
-        // 2. Инициализируем НАСТОЯЩИЙ менеджер кэша
+        // 2. Инициализируем настоящий менеджер кэша
         let mut kv_manager = KvCacheManager::new(MAX_SEQ_LEN, HIDDEN_SIZE);
 
-        // Создаем и асинхронно заполняем временные токены, чтобы сымитировать историю контекста
+        // Создаем временные токены под историю контекста
         let token_k = CudaBuffer::new(HIDDEN_SIZE);
         let token_v = CudaBuffer::new(HIDDEN_SIZE);
 
-        token_k.copy_from_host_async(&vec![1.0, 0.0, 0.0, 1.0], &stream);
-        token_v.copy_from_host_async(&vec![0.5, 0.5, 1.5, 1.5], &stream);
+        // ИСПРАВЛЕНИЕ 1: Явно размечаем тип f32 для векторов кэша
+        token_k.copy_from_host_async(&vec![1.0f32, 0.0, 0.0, 1.0], &stream);
+        token_v.copy_from_host_async(&vec![0.5f32, 0.5, 1.5, 1.5], &stream);
 
-        // Накапливаем историю контекста (например, промпт из 2 токенов)
+        // Накапливаем историю контекста (имитируем промпт из 2 токенов)
         kv_manager.append_async(&token_k, &token_v, &stream);
         kv_manager.append_async(&token_k, &token_v, &stream);
 
@@ -211,11 +209,13 @@ mod tests {
         let kv_view = kv_manager.get_view();
 
         // 3. Выделяем физические буферы под Query, Скоры и Выход
-        let gpu_query = CudaBuffer::new(NUM_HEADS * 2);
+        // ИСПРАВЛЕНИЕ 2: Явно прописываем HEAD_DIM в геометрию буферов
+        let gpu_query = CudaBuffer::new(NUM_HEADS * HEAD_DIM);
         let gpu_scores = CudaBuffer::new(NUM_HEADS * CURRENT_SEQ_LEN);
-        let gpu_output = CudaBuffer::new(NUM_HEADS * 2);
+        let gpu_output = CudaBuffer::new(NUM_HEADS * HEAD_DIM);
 
-        gpu_query.copy_from_host_async(&vec![1.0, 1.0, 1.0, 1.0], &stream);
+        // ИСПРАВЛЕНИЕ 3: Явно размечаем f32 для Query вектора
+        gpu_query.copy_from_host_async(&vec![1.0f32, 1.0, 1.0, 1.0], &stream);
 
         // 4. Проверяем работу трехстадийного вычислительного конвейера на реальных типах
         attention.compute_attention_scores(&gpu_scores, &gpu_query, &kv_view, &stream);
@@ -223,19 +223,14 @@ mod tests {
         attention.forward_values(&gpu_output, &gpu_scores, &kv_view, &stream);
 
         // Скачиваем результат на CPU
-        let mut host_output = vec![0.0f32; NUM_HEADS * 2];
+        let mut host_output = vec![0.0f32; NUM_HEADS * HEAD_DIM];
         gpu_output.copy_to_host_async(&mut host_output, &stream);
 
         stream.synchronize();
 
         // Финальные ассерты
-        assert_eq!(host_output.len(), NUM_HEADS * 2);
-        assert!(
-            host_output.iter().any(|&x| x != 0.0f32),
-            "Выходы внимания занулились!"
-        );
-        println!(
-            "[ЮНИТ-ТЕСТ УСПЕШЕН] Декомпозированный асинхронный SelfAttention на реальном кэше работает идеально."
-        );
+        assert_eq!(host_output.len(), NUM_HEADS * HEAD_DIM);
+        assert!(host_output.iter().any(|&x| x != 0.0f32), "Выходы внимания занулились!");
+        println!("[ЮНИТ-ТЕСТ УСПЕШЕН] Декомпозированный асинхронный SelfAttention на реальном кэше работает идеально.");
     }
 }

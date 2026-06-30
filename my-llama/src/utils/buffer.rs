@@ -278,13 +278,12 @@ mod tests {
     #[test]
     fn test_cuda_buffer_slicing_async() {
         let parent = CudaBuffer::new(6);
-        let host_data = vec![10.0, 20.0, 30.0, 40.0, 50.0, 60.0];
+        let host_data = vec![10.0f32, 20.0, 30.0, 40.0, 50.0, 60.0];
         let mut host_slice_check = vec![0.0f32; 3];
 
         let stream = CudaStream::new();
         parent.copy_from_host_async(&host_data, &stream);
 
-        // Создаем слайс: берем 3 элемента, начиная со 2-го индекса (30.0, 40.0, 50.0)
         let child_slice = parent.slice(2, 3);
 
         assert_eq!(child_slice.len(), 3, "Размер слайса должен быть равен 3");
@@ -322,7 +321,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Размер данных не совпадает")]
+    #[should_panic(expected = "Размер передаваемых данных в байтах не совпадает")]
     fn test_cuda_buffer_bounds_check_async() {
         let buffer = CudaBuffer::new(10);
         let invalid_data = vec![1.0f32; 5];

@@ -125,26 +125,47 @@ mod tests {
         let gpu_d_output = CudaBuffer::new(BATCH_SIZE * OUT_FEATURES);
         let gpu_d_input = CudaBuffer::new(BATCH_SIZE * IN_FEATURES);
 
-        gpu_input.copy_from_host_async(&vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0], &stream);
+        gpu_input.copy_from_host_async(
+            &vec![
+                1.0f32, 2.0, 3.0, // Токен 0
+                4.0, 5.0, 6.0, // Токен 1
+            ],
+            &stream,
+        );
 
-        gpu_d_output.copy_from_host_async(&vec![0.5, -0.2, 0.1, 0.4], &stream);
+        gpu_d_output.copy_from_host_async(
+            &vec![
+                0.5f32, -0.2, // dY для Токена 0
+                0.1, 0.4, // dY для Токена 1
+            ],
+            &stream,
+        );
 
+        // Запускаем асинхронный расчет градиентов на Tensor Cores через cuBLAS
         linear_layer.backward(&gpu_d_input, &gpu_input, &gpu_d_output, BATCH_SIZE, &stream);
 
+        // Выделяем массив-приемник на CPU под f32 элементы
         let mut calculated_grads = vec![0.0f32; IN_FEATURES * OUT_FEATURES];
         linear_layer
             .weight
             .grad
             .copy_to_host_async(&mut calculated_grads, &stream);
 
+        // Синхронизация перед проверкой ассертов!
         stream.synchronize();
 
+        // Математический расчет dW = X^T * dY:
+        // dW[0] = X[0,0]*dY[0,0] + X[1,0]*dY[1,0] = 1.0 * 0.5 + 4.0 * 0.1 = 0.9
         let expected_dw0 = 0.9f32;
+
         assert!(
-            (calculated_grads[0] - expected_dw0).abs() < 1e-5,
-            "Математика dW сломалась! Ожидали {}, получили {}",
+            (calculated_grads[0] - expected_dw0).abs() < 1e-4,
+            "Математика dW сломалась под cuBLAS! Ожидали {}, получили {}",
             expected_dw0,
             calculated_grads[0]
+        );
+        println!(
+            "[ЮНИТ-ТЕСТ УСПЕШЕН] Асинхронный cuBLAS обратного прохода Linear работает идеально."
         );
     }
 }

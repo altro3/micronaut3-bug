@@ -46,6 +46,11 @@ pub fn calculate_loss(
     }
 }
 
+// src/models/loss.rs
+
+// =========================================================================
+// ИЗОЛИРОВАННЫЙ АСИНХРОННЫЙ ЮНИТ-ТЕСТ МАТЕМАТИКИ LOSS ФУНКЦИИ
+// =========================================================================
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -62,9 +67,11 @@ mod tests {
         let mut gpu_d_logits = CudaBuffer::new(NUM_TOKENS * VOCAB_SIZE);
         let mut gpu_losses = CudaBuffer::new(NUM_TOKENS);
 
-        gpu_logits.copy_from_host_async(&vec![1.5, 1.5, 1.5, 1.5], &stream);
+        // ИСПРАВЛЕНИЕ 1: Явно размечаем тип f32 для логитов модели
+        gpu_logits.copy_from_host_async(&vec![1.5f32, 1.5, 1.5, 1.5], &stream);
         gpu_targets.copy_from_host_async(&vec![0, 1], &stream);
 
+        // Запускаем расчет лосса в асинхронном стриме
         calculate_loss(
             &gpu_logits,
             &gpu_targets,
@@ -81,6 +88,7 @@ mod tests {
         gpu_losses.copy_to_host_async(&mut host_losses, &stream);
         gpu_d_logits.copy_to_host_async(&mut host_d_logits, &stream);
 
+        // Точка синхронизации перед проверкой ассертов
         stream.synchronize();
 
         let expected_loss = std::f32::consts::LN_2;
@@ -93,7 +101,8 @@ mod tests {
             "Ошибка в расчете лосса Токена 1"
         );
 
-        let expected_gradients = vec![-0.5, 0.5, 0.5, -0.5];
+        // ИСПРАВЛЕНИЕ 2: Проверяем градиенты строго через дельту допуска .abs() < 1e-5
+        let expected_gradients = vec![-0.5f32, 0.5, 0.5, -0.5];
         for i in 0..(NUM_TOKENS * VOCAB_SIZE) {
             assert!(
                 (host_d_logits[i] - expected_gradients[i]).abs() < 1e-5,
