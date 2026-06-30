@@ -1,24 +1,19 @@
 use crate::utils::PinnedHostBuffer;
-use base64::{prelude::BASE64_STANDARD, Engine};
+use serde_json::{from_reader, Value};
 use std::collections::HashMap;
 use std::fs::File;
-use std::io::{BufRead, BufReader};
-
-#[derive(Clone, Copy, Debug)]
-struct BpeNode {
-    val: u8,
-    prev: i32,
-    next: i32,
-}
+use std::io::{BufReader, Error, ErrorKind};
 
 pub struct BpeTokenizer {
-    ranks: HashMap<(u8, u8), u32>,
     encoder: HashMap<Vec<u8>, u32>,
     decoder: HashMap<u32, Vec<u8>>,
+    ranks: HashMap<Vec<u8>, u32>,
     pub eos_token_id: u32,
 }
 
 impl BpeTokenizer {
+    
+    /// Для тестов
     pub fn new_micro() -> Self {
         let mut encoder = HashMap::new();
         let mut decoder = HashMap::new();
@@ -28,199 +23,185 @@ impl BpeTokenizer {
             let bytes = vec![b];
             let id = b as u32;
             encoder.insert(bytes.clone(), id);
-            decoder.insert(id, bytes);
+            decoder.insert(id, bytes.clone());
+            ranks.insert(bytes, id);
         }
 
-        let eos_bytes = b"[EOS]".to_vec();
         let eos_id = 256;
+        let eos_bytes = b"<|endoftext|>".to_vec();
         encoder.insert(eos_bytes.clone(), eos_id);
-        decoder.insert(eos_id, eos_bytes);
+        decoder.insert(eos_id, eos_bytes.clone());
+        ranks.insert(eos_bytes, eos_id);
 
-        let mut current_id = 257;
-        let mut rank_counter = 0;
-        let mut add_bpe_merge = |b1: u8, b2: u8| {
-            ranks.insert((b1, b2), rank_counter);
-            rank_counter += 1;
-
-            let merged_bytes = vec![b1, b2];
-            if !encoder.contains_key(&merged_bytes) {
-                encoder.insert(merged_bytes.clone(), current_id);
-                decoder.insert(current_id, merged_bytes);
-                current_id += 1;
-            }
+        let mut add_bpe_merge = |bytes: Vec<u8>, id: u32| {
+            encoder.insert(bytes.clone(), id);
+            decoder.insert(id, bytes.clone());
+            ranks.insert(bytes, id);
         };
 
-        add_bpe_merge(208, 191);
-        add_bpe_merge(209, 128);
+        add_bpe_merge(vec![208, 191], 257); // 'п'
+        add_bpe_merge(vec![209, 128], 258); // 'р'
+        add_bpe_merge(vec![208, 191, 209, 128], 259); // 'пр'
 
         BpeTokenizer {
-            ranks,
             encoder,
             decoder,
+            ranks,
             eos_token_id: eos_id,
         }
     }
 
     pub fn from_file(file_path: &str) -> std::io::Result<Self> {
-        let mut encoder = HashMap::new();
-        let mut decoder = HashMap::new();
-        let mut ranks = HashMap::new();
         let file = File::open(file_path)?;
         let reader = BufReader::new(file);
 
+        // Читаем и парсим структуру JSON
+        let json_data: Value = from_reader(reader)
+            .map_err(|e| Error::new(ErrorKind::InvalidData, e))?;
+
+        let mut encoder = HashMap::new();
+        let mut decoder = HashMap::new();
+        let mut ranks = HashMap::new();
+
+        // В Qwen3.5 токены лежат по пути: json["model"]["vocab"]
+        let vocab = json_data["model"]["vocab"].as_object().ok_or_else(|| {
+            Error::new(
+                ErrorKind::NotFound,
+                "Не найден блок 'model.vocab' в tokenizer.json",
+            )
+        })?;
+
         let mut max_id = 0;
 
-        for line in reader.lines() {
-            let line = line?;
-            if line.is_empty() {
-                continue;
-            }
-
-            let parts: Vec<&str> = line.split_whitespace().collect();
-            if parts.len() != 2 {
-                continue;
-            }
-
-            let token_bytes = BASE64_STANDARD
-                .decode(parts[0])
-                .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
-
-            let id = parts[1]
-                .parse::<u32>()
-                .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+        for (token_str, id_val) in vocab {
+            let id = id_val.as_u64().ok_or_else(|| {
+                Error::new(ErrorKind::InvalidData, "Неверный формат ID токена")
+            })? as u32;
 
             if id > max_id {
                 max_id = id;
             }
 
+            let token_bytes = token_str.as_bytes().to_vec();
+
             encoder.insert(token_bytes.clone(), id);
             decoder.insert(id, token_bytes.clone());
+            ranks.insert(token_bytes, id);
+        }
 
-            if token_bytes.len() == 2 {
-                let pair = (token_bytes[0], token_bytes[1]);
-                ranks.insert(pair, id);
+        let mut eos_id = 151643;
+        if let Some(added_tokens) = json_data["added_tokens"].as_array() {
+            for token in added_tokens {
+                if token["content"].as_str() == Some("<|endoftext|>") {
+                    if let Some(id) = token["id"].as_u64() {
+                        eos_id = id as u32;
+                    }
+                }
             }
         }
 
-        let eos_id = max_id + 1;
-        let eos_bytes = b"<|endoftext|>".to_vec();
-        encoder.insert(eos_bytes.clone(), eos_id);
-        decoder.insert(eos_id, eos_bytes);
-
         println!(
-            "Успешно загружен словарь Tiktoken! Всего токенов: {}",
-            encoder.len()
+            "[УСПЕШНО] Загружен оригинальный словарь Qwen. Всего токенов: {}, EOS ID: {}",
+            encoder.len(),
+            eos_id
         );
 
         Ok(BpeTokenizer {
-            ranks,
             encoder,
             decoder,
+            ranks,
             eos_token_id: eos_id,
         })
     }
 
-    fn bpe_merge_flat(&self, raw_bytes: &[u8]) -> Vec<Vec<u8>> {
-        if raw_bytes.is_empty() {
-            return Vec::new();
+    pub fn encode_to_pinned(&self, text: &str, pinned_dst: &mut PinnedHostBuffer) -> usize {
+        let slice = pinned_dst.as_slice_mut();
+        if text.is_empty() {
+            if slice.len() > 0 {
+                slice[0] = self.eos_token_id as f32;
+                return 1;
+            }
+            return 0;
         }
 
-        let mut nodes: Vec<BpeNode> = raw_bytes
-            .iter()
-            .enumerate()
-            .map(|(i, &b)| BpeNode {
-                val: b,
-                prev: i as i32 - 1,
-                next: if i == raw_bytes.len() - 1 {
-                    -1
-                } else {
-                    i as i32 + 1
-                },
-            })
-            .collect();
+        let raw_bytes = text.as_bytes();
+        let mut byte_parts = [0usize; 2048];
+        let mut parts_len = 0;
+
+        for i in 0..=raw_bytes.len() {
+            if parts_len >= byte_parts.len() {
+                break;
+            }
+            byte_parts[parts_len] = i;
+            parts_len += 1;
+        }
 
         loop {
-            let mut best_pair = None;
-            let mut min_rank = u32::MAX;
-            let mut curr_idx = 0;
-
-            while curr_idx != -1 {
-                let next_idx = nodes[curr_idx as usize].next;
-                if next_idx != -1 {
-                    let b1 = nodes[curr_idx as usize].val;
-                    let next_node = &nodes[next_idx as usize];
-
-                    let pair = (b1, next_node.val);
-                    if let Some(&rank) = self.ranks.get(&pair) {
-                        if rank < min_rank {
-                            min_rank = rank;
-                            best_pair = Some((curr_idx, next_idx));
-                        }
-                    }
-                }
-                curr_idx = nodes[curr_idx as usize].next;
+            if parts_len <= 2 {
+                break;
             }
 
-            if let Some((left_idx, right_idx)) = best_pair {
-                let far_next = nodes[right_idx as usize].next;
-                nodes[left_idx as usize].next = far_next;
-                if far_next != -1 {
-                    nodes[far_next as usize].prev = left_idx;
+            let mut min_rank = u32::MAX;
+            let mut best_pair_idx = None;
+
+            for i in 0..(parts_len - 2) {
+                let start = byte_parts[i];
+                let end = byte_parts[i + 2];
+                let slice_bytes = &raw_bytes[start..end];
+
+                if let Some(&rank) = self.ranks.get(slice_bytes) {
+                    if rank < min_rank {
+                        min_rank = rank;
+                        best_pair_idx = Some(i);
+                    }
                 }
+            }
+
+            if let Some(idx) = best_pair_idx {
+                for j in (idx + 1)..(parts_len - 1) {
+                    byte_parts[j] = byte_parts[j + 1];
+                }
+                parts_len -= 1;
             } else {
                 break;
             }
         }
 
-        // Собираем финальные байтовые куски
-        let mut result = Vec::new();
-        let mut curr = 0;
-        while curr != -1 {
-            result.push(vec![nodes[curr as usize].val]);
-            curr = nodes[curr as usize].next;
-        }
-        result
-    }
+        let mut token_count = 0;
+        for i in 0..(parts_len - 1) {
+            if token_count >= slice.len() {
+                eprintln!("Критическая ошибка: Pinned буфер хоста слишком мал!");
+                break;
+            }
 
-    pub fn encode(&self, text: &str) -> Vec<u32> {
-        let mut final_token_ids = Vec::new();
-        if text.is_empty() {
-            final_token_ids.push(self.eos_token_id);
-            return final_token_ids;
-        }
+            let start = byte_parts[i];
+            let end = byte_parts[i + 1];
+            let token_bytes = &raw_bytes[start..end];
 
-        let raw_bytes = text.as_bytes();
-        let merged_parts = self.bpe_merge_flat(raw_bytes);
-
-        for part in merged_parts {
-            if let Some(&id) = self.encoder.get(&part) {
-                final_token_ids.push(id);
+            if let Some(&id) = self.encoder.get(token_bytes) {
+                slice[token_count] = id as f32;
+                token_count += 1;
             }
         }
 
-        final_token_ids.push(self.eos_token_id);
-        final_token_ids
+        if token_count < slice.len() {
+            slice[token_count] = self.eos_token_id as f32;
+            token_count += 1;
+        }
+
+        token_count
     }
 
-    pub fn encode_to_pinned(&self, text: &str, pinned_dst: &mut PinnedHostBuffer) -> usize {
-        if text.is_empty() {
-            pinned_dst.as_slice_mut()[0] = self.eos_token_id as f32;
-            return 1;
+    pub fn encode(&self, text: &str) -> Vec<u32> {
+        let mut dummy_buffer = PinnedHostBuffer::new(text.len() + 2);
+        let count = self.encode_to_pinned(text, &mut dummy_buffer);
+
+        let slice = dummy_buffer.as_slice_mut();
+        let mut result = Vec::with_capacity(count);
+        for i in 0..count {
+            result.push(slice[i] as u32);
         }
-
-        let token_ids = self.encode(text);
-        let slice = pinned_dst.as_slice_mut();
-
-        assert!(
-            token_ids.len() <= slice.len(),
-            "Критическая ошибка: Pinned буфер хоста слишком мал!"
-        );
-
-        for (i, &id) in token_ids.iter().enumerate() {
-            // Записываем ID как f32 (так как наши CudaBuffer общие для логитов)
-            slice[i] = id as f32;
-        }
-        token_ids.len()
+        result
     }
 
     pub fn decode(&self, ids: &[u32]) -> String {
@@ -228,7 +209,6 @@ impl BpeTokenizer {
 
         for &id in ids {
             if id == self.eos_token_id {
-                byte_buffer.extend_from_slice(b"<|endoftext|>");
                 continue;
             }
             if let Some(bytes) = self.decoder.get(&id) {
@@ -254,7 +234,7 @@ mod tests {
         assert_eq!(*ids.last().unwrap(), tokenizer.eos_token_id);
 
         let decoded = tokenizer.decode(&ids);
-        assert!(decoded.contains("привет") || decoded.contains("<|endoftext|>"));
+        assert!(decoded.contains("привет"));
     }
 
     #[test]

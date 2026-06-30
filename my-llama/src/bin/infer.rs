@@ -1,11 +1,12 @@
-use my_llama::models::block::TransformerBlock;
 use my_llama::models::kv_cache::KvCacheManager;
+use my_llama::models::{KvCache, LlamaModel};
 use my_llama::token::BpeTokenizer;
-use my_llama::utils::{CudaBuffer, CudaStream};
+use my_llama::utils::safetensors::SafeTensorLoader;
+use my_llama::utils::{CudaBuffer, CudaStream, PinnedHostBuffer};
 use std::ffi::c_void;
+use std::io::{stdout, Write};
 
 unsafe extern "C" {
-    // Подключаем ультимативную асинхронную сигнатуру ArgMax со стримом
     fn launch_argmax(
         output_index: *mut i32,
         logits: *const f32,
@@ -14,149 +15,148 @@ unsafe extern "C" {
     );
 }
 
-fn main() {
-    println!("=== УЛЬТИМАТИВНЫЙ АСИНХРОННЫЙ ДВИЖОК ИНФЕРЕНСА (Tensor Cores) ===");
+fn main() -> std::io::Result<()> {
+    println!("=================================================================");
+    println!("    ЗАПУСК ПРОДАКШЕН ДВИЖКА ИНФЕРЕНСА (Qwen3.5-2B на GPU)        ");
+    println!("=================================================================");
 
-    // 1. Аппаратный прогрев cuBLAS
     my_llama::init_framework();
 
-    const BATCH_SIZE: usize = 1;
-    const HIDDEN_SIZE: usize = 4;
-    const NUM_HEADS: usize = 2;
-    const NUM_KV_HEADS: usize = 1;
-    const HIDDEN_FEATURES: usize = 6;
-    const MAX_SEQ_LEN: usize = 32;
-    const VOCAB_SIZE: usize = 260;
+    const NUM_LAYERS: usize = 24;
+    const HIDDEN_SIZE: usize = 2048;
+    const NUM_HEADS: usize = 16;
+    const NUM_KV_HEADS: usize = 2;
+    const HIDDEN_FEATURES: usize = 5504;
+    const VOCAB_SIZE: usize = 248320;
+    const MAX_SEQ_LEN: usize = 512;
 
-    // Инициализируем неблокирующую очередь команд для GPU
     let stream = CudaStream::new();
-    let tokenizer = BpeTokenizer::new_micro();
 
-    let prompt = "привет";
-    println!("Пользователь ввел: \"{}\"", prompt);
+    let tokenizer = BpeTokenizer::from_file("tokenizer.json")
+        .expect("Критическая ошибка: Не удалось загрузить оригинальный tokenizer.json для Qwen");
 
-    let mut input_ids = tokenizer.encode(prompt);
-    if input_ids.last() == Some(&tokenizer.eos_token_id) {
-        input_ids.pop();
-    }
-    println!("Стартовые ID токенов: {:?}", input_ids);
-
-    // =========================================================================
-    // ВЫДЕЛЕНИЕ ПАМЯТИ ПРИ СТАРТЕ (0 аллокаций в рантайме)
-    // =========================================================================
-    let mut kv_manager = KvCacheManager::new(MAX_SEQ_LEN, HIDDEN_SIZE);
-    let transformer_block = TransformerBlock::new(
+    let model = LlamaModel::new(
         HIDDEN_SIZE,
         NUM_HEADS,
         NUM_KV_HEADS,
         HIDDEN_FEATURES,
+        NUM_LAYERS,
+        VOCAB_SIZE,
         &stream,
     );
 
-    // Рассчитываем и выделяем единый Workspace-черновик для внутренних слоев TransformerBlock
-    let req_workspace_elements =
-        transformer_block.required_workspace_elements(BATCH_SIZE, MAX_SEQ_LEN);
-    let gpu_workspace = CudaBuffer::new(req_workspace_elements);
+    let loader = SafeTensorLoader::open("model.safetensors")?;
 
-    // Постоянные буферы-переменные для генерации (выделены ДО горячего цикла)
-    let current_x = CudaBuffer::new(HIDDEN_SIZE);
-    let logits_buffer = CudaBuffer::new(VOCAB_SIZE);
+    println!("\n--- ЗАГРУЗКА ВЕСОВ МОДЕЛИ ---");
+    model.load_weights(&loader, &stream)?;
 
-    // Безопасный, обернутый в CudaBuffer интеджер под результат ArgMax
+    // Выделяем память под рабочие буферы
+    let req_elements = model.required_workspace_elements(1, MAX_SEQ_LEN);
+    let gpu_workspace = CudaBuffer::new(req_elements + HIDDEN_SIZE * 4);
+    let gpu_logits = CudaBuffer::new(VOCAB_SIZE);
     let gpu_next_token_idx = CudaBuffer::new_int(1);
 
-    let dummy_k = CudaBuffer::new(HIDDEN_SIZE);
-    let dummy_v = CudaBuffer::new(HIDDEN_SIZE);
+    let mut pinned_prompt_buffer = PinnedHostBuffer::new(MAX_SEQ_LEN);
 
-    // Имитируем заполнение кэша для стартового промпта
-    dummy_k.copy_from_host_async(&vec![1.0f32; HIDDEN_SIZE], &stream);
-    dummy_v.copy_from_host_async(&vec![1.0f32; HIDDEN_SIZE], &stream);
-    for _ in 0..input_ids.len() {
-        kv_manager.append_async(&dummy_k, &dummy_v, &stream);
+    let kv_managers: Vec<KvCacheManager> = (0..NUM_LAYERS)
+        .map(|_| KvCacheManager::new(MAX_SEQ_LEN, HIDDEN_SIZE))
+        .collect();
+
+    let prompt = "Привет, как твои дела?";
+    println!("\nПользователь ввел: \"{}\"", prompt);
+
+    let prompt_tokens_len = tokenizer.encode_to_pinned(prompt, &mut pinned_prompt_buffer);
+
+    let mut input_ids = Vec::with_capacity(prompt_tokens_len);
+    let pinned_slice = pinned_prompt_buffer.as_slice_mut();
+    for i in 0..prompt_tokens_len {
+        input_ids.push(pinned_slice[i] as u32);
     }
+    println!("Токенизированные стартовые ID Qwen: {:?}", input_ids);
 
-    println!("\n--- СТАРТ АВТОРЕГРЕССИВНОЙ ГЕНЕРАЦИИ ---");
+    println!("\n--- СТАРТ АВТОРЕГРЕССИВНОЙ ГЕНЕРАЦИИ ТОКЕНОВ НА ТЕНЗОРНЫХ ЯДРАХ ---");
 
     let mut generated_tokens = Vec::new();
-
-    // Массивы-приемники на CPU для асинхронного считывания (0 аллокаций в цикле)
     let mut host_token_result = vec![0; 1];
-    let mut mock_logits = vec![-100.0f32; VOCAB_SIZE];
 
-    for step in 0..5 {
-        let last_token = *input_ids.last().unwrap();
+    {
+        let mut kv_views: Vec<KvCache> = kv_managers.iter().map(|m| m.get_view()).collect();
 
-        // Асинхронно закидываем последний сгенерированный токен на вход
-        current_x.copy_from_host_async(&vec![last_token as f32; HIDDEN_SIZE], &stream);
+        model.forward(
+            &input_ids,
+            &mut kv_views,
+            &gpu_workspace,
+            &gpu_logits,
+            &stream,
+        );
 
-        // Получаем легковесный взгляд на заполненную часть кэша за 0 наносекунд
-        let kv_view = kv_manager.get_view();
-
-        // Прогоняем весь блок трансформера в асинхронном стриме без аллокаций
-        transformer_block.forward(&current_x, &kv_view, BATCH_SIZE, &gpu_workspace, &stream);
-
-        // Имитируем выходные логиты языковой модели (Mock логики классификации)
-        let next_mock_id = match step {
-            0 => 208, // 'п'
-            1 => 159, // 'П'
-            2 => 209, // 'р'
-            3 => 128, // 'р' часть 2
-            _ => tokenizer.eos_token_id,
-        };
-
-        // Зануляем старый топ-логит и выставляем новый
-        if step > 0 {
-            let prev_mock_id = match step - 1 {
-                0 => 208,
-                1 => 159,
-                2 => 209,
-                3 => 128,
-                _ => 0,
-            };
-            mock_logits[prev_mock_id] = -100.0f32;
-        }
-        mock_logits[next_mock_id as usize] = 50.0f32;
-
-        // Асинхронно загружаем логиты на GPU
-        logits_buffer.copy_from_host_async(&mock_logits, &stream);
-
-        // Запускаем асинхронный ArgMax для выбора лучшего токена в стриме
         unsafe {
             launch_argmax(
                 gpu_next_token_idx.as_raw_ptr() as *mut i32,
-                logits_buffer.as_raw_ptr() as *const f32,
+                gpu_logits.as_raw_ptr() as *const f32,
                 VOCAB_SIZE as i32,
                 stream.as_raw(),
             );
         }
 
-        // Асинхронно скачиваем ID выбранного токена обратно на хост
         gpu_next_token_idx.copy_to_host_async(&mut host_token_result, &stream);
-
-        // Единственная точка синхронизации процессора за весь такт генерации!
         stream.synchronize();
+    }
 
-        let next_token_id = host_token_result[0] as u32;
+    let mut next_token_id = host_token_result[0] as u32;
+    if next_token_id != tokenizer.eos_token_id {
+        generated_tokens.push(next_token_id);
+        let token_text = tokenizer.decode(&[next_token_id]);
+        print!("{}", token_text);
+        Write::flush(&mut stdout())?;
+    }
 
+    for _ in 0..30 {
         if next_token_id == tokenizer.eos_token_id {
+            print!("[EOS]");
             break;
         }
 
-        input_ids.push(next_token_id);
+        let current_step_input = vec![next_token_id];
+
+        let mut kv_views: Vec<KvCache> = kv_managers.iter().map(|m| m.get_view()).collect();
+
+        model.forward(
+            &current_step_input,
+            &mut kv_views,
+            &gpu_workspace,
+            &gpu_logits,
+            &stream,
+        );
+
+        unsafe {
+            launch_argmax(
+                gpu_next_token_idx.as_raw_ptr() as *mut i32,
+                gpu_logits.as_raw_ptr() as *const f32,
+                VOCAB_SIZE as i32,
+                stream.as_raw(),
+            );
+        }
+
+        gpu_next_token_idx.copy_to_host_async(&mut host_token_result, &stream);
+        stream.synchronize();
+
+        next_token_id = host_token_result[0] as u32;
+
+        if next_token_id == tokenizer.eos_token_id {
+            print!("[EOS]");
+            break;
+        }
+
         generated_tokens.push(next_token_id);
 
-        // Асинхронно обновляем KV-кэш контекста для следующего шага
-        dummy_k.copy_from_host_async(&vec![0.5f32; HIDDEN_SIZE], &stream);
-        dummy_v.copy_from_host_async(&vec![0.5f32; HIDDEN_SIZE], &stream);
-
-        if !kv_manager.is_full() {
-            kv_manager.append_async(&dummy_k, &dummy_v, &stream);
-        }
+        let token_text = tokenizer.decode(&[next_token_id]);
+        print!("{}", token_text);
+        Write::flush(&mut stdout())?;
     }
 
-    let final_generated_text = tokenizer.decode(&generated_tokens);
-    println!("{}{}[EOS]", prompt, final_generated_text);
-
-    println!("\n--- ГЕНЕРАЦИЯ ЗАВЕРШЕНА ПО СИГНАЛУ [EOS] ---");
-    // Больше никакого небезопасного cudaFree вручную! RAII полностью очистит буферы.
+    println!("\n-----------------------------------------------------------------");
+    println!("[УСПЕХ] Инференс реальной Qwen3.5-2B успешно выполнен на видеокарте!");
+    println!("=================================================================");
+    Ok(())
 }

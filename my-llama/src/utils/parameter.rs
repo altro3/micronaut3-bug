@@ -1,4 +1,4 @@
-use crate::utils::buffer::{CudaBuffer, CudaStream};
+use crate::utils::{CudaBuffer, CudaStream};
 
 pub struct Parameter {
     pub data: CudaBuffer,
@@ -32,6 +32,7 @@ impl Parameter {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::utils::CudaStream;
 
     #[test]
     fn test_parameter_gradient_zeroing_async() {

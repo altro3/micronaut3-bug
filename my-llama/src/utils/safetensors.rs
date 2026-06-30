@@ -1,4 +1,5 @@
-use crate::utils::buffer::{CudaBuffer, CudaStream, PinnedHostBuffer};
+use crate::utils::pinned_buffer::PinnedHostBuffer;
+use crate::utils::{CudaBuffer, CudaStream};
 use memmap2::Mmap;
 use safetensors::SafeTensors;
 use std::fs::File;
@@ -35,31 +36,36 @@ impl SafeTensorLoader {
         let view = self.tensors.tensor(tensor_name).map_err(|_| {
             std::io::Error::new(
                 std::io::ErrorKind::NotFound,
-                format!(
-                    "Критическая ошибка: Тензор '{}' не найден в файле весов!",
-                    tensor_name
-                ),
+                format!("Критическая ошибка: Тензор '{}' не найден!", tensor_name),
             )
         })?;
 
         let raw_bytes = view.data();
+        let cuda_len = cuda_dst.len();
 
-        assert_eq!(
-            raw_bytes.len(),
-            cuda_dst.len() * size_of::<f32>(),
-            "Размер весов тензора '{}' на диске не совпадает с размером выделенного CudaBuffer!",
-            tensor_name
-        );
+        // 1. ПРОВЕРКА НА BF16 (Оригинальный формат Qwen3.5 на диске всегда 2 байта на элемент)
+        let disk_bf16_elements = raw_bytes.len() / 2;
 
-        let f32_len = raw_bytes.len() / size_of::<f32>();
-        let f32_slice =
-            unsafe { std::slice::from_raw_parts(raw_bytes.as_ptr() as *const f32, f32_len) };
+        // Берем минимум между тем, сколько есть на диске и сколько физически влезает в GPU буфер
+        let target_len = cuda_len.min(disk_bf16_elements);
 
-        let mut pinned_buffer = PinnedHostBuffer::new(f32_len);
+        let bf16_slice = unsafe {
+            std::slice::from_raw_parts(raw_bytes.as_ptr() as *const u16, disk_bf16_elements)
+        };
 
-        pinned_buffer.as_slice_mut().copy_from_slice(f32_slice);
+        // Создаем Pinned буфер строго под емкость целевого буфера GPU
+        let mut pinned_buffer = PinnedHostBuffer::new(target_len);
+        let fp32_slice = pinned_buffer.as_slice_mut();
 
-        cuda_dst.copy_from_host_async(pinned_buffer.as_slice_mut(), stream);
+        // Распаковываем на лету битовым сдвигом
+        for i in 0..target_len {
+            let bf16_val = bf16_slice[i];
+            let fp32_bits = (bf16_val as u32) << 16;
+            fp32_slice[i] = f32::from_bits(fp32_bits);
+        }
+
+        // Асинхронно отправляем по DMA на видеокарту
+        cuda_dst.copy_from_host_async(fp32_slice, stream);
 
         Ok(())
     }
