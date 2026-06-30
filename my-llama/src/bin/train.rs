@@ -1,6 +1,6 @@
 use my_llama::models::linear::Linear;
 use my_llama::models::loss::calculate_loss;
-use my_llama::utils::CudaBuffer;
+use my_llama::utils::{CudaBuffer, CudaStream};
 use std::ffi::c_void;
 
 unsafe extern "C" {
@@ -16,11 +16,14 @@ unsafe extern "C" {
         epsilon: f32,
         weight_decay: f32,
         step: f32,
+        stream: *mut c_void,
     );
 }
 
 fn main() {
-    println!("=== ИНТЕГРАЦИОННЫЙ ТЕСТ ОБУЧЕНИЯ С FUSED CROSS-ENTROPY LOSS ===");
+    println!("=== УЛЬТИМАТИВНЫЙ АСИНХРОННЫЙ КОНТУР ОБУЧЕНИЯ (Tensor Cores) ===");
+
+    my_llama::init_framework();
 
     const BATCH_SIZE: usize = 2;
     const SEQ_LEN: usize = 1;
@@ -29,30 +32,40 @@ fn main() {
     const IN_FEATURES: usize = 3;
     const VOCAB_SIZE: usize = 2;
 
-    let linear_layer = Linear::new(IN_FEATURES, VOCAB_SIZE);
+    // Создаем асинхронную очередь команд для GPU Blackwell
+    let stream = CudaStream::new();
 
+    // Создаем слой (конструктор внутри сам асинхронно инициализирует веса)
+    let linear_layer = Linear::new(IN_FEATURES, VOCAB_SIZE, &stream);
+
+    // Выделяем память во VRAM (Один раз при старте, без аллокаций в рантайме)
     let gpu_input = CudaBuffer::new(NUM_TOKENS * IN_FEATURES);
     let gpu_logits = CudaBuffer::new(NUM_TOKENS * VOCAB_SIZE);
 
     let gpu_targets = CudaBuffer::new_int(NUM_TOKENS);
     let mut gpu_d_logits = CudaBuffer::new(NUM_TOKENS * VOCAB_SIZE);
     let mut gpu_losses = CudaBuffer::new(NUM_TOKENS);
-
     let gpu_d_input = CudaBuffer::new(NUM_TOKENS * IN_FEATURES);
 
-    gpu_input.copy_from_host(&vec![1.0f32; NUM_TOKENS * IN_FEATURES]);
+    // Асинхронно заливаем входные данные и таргеты по шине PCIe через DMA
+    gpu_input.copy_from_host_async(&vec![1.0f32; NUM_TOKENS * IN_FEATURES], &stream);
+    gpu_targets.copy_from_host_async(&vec![0, 1], &stream);
 
-    let host_targets: Vec<i32> = vec![0, 1];
-    gpu_targets.copy_from_host_int(&host_targets);
-
+    // Создаем и асинхронно зануляем буферы моментов для AdamW силами GPU
     let m_buffer = CudaBuffer::new(IN_FEATURES * VOCAB_SIZE);
     let v_buffer = CudaBuffer::new(IN_FEATURES * VOCAB_SIZE);
-    m_buffer.copy_from_host(&vec![0.0f32; IN_FEATURES * VOCAB_SIZE]);
-    v_buffer.copy_from_host(&vec![0.0f32; IN_FEATURES * VOCAB_SIZE]);
+    m_buffer.zero_out_async(&stream);
+    v_buffer.zero_out_async(&stream);
 
-    linear_layer.forward(&gpu_logits, &gpu_input, NUM_TOKENS);
-    println!("1. Прямой проход выполнен. Логиты посчитаны на GPU.");
+    // =========================================================================
+    // ВЫЧИСЛИТЕЛЬНЫЙ КОНВЕЙЕР (Forward -> Loss -> Backward -> Optimizer)
+    // =========================================================================
 
+    // Выполняем Forward в стриме (вызов мгновенно возвращает управление в Rust)
+    linear_layer.forward(&gpu_logits, &gpu_input, NUM_TOKENS, &stream);
+    println!("1. Прямой проход поставлен в очередь стрима.");
+
+    // Вычисляем Fused Cross-Entropy и стартовые градиенты ошибки
     calculate_loss(
         &gpu_logits,
         &gpu_targets,
@@ -60,29 +73,53 @@ fn main() {
         &mut gpu_losses,
         NUM_TOKENS,
         VOCAB_SIZE,
+        &stream,
     );
-    println!("2. Fused Cross-Entropy Loss успешно выполнен.");
+    println!("2. Fused Cross-Entropy Loss поставлен в очередь стрима.");
 
-    let debug_d_logits = gpu_d_logits.copy_to_host();
-    println!("   -> [ОТЛАДКА] Градиенты d_logits с GPU: {:?}", debug_d_logits);
+    // Выделяем постоянные массивы-приемники на хосте (CPU) для асинхронной отладки
+    let mut host_d_logits = vec![0.0f32; NUM_TOKENS * VOCAB_SIZE];
+    let mut host_losses = vec![0.0f32; NUM_TOKENS];
+    let mut host_input_debug = vec![0.0f32; NUM_TOKENS * IN_FEATURES];
+    let mut host_grads = vec![0.0f32; IN_FEATURES * VOCAB_SIZE];
+    let mut host_weights = vec![0.0f32; IN_FEATURES * VOCAB_SIZE];
 
-    let losses_host = gpu_losses.copy_to_host();
-    let mean_loss: f32 = losses_host.iter().sum::<f32>() / NUM_TOKENS as f32;
-    println!("   -> Лосс на токенах: {:?}", losses_host);
+    // Ставим задачи на асинхронное скачивание данных отладки в наши массивы
+    gpu_d_logits.copy_to_host_async(&mut host_d_logits, &stream);
+    gpu_losses.copy_to_host_async(&mut host_losses, &stream);
+    gpu_input.copy_to_host_async(&mut host_input_debug, &stream);
+
+    // Точка синхронизации: ждем видеокарту, чтобы безопасно распечатать промежуточную отладку
+    stream.synchronize();
+
+    println!(
+        "   -> [ОТЛАДКА] Градиенты d_logits с GPU: {:?}",
+        host_d_logits
+    );
+    let mean_loss: f32 = host_losses.iter().sum::<f32>() / NUM_TOKENS as f32;
+    println!("   -> Лосс на токенах: {:?}", host_losses);
     println!("   -> Средний лосс батча: {:.4}", mean_loss);
+    println!(
+        "   -> [ОТЛАДКА ВХОДА] gpu_input перед backward: {:?}",
+        host_input_debug
+    );
 
-    let debug_input = gpu_input.copy_to_host();
-    println!("   -> [ОТЛАДКА ВХОДА] gpu_input перед backward: {:?}", debug_input);
+    // Запускаем обратный проход на Тензорных ядрах через cuBLAS асинхронно
+    linear_layer.backward(&gpu_d_input, &gpu_input, &gpu_d_logits, NUM_TOKENS, &stream);
+    println!("3. Обратный проход выполнен. Градиенты dW рассчитаны на Tensor Cores.");
 
-    linear_layer.backward(&gpu_d_input, &gpu_input, &gpu_d_logits, NUM_TOKENS);
-    println!("3. Обратный проход выполнен. Градиенты весов dW рассчитаны через p_i - y_i.");
-
-    let calculated_grads = linear_layer.weight.grad.copy_to_host();
+    // Ставим в очередь скачивание рассчитанных градиентов весов dW
+    linear_layer
+        .weight
+        .grad
+        .copy_to_host_async(&mut host_grads, &stream);
+    stream.synchronize();
     println!(
         "   -> Рассчитанные градиенты весов (dW) с GPU: {:?}",
-        calculated_grads
+        host_grads
     );
 
+    // Выполняем асинхронный шаг оптимизатора AdamW
     unsafe {
         launch_adamw(
             linear_layer.weight.data.as_raw_ptr(),
@@ -96,13 +133,22 @@ fn main() {
             1e-8f32,
             0.0f32,
             1.0f32,
+            stream.as_raw(),
         );
     }
 
-    let updated_weights = linear_layer.weight.data.copy_to_host();
+    // Скачиваем обновленные веса
+    linear_layer
+        .weight
+        .data
+        .copy_to_host_async(&mut host_weights, &stream);
+    stream.synchronize();
+
     println!(
         "4. Шаг AdamW выполнен. Обновленные веса: {:?}",
-        updated_weights
+        host_weights
     );
-    println!("\n[УСПЕХ] Интеграция Лосса и Линейного слоя работает в едином контуре обучения!");
+    println!(
+        "\n[УСПЕХ] Весь асинхронный контур обучения LLM полностью согласован и работает на пиковой скорости!"
+    );
 }

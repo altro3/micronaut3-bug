@@ -40,7 +40,7 @@ void launch_update_kv_cache(float *k_cache,
                             const float *new_k,
                             const float *new_v,
                             int token_index, int hidden_size,
-                            void *stream);
+                            void *stream_ptr);
 
 void launch_attention_scores(float *output_scores,
                              const float *query,

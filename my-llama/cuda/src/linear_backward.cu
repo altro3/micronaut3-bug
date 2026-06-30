@@ -1,8 +1,9 @@
+#include "kernels.h"
 #include <cuda_runtime.h>
 #include <cublas_v2.h>
 #include <stdio.h>
 
-extern cublasHandle_t global_cublas_handle;
+extern "C" cublasHandle_t get_global_cublas_handle();
 
 extern "C" {
 void launch_matmul_backward_weights(float *d_weights,
@@ -13,13 +14,15 @@ void launch_matmul_backward_weights(float *d_weights,
                                     int in_features,
                                     void *stream_ptr) {
     const auto stream = static_cast<cudaStream_t>(stream_ptr);
-    cublasSetStream(global_cublas_handle, stream);
+
+    const cublasHandle_t handle = get_global_cublas_handle();
+    cublasSetStream(handle, stream);
 
     constexpr float alpha = 1.0f;
     constexpr float beta = 0.0f;
 
     const cublasStatus_t status = cublasGemmEx(
-        global_cublas_handle,
+        handle,
         CUBLAS_OP_N,
         CUBLAS_OP_T,
         out_features,
@@ -47,13 +50,15 @@ void launch_matmul_backward_input(float *d_input,
                                   int in_features,
                                   void *stream_ptr) {
     const auto stream = static_cast<cudaStream_t>(stream_ptr);
-    cublasSetStream(global_cublas_handle, stream);
+
+    const cublasHandle_t handle = get_global_cublas_handle();
+    cublasSetStream(handle, stream);
 
     constexpr float alpha = 1.0f;
     constexpr float beta = 0.0f;
 
     const cublasStatus_t status = cublasGemmEx(
-        global_cublas_handle,
+        handle,
         CUBLAS_OP_T,
         CUBLAS_OP_N,
         in_features,
@@ -69,7 +74,7 @@ void launch_matmul_backward_input(float *d_input,
     );
 
     if (status != CUBLAS_STATUS_SUCCESS) {
-        fprintf(stderr, "Ошибка cuBLAS GemmEx в backward_input! Код: %d\n", status);
+        fprintf(stderr, "Ошибка cuBLAS GemmEx in backward_input! Код: %d\n", status);
     }
 }
 }

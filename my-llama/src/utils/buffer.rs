@@ -28,7 +28,7 @@ unsafe extern "C" {
 
 const CUDA_MEMCPY_HOST_TO_DEVICE: c_int = 1;
 const CUDA_MEMCPY_DEVICE_TO_HOST: c_int = 2;
-const CUDA_HOST_ALLOC_DEFAULT: u32 = 0x00;
+const _CUDA_HOST_ALLOC_DEFAULT: u32 = 0x00;
 
 pub struct CudaStream {
     raw: *mut c_void,
@@ -197,7 +197,7 @@ impl PinnedHostBuffer {
         let size_in_bytes = elements * size_of::<f32>();
         let mut raw_ptr = std::ptr::null_mut();
         unsafe {
-            if cudaHostAlloc(&mut raw_ptr, size_in_bytes, CUDA_HOST_ALLOC_DEFAULT) != 0 {
+            if cudaHostAlloc(&mut raw_ptr, size_in_bytes, _CUDA_HOST_ALLOC_DEFAULT) != 0 {
                 panic!("Не удалось выделить Pinned Memory на CPU");
             }
         }

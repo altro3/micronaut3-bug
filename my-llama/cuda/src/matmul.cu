@@ -1,3 +1,4 @@
+#include "kernels.h"
 #include <cuda_runtime.h>
 #include <cublas_v2.h>
 #include <stdio.h>
@@ -30,6 +31,13 @@ __global__ void residual_kernel(float *const input_output, const float *const re
 }
 
 extern "C" {
+cublasHandle_t get_global_cublas_handle() {
+    if (global_cublas_handle == nullptr) {
+        init_cublas_infrastructure();
+    }
+    return global_cublas_handle;
+}
+
 void launch_matmul(float *output_matrix,
                    const float *matrix_a,
                    const float *matrix_b,
