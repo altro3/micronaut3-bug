@@ -3,7 +3,7 @@ pub mod token;
 pub mod utils;
 
 unsafe extern "C" {
-    fn init_cublas_infrastructure();
+    pub fn init_cublas_infrastructure();
 }
 
 pub fn init_framework() {
@@ -11,6 +11,6 @@ pub fn init_framework() {
         init_cublas_infrastructure();
     }
     println!(
-        "[MY-LLAMA] Высокопроизводительный движок на базе асинхронной архитектуры успешно запущен."
+        "[MY-LLAMA] Высокопроизводительный движок на базе асинхронной архитектуры арен успешно запущен."
     );
 }

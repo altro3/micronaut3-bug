@@ -32,7 +32,6 @@ pub const CUDA_MEMCPY_HOST_TO_DEVICE: c_int = 1;
 pub const CUDA_MEMCPY_DEVICE_TO_HOST: c_int = 2;
 pub const CUDA_HOST_ALLOC_DEFAULT: u32 = 0x00;
 
-/// RAII-обертка над асинхронным CUDA Stream для выполнения ядер без блокировки CPU
 pub struct CudaStream {
     raw: *mut c_void,
 }

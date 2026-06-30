@@ -66,22 +66,35 @@ void launch_argmax(int *output_index, const float *logits, int vocab_size, void 
 // =========================================================================
 // Обучение и Обратный проход (Training & Backward Pass)
 // =========================================================================
-void launch_fused_cross_entropy(const float *logits,
-                                const float *losses,
-                                int num_tokens, int vocab_size,
-                                void *stream);
+void launch_fused_cross_entropy(
+    const float *logits,
+    const int *targets,
+    float *d_logits,
+    float *losses,
+    int num_tokens,
+    int vocab_size,
+    void *stream_ptr
+);
 
-void launch_matmul_backward_weights(float *d_weights,
-                                    const float *input,
-                                    const float *d_output,
-                                    int batch_size, int out_features, int in_features,
-                                    void *stream);
+void launch_matmul_backward_weights(
+    float *d_weights,
+    const float *input,
+    const float *d_output,
+    int batch_size,
+    int out_features,
+    int in_features,
+    void *stream
+);
 
-void launch_matmul_backward_input(float *d_input,
-                                  const float *d_output,
-                                  const float *weights,
-                                  int batch_size, int out_features, int in_features,
-                                  void *stream);
+void launch_matmul_backward_input(
+    float *d_input,
+    const float *d_output,
+    const float *weights,
+    int batch_size,
+    int out_features,
+    int in_features,
+    void *stream
+);
 
 void launch_adamw(float *weights,
                   float *gradients,

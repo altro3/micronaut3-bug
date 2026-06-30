@@ -1,164 +1,76 @@
-use crate::models::llama_model::LlamaModel;
-use crate::utils::safetensors::SafeTensorLoader;
-use crate::utils::{CudaStream, PinnedHostBuffer};
+use crate::models::compiler::llama::WeightSpec;
+use crate::utils::cuda_stream::cudaMemcpyAsync;
+use crate::utils::{CudaStream, Parameter};
+use memmap2::Mmap;
+use std::fs::File;
+use std::io::{Error, ErrorKind, Result};
 
-impl LlamaModel {
-    pub fn load_weights(
-        &self,
-        loader: &SafeTensorLoader,
-        stream: &CudaStream,
-    ) -> std::io::Result<()> {
-        println!(
-            "[MY-LLAMA] Начинается сквозная асинхронная заливка весов Qwen3.5-2B по PCIe DMA..."
-        );
+pub fn load_model_weights(
+    weights_path: &str,
+    weight_specs: &[WeightSpec],
+    weights: &mut [Parameter],
+    stream: &CudaStream,
+) -> Result<()> {
+    let file = File::open(weights_path)?;
+    let mmap = unsafe { Mmap::map(&file)? };
 
-        loader.load_into_buffer(
-            "model.language_model.embed_tokens.weight",
-            &self.token_embeddings,
-            stream,
-        )?;
+    println!("[LOADER] Файл весов успешно спроецирован через mmap. Размер: {} байт", mmap.len());
 
-        let q_heads = 16;
-        let kv_heads = 2;
-        let total_heads = q_heads + kv_heads + kv_heads;
+    let json_len_bytes = mmap.get(0..8)
+        .ok_or_else(|| Error::new(ErrorKind::InvalidData, "Файл слишком мал или поврежден"))?;
 
-        for (i, layer) in self.layers.iter().enumerate() {
-            let prefix = format!("model.language_model.layers.{}.", i);
+    let json_len = u64::from_le_bytes(json_len_bytes.try_into().unwrap()) as usize;
 
-            loader.load_into_buffer(
-                &format!("{}input_layernorm.weight", prefix),
-                &layer.attn_norm.weight,
-                stream,
-            )?;
-            loader.load_into_buffer(
-                &format!("{}post_attention_layernorm.weight", prefix),
-                &layer.ffn_norm.weight,
-                stream,
-            )?;
+    let json_slice = mmap.get(8..(8 + json_len))
+        .ok_or_else(|| Error::new(ErrorKind::InvalidData, "Неверный размер заголовка Safetensors"))?;
 
-            let is_delta_net = loader
-                .tensors
-                .tensor(&format!("{}linear_attn.in_proj_qkv.weight", prefix))
-                .is_ok();
+    let metadata: serde_json::Value = serde_json::from_slice(json_slice)
+        .map_err(|e| Error::new(ErrorKind::InvalidData, format!("Ошибка парсинга JSON Safetensors: {}", e)))?;
 
-            if is_delta_net {
-                let qkv_name = format!("{}linear_attn.in_proj_qkv.weight", prefix);
-                let qkv_view = loader.tensors.tensor(&qkv_name).unwrap();
-                let qkv_raw_bytes = qkv_view.data();
+    let data_start_offset = 8 + json_len;
 
-                let total_bf16_elements = qkv_raw_bytes.len() / 2;
-                let head_elements = total_bf16_elements / total_heads;
+    for (idx, spec) in weight_specs.iter().enumerate() {
+        let tensor_info = &metadata[&spec.name];
 
-                let q_cap = layer.attention.projections.w_query.len();
-                let k_cap = layer.attention.projections.w_key.len();
-
-                let q_target_len = q_cap.min(q_heads * head_elements);
-                let kv_target_len = k_cap.min(kv_heads * head_elements);
-
-                let qkv_bf16_slice = unsafe {
-                    std::slice::from_raw_parts(
-                        qkv_raw_bytes.as_ptr() as *const u16,
-                        total_bf16_elements,
-                    )
-                };
-
-                let mut pinned_q = PinnedHostBuffer::new(q_target_len);
-                let mut pinned_k = PinnedHostBuffer::new(kv_target_len);
-                let mut pinned_v = PinnedHostBuffer::new(kv_target_len);
-
-                let slice_q = pinned_q.as_slice_mut();
-                let slice_k = pinned_k.as_slice_mut();
-                let slice_v = pinned_v.as_slice_mut();
-
-                let q_offset = 0;
-                let k_offset = q_heads * head_elements;
-                let v_offset = (q_heads + kv_heads) * head_elements;
-
-                for j in 0..q_target_len {
-                    slice_q[j] = f32::from_bits((qkv_bf16_slice[q_offset + j] as u32) << 16);
-                }
-                for j in 0..kv_target_len {
-                    slice_k[j] = f32::from_bits((qkv_bf16_slice[k_offset + j] as u32) << 16);
-                    slice_v[j] = f32::from_bits((qkv_bf16_slice[v_offset + j] as u32) << 16);
-                }
-
-                layer
-                    .attention
-                    .projections
-                    .w_query
-                    .copy_from_host_async(slice_q, stream);
-                layer
-                    .attention
-                    .projections
-                    .w_key
-                    .copy_from_host_async(slice_k, stream);
-                layer
-                    .attention
-                    .projections
-                    .w_value
-                    .copy_from_host_async(slice_v, stream);
-
-                loader.load_into_buffer(
-                    &format!("{}linear_attn.out_proj.weight", prefix),
-                    &layer.attention.projections.w_out,
-                    stream,
-                )?;
-            } else {
-                loader.load_into_buffer(
-                    &format!("{}self_attn.q_proj.weight", prefix),
-                    &layer.attention.projections.w_query,
-                    stream,
-                )?;
-                loader.load_into_buffer(
-                    &format!("{}self_attn.k_proj.weight", prefix),
-                    &layer.attention.projections.w_key,
-                    stream,
-                )?;
-                loader.load_into_buffer(
-                    &format!("{}self_attn.v_proj.weight", prefix),
-                    &layer.attention.projections.w_value,
-                    stream,
-                )?;
-                loader.load_into_buffer(
-                    &format!("{}self_attn.o_proj.weight", prefix),
-                    &layer.attention.projections.w_out,
-                    stream,
-                )?;
-            }
-
-            loader.load_into_buffer(
-                &format!("{}mlp.gate_proj.weight", prefix),
-                &layer.mlp.w_gate,
-                stream,
-            )?;
-            loader.load_into_buffer(
-                &format!("{}mlp.up_proj.weight", prefix),
-                &layer.mlp.w_up,
-                stream,
-            )?;
-            loader.load_into_buffer(
-                &format!("{}mlp.down_proj.weight", prefix),
-                &layer.mlp.w_down,
-                stream,
-            )?;
+        if tensor_info.is_null() {
+            return Err(Error::new(
+                ErrorKind::NotFound,
+                format!("Критическая ошибка: Тензор '{}' не найден в файле модели!", spec.name)
+            ));
         }
 
-        loader.load_into_buffer(
-            "model.language_model.norm.weight",
-            &self.norm.weight,
-            stream,
-        )?;
+        let data_offsets = tensor_info["data_offsets"].as_array()
+            .ok_or_else(|| Error::new(ErrorKind::InvalidData, format!("Отсутствуют data_offsets для {}", spec.name)))?;
 
-        let mut tied_weights = vec![0.0f32; self.token_embeddings.len()];
-        self.token_embeddings
-            .copy_to_host_async(&mut tied_weights, stream);
-        stream.synchronize();
-        self.lm_head
-            .weight
-            .data
-            .copy_from_host_async(&tied_weights, stream);
+        let start_byte = data_offsets[0].as_u64().unwrap() as usize;
+        let end_byte = data_offsets[1].as_u64().unwrap() as usize;
+        let tensor_bytes_count = end_byte - start_byte;
 
-        println!("[MY-LLAMA] Сквозная PCIe DMA загрузка и Weight Tying полностью завершены.");
-        Ok(())
+        let file_tensor_start = data_start_offset + start_byte;
+        let file_tensor_slice = mmap.get(file_tensor_start..(file_tensor_start + tensor_bytes_count))
+            .ok_or_else(|| Error::new(ErrorKind::InvalidData, format!("Выход за границы файла при чтении {}", spec.name)))?;
+
+        let gpu_parameter = &weights[idx];
+        let host_ptr = file_tensor_slice.as_ptr();
+        let gpu_ptr = gpu_parameter.data.as_raw_ptr();
+
+        unsafe {
+            let result = cudaMemcpyAsync(
+                gpu_ptr,
+                host_ptr as *const _,
+                tensor_bytes_count,
+                1,
+                stream.as_raw(),
+            );
+
+            if result != 0 {
+                return Err(Error::new(ErrorKind::Other, format!("cudaMemcpyAsync вернул ошибку {} для {}", result, spec.name)));
+            }
+        }
     }
+
+    stream.synchronize();
+    println!("[LOADER] Все {} тензоров весов успешно загружены в VRAM по технологии Zero-Copy.", weight_specs.len());
+
+    Ok(())
 }

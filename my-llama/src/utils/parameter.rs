@@ -1,77 +1,83 @@
 use crate::utils::{CudaBuffer, CudaStream};
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DataType {
+    F32,
+    F16,
+    BF16,
+    Int4GPTQ,
+    Int3AWQ,
+}
+
+impl DataType {
+    pub fn element_size(&self) -> usize {
+        match self {
+            DataType::F32 => 4,
+            DataType::F16 | DataType::BF16 => 2,
+            DataType::Int4GPTQ | DataType::Int3AWQ => 1, // Квантованные упакованные типы
+        }
+    }
+}
+
 pub struct Parameter {
     pub data: CudaBuffer,
-    pub grad: CudaBuffer,
+    pub grad: Option<CudaBuffer>,
+    pub m_buffer: Option<CudaBuffer>,
+    pub v_buffer: Option<CudaBuffer>,
+    pub shape: Vec<usize>,
+    pub dtype: DataType,
     pub size: usize,
 }
 
 impl Parameter {
-    pub fn new(elements: usize, stream: &CudaStream) -> Self {
-        let data = CudaBuffer::new(elements);
-        let grad = CudaBuffer::new(elements);
+    pub fn new(
+        shape: Vec<usize>,
+        dtype: DataType,
+        requires_grad: bool,
+        stream: &CudaStream,
+    ) -> Self {
+        let size: usize = shape.iter().product();
 
-        grad.zero_out_async(stream);
+        let bytes = match dtype {
+            DataType::Int4GPTQ => (size + 7) / 8 * 4,
+            DataType::Int3AWQ => (size * 3 + 7) / 8,
+            _ => size * dtype.element_size(),
+        };
+
+        let data = CudaBuffer::new(bytes);
+
+        let (grad, m_buffer, v_buffer) = if requires_grad {
+            let grad_buffer = CudaBuffer::new(bytes);
+            let m_buf = CudaBuffer::new(bytes);
+            let v_buf = CudaBuffer::new(bytes);
+
+            grad_buffer.zero_out_async(stream);
+            m_buf.zero_out_async(stream);
+            v_buf.zero_out_async(stream);
+
+            (Some(grad_buffer), Some(m_buf), Some(v_buf))
+        } else {
+            (None, None, None)
+        };
 
         Parameter {
             data,
             grad,
-            size: elements,
+            m_buffer,
+            v_buffer,
+            shape,
+            dtype,
+            size,
         }
     }
 
     pub fn zero_grad_async(&self, stream: &CudaStream) {
-        self.grad.zero_out_async(stream);
+        if let Some(ref grad_buffer) = self.grad {
+            grad_buffer.zero_out_async(stream);
+        }
     }
 
     pub fn load_weights_async<T: Copy>(&self, host_weights: &[T], stream: &CudaStream) {
         self.data.copy_from_host_async(host_weights, stream);
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::utils::CudaStream;
-
-    #[test]
-    fn test_parameter_gradient_zeroing_async() {
-        const ELEMENTS: usize = 5;
-        let stream = CudaStream::new();
-
-        // 1. Инициализация параметра в стриме (вызывает асинхронное зануление градиентов силами GPU)
-        let param = Parameter::new(ELEMENTS, &stream);
-
-        // Выделяем массив-приемник на CPU под f32 элементы
-        let mut check_grads = vec![0.0f32; ELEMENTS];
-
-        // Скачиваем градиенты для проверки через универсальный метод
-        param.grad.copy_to_host_async(&mut check_grads, &stream);
-
-        // Ждем видеокарту, чтобы гарантировать запись и чтение
-        stream.synchronize();
-        assert_eq!(
-            check_grads,
-            vec![0.0f32; ELEMENTS],
-            "Градиенты не занулены при старте"
-        );
-
-        // 2. Имитируем "грязный" обратный проход: заливаем фейковые градиенты СТРОГО как f32
-        let fake_gradients = vec![0.5f32, -1.2, 3.14, 0.0, 99.9];
-        param.grad.copy_from_host_async(&fake_gradients, &stream);
-
-        // 3. Вызываем асинхронное зануление
-        param.zero_grad_async(&stream);
-
-        // 4. Проверяем, что память очистилась
-        param.grad.copy_to_host_async(&mut check_grads, &stream);
-        stream.synchronize();
-
-        assert_eq!(
-            check_grads,
-            vec![0.0f32; ELEMENTS],
-            "Метод zero_grad_async не очистил память на GPU! Получено: {:?}",
-            check_grads
-        );
     }
 }

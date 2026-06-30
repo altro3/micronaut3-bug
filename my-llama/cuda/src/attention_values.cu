@@ -40,7 +40,7 @@ void launch_attention_values(float *output,
                              const int head_dim,
                              const int current_seq_len,
                              void *stream_ptr) {
-    const int threads = head_dim < 256 ? ((head_dim + 31) / 32) * 32 : 256;
+    const int threads = head_dim < 256 ? (head_dim + 31) / 32 * 32 : 256;
 
     const auto stream = static_cast<cudaStream_t>(stream_ptr);
 
