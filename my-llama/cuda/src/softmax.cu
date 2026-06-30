@@ -1,108 +1,95 @@
 #include "kernels.h"
 #include <cuda_runtime.h>
+#include <math.h>
 
-__global__ void rms_norm_kernel(float *const output,
-                                const float *const input,
-                                const float *const weight,
-                                const int hidden_size,
-                                const float epsilon) {
-    const int row_idx = blockIdx.x;
+// Ядро вычисляет Safe Softmax, Cross-Entropy Loss и градиенты dL/dz = p_i - y_i
+__global__ void fused_cross_entropy_kernel(
+    const float * __restrict__ logits, // [num_tokens, vocab_size]
+    const int * __restrict__ targets, // [num_tokens]
+    float * __restrict__ d_logits, // [num_tokens, vocab_size] - выходной градиент
+    float * __restrict__ losses, // [num_tokens] - лосс для каждого токена
+    int vocab_size
+) {
+    int token_idx = blockIdx.x; // Один блок обрабатывает один токен
+    int tid = threadIdx.x;
 
-    const float *const x = input + row_idx * hidden_size;
-    float *const y = output + row_idx * hidden_size;
+    const float *token_logits = logits + token_idx * vocab_size;
+    float *token_d_logits = d_logits + token_idx * vocab_size;
+    int target_label = targets[token_idx];
 
-    extern __shared__ float s_data[];
-    const int tid = threadIdx.x;
-
-    float sum = 0.0f;
-    for (int i = tid; i < hidden_size; i += blockDim.x) {
-        sum += x[i] * x[i];
-    }
-    s_data[tid] = sum;
-    __syncthreads();
-
-    for (int s = blockDim.x / 2; s > 0; s >>= 1) {
-        if (tid < s) {
-            s_data[tid] += s_data[tid + s];
-        }
-        __syncthreads();
-    }
-
-    float rms_inv = 0.0f;
-
-    if (tid == 0) {
-        rms_inv = 1.0f / sqrtf(s_data[0] / hidden_size + epsilon);
-    }
-
-    rms_inv = __shfl_sync(0xFFFFFFFF, rms_inv, 0);
-
-    if (blockDim.x > 32) {
-        if (tid == 0) {
-            s_data[0] = rms_inv;
-        }
-        __syncthreads();
-        rms_inv = s_data[0];
-    }
-
-    for (int i = tid; i < hidden_size; i += blockDim.x) {
-        y[i] = x[i] * rms_inv * weight[i];
-    }
-}
-
-__global__ void argmax_kernel(int *const output_index, const float *const logits, const int vocab_size) {
-    extern __shared__ float s_max_val[];
-    const auto s_max_idx = reinterpret_cast<int *>(&s_max_val[blockDim.x]);
-
-    const int tid = threadIdx.x;
-
-    float max_val = -INFINITY;
-    int max_idx = -1;
-
-    // Каждый поток ищет максимум в своей порции словаря
+    // Шаг 1: Поиск максимума строки (Max Reduction) для стабильности экспонент
+    float local_max = -INFINITY;
     for (int i = tid; i < vocab_size; i += blockDim.x) {
-        if (logits[i] > max_val) {
-            max_val = logits[i];
-            max_idx = i;
+        if (token_logits[i] > local_max) {
+            local_max = token_logits[i];
         }
     }
 
-    s_max_val[tid] = max_val;
-    s_max_idx[tid] = max_idx;
+    extern __shared__ float s_mem[];
+    s_mem[tid] = local_max;
     __syncthreads();
 
-    for (int s = blockDim.x / 2; s > 0; s >>= 1) {
-        if (tid < s) {
-            if (s_max_val[tid + s] > s_max_val[tid]) {
-                s_max_val[tid] = s_max_val[tid + s];
-                s_max_idx[tid] = s_max_idx[tid + s];
+    for (int stride = blockDim.x / 2; stride > 0; stride /= 2) {
+        if (tid < stride) {
+            if (s_mem[tid + stride] > s_mem[tid]) {
+                s_mem[tid] = s_mem[tid + stride];
             }
         }
         __syncthreads();
     }
+    float global_max = s_mem[0];
+    __syncthreads();
 
+    // Шаг 2: Вычисление суммы экспонент (Sum Reduction)
+    float local_sum = 0.0f;
+    for (int i = tid; i < vocab_size; i += blockDim.x) {
+        local_sum += expf(token_logits[i] - global_max);
+    }
+
+    s_mem[tid] = local_sum;
+    __syncthreads();
+
+    for (int stride = blockDim.x / 2; stride > 0; stride /= 2) {
+        if (tid < stride) {
+            s_mem[tid] += s_mem[tid + stride];
+        }
+        __syncthreads();
+    }
+    float global_sum = s_mem[0];
+    __syncthreads();
+
+    // Шаг 3: Расчет лосса и градиентов (p_i - y_i)
     if (tid == 0) {
-        *output_index = s_max_idx[0];
+        // L = -ln(p_target) = -((logits[target] - max) - ln(sum))
+        float log_p_target = (token_logits[target_label] - global_max) - logf(global_sum);
+        losses[token_idx] = -log_p_target;
+    }
+
+    // Расчет вероятностей и градиента для каждого токена словаря
+    for (int i = tid; i < vocab_size; i += blockDim.x) {
+        float p_i = expf(token_logits[i] - global_max) / global_sum;
+        float y_i = (i == target_label) ? 1.0f : 0.0f;
+
+        // dL/dzi = p_i - y_i
+        token_d_logits[i] = p_i - y_i;
     }
 }
 
 extern "C" {
-void launch_rms_norm(float *output,
-                     const float *input,
-                     const float *weight,
-                     const int batch_size,
-                     const int hidden_size,
-                     const float epsilon) {
-    const int blocks = batch_size;
-    const int threads = hidden_size < 256 ? hidden_size : 256;
-    const int shared_mem_size = threads * sizeof(float);
-
-    rms_norm_kernel<<<blocks, threads, shared_mem_size>>>(output, input, weight, hidden_size, epsilon);
-}
-
-void launch_argmax(int *output_index, const float *logits, const int vocab_size) {
+void launch_fused_cross_entropy(
+    const float *logits,
+    const int *targets,
+    float *d_logits,
+    float *losses,
+    int num_tokens,
+    int vocab_size
+) {
     constexpr int threads = 256;
-    constexpr int shared_mem_size = threads * sizeof(float) + threads * sizeof(int);
+    int blocks = num_tokens;
+    size_t shared_mem_size = threads * sizeof(float);
 
-    argmax_kernel<<<1, threads, shared_mem_size>>>(output_index, logits, vocab_size);
+    fused_cross_entropy_kernel<<<blocks, threads, shared_mem_size>>>(
+        logits, targets, d_logits, losses, vocab_size
+    );
 }
 }

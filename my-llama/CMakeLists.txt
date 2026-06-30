@@ -8,6 +8,8 @@ add_library(
         cuda/src/matmul.cu
         cuda/src/swiglu.cu
         cuda/src/linear_backward.cu
+        cuda/src/argmax.cu
+        cuda/src/rmsnorm.cu
         cuda/src/softmax.cu
         cuda/src/attention.cu
         cuda/src/adam.cu

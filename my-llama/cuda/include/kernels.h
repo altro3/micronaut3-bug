@@ -4,12 +4,11 @@
 extern "C" {
 void test_cuda_setup(float *d_array, int size);
 
-void launch_rms_norm(float *output,
-                     const float *input,
-                     const float *weight,
-                     int batch_size,
-                     int hidden_size,
-                     float epsilon);
+void launch_rms_norm(float *output, const float *input, const float *weight, int batch_size, int hidden_size, float epsilon);
+
+void launch_fused_cross_entropy(const float* logits, const int* targets, float* d_logits, float* losses, int num_tokens, int vocab_size);
+
+void launch_argmax(int *output_index, const float *logits, int vocab_size);
 
 void launch_matmul(float *output_matrix,
                    const float *matrix_a,
@@ -44,8 +43,6 @@ void launch_update_kv_cache(float *k_cache,
                             const float *new_k,
                             const float *new_v,
                             int token_index, int hidden_size);
-
-void launch_argmax(int *output_index, const float *logits, int vocab_size);
 
 void launch_adamw(float *weights,
                   float *gradients,

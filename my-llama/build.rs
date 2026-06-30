@@ -12,6 +12,8 @@ fn main() {
         .file("cuda/src/matmul.cu")
         .file("cuda/src/swiglu.cu")
         .file("cuda/src/linear_backward.cu")
+        .file("cuda/src/argmax.cu")
+        .file("cuda/src/rmsnorm.cu")
         .file("cuda/src/softmax.cu")
         .file("cuda/src/attention.cu")
         .file("cuda/src/adam.cu")

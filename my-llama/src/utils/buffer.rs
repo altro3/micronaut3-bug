@@ -38,6 +38,53 @@ impl CudaBuffer {
         }
     }
 
+    pub fn new_int(elements: usize) -> Self {
+        let size_in_bytes = elements * size_of::<i32>();
+        let mut raw_ptr = std::ptr::null_mut();
+
+        unsafe {
+            let status = cudaMalloc(&mut raw_ptr, size_in_bytes);
+            if status != 0 {
+                panic!(
+                    "Ошибка CUDA: Не удалось выделить {} байт (i32) во VRAM. Код ошибки: {}",
+                    size_in_bytes, status
+                );
+            }
+        }
+
+        CudaBuffer {
+            raw_ptr,
+            size_in_bytes,
+        }
+    }
+
+    pub fn len(&self) -> usize {
+        self.size_in_bytes / size_of::<f32>()
+    }
+
+    pub fn copy_from_host_int(&self, host_data: &[i32]) {
+        assert_eq!(
+            host_data.len() * size_of::<i32>(),
+            self.size_in_bytes,
+            "Размер входящих i32 данных не совпадает с размером буфера GPU!"
+        );
+
+        unsafe {
+            let status = cudaMemcpy(
+                self.raw_ptr,
+                host_data.as_ptr() as *const c_void,
+                self.size_in_bytes,
+                CUDA_MEMCPY_HOST_TO_DEVICE,
+            );
+            if status != 0 {
+                panic!(
+                    "Ошибка CUDA: Не удалось скопировать i32 данные на GPU. Код: {}",
+                    status
+                );
+            }
+        }
+    }
+
     pub fn copy_from_host(&self, host_data: &[f32]) {
         assert_eq!(
             host_data.len() * size_of::<f32>(),
