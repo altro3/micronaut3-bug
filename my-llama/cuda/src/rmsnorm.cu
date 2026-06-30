@@ -1,11 +1,12 @@
-#include "kernels.h"
 #include <cuda_runtime.h>
 
-__global__ void rms_norm_kernel(float *const output,
-                                const float *const input,
-                                const float *const weight,
-                                const int hidden_size,
-                                const float epsilon) {
+__global__ void rms_norm_kernel(
+    float * __restrict__ output,
+    const float * __restrict__ input,
+    const float * __restrict__ weight,
+    const int hidden_size,
+    const float epsilon
+) {
     const int row_idx = blockIdx.x;
     const float *const x = input + row_idx * hidden_size;
     float *const y = output + row_idx * hidden_size;
@@ -17,7 +18,8 @@ __global__ void rms_norm_kernel(float *const output,
     for (int i = tid; i < hidden_size; i += blockDim.x) {
         sum += x[i] * x[i];
     }
-    s_data[tid] = sum;
+
+    s_data[tid] = (tid < hidden_size) ? sum : 0.0f;
     __syncthreads();
 
     for (int s = blockDim.x / 2; s > 0; s >>= 1) {
@@ -48,16 +50,22 @@ __global__ void rms_norm_kernel(float *const output,
 }
 
 extern "C" {
-void launch_rms_norm(float *output,
-                     const float *input,
-                     const float *weight,
-                     const int batch_size,
-                     const int hidden_size,
-                     const float epsilon) {
+void launch_rms_norm(
+    float *output,
+    const float *input,
+    const float *weight,
+    const int batch_size,
+    const int hidden_size,
+    const float epsilon,
+    void *stream_ptr
+) {
     const int blocks = batch_size;
-    const int threads = hidden_size < 256 ? hidden_size : 256;
-    const int shared_mem_size = threads * sizeof(float);
+    const int threads = hidden_size < 256 ? (hidden_size + 31) / 32 * 32 : 256;
+    const size_t shared_mem_size = threads * sizeof(float);
+    const auto stream = static_cast<cudaStream_t>(stream_ptr);
 
-    rms_norm_kernel<<<blocks, threads, shared_mem_size>>>(output, input, weight, hidden_size, epsilon);
+    rms_norm_kernel<<<blocks, threads, shared_mem_size, stream>>>(
+        output, input, weight, hidden_size, epsilon
+    );
 }
 }

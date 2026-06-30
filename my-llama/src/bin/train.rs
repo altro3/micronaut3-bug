@@ -71,6 +71,9 @@ fn main() {
     println!("   -> Лосс на токенах: {:?}", losses_host);
     println!("   -> Средний лосс батча: {:.4}", mean_loss);
 
+    let debug_input = gpu_input.copy_to_host();
+    println!("   -> [ОТЛАДКА ВХОДА] gpu_input перед backward: {:?}", debug_input);
+
     linear_layer.backward(&gpu_d_input, &gpu_input, &gpu_d_logits, NUM_TOKENS);
     println!("3. Обратный проход выполнен. Градиенты весов dW рассчитаны через p_i - y_i.");
 

@@ -1,8 +1,11 @@
-#include "kernels.h"
 #include <cuda_runtime.h>
 #include <math.h>
 
-__global__ void argmax_kernel(int *const output_index, const float *const logits, const int vocab_size) {
+__global__ void argmax_kernel(
+    int *const output_index,
+    const float * __restrict__ logits,
+    const int vocab_size
+) {
     extern __shared__ float s_max_val[];
     const auto s_max_idx = reinterpret_cast<int *>(&s_max_val[blockDim.x]);
     const int tid = threadIdx.x;
@@ -37,10 +40,17 @@ __global__ void argmax_kernel(int *const output_index, const float *const logits
 }
 
 extern "C" {
-void launch_argmax(int *output_index, const float *logits, const int vocab_size) {
+void launch_argmax(
+    int *output_index,
+    const float *logits,
+    const int vocab_size,
+    void *stream_ptr
+) {
     constexpr int threads = 256;
-    constexpr int shared_mem_size = threads * sizeof(float) + threads * sizeof(int);
+    constexpr size_t shared_mem_size = threads * sizeof(float) + threads * sizeof(int);
 
-    argmax_kernel<<<1, threads, shared_mem_size>>>(output_index, logits, vocab_size);
+    const auto stream = static_cast<cudaStream_t>(stream_ptr);
+
+    argmax_kernel<<<1, threads, shared_mem_size, stream>>>(output_index, logits, vocab_size);
 }
 }

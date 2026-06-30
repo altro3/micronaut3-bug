@@ -3,6 +3,8 @@ pub mod token;
 pub mod utils;
 
 unsafe extern "C" {
+    fn init_cublas_infrastructure();
+
     pub fn launch_fused_cross_entropy(
         logits: *const f32,
         targets: *const i32,
@@ -14,5 +16,6 @@ unsafe extern "C" {
 }
 
 pub fn init_framework() {
+    unsafe { init_cublas_infrastructure(); }
     println!("[MY-LLAMA] Инициализация высокопроизводительного CUDA-ядра завершена.");
 }
