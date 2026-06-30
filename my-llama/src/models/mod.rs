@@ -5,6 +5,7 @@ pub mod linear;
 pub mod rmsnorm;
 pub mod swiglu;
 pub mod loss;
+pub mod llama;
 
 pub use attention::SelfAttention;
 pub use block::TransformerBlock;
