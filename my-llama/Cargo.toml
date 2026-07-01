@@ -3,17 +3,18 @@ name = "my-llama"
 version = "0.1.0"
 edition = "2024"
 
+[build-dependencies]
+cc = "1.2"
+
 [dependencies]
-libc = "0.2"
 safetensors = "0.8"
 memmap2 = "0.9"
 serde_json = "1.0"
 rayon = "1.12"
 rustc-hash = "2.1.2"
-regex = "1.12.4"
 
-[build-dependencies]
-cc = "1.2"
+[dev-dependencies]
+criterion = { version = "0.8", features = ["html_reports"] }
 
 [lib]
 name = "my_llama"
@@ -26,3 +27,18 @@ path = "src/bin/infer.rs"
 [[bin]]
 name = "train"
 path = "src/bin/train.rs"
+
+[[test]]
+name = "tokenizer_tests"
+path = "tests/token/tokenizer_tests.rs"
+
+[[bench]]
+name = "tokenizer_benchmark"
+path = "tests/benches/tokenizer_benchmark.rs"
+harness = false
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"

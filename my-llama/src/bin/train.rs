@@ -1,6 +1,7 @@
+use my_llama::cuda::CudaStream;
 use my_llama::init_framework;
 use my_llama::models::factory::ModelFactory;
-use my_llama::utils::CudaStream;
+use std::io::{Error, ErrorKind};
 use std::time::Instant;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -13,13 +14,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let batch_size = 4;
     let is_training = true;
 
-    let mut training_graph = ModelFactory::create_from_config(
-        config_path,
-        weights_path,
-        batch_size,
-        is_training,
-        &stream,
-    )?;
+    let mut training_graph = ModelFactory::create_from_config(config_path, weights_path, batch_size, is_training, &stream)?;
 
     let seq_len = 512;
     let host_input_tokens = vec![128000u32; batch_size * seq_len];
@@ -35,9 +30,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         let losses_gpu_buffer = training_graph
             .forward(&host_input_tokens, &stream)
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+            .map_err(|e| Error::new(ErrorKind::Other, e))?;
 
-        losses_gpu_buffer.copy_to_host_async(&mut host_losses, &stream);
+        losses_gpu_buffer.copy_to_host_slice(&mut host_losses, &stream);
     }
 
     println!("[КОНВЕЙЕР] Ожидание завершения очереди задач на GPU...");
@@ -50,10 +45,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("|-> Успешно выполнено шагов: {}", iterations);
     println!("|-> Финальный средний Loss: {:.4}", average_loss);
     println!("|-> Полное время процесса: {:.2?}", elapsed);
-    println!(
-        "|-> Среднее скорость: {:.2?} на один полный шаг (Fwd+Bwd+AdamW)",
-        elapsed / iterations
-    );
+    println!("|-> Среднее скорость: {:.2?} на один полный шаг (Fwd+Bwd+AdamW)", elapsed / iterations);
 
     Ok(())
 }
