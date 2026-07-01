@@ -9,9 +9,9 @@ extern "C" {
 void launch_matmul_backward_weights(float *d_weights,
                                     const float *input,
                                     const float *d_output,
-                                    int batch_size,
-                                    int out_features,
-                                    int in_features,
+                                    const int batch_size,
+                                    const int out_features,
+                                    const int in_features,
                                     void *stream_ptr) {
     const auto stream = static_cast<cudaStream_t>(stream_ptr);
 
@@ -45,9 +45,9 @@ void launch_matmul_backward_weights(float *d_weights,
 void launch_matmul_backward_input(float *d_input,
                                   const float *d_output,
                                   const float *weights,
-                                  int batch_size,
-                                  int out_features,
-                                  int in_features,
+                                  const int batch_size,
+                                  const int out_features,
+                                  const int in_features,
                                   void *stream_ptr) {
     const auto stream = static_cast<cudaStream_t>(stream_ptr);
 

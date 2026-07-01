@@ -26,6 +26,8 @@ void launch_matmul(float *output_matrix,
                    int batch_size, int out_features, int in_features,
                    void *stream);
 
+void launch_embeddings(float *out, const float *weight, const unsigned int *tokens, int total_tokens, int out_features, int vocab_size, cudaStream_t stream);
+
 void launch_swish_glu(float *output,
                       const float *gate_input,
                       const float *up_input,
@@ -83,7 +85,7 @@ void launch_matmul_backward_weights(
     int batch_size,
     int out_features,
     int in_features,
-    void *stream
+    void *stream_ptr
 );
 
 void launch_matmul_backward_input(

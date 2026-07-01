@@ -18,7 +18,6 @@ fn create_test_tokenizer() -> BpeTokenizer {
     BpeTokenizer::new(pair_ranks, byte_fallback, 151643)
 }
 
-
 #[test]
 fn test_short_chunk_merging() {
     let tokenizer = create_test_tokenizer();
@@ -44,11 +43,7 @@ fn test_empty_string() {
 #[test]
 fn test_parallel_encoding() {
     let tokenizer = create_test_tokenizer();
-    let input = vec![
-        "abc".to_string(),
-        "abc_abc".to_string(),
-        "".to_string(),
-    ];
+    let input = vec!["abc".to_string(), "abc_abc".to_string(), "".to_string()];
 
     let results = tokenizer.encode_parallel(&input);
 

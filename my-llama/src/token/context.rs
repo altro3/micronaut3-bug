@@ -11,8 +11,8 @@ pub struct TokenizationContext {
 impl TokenizationContext {
     pub fn new(vocab_size: usize) -> Self {
         Self {
-            prev: Vec::with_capacity(512),
-            heap: BucketQueue::with_capacity(vocab_size, 512),
+            prev: Vec::with_capacity(4096),
+            heap: BucketQueue::with_capacity(vocab_size, 1024),
             short_prev: [0; 16],
             short_next: [0; 16],
             short_token_ids: [0; 16],

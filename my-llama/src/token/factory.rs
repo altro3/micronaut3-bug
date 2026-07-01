@@ -8,6 +8,23 @@ use std::io::{BufReader, Error, ErrorKind};
 pub struct TokenizerFactory;
 
 impl TokenizerFactory {
+    fn byte_to_unicode_decode(s: &str) -> Vec<u8> {
+        let mut bytes = Vec::with_capacity(s.len());
+        for c in s.chars() {
+            let u = c as u32;
+            let b = match u {
+                0x0000..=0x0020 => u as u8,
+                0x007F..=0x00A0 => u as u8,
+                0x0100..=0x011F => (u - 0x0100) as u8 + 33,
+                0x0120..=0x017F => (u - 0x0120) as u8 + 127,
+                0x0180..=0x01A3 => (u - 0x0180) as u8 + 223,
+                _ => u as u8,
+            };
+            bytes.push(b);
+        }
+        bytes
+    }
+
     pub fn from_file(file_path: &str) -> std::io::Result<BpeTokenizer> {
         let file = File::open(file_path)?;
         let reader = BufReader::new(file);
@@ -20,13 +37,16 @@ impl TokenizerFactory {
             .as_object()
             .ok_or_else(|| Error::new(ErrorKind::NotFound, "Vocab not found"))?;
 
+        let mut bytes_to_id: FxHashMap<Vec<u8>, u32> = FxHashMap::default();
+
         for (token_str, id_val) in vocab {
             let id = id_val.as_u64().ok_or_else(|| Error::new(ErrorKind::InvalidData, "ID error"))? as u32;
-            let token_bytes = token_str.as_bytes().to_vec();
+            let token_bytes = Self::byte_to_unicode_decode(token_str);
 
             if token_bytes.len() == 1 {
                 byte_fallback[token_bytes[0] as usize] = id;
             }
+            bytes_to_id.insert(token_bytes, id);
         }
 
         for b in 0..=255 {
@@ -41,7 +61,9 @@ impl TokenizerFactory {
                 if let Some(merge_str) = item.as_str() {
                     let parts: Vec<&str> = merge_str.split(' ').collect();
                     if parts.len() == 2 {
-                        merges.push((parts[0].as_bytes().to_vec(), parts[1].as_bytes().to_vec()));
+                        let p1 = Self::byte_to_unicode_decode(parts[0]);
+                        let p2 = Self::byte_to_unicode_decode(parts[1]);
+                        merges.push((p1, p2));
                     }
                 }
             }
@@ -59,24 +81,22 @@ impl TokenizerFactory {
             }
 
             if id1 == u32::MAX {
-                if let Some(id) = vocab.get(&String::from_utf8_lossy(p1).into_owned()).and_then(|v| v.as_u64()) {
-                    id1 = id as u32;
+                if let Some(&id) = bytes_to_id.get(p1) {
+                    id1 = id;
                 }
             }
             if id2 == u32::MAX {
-                if let Some(id) = vocab.get(&String::from_utf8_lossy(p2).into_owned()).and_then(|v| v.as_u64()) {
-                    id2 = id as u32;
+                if let Some(&id) = bytes_to_id.get(p2) {
+                    id2 = id;
                 }
             }
-
             if id1 != u32::MAX && id2 != u32::MAX {
                 let pack = ((id1 as u64) << 32) | (id2 as u64);
 
                 let mut merged_bytes = p1.clone();
                 merged_bytes.extend_from_slice(p2);
-                let merged_str = String::from_utf8_lossy(&merged_bytes).into_owned();
 
-                let merged_id = vocab.get(&merged_str).and_then(|v| v.as_u64()).map(|id| id as u32).unwrap_or(rank as u32);
+                let merged_id = bytes_to_id.get(&merged_bytes).copied().unwrap_or(rank as u32);
 
                 pair_ranks.insert(
                     pack,
@@ -88,7 +108,7 @@ impl TokenizerFactory {
             }
         }
 
-        let mut eos_id = 151643;
+        let mut eos_id = 248044;
         if let Some(added_tokens) = json_data["added_tokens"].as_array() {
             for token in added_tokens {
                 if token["content"].as_str() == Some("<|endoftext|>") {
