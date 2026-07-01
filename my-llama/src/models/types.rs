@@ -1,5 +1,5 @@
 use crate::cuda::{CudaBuffer, CudaStream};
-use crate::models::Op;
+use crate::models::compiler::ops::Op;
 use crate::utils::parameter::Parameter;
 use std::any::Any;
 

@@ -1,6 +1,6 @@
 use crate::cuda::{CudaBuffer, CudaStream};
 use crate::models::compiler::llama::LlamaGraphCompiler;
-use crate::models::{ModelGraph, UniversalComputationGraph};
+use crate::models::types::{ModelGraph, UniversalComputationGraph};
 use crate::utils::parameter::{DataType, Parameter};
 use serde_json::{from_reader, Value};
 use std::fs::File;
@@ -73,12 +73,7 @@ impl ModelFactory {
         }
 
         // Загрузка сырых параметров из SafeTensors на хосте
-        crate::models::llama_loader::load_model_weights(
-            weights_path,
-            &compiled.weight_specs,
-            &mut weights,
-            stream,
-        )
+        crate::models::llama_loader::load_model_weights(weights_path, &compiled.weight_specs, &mut weights, stream)
             .map_err(|e| Error::new(ErrorKind::Other, format!("Критическая ошибка загрузки весов: {}", e)))?;
 
         let allocation_units = (compiled.max_arena_bytes + 3) / 4;
@@ -93,7 +88,11 @@ impl ModelFactory {
              |-> Количество скомпилированных GPU инструкций: {}",
             model_type,
             dtype,
-            if is_training { "ОБУЧЕНИЕ (Градиенты активны)" } else { "ИНФЕРЕНС (Энергосберегающий)" },
+            if is_training {
+                "ОБУЧЕНИЕ (Градиенты активны)"
+            } else {
+                "ИНФЕРЕНС (Энергосберегающий)"
+            },
             weights.len(),
             compiled.max_arena_bytes,
             compiled.pipeline.len()

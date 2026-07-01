@@ -1,4 +1,5 @@
-use crate::models::{Op, TensorView};
+use crate::models::compiler::ops::Op;
+use crate::models::types::TensorView;
 use crate::utils::parameter::DataType;
 
 #[derive(Debug, Clone)]

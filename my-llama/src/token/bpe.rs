@@ -1,204 +1,211 @@
-use crate::cuda::PinnedHostBuffer;
-use crate::token::BpePair;
-use serde_json::{from_reader, Value};
-use std::collections::{BinaryHeap, HashMap};
-use std::fs::File;
-use std::io::{BufReader, Error, ErrorKind};
+use super::context::TokenizationContext;
+use rustc_hash::FxHashMap;
+use std::cmp::Ordering;
+
+#[derive(Eq, PartialEq)]
+pub struct BpePair {
+    pub rank: u32,
+    pub left_idx: usize,
+}
+
+impl Ord for BpePair {
+    #[inline(always)]
+    fn cmp(&self, other: &Self) -> Ordering {
+        other.rank.cmp(&self.rank).then_with(|| self.left_idx.cmp(&other.left_idx))
+    }
+}
+
+impl PartialOrd for BpePair {
+    #[inline(always)]
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
 
 pub struct BpeTokenizer {
-    encoder_pool: HashMap<u64, u32>,
-    decoder: HashMap<u32, Vec<u8>>,
-    pub eos_token_id: u32,
+    pair_ranks: FxHashMap<u64, u32>,
+    byte_pair_ranks: Box<[[u32; 256]; 256]>,
     byte_fallback: [u32; 256],
 }
 
 impl BpeTokenizer {
-    pub fn from_file(file_path: &str) -> std::io::Result<Self> {
-        let file = File::open(file_path)?;
-        let reader = BufReader::new(file);
-        let json_data: Value = from_reader(reader).map_err(|e| Error::new(ErrorKind::InvalidData, e))?;
-
-        let mut encoder_pool = HashMap::new();
-        let mut decoder = HashMap::new();
-        let mut byte_fallback = [0u32; 256];
-
-        let vocab = json_data["model"]["vocab"]
-            .as_object()
-            .ok_or_else(|| Error::new(ErrorKind::NotFound, "Не найден блок 'model.vocab'"))?;
-
-        for (token_str, id_val) in vocab {
-            let id = id_val.as_u64().ok_or_else(|| Error::new(ErrorKind::InvalidData, "Format ID error"))? as u32;
-            let token_bytes = token_str.as_bytes().to_vec();
-
-            if token_bytes.len() == 1 {
-                byte_fallback[token_bytes[0] as usize] = id;
-            }
-
-            let hash = Self::hash_bytes(&token_bytes);
-            encoder_pool.insert(hash, id);
-            decoder.insert(id, token_bytes);
-        }
-
-        for b in 0..=255 {
-            if byte_fallback[b] == 0 {
-                let hash = Self::hash_bytes(&[b as u8]);
-                byte_fallback[b] = *encoder_pool.get(&hash).unwrap_or(&(b as u32));
-            }
-        }
-
-        let mut eos_id = 151643;
-        if let Some(added_tokens) = json_data["added_tokens"].as_array() {
-            for token in added_tokens {
-                if token["content"].as_str() == Some("<|endoftext|") {
-                    if let Some(id) = token["id"].as_u64() {
-                        eos_id = id as u32;
-                    }
+    pub fn new(pair_ranks: FxHashMap<u64, u32>, byte_fallback: [u32; 256]) -> Self {
+        let mut byte_pair_ranks = Box::new([[u32::MAX; 256]; 256]);
+        for b1 in 0..=255 {
+            for b2 in 0..=255 {
+                let id1 = byte_fallback[b1];
+                let id2 = byte_fallback[b2];
+                let pack = ((id1 as u64) << 32) | (id2 as u64);
+                if let Some(&rank) = pair_ranks.get(&pack) {
+                    byte_pair_ranks[b1][b2] = rank;
                 }
             }
         }
 
-        println!("[API] Кэш BPE собран. Токенов: {}, EOS: {}", encoder_pool.len(), eos_id);
-        Ok(BpeTokenizer {
-            encoder_pool,
-            decoder,
-            eos_token_id: eos_id,
+        Self {
+            pair_ranks,
+            byte_pair_ranks,
             byte_fallback,
-        })
+        }
     }
 
     #[inline(always)]
-    fn hash_bytes(bytes: &[u8]) -> u64 {
-        let mut hash = 0xcbf29ce484222325;
-        for &b in bytes {
-            hash ^= b as u64;
-            hash = hash.wrapping_mul(0x100000001b3);
+    fn get_pair_rank(&self, left: u32, right: u32) -> Option<u32> {
+        if left < 256 && right < 256 {
+            let rank = self.byte_pair_ranks[left as usize][right as usize];
+            if rank == u32::MAX { None } else { Some(rank) }
+        } else {
+            let pack = ((left as u64) << 32) | (right as u64);
+            self.pair_ranks.get(&pack).copied()
         }
-        hash
     }
 
-    #[inline(always)]
-    fn get_pair_rank(&self, left: usize, right: usize, len: usize, next: &[usize], raw_bytes: &[u8]) -> Option<u32> {
-        if right >= len {
-            return None;
+    pub fn encode_single_chunk(&self, bytes: &[u8], slice: &mut [u32], token_count: &mut usize, ctx: &mut TokenizationContext) {
+        let len = bytes.len();
+        if len == 0 {
+            return;
         }
-        let end = next[right];
-        let hash = Self::hash_bytes(&raw_bytes[left..end]);
-        self.encoder_pool.get(&hash).copied()
-    }
-
-    pub fn encode_to_pinned(&self, text: &str, pinned_dst: &mut PinnedHostBuffer) -> usize {
-        let slice = pinned_dst.as_slice_mut();
-        if text.is_empty() {
-            if !slice.is_empty() {
-                slice[0] = self.eos_token_id as f32;
-                return 1;
+        if len == 1 {
+            if *token_count < slice.len() {
+                slice[*token_count] = self.byte_fallback[bytes[0] as usize];
+                *token_count += 1;
             }
-            return 0;
+            return;
         }
 
-        let raw_bytes = text.as_bytes();
-        let len = raw_bytes.len();
+        if len <= 16 {
+            self.encode_short_chunk(bytes, slice, token_count, ctx);
+        } else {
+            self.encode_long_chunk(bytes, slice, token_count, ctx);
+        }
+    }
 
-        let mut prev = vec![0usize; len + 1];
-        let mut next = vec![0usize; len + 1];
-        let mut heap = BinaryHeap::with_capacity(len);
+    /// 1. КОРОТКИЙ ПУТЬ (Длина <= 16): Без кучи, линейный поиск на стеке.
+    fn encode_short_chunk(&self, bytes: &[u8], slice: &mut [u32], token_count: &mut usize, ctx: &mut TokenizationContext) {
+        let len = bytes.len();
+        let prev = &mut ctx.short_prev[..len];
+        let next = &mut ctx.short_next[..len];
+        let ids = &mut ctx.short_token_ids[..len];
 
         for i in 0..len {
-            prev[i] = i.wrapping_sub(1);
-            next[i] = i + 1;
-        }
-        next[len] = len;
-
-        for i in 0..(len - 1) {
-            if let Some(rank) = self.get_pair_rank(i, i + 1, len, &next, raw_bytes) {
-                heap.push(BpePair { rank, index: i });
-            }
+            prev[i] = i.wrapping_sub(1) as u8;
+            next[i] = (i + 1) as u8;
+            ids[i] = self.byte_fallback[bytes[i] as usize];
         }
 
-        while let Some(BpePair { rank, index: l }) = heap.pop() {
-            let r = next[l];
-            if r >= len || next[r] == l {
-                continue;
-            }
+        loop {
+            let mut min_rank = u32::MAX;
+            let mut best_left = usize::MAX;
 
-            if let Some(current_rank) = self.get_pair_rank(l, r, len, &next, raw_bytes) {
-                if current_rank != rank {
-                    continue;
+            let mut i = 0;
+            while i < len {
+                let r = next[i] as usize;
+                if r >= len {
+                    break;
                 }
 
-                let after_r = next[r];
-                next[l] = after_r;
-                if after_r < len {
-                    prev[after_r] = l;
-                }
-
-                let before_l = prev[l];
-                if before_l != usize::MAX {
-                    if let Some(new_rank) = self.get_pair_rank(before_l, l, len, &next, raw_bytes) {
-                        heap.push(BpePair {
-                            rank: new_rank,
-                            index: before_l,
-                        });
+                if let Some(rank) = self.get_pair_rank(ids[i], ids[r]) {
+                    if rank < min_rank {
+                        min_rank = rank;
+                        best_left = i;
                     }
                 }
-                if after_r < len {
-                    if let Some(new_rank) = self.get_pair_rank(l, after_r, len, &next, raw_bytes) {
-                        heap.push(BpePair { rank: new_rank, index: l });
-                    }
-                }
+                i = r;
             }
-        }
 
-        let mut token_count = 0;
-        let mut i = 0;
-        while i < len {
-            if token_count >= slice.len() {
+            if best_left == usize::MAX {
                 break;
             }
-            let end = next[i];
-            let token_bytes = &raw_bytes[i..end];
 
-            let token_id = if let Some(&id) = self.encoder_pool.get(&Self::hash_bytes(token_bytes)) {
-                id
-            } else if token_bytes.len() == 1 {
-                self.byte_fallback[token_bytes[0] as usize]
-            } else {
-                token_bytes[0] as u32
-            };
+            let l = best_left;
+            let r = next[l] as usize;
+            let after_r = next[r];
 
-            slice[token_count] = token_id as f32;
-            token_count += 1;
-            i = end;
+            next[l] = after_r;
+            if (after_r as usize) < len {
+                prev[after_r as usize] = l as u8;
+            }
+
+            ids[l] = min_rank;
         }
-        token_count
+
+        let mut i = 0;
+        while i < len {
+            if *token_count >= slice.len() {
+                break;
+            }
+            slice[*token_count] = ids[i];
+            *token_count += 1;
+            i = next[i] as usize;
+        }
     }
 
-    pub fn encode(&self, text: &str) -> Vec<u32> {
-        let mut dummy = PinnedHostBuffer::new(text.len() + 1);
-        let count = self.encode_to_pinned(text, &mut dummy);
-        dummy.as_slice_mut()[..count].iter().map(|&x| x as u32).collect()
-    }
+    fn encode_long_chunk(&self, bytes: &[u8], slice: &mut [u32], token_count: &mut usize, ctx: &mut TokenizationContext) {
+        let len = bytes.len();
+        ctx.prev.resize(len, 0);
+        ctx.next.resize(len, 0);
+        ctx.token_ids.resize(len, 0);
+        ctx.heap.clear();
 
-    pub fn decode(&self, ids: &[u32]) -> String {
-        let mut byte_buffer = Vec::with_capacity(ids.len() * 4);
-        for &id in ids {
-            if id == self.eos_token_id {
+        for i in 0..len {
+            ctx.prev[i] = i.wrapping_sub(1);
+            ctx.next[i] = i + 1;
+            ctx.token_ids[i] = self.byte_fallback[bytes[i] as usize];
+        }
+
+        for i in 0..len - 1 {
+            if let Some(rank) = self.get_pair_rank(ctx.token_ids[i], ctx.token_ids[i + 1]) {
+                ctx.heap.push(BpePair { rank, left_idx: i });
+            }
+        }
+
+        while let Some(BpePair { rank, left_idx }) = ctx.heap.pop() {
+            let r = ctx.next[left_idx];
+            if r >= len {
                 continue;
             }
-            if let Some(bytes) = self.decoder.get(&id) {
-                byte_buffer.extend_from_slice(bytes);
-            } else {
-                for (b, &fallback_id) in self.byte_fallback.iter().enumerate() {
-                    if fallback_id == id {
-                        byte_buffer.push(b as u8);
-                        break;
-                    }
+
+            if self.get_pair_rank(ctx.token_ids[left_idx], ctx.token_ids[r]) != Some(rank) {
+                continue;
+            }
+
+            let l_prev = ctx.prev[left_idx];
+            let after_r = ctx.next[r];
+
+            ctx.next[left_idx] = after_r;
+            if after_r < len {
+                ctx.prev[after_r] = left_idx;
+            }
+
+            ctx.token_ids[left_idx] = rank;
+
+            if l_prev != usize::MAX {
+                if let Some(r_new) = self.get_pair_rank(ctx.token_ids[l_prev], ctx.token_ids[left_idx]) {
+                    ctx.heap.push(BpePair {
+                        rank: r_new,
+                        left_idx: l_prev,
+                    });
+                }
+            }
+
+            if after_r < len {
+                if let Some(r_new) = self.get_pair_rank(ctx.token_ids[left_idx], ctx.token_ids[after_r]) {
+                    ctx.heap.push(BpePair {
+                        rank: r_new,
+                        left_idx: left_idx,
+                    });
                 }
             }
         }
-        String::from_utf8_lossy(&byte_buffer).into_owned()
+
+        let mut i = 0;
+        while i < len {
+            if *token_count >= slice.len() {
+                break;
+            }
+            slice[*token_count] = ctx.token_ids[i];
+            *token_count += 1;
+            i = ctx.next[i];
+        }
     }
 }
-
-unsafe impl Send for BpeTokenizer {}
-unsafe impl Sync for BpeTokenizer {}
