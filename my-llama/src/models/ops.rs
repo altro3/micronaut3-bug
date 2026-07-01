@@ -1,7 +1,7 @@
 use crate::models::attention::cuda_dispatch_attention;
 use crate::models::swiglu::cuda_dispatch_swiglu;
 use crate::models::TensorView;
-use crate::utils::cuda_stream::cudaMemcpyAsync;
+use crate::utils::stream::cudaMemcpyAsync;
 use crate::utils::{CudaStream, Parameter};
 use std::ffi::c_void;
 

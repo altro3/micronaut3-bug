@@ -1,5 +1,6 @@
+use crate::cuda::{CudaBuffer, CudaStream};
 use crate::models::Op;
-use crate::utils::{CudaBuffer, CudaStream, Parameter};
+use crate::utils::parameter::Parameter;
 use std::any::Any;
 
 pub trait ModelGraph: Send + Sync {
@@ -31,8 +32,9 @@ impl ModelGraph for UniversalComputationGraph {
     fn forward(&mut self, input_tokens: &[u32], stream: &CudaStream) -> Result<CudaBuffer, String> {
         let arena_ptr = self.activation_arena.as_raw_ptr();
 
-        self.activation_arena
-            .copy_from_host_async(input_tokens, stream);
+        let token_bytes = input_tokens.len() * size_of::<u32>();
+        let input_gpu_slice = self.activation_arena.slice(0, token_bytes);
+        input_gpu_slice.copy_from_host_slice(input_tokens, stream);
 
         for op in &self.pipeline {
             unsafe {
@@ -40,9 +42,7 @@ impl ModelGraph for UniversalComputationGraph {
             }
         }
 
-        let logits_buffer = self
-            .activation_arena
-            .slice(self.logits_tensor.offset, self.logits_tensor.bytes);
+        let logits_buffer = self.activation_arena.slice(self.logits_tensor.offset, self.logits_tensor.bytes);
         Ok(logits_buffer)
     }
 
@@ -56,9 +56,7 @@ impl ModelGraph for UniversalComputationGraph {
 
     fn load_targets(&self, targets: &[i32], stream: &CudaStream) {
         let size_in_bytes = targets.len() * size_of::<i32>();
-        let targets_gpu_slice = self
-            .activation_arena
-            .slice(self.targets_offset, size_in_bytes);
-        targets_gpu_slice.copy_from_host_async(targets, stream);
+        let targets_gpu_slice = self.activation_arena.slice(self.targets_offset, size_in_bytes);
+        targets_gpu_slice.copy_from_host_slice(targets, stream);
     }
 }

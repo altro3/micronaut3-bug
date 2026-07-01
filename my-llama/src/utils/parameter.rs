@@ -1,4 +1,4 @@
-use crate::utils::{CudaBuffer, CudaStream};
+use crate::cuda::{CudaBuffer, CudaStream};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DataType {
@@ -14,7 +14,7 @@ impl DataType {
         match self {
             DataType::F32 => 4,
             DataType::F16 | DataType::BF16 => 2,
-            DataType::Int4GPTQ | DataType::Int3AWQ => 1, // Квантованные упакованные типы
+            DataType::Int4GPTQ | DataType::Int3AWQ => 1,
         }
     }
 }
@@ -30,26 +30,23 @@ pub struct Parameter {
 }
 
 impl Parameter {
-    pub fn new(
-        shape: Vec<usize>,
-        dtype: DataType,
-        requires_grad: bool,
-        stream: &CudaStream,
-    ) -> Self {
+    pub fn new(shape: Vec<usize>, dtype: DataType, requires_grad: bool, stream: &CudaStream) -> Self {
         let size: usize = shape.iter().product();
 
         let bytes = match dtype {
-            DataType::Int4GPTQ => (size + 7) / 8 * 4,
+            DataType::Int4GPTQ => ((size + 7) / 8) * 4,
             DataType::Int3AWQ => (size * 3 + 7) / 8,
             _ => size * dtype.element_size(),
         };
 
-        let data = CudaBuffer::new(bytes);
+        let allocation_units = (bytes + 3) / 4;
+
+        let data = CudaBuffer::new(allocation_units);
 
         let (grad, m_buffer, v_buffer) = if requires_grad {
-            let grad_buffer = CudaBuffer::new(bytes);
-            let m_buf = CudaBuffer::new(bytes);
-            let v_buf = CudaBuffer::new(bytes);
+            let grad_buffer = CudaBuffer::new(allocation_units);
+            let m_buf = CudaBuffer::new(allocation_units);
+            let v_buf = CudaBuffer::new(allocation_units);
 
             grad_buffer.zero_out_async(stream);
             m_buf.zero_out_async(stream);
@@ -78,6 +75,6 @@ impl Parameter {
     }
 
     pub fn load_weights_async<T: Copy>(&self, host_weights: &[T], stream: &CudaStream) {
-        self.data.copy_from_host_async(host_weights, stream);
+        self.data.copy_from_host_slice(host_weights, stream);
     }
 }

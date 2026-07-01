@@ -1,6 +1,6 @@
+use crate::cuda::CudaStream;
 use crate::models::compiler::llama::WeightSpec;
-use crate::utils::cuda_stream::cudaMemcpyAsync;
-use crate::utils::{CudaStream, Parameter};
+use crate::utils::parameter::Parameter;
 use memmap2::Mmap;
 use std::fs::File;
 use std::io::{Error, ErrorKind, Result};
@@ -51,22 +51,8 @@ pub fn load_model_weights(
             .ok_or_else(|| Error::new(ErrorKind::InvalidData, format!("Выход за границы файла при чтении {}", spec.name)))?;
 
         let gpu_parameter = &weights[idx];
-        let host_ptr = file_tensor_slice.as_ptr();
-        let gpu_ptr = gpu_parameter.data.as_raw_ptr();
 
-        unsafe {
-            let result = cudaMemcpyAsync(
-                gpu_ptr,
-                host_ptr as *const _,
-                tensor_bytes_count,
-                1,
-                stream.as_raw(),
-            );
-
-            if result != 0 {
-                return Err(Error::new(ErrorKind::Other, format!("cudaMemcpyAsync вернул ошибку {} для {}", result, spec.name)));
-            }
-        }
+        gpu_parameter.data.copy_from_host_slice(file_tensor_slice, stream);
     }
 
     stream.synchronize();

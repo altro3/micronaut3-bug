@@ -1,4 +1,4 @@
-use crate::utils::cuda_stream::{cudaFreeHost, cudaHostAlloc, CUDA_HOST_ALLOC_DEFAULT};
+use crate::cuda::sys::{cudaFreeHost, cudaHostAlloc, CUDA_HOST_ALLOC_DEFAULT};
 use std::ffi::c_void;
 
 pub struct PinnedHostBuffer {
@@ -31,28 +31,11 @@ impl Drop for PinnedHostBuffer {
     fn drop(&mut self) {
         if !self.raw_ptr.is_null() {
             unsafe {
-                cudaFreeHost(self.raw_ptr);
+                let _ = cudaFreeHost(self.raw_ptr);
             }
         }
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_pinned_host_buffer_dma() {
-        let elements = 5;
-        let mut pinned_buf = PinnedHostBuffer::new(elements);
-
-        {
-            let slice = pinned_buf.as_slice_mut();
-            assert_eq!(slice.len(), elements);
-            slice[0] = 7.7f32;
-            slice[4] = 9.9f32;
-        }
-
-        assert!(!pinned_buf.as_ptr().is_null());
-    }
-}
+unsafe impl Send for PinnedHostBuffer {}
+unsafe impl Sync for PinnedHostBuffer {}

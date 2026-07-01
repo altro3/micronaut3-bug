@@ -1,9 +1,6 @@
-use crate::utils::cuda_stream::{
-    cudaFree, cudaMalloc, cudaMemcpyAsync, cudaMemsetAsync,
-    CUDA_MEMCPY_DEVICE_TO_HOST, CUDA_MEMCPY_HOST_TO_DEVICE,
-};
+use crate::cuda::stream::CudaStream;
+use crate::cuda::sys::{cudaFree, cudaMalloc, cudaMemcpyAsync, cudaMemsetAsync, CUDA_MEMCPY_DEVICE_TO_HOST, CUDA_MEMCPY_HOST_TO_DEVICE};
 use std::ffi::c_void;
-use crate::utils::CudaStream;
 
 pub struct CudaBuffer {
     raw_ptr: *mut c_void,
@@ -11,9 +8,6 @@ pub struct CudaBuffer {
     elements: usize,
     is_owner: bool,
 }
-
-unsafe impl Send for CudaBuffer {}
-unsafe impl Sync for CudaBuffer {}
 
 impl CudaBuffer {
     pub fn new(elements: usize) -> Self {
@@ -48,26 +42,17 @@ impl CudaBuffer {
         }
     }
 
-    pub fn slice(&self, offset_elements: usize, num_elements: usize) -> Self {
-        if self.elements == 0 {
+    pub fn slice(&self, offset_bytes: usize, num_bytes: usize) -> Self {
+        if self.size_in_bytes == 0 {
             panic!("Попытка сделать слайс от пустого CudaBuffer!");
         }
-        let element_size = self.size_in_bytes / self.elements;
-        let offset_bytes = offset_elements * element_size;
-        let size_in_bytes = num_elements * element_size;
-
-        assert!(
-            offset_bytes + size_in_bytes <= self.size_in_bytes,
-            "КРИТИЧЕСКИЙ ВЫХОД ЗА ГРАНИЦЫ VRAM БУФЕРА! Доступ к байтам {}..{}, доступно всего {}",
-            offset_bytes, offset_bytes + size_in_bytes, self.size_in_bytes
-        );
-
+        assert!(offset_bytes + num_bytes <= self.size_in_bytes);
         unsafe {
             let sliced_ptr = (self.raw_ptr as *mut u8).add(offset_bytes) as *mut c_void;
             CudaBuffer {
                 raw_ptr: sliced_ptr,
-                size_in_bytes,
-                elements: num_elements,
+                size_in_bytes: num_bytes,
+                elements: num_bytes,
                 is_owner: false,
             }
         }
@@ -75,48 +60,39 @@ impl CudaBuffer {
 
     pub fn zero_out_async(&self, stream: &CudaStream) {
         unsafe {
-            cudaMemsetAsync(self.raw_ptr, 0, self.size_in_bytes, stream.as_raw());
+            let _ = cudaMemsetAsync(self.raw_ptr, 0, self.size_in_bytes, stream.as_raw());
         }
     }
 
     pub fn len(&self) -> usize {
         self.elements
     }
-
     pub fn as_raw_ptr(&self) -> *mut c_void {
         self.raw_ptr
     }
 
-    pub fn copy_from_host_async<T: Copy>(&self, host_data: &[T], stream: &CudaStream) {
-        assert_eq!(
-            host_data.len() * size_of::<T>(),
-            self.size_in_bytes,
-            "Ошибка DMA: Размер передаваемых данных в байтах не совпадает с буфером GPU!"
-        );
-
+    pub fn copy_from_host_slice<T: Copy>(&self, host_data: &[T], stream: &CudaStream) {
+        let host_bytes = host_data.len() * size_of::<T>();
+        assert!(host_bytes <= self.size_in_bytes);
         unsafe {
-            cudaMemcpyAsync(
+            let _ = cudaMemcpyAsync(
                 self.raw_ptr,
                 host_data.as_ptr() as *const c_void,
-                self.size_in_bytes,
+                host_bytes,
                 CUDA_MEMCPY_HOST_TO_DEVICE,
                 stream.as_raw(),
             );
         }
     }
 
-    pub fn copy_to_host_async<T: Copy>(&self, host_dst: &mut [T], stream: &CudaStream) {
-        assert_eq!(
-            host_dst.len() * size_of::<T>(),
-            self.size_in_bytes,
-            "Ошибка DMA: Размер хост-массива приемника не совпадает с буфером GPU!"
-        );
-
+    pub fn copy_to_host_slice<T: Copy>(&self, host_dst: &mut [T], stream: &CudaStream) {
+        let host_bytes = host_dst.len() * size_of::<T>();
+        assert!(host_bytes <= self.size_in_bytes);
         unsafe {
-            cudaMemcpyAsync(
+            let _ = cudaMemcpyAsync(
                 host_dst.as_mut_ptr() as *mut c_void,
                 self.raw_ptr,
-                self.size_in_bytes,
+                host_bytes,
                 CUDA_MEMCPY_DEVICE_TO_HOST,
                 stream.as_raw(),
             );
@@ -128,8 +104,11 @@ impl Drop for CudaBuffer {
     fn drop(&mut self) {
         if self.is_owner && !self.raw_ptr.is_null() {
             unsafe {
-                cudaFree(self.raw_ptr);
+                let _ = cudaFree(self.raw_ptr);
             }
         }
     }
 }
+
+unsafe impl Send for CudaBuffer {}
+unsafe impl Sync for CudaBuffer {}
