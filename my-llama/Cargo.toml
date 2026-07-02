@@ -36,9 +36,14 @@ path = "src/bin/train_tokenizer.rs"
 name = "tokenizer_tests"
 path = "tests/token/tokenizer_tests.rs"
 
+#[[bench]]
+#name = "tokenizer_benchmark"
+#path = "tests/benches/tokenizer_benchmark.rs"
+#harness = false
+
 [[bench]]
-name = "tokenizer_benchmark"
-path = "tests/benches/tokenizer_benchmark.rs"
+name = "splitter_benchmark"
+path = "tests/benches/splitter_bench.rs"
 harness = false
 
 [profile.release]

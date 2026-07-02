@@ -1,4 +1,4 @@
-use super::simd_splitter::SimdSplitter;
+use super::simd_splitter::{SimdSplitter, TokenSpan};
 use rustc_hash::{FxHashMap, FxHashSet};
 use serde_json::json;
 use std::fs::File;
@@ -71,11 +71,29 @@ impl BpeTrainer {
         let mut global_word_counts: Vec<usize> = Vec::new();
         let mut counts_map: FxHashMap<Vec<u8>, usize> = FxHashMap::default();
 
-        SimdSplitter::split(text, |chunk| {
+        // === СКОРРЕКТИРОВАННЫЙ ВЫЗОВ SIMD ДЛЯ EDITION 2024 ===
+        let text_bytes = text.as_bytes();
+        let max_possible_words = text_bytes.len() + 1;
+
+        let mut spans_buffer = vec![TokenSpan { start: 0, end: 0 }; (text_bytes.len() / 5).max(1024)];
+        let mut spans_count = SimdSplitter::split(text, &mut spans_buffer);
+
+        if spans_count == spans_buffer.len() && spans_buffer.len() < max_possible_words {
+            spans_buffer.resize(max_possible_words, TokenSpan { start: 0, end: 0 });
+            spans_count = SimdSplitter::split(text, &mut spans_buffer);
+        }
+
+        for i in 0..spans_count {
+            let span = unsafe { *spans_buffer.get_unchecked(i) };
+            let chunk = unsafe { text_bytes.get_unchecked(span.start as usize..span.end as usize) };
+
             if !chunk.is_empty() {
                 *counts_map.entry(chunk.to_vec()).or_insert(0) += 1;
             }
-        });
+        }
+
+        drop(spans_buffer);
+        // ====================================================
 
         for (word_bytes, count) in counts_map {
             let word_ids: Vec<u32> = word_bytes.iter().map(|&b| b as u32).collect();
@@ -121,7 +139,6 @@ impl BpeTrainer {
                 workers.push(handle.join().unwrap());
             }
         });
-
         let mut merges: Vec<String> = Vec::new();
         let mut current_id = 256u32;
 

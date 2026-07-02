@@ -1,3 +1,5 @@
+/*pub mod splitter_bench;
+
 use criterion::{criterion_group, criterion_main, Criterion, Throughput};
 use my_llama::tokenizer::{BpeTokenizer, BpeValue};
 use rustc_hash::FxHashMap;
@@ -48,3 +50,4 @@ fn bench_tokenizer(c: &mut Criterion) {
 
 criterion_group!(benches, bench_tokenizer);
 criterion_main!(benches);
+*/

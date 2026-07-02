@@ -1,6 +1,6 @@
 pub struct SimdSplitter;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 #[repr(C)]
 pub struct TokenSpan {
     pub start: u32,
@@ -71,47 +71,101 @@ impl SimdSplitter {
         let vector_carriage = _mm256_set1_epi8(b'\r' as i8);
         let vector_tab = _mm256_set1_epi8(b'\t' as i8);
 
+        macro_rules! consume_bitmask {
+            ($bitmask:expr, $chunk_offset:expr) => {{
+                let mask = $bitmask;
+                let mut success = true;
+
+                if mask != 0 {
+                    // Проверяем, один ли бит установлен в маске (быстрый путь)
+                    // (mask & (mask - 1)) == 0 означает, что пробел ровно ОДИН на все 32 байта
+                    if (mask & (mask - 1)) == 0 {
+                        let trailing_zeros = mask.trailing_zeros() as usize;
+                        let split_position = $chunk_offset + trailing_zeros;
+
+                        if split_position > current_token_start {
+                            if *tokens_found < tokens_buffer.len() {
+                                unsafe {
+                                    let cell = tokens_buffer.as_mut_ptr().add(*tokens_found);
+                                    *cell = TokenSpan {
+                                        start: current_token_start as u32,
+                                        end: split_position as u32,
+                                    };
+                                }
+                                *tokens_found += 1;
+                            } else {
+                                success = false;
+                            }
+                        }
+                        current_token_start = split_position + 1;
+                    } else {
+                        let mut temp_mask = mask;
+                        unsafe {
+                            let dest_ptr = tokens_buffer.as_mut_ptr();
+                            while temp_mask != 0 {
+                                let trailing_zeros = temp_mask.trailing_zeros() as usize;
+                                let split_position = $chunk_offset + trailing_zeros;
+
+                                if split_position > current_token_start {
+                                    if *tokens_found < tokens_buffer.len() {
+                                        let cell = dest_ptr.add(*tokens_found);
+                                        *cell = TokenSpan {
+                                            start: current_token_start as u32,
+                                            end: split_position as u32,
+                                        };
+                                        *tokens_found += 1;
+                                    } else {
+                                        success = false;
+                                        break;
+                                    }
+                                }
+                                current_token_start = split_position + 1;
+                                temp_mask &= temp_mask - 1;
+                            }
+                        }
+                    }
+                }
+                success
+            }};
+        }
+
         while current_index + 64 <= total_length {
             let delimiters_bitmask_1;
             let delimiters_bitmask_2;
 
-            let base_pointer = text_bytes.as_ptr().add(current_index);
+            unsafe {
+                let base_pointer = text_bytes.as_ptr().add(current_index);
 
-            let memory_chunk_1 = _mm256_loadu_si256(base_pointer as *const __m256i);
-            let memory_chunk_2 = _mm256_loadu_si256(base_pointer.add(32) as *const __m256i);
+                let memory_chunk_1 = _mm256_loadu_si256(base_pointer as *const __m256i);
+                let memory_chunk_2 = _mm256_loadu_si256(base_pointer.add(32) as *const __m256i);
 
-            let match_space_1 = _mm256_cmpeq_epi8(memory_chunk_1, vector_space);
-            let match_newline_1 = _mm256_cmpeq_epi8(memory_chunk_1, vector_newline);
-            let match_carriage_1 = _mm256_cmpeq_epi8(memory_chunk_1, vector_carriage);
-            let match_tab_1 = _mm256_cmpeq_epi8(memory_chunk_1, vector_tab);
+                let match_space_1 = _mm256_cmpeq_epi8(memory_chunk_1, vector_space);
+                let match_newline_1 = _mm256_cmpeq_epi8(memory_chunk_1, vector_newline);
+                let match_carriage_1 = _mm256_cmpeq_epi8(memory_chunk_1, vector_carriage);
+                let match_tab_1 = _mm256_cmpeq_epi8(memory_chunk_1, vector_tab);
 
-            let combined_matches_1 = _mm256_or_si256(
-                _mm256_or_si256(match_space_1, match_newline_1),
-                _mm256_or_si256(match_carriage_1, match_tab_1),
-            );
-            delimiters_bitmask_1 = _mm256_movemask_epi8(combined_matches_1) as u32;
+                let combined_matches_1 = _mm256_or_si256(
+                    _mm256_or_si256(match_space_1, match_newline_1),
+                    _mm256_or_si256(match_carriage_1, match_tab_1),
+                );
+                delimiters_bitmask_1 = _mm256_movemask_epi8(combined_matches_1) as u32;
 
-            let match_space_2 = _mm256_cmpeq_epi8(memory_chunk_2, vector_space);
-            let match_newline_2 = _mm256_cmpeq_epi8(memory_chunk_2, vector_newline);
-            let match_carriage_2 = _mm256_cmpeq_epi8(memory_chunk_2, vector_carriage);
-            let match_tab_2 = _mm256_cmpeq_epi8(memory_chunk_2, vector_tab);
+                let match_space_2 = _mm256_cmpeq_epi8(memory_chunk_2, vector_space);
+                let match_newline_2 = _mm256_cmpeq_epi8(memory_chunk_2, vector_newline);
+                let match_carriage_2 = _mm256_cmpeq_epi8(memory_chunk_2, vector_carriage);
+                let match_tab_2 = _mm256_cmpeq_epi8(memory_chunk_2, vector_tab);
 
-            let combined_matches_2 = _mm256_or_si256(
-                _mm256_or_si256(match_space_2, match_newline_2),
-                _mm256_or_si256(match_carriage_2, match_tab_2),
-            );
-            delimiters_bitmask_2 = _mm256_movemask_epi8(combined_matches_2) as u32;
+                let combined_matches_2 = _mm256_or_si256(
+                    _mm256_or_si256(match_space_2, match_newline_2),
+                    _mm256_or_si256(match_carriage_2, match_tab_2),
+                );
+                delimiters_bitmask_2 = _mm256_movemask_epi8(combined_matches_2) as u32;
+            }
 
-            if !Self::consume_bitmask(delimiters_bitmask_1, current_index, tokens_buffer, &mut current_token_start, tokens_found) {
+            if !consume_bitmask!(delimiters_bitmask_1, current_index) {
                 return current_token_start;
             }
-            if !Self::consume_bitmask(
-                delimiters_bitmask_2,
-                current_index + 32,
-                tokens_buffer,
-                &mut current_token_start,
-                tokens_found,
-            ) {
+            if !consume_bitmask!(delimiters_bitmask_2, current_index + 32) {
                 return current_token_start;
             }
 
@@ -121,52 +175,23 @@ impl SimdSplitter {
         while current_index + 32 <= total_length {
             let delimiters_bitmask;
 
-            let memory_chunk = _mm256_loadu_si256(text_bytes.as_ptr().add(current_index) as *const __m256i);
-            let match_space = _mm256_cmpeq_epi8(memory_chunk, vector_space);
-            let match_newline = _mm256_cmpeq_epi8(memory_chunk, vector_newline);
-            let match_carriage = _mm256_cmpeq_epi8(memory_chunk, vector_carriage);
-            let match_tab = _mm256_cmpeq_epi8(memory_chunk, vector_tab);
+            unsafe {
+                let memory_chunk = _mm256_loadu_si256(text_bytes.as_ptr().add(current_index) as *const __m256i);
+                let match_space = _mm256_cmpeq_epi8(memory_chunk, vector_space);
+                let match_newline = _mm256_cmpeq_epi8(memory_chunk, vector_newline);
+                let match_carriage = _mm256_cmpeq_epi8(memory_chunk, vector_carriage);
+                let match_tab = _mm256_cmpeq_epi8(memory_chunk, vector_tab);
 
-            let combined_matches = _mm256_or_si256(_mm256_or_si256(match_space, match_newline), _mm256_or_si256(match_carriage, match_tab));
-            delimiters_bitmask = _mm256_movemask_epi8(combined_matches) as u32;
+                let combined_matches = _mm256_or_si256(_mm256_or_si256(match_space, match_newline), _mm256_or_si256(match_carriage, match_tab));
+                delimiters_bitmask = _mm256_movemask_epi8(combined_matches) as u32;
+            }
 
-            if !Self::consume_bitmask(delimiters_bitmask, current_index, tokens_buffer, &mut current_token_start, tokens_found) {
+            if !consume_bitmask!(delimiters_bitmask, current_index) {
                 return current_token_start;
             }
             current_index += 32;
         }
 
         current_token_start
-    }
-
-    #[inline(always)]
-    fn consume_bitmask(
-        mut bitmask: u32,
-        chunk_offset: usize,
-        tokens_buffer: &mut [TokenSpan],
-        current_token_start: &mut usize,
-        tokens_found: &mut usize,
-    ) -> bool {
-        while bitmask != 0 {
-            let trailing_zeros = bitmask.trailing_zeros() as usize;
-            let split_position = chunk_offset + trailing_zeros;
-
-            if split_position > *current_token_start {
-                if *tokens_found < tokens_buffer.len() {
-                    unsafe {
-                        *tokens_buffer.get_unchecked_mut(*tokens_found) = TokenSpan {
-                            start: *current_token_start as u32,
-                            end: split_position as u32,
-                        };
-                    }
-                    *tokens_found += 1;
-                } else {
-                    return false;
-                }
-            }
-            *current_token_start = split_position + 1;
-            bitmask &= bitmask - 1;
-        }
-        true
     }
 }
