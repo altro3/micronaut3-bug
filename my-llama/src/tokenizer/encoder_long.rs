@@ -14,6 +14,7 @@ impl BpeTokenizer {
             ctx.long_prev.reserve_exact(new_cap - ctx.long_prev.len());
             ctx.long_next.reserve_exact(new_cap - ctx.long_next.len());
         }
+
         unsafe {
             ctx.long_ids.set_len(len);
             ctx.long_prev.set_len(len);
@@ -27,7 +28,6 @@ impl BpeTokenizer {
         let mut min_rank = ctx.heap.buckets.len();
         let mut max_rank_dirty = ctx.heap.buckets.len() - 1;
 
-        // Очищаем кучу по реальным границам
         let (n_min, n_max) = ctx.heap.clear(min_rank, max_rank_dirty, len);
         min_rank = n_min;
         max_rank_dirty = n_max;
@@ -42,9 +42,9 @@ impl BpeTokenizer {
         for i in 0..len {
             unsafe {
                 let id = *fallback_ptr.add(*bytes_ptr.add(i) as usize);
-                *long_ids_ptr.add(i) = id;
-                *long_prev_ptr.add(i) = if i == 0 { -1 } else { (i - 1) as i32 };
-                *long_next_ptr.add(i) = if i == len - 1 { -1 } else { (i + 1) as i32 };
+                std::ptr::write(long_ids_ptr.add(i), id);
+                std::ptr::write(long_prev_ptr.add(i), if i == 0 { -1 } else { (i - 1) as i32 });
+                std::ptr::write(long_next_ptr.add(i), if i == len - 1 { -1 } else { (i + 1) as i32 });
             }
         }
 
