@@ -13,7 +13,7 @@ fn main() -> std::io::Result<()> {
         println!("[Tokenizer Test] Создаю демонстрационный файл текста...");
         fs::write(
             input_path,
-            "Привет мир! Это тестовый большой реальный текст для проверки нашего токенизатора на Rust. ".repeat(30000),
+            "Привет мир! Это тестовый большой реальный текст для проверки нашего токенизатора на Rust. ".repeat(60000),
         )?;
     }
 
@@ -24,19 +24,19 @@ fn main() -> std::io::Result<()> {
         total_bytes as f64 / (1024.0 * 1024.0)
     );
 
-    // 1. Обучаем словарь с использованием TrainerConfig уровня 2026 года
+    // 1. Обучаем словарь. Выставляем 5000 — этого более чем достаточно для тестового корпуса
     let config = TrainerConfig::default();
-    let trainer = BpeTrainer::new(200000, config);
+    let trainer = BpeTrainer::new(5000, config);
 
     let start_train = Instant::now();
     trainer.train(&text_content, model_path)?;
     println!("[Tokenizer Test] Время обучения словаря: {:?}", start_train.elapsed());
 
-    // 2. Загружаем свежесозданный словарь через нашу AVX2 фабрику
+    // 2. Загружаем свежесозданный словарь через нашу ультра-быструю фабрику
     println!("\n[Tokenizer Test] Загружаем свежесозданный словарь через фабрику...");
     let tokenizer = TokenizerFactory::from_file(model_path)?;
 
-    // --- СУПЕРСКАЛЯРНЫЙ МНОГОПОТОЧНЫЙ ТЕСТ ---
+    // --- МНОГОПОТОЧНЫЙ ТЕСТ ЭНКОДЕРА ---
     println!("\n[Tokenizer Test] Эмулируем батчинг: нарезаем текст на 64 независимые строки...");
     let mut batch_texts = Vec::with_capacity(64);
     let chunk_size = text_content.len() / 64;
@@ -50,7 +50,6 @@ fn main() -> std::io::Result<()> {
         batch_texts.push(text_content[current_idx..end_idx].to_string());
         current_idx = end_idx;
     }
-    // Хвост забираем целиком без брейк-поинтов
     if current_idx < text_content.len() {
         batch_texts.push(text_content[current_idx..].to_string());
     }
@@ -59,11 +58,11 @@ fn main() -> std::io::Result<()> {
     println!("[Tokenizer Test] Токенизируем БАТЧ в МНОГОПОТОЧНОМ режиме...");
     println!("  |-> Всего строк на обработку: {}", batch_texts.len());
     println!(
-        "  |-> Средний размер одной строки: {:.2} МБ",
-        (batch_bytes as f64 / batch_texts.len() as f64) / (1024.0 * 1024.0)
+        "  |-> Средний размер одной строки: {:.2} КБ",
+        (batch_bytes as f64 / batch_texts.len() as f64) / 1024.0
     );
 
-    // Запуск нашего полностью изолированного, параллельного энкодера
+    // Запуск параллельного векторного энкодера на все P-ядра процессора Arrow Lake
     let start_parallel = Instant::now();
     let parallel_results = tokenizer.encode_parallel(&batch_texts);
     let duration_parallel = start_parallel.elapsed();

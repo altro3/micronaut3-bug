@@ -36,19 +36,42 @@ impl BpeTrainer {
 
     pub fn train(&self, text: &str, output_json_path: &str) -> std::io::Result<()> {
         let timer = Instant::now();
-        let mut counts_map: HashMap<Vec<u8>, u32> = HashMap::new();
-
         let text_bytes = text.as_bytes();
-        let mut i = 0;
-        while i < text_bytes.len() {
-            let start = i;
-            while i < text_bytes.len() && text_bytes[i] > 32 {
-                i += 1;
+        let num_threads = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(8);
+
+        let chunk_size = (text_bytes.len() + num_threads - 1) / num_threads;
+        let mut global_maps = vec![HashMap::new(); num_threads];
+
+        std::thread::scope(|scope| {
+            for (t_idx, local_map) in global_maps.iter_mut().enumerate() {
+                scope.spawn(move || {
+                    let start_pos = (t_idx * chunk_size).min(text_bytes.len());
+                    let mut end_pos = ((t_idx + 1) * chunk_size).min(text_bytes.len());
+                    while end_pos < text_bytes.len() && text_bytes[end_pos] > 32 {
+                        end_pos += 1;
+                    }
+
+                    let local_chunk = &text_bytes[start_pos..end_pos];
+                    let mut i = 0;
+                    while i < local_chunk.len() {
+                        let start = i;
+                        while i < local_chunk.len() && local_chunk[i] > 32 {
+                            i += 1;
+                        }
+                        if start < i {
+                            *local_map.entry(local_chunk[start..i].to_vec()).or_insert(0) += 1;
+                        }
+                        i += 1;
+                    }
+                });
             }
-            if start < i {
-                *counts_map.entry(text_bytes[start..i].to_vec()).or_insert(0) += 1;
+        });
+
+        let mut counts_map: HashMap<Vec<u8>, u32> = HashMap::with_capacity(65536);
+        for local_map in global_maps {
+            for (k, v) in local_map {
+                *counts_map.entry(k).or_insert(0) += v;
             }
-            i += 1;
         }
 
         let (mut global_words, mut global_counts) = (Vec::new(), Vec::new());
