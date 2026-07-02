@@ -21,14 +21,12 @@ impl BucketQueue {
             let end = self.max_rank_dirty.min(self.buckets.len() - 1);
             unsafe {
                 let ptr = self.buckets.as_mut_ptr().add(self.min_rank);
-                // Заполняем u32::MAX (побайтово 0xFF) строго измененный диапазон
-                std::ptr::write_bytes(ptr, 0xFF, (end - self.min_rank) + 1);
+                std::ptr::write_bytes(ptr, 0xFF, (end - self.min_rank) + 1 * 4);
             }
         }
-
+        let end_next = chunk_len.min(self.next_node.len());
         unsafe {
-            let end_next = chunk_len.min(self.next_node.len());
-            std::ptr::write_bytes(self.next_node.as_mut_ptr(), 0xFF, end_next);
+            std::ptr::write_bytes(self.next_node.as_mut_ptr(), 0xFF, end_next * 4);
         }
 
         self.min_rank = self.buckets.len();
