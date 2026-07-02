@@ -24,7 +24,7 @@ impl BpeTokenizer {
             ctx.long_prev.set_len(len);
             ctx.long_next.set_len(len);
         }
-        ctx.heap.clear();
+        ctx.heap.clear(len);
 
         for i in 0..len {
             unsafe {
@@ -49,13 +49,13 @@ impl BpeTokenizer {
         }
 
         loop {
-            let pair_packed = ctx.heap.pop_packed(); // Должен возвращать u64
-            if pair_packed == u64::MAX {
+            let packed_pair = ctx.heap.pop_packed();
+            if packed_pair == u64::MAX {
                 break;
             }
 
-            let rank = (pair_packed >> 32) as u32;
-            let l = pair_packed as u32 as usize;
+            let rank = (packed_pair >> 32) as u32;
+            let l = packed_pair as u32 as usize;
 
             let r = unsafe { *ctx.long_next.get_unchecked(l) };
             if r == -1 {
