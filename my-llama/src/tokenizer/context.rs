@@ -43,10 +43,18 @@ impl TokenizationContext {
             }
         }
 
+        let current_long_cap = self.long_ids.capacity();
+        if text_len > current_long_cap {
+            let new_long_cap = text_len.next_power_of_two();
+            self.long_ids.reserve_exact(new_long_cap - self.long_ids.len());
+            self.long_prev.reserve_exact(new_long_cap - self.long_prev.len());
+            self.long_next.reserve_exact(new_long_cap - self.long_next.len());
+        }
+
         unsafe {
-            self.long_ids.set_len(0);
-            self.long_prev.set_len(0);
-            self.long_next.set_len(0);
+            self.long_ids.set_len(text_len);
+            self.long_prev.set_len(text_len);
+            self.long_next.set_len(text_len);
         }
     }
 }
