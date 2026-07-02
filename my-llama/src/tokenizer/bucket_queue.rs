@@ -21,12 +21,14 @@ impl BucketQueue {
             let end = self.max_rank_dirty.min(self.buckets.len() - 1);
             unsafe {
                 let ptr = self.buckets.as_mut_ptr().add(self.min_rank);
-                std::ptr::write_bytes(ptr, 0xFF, (end - self.min_rank) + 1 * 4);
+                let count = (end - self.min_rank) + 1;
+                std::ptr::write_bytes(ptr, 0xFF, count);
             }
         }
+
         let end_next = chunk_len.min(self.next_node.len());
         unsafe {
-            std::ptr::write_bytes(self.next_node.as_mut_ptr(), 0xFF, end_next * 4);
+            std::ptr::write_bytes(self.next_node.as_mut_ptr(), 0xFF, end_next);
         }
 
         self.min_rank = self.buckets.len();
@@ -47,6 +49,7 @@ impl BucketQueue {
                 let old_len = self.next_node.len();
                 self.next_node.set_len(new_len);
                 let ptr = self.next_node.as_mut_ptr().add(old_len);
+                // Здесь вы изначально написали правильно — additional передается без умножения
                 std::ptr::write_bytes(ptr, 0xFF, additional);
             }
         }
