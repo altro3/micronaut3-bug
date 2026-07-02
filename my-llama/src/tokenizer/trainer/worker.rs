@@ -82,6 +82,11 @@ impl BpeWorker {
         loop {
             if self.table_keys[idx] == pack {
                 self.table_stats[idx] += weight;
+                if self.table_heads[idx] != w_idx {
+                    let old_head = self.table_heads[idx];
+                    self.table_heads[idx] = w_idx;
+                    self.next_node[w_idx as usize] = old_head;
+                }
                 return;
             }
             if self.table_keys[idx] == u64::MAX {
@@ -127,9 +132,15 @@ impl BpeWorker {
                 if curr_id == new_id || next_id == new_id {
                     let pack = ((curr_id as u64) << 32) | (next_id as u64);
                     let mut idx = (pack.wrapping_mul(0x517cc1b727220a95) as usize) & self.mask;
+
                     loop {
                         if self.table_keys[idx] == pack {
                             self.table_stats[idx] += weight;
+                            if self.table_heads[idx] != w_idx as u32 {
+                                let old_head = self.table_heads[idx];
+                                self.table_heads[idx] = w_idx as u32;
+                                self.next_node[w_idx] = old_head;
+                            }
                             break;
                         }
                         if self.table_keys[idx] == u64::MAX {

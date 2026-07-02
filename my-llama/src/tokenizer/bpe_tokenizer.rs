@@ -23,7 +23,7 @@ impl BpeTokenizer {
 
         for b in 0..=255 {
             let id = byte_fallback[b] as usize;
-            if id < 512 && id < vocab_size {
+            if id < 512 {
                 id_to_byte[id] = b as i16;
             }
         }
@@ -36,7 +36,6 @@ impl BpeTokenizer {
             h ^= h >> 32;
 
             let mut target_idx = (h & hash_mask) as usize;
-
             while keys_flat[target_idx] != u64::MAX && keys_flat[target_idx] != pack {
                 target_idx = (target_idx + 1) & (table_size - 1);
             }

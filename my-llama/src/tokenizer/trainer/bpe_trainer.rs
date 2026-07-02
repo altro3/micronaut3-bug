@@ -40,7 +40,7 @@ impl BpeTrainer {
         let num_threads = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(8);
 
         let chunk_size = (text_bytes.len() + num_threads - 1) / num_threads;
-        let mut global_maps = vec![HashMap::new(); num_threads];
+        let mut global_maps: Vec<Box<HashMap<Vec<u8>, u32>>> = vec![Box::new(HashMap::new()); num_threads];
 
         std::thread::scope(|scope| {
             for (t_idx, local_map) in global_maps.iter_mut().enumerate() {
@@ -69,8 +69,8 @@ impl BpeTrainer {
 
         let mut counts_map: HashMap<Vec<u8>, u32> = HashMap::with_capacity(65536);
         for local_map in global_maps {
-            for (k, v) in local_map {
-                *counts_map.entry(k).or_insert(0) += v;
+            for (k, v) in *local_map {
+                counts_map.insert(k, v);
             }
         }
 
@@ -91,22 +91,19 @@ impl BpeTrainer {
             vocab_json.insert(unsafe { std::str::from_utf8_unchecked(u_slice) }.to_string(), b as u32);
         }
 
-        let num_threads = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(8);
-        let chunk_size = (global_words.len() + num_threads - 1) / num_threads;
-        let mut workers = Vec::with_capacity(num_threads);
-
-        // Динамически масштабируем размер хэш-таблицы воркера на основе количества уникальных слов
-        let dynamic_table_size = (chunk_size * 2).max(self.config.initial_table_size).next_power_of_two();
+        let w_chunk_size = (global_words.len() + num_threads - 1) / num_threads;
+        let mut workers: Vec<Box<BpeWorker>> = Vec::with_capacity(num_threads);
+        let dynamic_table_size = (w_chunk_size * 2).max(self.config.initial_table_size).next_power_of_two();
 
         for i in 0..num_threads {
-            let start = (i * chunk_size).min(global_words.len());
-            let end = ((i + 1) * chunk_size).min(global_words.len());
+            let start = (i * w_chunk_size).min(global_words.len());
+            let end = ((i + 1) * w_chunk_size).min(global_words.len());
             if start < end {
-                workers.push(BpeWorker::with_capacity(
+                workers.push(Box::new(BpeWorker::with_capacity(
                     global_words[start..end].to_vec(),
                     global_counts[start..end].to_vec(),
                     dynamic_table_size,
-                ));
+                )));
             }
         }
 

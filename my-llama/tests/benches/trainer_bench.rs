@@ -17,9 +17,7 @@ fn bench_bpe_trainer(c: &mut Criterion) {
     let text_bytes_len = training_text.len();
     group.throughput(Throughput::Bytes(text_bytes_len as u64));
 
-    // ИСПРАВЛЕНО: Выставляем минимально разрешенный Criterion размер выборки
     group.sample_size(10);
-    // ИСПРАВЛЕНО: Даем процессору честные 40 секунд на выполнение 10 итераций по 270 МБ
     group.measurement_time(Duration::from_secs(40));
 
     let config = TrainerConfig {
