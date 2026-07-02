@@ -9,14 +9,23 @@ impl BpeTokenizer {
             ctx.heap.reserve_chunk_len(len + 256);
         }
 
-        ctx.prev.resize(len * 3, 0);
+        let required_slots = len * 3;
+        if ctx.prev.capacity() < required_slots {
+            ctx.prev.reserve(required_slots - ctx.prev.len());
+        }
+        unsafe {
+            ctx.prev.set_len(required_slots);
+        }
         ctx.heap.clear();
+
+        let boundary_terminator = 0x7FFFFFFF_FFFFFFFFusize;
 
         for i in 0..len {
             let base = i * 3;
             unsafe {
-                *ctx.prev.get_unchecked_mut(base) = *self.byte_fallback.get_unchecked(*bytes.get_unchecked(i) as usize) as usize;
-                *ctx.prev.get_unchecked_mut(base + 1) = i.wrapping_sub(1);
+                let id = *self.byte_fallback.get_unchecked(*bytes.get_unchecked(i) as usize) as usize;
+                *ctx.prev.get_unchecked_mut(base) = id;
+                *ctx.prev.get_unchecked_mut(base + 1) = if i == 0 { boundary_terminator } else { i - 1 };
                 *ctx.prev.get_unchecked_mut(base + 2) = i + 1;
             }
         }
@@ -25,8 +34,11 @@ impl BpeTokenizer {
             unsafe {
                 let id1 = *ctx.prev.get_unchecked(i * 3) as u32;
                 let id2 = *ctx.prev.get_unchecked((i + 1) * 3) as u32;
-                if let Some(val) = self.get_pair_value(id1, id2) {
-                    ctx.heap.push(val.rank, i);
+
+                let packed = self.get_pair_packed(id1, id2);
+                if packed != u64::MAX {
+                    let rank = (packed >> 32) as u32;
+                    ctx.heap.push(rank, i);
                 }
             }
         }
@@ -52,12 +64,12 @@ impl BpeTokenizer {
             let id_l = unsafe { *ctx.prev.get_unchecked(base_l) as u32 };
             let id_r = unsafe { *ctx.prev.get_unchecked(base_r) as u32 };
 
-            let current_val = self.get_pair_value(id_l, id_r);
-            if current_val.map(|v| v.rank) != Some(rank) {
+            let packed = self.get_pair_packed(id_l, id_r);
+            if packed == u64::MAX || (packed >> 32) as u32 != rank {
                 continue;
             }
 
-            let target_id = current_val.unwrap().id;
+            let target_id = packed as u32;
             let l_prev = unsafe { *ctx.prev.get_unchecked(base_l + 1) };
             let after_r = unsafe { *ctx.prev.get_unchecked(base_r + 2) };
 
@@ -69,11 +81,12 @@ impl BpeTokenizer {
                 *ctx.prev.get_unchecked_mut(base_l) = target_id as usize;
             }
 
-            if l_prev != usize::MAX && l_prev * 3 < ctx.prev.len() {
+            if l_prev != boundary_terminator && l_prev * 3 < ctx.prev.len() {
                 unsafe {
                     let id_l_prev = *ctx.prev.get_unchecked(l_prev * 3) as u32;
-                    if let Some(val) = self.get_pair_value(id_l_prev, target_id) {
-                        ctx.heap.push(val.rank, l_prev);
+                    let packed_l = self.get_pair_packed(id_l_prev, target_id);
+                    if packed_l != u64::MAX {
+                        ctx.heap.push((packed_l >> 32) as u32, l_prev);
                     }
                 }
             }
@@ -81,16 +94,20 @@ impl BpeTokenizer {
             if after_r < len && after_r * 3 < ctx.prev.len() {
                 unsafe {
                     let id_after_r = *ctx.prev.get_unchecked(after_r * 3) as u32;
-                    if let Some(val) = self.get_pair_value(target_id, id_after_r) {
-                        ctx.heap.push(val.rank, left_idx);
+                    let packed_r = self.get_pair_packed(target_id, id_after_r);
+                    if packed_r != u64::MAX {
+                        ctx.heap.push((packed_r >> 32) as u32, left_idx);
                     }
                 }
             }
         }
 
         let mut i = 0;
+        let mut count = *token_count;
+        let slice_len = slice.len();
+
         while i < len {
-            if *token_count >= slice.len() {
+            if count >= slice_len {
                 break;
             }
             let base = i * 3;
@@ -98,10 +115,11 @@ impl BpeTokenizer {
                 break;
             }
             unsafe {
-                *slice.get_unchecked_mut(*token_count) = *ctx.prev.get_unchecked(base) as u32;
-                *token_count += 1;
+                *slice.get_unchecked_mut(count) = *ctx.prev.get_unchecked(base) as u32;
+                count += 1;
                 i = *ctx.prev.get_unchecked(base + 2);
             }
         }
+        *token_count = count;
     }
 }
