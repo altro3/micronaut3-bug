@@ -1,37 +1,12 @@
 use crate::tokenizer::factory::table::InlineHashTable;
 use crate::tokenizer::factory::FactoryUtils;
 use crate::tokenizer::BpeTokenizer;
-use std::arch::x86_64::*;
 use std::fs::File;
 use std::io::{BufReader, Error, ErrorKind, Read};
 
 pub struct TokenizerFactory;
 
 impl TokenizerFactory {
-    #[target_feature(enable = "avx2")]
-    fn find_sub_simd(buf: &[u8], needle: &[u8]) -> Option<usize> {
-        if buf.len() < needle.len() {
-            return None;
-        }
-        let n0 = _mm256_set1_epi8(needle[0] as i8);
-        let limit = buf.len() - needle.len();
-        let mut i = 0;
-        while i + 32 <= limit {
-            let chunk = unsafe { _mm256_loadu_si256(buf.as_ptr().add(i) as *const __m256i) };
-            let cmp = _mm256_cmpeq_epi8(chunk, n0);
-            let mut mask = _mm256_movemask_epi8(cmp) as u32;
-            while mask != 0 {
-                let tz = mask.trailing_zeros() as usize;
-                if &buf[i + tz..i + tz + needle.len()] == needle {
-                    return Some(i + tz);
-                }
-                mask &= mask - 1;
-            }
-            i += 32;
-        }
-        buf[i..].windows(needle.len()).position(|w| w == needle).map(|pos| i + pos)
-    }
-
     pub fn from_file(file_path: &str) -> std::io::Result<BpeTokenizer> {
         let file = File::open(file_path)?;
         let mut file_buf = Vec::with_capacity(file.metadata()?.len() as usize);
@@ -42,9 +17,8 @@ impl TokenizerFactory {
         let mut hash_table = InlineHashTable::new();
         let (mut tmp_buf, mut vocab_size) = ([0u8; 128], 0);
 
-        let v_start = unsafe { Self::find_sub_simd(&file_buf, b"\"vocab\"") };
-        if let Some(start) = v_start {
-            let mut cursor = start + 7;
+        if let Some(v_start) = file_buf.windows(7).position(|w| w == b"\"vocab\"") {
+            let mut cursor = v_start + 7;
             while cursor < file_len && file_buf[cursor] != b'{' {
                 cursor += 1;
             }
@@ -102,14 +76,15 @@ impl TokenizerFactory {
             }
         }
 
-        let m_start = unsafe { Self::find_sub_simd(&file_buf, b"\"merges\"") };
-        if let Some(start) = m_start {
-            let mut cursor = start + 8;
+        // --- ИСПРАВЛЕННЫЙ ЭТАП 2: MERGES SCAN ЧЕРЕЗ ПРЯМЫЕ ID ---
+        if let Some(m_start) = file_buf.windows(8).position(|w| w == b"\"merges\"") {
+            let mut cursor = m_start + 8;
             while cursor < file_len && file_buf[cursor] != b'[' {
                 cursor += 1;
             }
             cursor += 1;
-            let (mut rank, mut p1_b, mut p2_b, mut m_b) = (0u32, [0u8; 128], [0u8; 128], [0u8; 256]);
+            let mut rank = 0u32;
+
             while cursor < file_len && file_buf[cursor] != b']' {
                 if file_buf[cursor] == b'"' {
                     let start_str = cursor + 1;
@@ -119,28 +94,17 @@ impl TokenizerFactory {
                     }
                     let m_line = &file_buf[start_str..cursor];
                     cursor += 1;
+
                     if let Some(sp) = m_line.iter().position(|&b| b == b' ') {
-                        let p1_len = FactoryUtils::decode_inplace(&m_line[..sp], &mut p1_b);
-                        let p2_len = FactoryUtils::decode_inplace(&m_line[sp + 1..], &mut p2_b);
-                        let id1 = if p1_len == 1 {
-                            byte_fallback[p1_b[0] as usize]
-                        } else {
-                            hash_table.find(FactoryUtils::fxhash64(&p1_b[..p1_len]))
-                        };
-                        let id2 = if p2_len == 1 {
-                            byte_fallback[p2_b[0] as usize]
-                        } else {
-                            hash_table.find(FactoryUtils::fxhash64(&p2_b[..p2_len]))
-                        };
+                        // Прямой парсинг ID чисел из строки "ID1 ID2" без декодеров и хэшей!
+                        let id1 = FactoryUtils::parse_u32(&m_line[..sp]);
+                        let id2 = FactoryUtils::parse_u32(&m_line[sp + 1..]);
 
                         if id1 != u32::MAX && id2 != u32::MAX {
-                            unsafe {
-                                std::ptr::copy_nonoverlapping(p1_b.as_ptr(), m_b.as_mut_ptr(), p1_len);
-                                std::ptr::copy_nonoverlapping(p2_b.as_ptr(), m_b.as_mut_ptr().add(p1_len), p2_len);
-                            }
-                            let mid = hash_table.find(FactoryUtils::fxhash64(&m_b[..p1_len + p2_len]));
-                            let final_mid = if mid == u32::MAX { rank } else { mid };
-                            raw_pairs.push((((id1 as u64) << 32) | (id2 as u64), (rank, final_mid)));
+                            // Нам нужен результирующий ID склеенного токена.
+                            // Но мы знаем, что мёрджи идут строго по порядку их генерации тренером (current_id = 256 + rank)
+                            let mid = 256 + rank;
+                            raw_pairs.push((((id1 as u64) << 32) | (id2 as u64), (rank, mid)));
                             rank += 1;
                         }
                     }
@@ -150,12 +114,11 @@ impl TokenizerFactory {
             }
         }
 
-        let a_start = unsafe { Self::find_sub_simd(&file_buf, b"\"added_tokens\"") };
         let mut eos_id = 248044;
-        if let Some(start) = a_start {
-            if let Some(off) = file_buf[start + 13..].windows(13).position(|w| w == b"<|endoftext|>") {
-                let mut s = start + 13 + off;
-                while s < file_len && s < start + 213 + off {
+        if let Some(a_start) = file_buf.windows(13).position(|w| w == b"\"added_tokens\"") {
+            if let Some(off) = file_buf[a_start + 13..].windows(13).position(|w| w == b"<|endoftext|>") {
+                let mut s = a_start + 13 + off;
+                while s < file_len && s < a_start + 213 + off {
                     if file_buf[s..].starts_with(b"\"id\"") {
                         s += 4;
                         while s < file_len && !file_buf[s].is_ascii_digit() {

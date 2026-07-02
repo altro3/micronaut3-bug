@@ -131,7 +131,6 @@ impl BpeTrainer {
 
             let actual_batch = b_size.min(pairs_pool.len()).min(self.vocab_size - id_to_bytes.len());
             let mut batch_merges = Vec::with_capacity(actual_batch);
-            let (mut b1, mut b2, mut bm) = ([0u8; 512], [0u8; 512], [0u8; 512]);
 
             for i in 0..actual_batch {
                 let pack = pairs_pool[i].0;
@@ -140,13 +139,7 @@ impl BpeTrainer {
                 merged_bytes.extend_from_slice(&id_to_bytes.get(&id2).cloned().unwrap_or_default());
 
                 id_to_bytes.insert(current_id, merged_bytes.clone());
-                let u_slice = TrainerUtils::byte_to_unicode_encode_fast(&merged_bytes, &mut bm);
-                vocab_json.insert(unsafe { std::str::from_utf8_unchecked(u_slice) }.to_string(), current_id);
-
-                let u1 = unsafe { std::str::from_utf8_unchecked(TrainerUtils::byte_to_unicode_encode_fast(id_to_bytes.get(&id1).unwrap(), &mut b1)) };
-                let u2 = unsafe { std::str::from_utf8_unchecked(TrainerUtils::byte_to_unicode_encode_fast(id_to_bytes.get(&id2).unwrap(), &mut b2)) };
-
-                merges.push(format!("{} {}", u1, u2));
+                merges.push(format!("{} {}", id1, id2));
                 batch_merges.push((id1, id2, current_id, pack));
                 current_id += 1;
             }
@@ -176,7 +169,7 @@ impl BpeTrainer {
         }
 
         let mut writer = BufWriter::with_capacity(self.config.io_buffer_size, File::create(output_json_path)?);
-        write!(writer, "{{\"version\":\"1.0\",\"model\":{{\"type\":\"BPE\",\"vocab\":{{")?;
+        write!(writer, "{{\"\x76ersion\":\"1.0\",\"model\":{{\"type\":\"BPE\",\"vocab\":{{")?;
         for (i, (k, v)) in vocab_json.iter().enumerate() {
             write!(writer, "\"{}\":{}", k, v)?;
             if i < vocab_json.len() - 1 {

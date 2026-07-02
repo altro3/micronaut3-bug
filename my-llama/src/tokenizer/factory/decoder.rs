@@ -24,35 +24,32 @@ impl FactoryUtils {
         hash
     }
 
+    /// Конвертирует Hex-строку из JSON обратно в сырые байты без аллокаций.
     #[inline(always)]
     pub fn decode_inplace(s: &[u8], buf: &mut [u8; 128]) -> usize {
-        let (mut w, mut i, len) = (0, 0, s.len());
-        while i < len && w < 128 {
-            let b0 = s[i];
-            let u = if b0 < 0x80 {
-                i += 1;
-                b0 as u32
-            } else if (b0 & 0xE0) == 0xC0 && i + 1 < len {
-                let u = (((b0 & 0x1F) as u32) << 6) | ((s[i + 1] & 0x3F) as u32);
-                i += 2;
-                u
-            } else if (b0 & 0xF0) == 0xE0 && i + 2 < len {
-                let u = (((b0 & 0x0F) as u32) << 12) | (((s[i + 1] & 0x3F) as u32) << 6) | ((s[i + 2] & 0x3F) as u32);
-                i += 3;
-                u
-            } else {
-                i += 1;
-                continue;
-            };
+        let mut w = 0;
+        let mut i = 0;
+        let len = s.len();
 
-            buf[w] = match u {
-                0..=32 | 127..=159 => u as u8,
-                33..=126 => u as u8,
-                0x0100..=0x011F => (u - 0x0100 + 33) as u8,
-                0x0120..=0x013E => (u - 0x0120 + 127) as u8,
-                0x013F..=0x015F => (u - 0x0180 + 223) as u8,
-                _ => u as u8,
+        while i + 1 < len && w < 128 {
+            let h1 = match s[i] {
+                b'0'..=b'9' => s[i] - b'0',
+                b'A'..=b'F' => s[i] - b'A' + 10,
+                _ => {
+                    i += 1;
+                    continue;
+                }
             };
+            let h2 = match s[i + 1] {
+                b'0'..=b'9' => s[i + 1] - b'0',
+                b'A'..=b'F' => s[i + 1] - b'A' + 10,
+                _ => {
+                    i += 2;
+                    continue;
+                }
+            };
+            buf[w] = (h1 << 4) | h2;
+            i += 2;
             w += 1;
         }
         w
