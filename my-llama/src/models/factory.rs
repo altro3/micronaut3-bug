@@ -1,4 +1,4 @@
-use crate::cuda::{CudaBuffer, CudaStream};
+/*use crate::cuda::{CudaBuffer, CudaStream};
 use crate::models::compiler::llama::LlamaGraphCompiler;
 use crate::models::types::{ModelGraph, UniversalComputationGraph};
 use crate::utils::parameter::{DataType, Parameter};
@@ -73,9 +73,9 @@ impl ModelFactory {
         }
 
         // Загрузка сырых параметров из SafeTensors на хосте
-        crate::models::llama_loader::load_model_weights(weights_path, &compiled.weight_specs, &mut weights, stream)
+/*        crate::models::llama_loader::load_model_weights(weights_path, &compiled.weight_specs, &mut weights, stream)
             .map_err(|e| Error::new(ErrorKind::Other, format!("Критическая ошибка загрузки весов: {}", e)))?;
-
+*/
         let allocation_units = (compiled.max_arena_bytes + 3) / 4;
         let activation_arena = CudaBuffer::new(allocation_units);
 
@@ -107,3 +107,4 @@ impl ModelFactory {
         }))
     }
 }
+*/

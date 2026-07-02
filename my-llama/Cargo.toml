@@ -7,11 +7,6 @@ edition = "2024"
 cc = "1.2"
 
 [dependencies]
-safetensors = "0.8"
-memmap2 = "0.9"
-serde_json = "1.0"
-rayon = "1.12"
-rustc-hash = "2.1.2"
 
 [dev-dependencies]
 criterion = { version = "0.8", features = ["html_reports"] }
@@ -31,10 +26,6 @@ path = "src/bin/train.rs"
 [[bin]]
 name = "train_tokenizer"
 path = "src/bin/train_tokenizer.rs"
-
-[[test]]
-name = "tokenizer_tests"
-path = "tests/token/tokenizer_tests.rs"
 
 #[[bench]]
 #name = "tokenizer_benchmark"

@@ -98,30 +98,32 @@ impl BpeWorker {
 
     #[inline(always)]
     pub unsafe fn merge_tokens_inplace(&mut self, w_idx: usize, id1: u32, id2: u32, new_id: u32, weight: i64) {
-        let word = self.words.get_unchecked_mut(w_idx);
+        let word = unsafe { self.words.get_unchecked_mut(w_idx) };
         let len = word.len();
         if len < 2 {
             return;
         }
-        let (mut r_ptr, mut w_ptr, end_ptr, mut new_len) = (word.as_ptr(), word.as_mut_ptr(), word.as_ptr().add(len), 0);
+        let (mut r_ptr, mut w_ptr, end_ptr, mut new_len) = (word.as_ptr(), word.as_mut_ptr(), unsafe { word.as_ptr().add(len) }, 0);
 
-        while r_ptr < end_ptr {
-            if r_ptr.add(1) < end_ptr && *r_ptr == id1 && *r_ptr.add(1) == id2 {
-                *w_ptr = new_id;
-                r_ptr = r_ptr.add(2);
-            } else {
-                *w_ptr = *r_ptr;
-                r_ptr = r_ptr.add(1);
+        unsafe {
+            while r_ptr < end_ptr {
+                if r_ptr.add(1) < end_ptr && *r_ptr == id1 && *r_ptr.add(1) == id2 {
+                    *w_ptr = new_id;
+                    r_ptr = r_ptr.add(2);
+                } else {
+                    *w_ptr = *r_ptr;
+                    r_ptr = r_ptr.add(1);
+                }
+                w_ptr = w_ptr.add(1);
+                new_len += 1;
             }
-            w_ptr = w_ptr.add(1);
-            new_len += 1;
         }
-        word.set_len(new_len);
+        unsafe { word.set_len(new_len) };
 
         if new_len >= 2 {
             for i in 0..new_len - 1 {
-                let curr_id = *word.get_unchecked(i);
-                let next_id = *word.get_unchecked(i + 1);
+                let curr_id = unsafe { *word.get_unchecked(i) };
+                let next_id = unsafe { *word.get_unchecked(i + 1) };
                 if curr_id == new_id || next_id == new_id {
                     let pack = ((curr_id as u64) << 32) | (next_id as u64);
                     let mut idx = (pack.wrapping_mul(0x517cc1b727220a95) as usize) & self.mask;

@@ -64,7 +64,7 @@ impl BpeTrainer {
         for b in 0..=255 {
             let b_vec = vec![b];
             id_to_bytes.insert(b as u32, b_vec.clone());
-            let u_slice = unsafe { TrainerUtils::byte_to_unicode_encode_fast(&b_vec, &mut static_buf) };
+            let u_slice = TrainerUtils::byte_to_unicode_encode_fast(&b_vec, &mut static_buf);
             vocab_json.insert(unsafe { std::str::from_utf8_unchecked(u_slice) }.to_string(), b as u32);
         }
 
@@ -121,7 +121,7 @@ impl BpeTrainer {
                 merged_bytes.extend_from_slice(&id_to_bytes.get(&id2).cloned().unwrap_or_default());
 
                 id_to_bytes.insert(current_id, merged_bytes.clone());
-                let u_slice = unsafe { TrainerUtils::byte_to_unicode_encode_fast(&merged_bytes, &mut bm) };
+                let u_slice = TrainerUtils::byte_to_unicode_encode_fast(&merged_bytes, &mut bm);
                 vocab_json.insert(unsafe { std::str::from_utf8_unchecked(u_slice) }.to_string(), current_id);
 
                 let u1 = unsafe { std::str::from_utf8_unchecked(TrainerUtils::byte_to_unicode_encode_fast(id_to_bytes.get(&id1).unwrap(), &mut b1)) };

@@ -9,7 +9,7 @@ pub struct TokenizerFactory;
 
 impl TokenizerFactory {
     #[target_feature(enable = "avx2")]
-    unsafe fn find_sub_simd(buf: &[u8], needle: &[u8]) -> Option<usize> {
+    fn find_sub_simd(buf: &[u8], needle: &[u8]) -> Option<usize> {
         if buf.len() < needle.len() {
             return None;
         }
@@ -17,7 +17,7 @@ impl TokenizerFactory {
         let limit = buf.len() - needle.len();
         let mut i = 0;
         while i + 32 <= limit {
-            let chunk = _mm256_loadu_si256(buf.as_ptr().add(i) as *const __m256i);
+            let chunk = unsafe { _mm256_loadu_si256(buf.as_ptr().add(i) as *const __m256i) };
             let cmp = _mm256_cmpeq_epi8(chunk, n0);
             let mut mask = _mm256_movemask_epi8(cmp) as u32;
             while mask != 0 {

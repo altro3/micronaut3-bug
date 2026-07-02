@@ -23,22 +23,22 @@ pub unsafe fn split(text: &str, ids_buffer: &mut [u32], byte_fallback: &[u32; 25
     let buffer_len = ids_buffer.len();
     let buf_start_ptr = ids_buffer.as_mut_ptr();
     let mut write_ptr = buf_start_ptr;
-    let end_write_ptr = write_ptr.add(buffer_len);
+    let end_write_ptr = unsafe {write_ptr.add(buffer_len) };
 
     let fallback_ptr = byte_fallback.as_ptr();
     let bytes_ptr = bytes.as_ptr();
 
-    let lookup_mask = _mm256_load_si256((&LOOKUP_MASK.data as *const [i8; 32]) as *const __m256i);
+    let lookup_mask = unsafe {_mm256_load_si256((&LOOKUP_MASK.data as *const [i8; 32]) as *const __m256i) };
     let low_nibble_mask = _mm256_set1_epi8(0x0F);
     let non_printable_mask = _mm256_set1_epi8(33);
 
     while idx + 128 <= len {
-        let base_ptr = bytes_ptr.add(idx);
+        let base_ptr = unsafe { bytes_ptr.add(idx) };
 
-        let chunk0 = _mm256_loadu_si256(base_ptr as *const __m256i);
-        let chunk1 = _mm256_loadu_si256(base_ptr.add(32) as *const __m256i);
-        let chunk2 = _mm256_loadu_si256(base_ptr.add(64) as *const __m256i);
-        let chunk3 = _mm256_loadu_si256(base_ptr.add(96) as *const __m256i);
+        let chunk0 = unsafe { _mm256_loadu_si256(base_ptr as *const __m256i) };
+        let chunk1 = unsafe {_mm256_loadu_si256(base_ptr.add(32) as *const __m256i) };
+        let chunk2 = unsafe {_mm256_loadu_si256(base_ptr.add(64) as *const __m256i) };
+        let chunk3 = unsafe {_mm256_loadu_si256(base_ptr.add(96) as *const __m256i) };
 
         let delim0 = _mm256_and_si256(
             _mm256_shuffle_epi8(lookup_mask, _mm256_and_si256(chunk0, low_nibble_mask)),
