@@ -2,16 +2,18 @@ use super::bpe_tokenizer::BpeTokenizer;
 use super::context::TokenizationContext;
 
 macro_rules! generate_bpe_loop {
-    ($N:expr, $self:expr, $len:expr, $cached_ranks:expr, $cached_ids:expr, $prev:expr, $next:expr, $ids:expr, $token_count:expr, $slice:expr, $slice_len:expr) => {
+    ($N:expr, $self:expr, $len:expr, $cached_ranks:expr, $cached_ids:expr, $prev:expr, $next:expr, $ids:expr) => {
         loop {
             let mut min_rank = u32::MAX;
             let mut best_left = usize::MAX;
+            let mut best_id = 0u32;
 
             for i in 0..($N - 1) {
                 let rk = unsafe { *$cached_ranks.get_unchecked(i) };
                 if rk < min_rank {
                     min_rank = rk;
                     best_left = i;
+                    best_id = unsafe { *$cached_ids.get_unchecked(i) };
                 }
             }
 
@@ -28,7 +30,7 @@ macro_rules! generate_bpe_loop {
                 if (after_r as usize) < $len {
                     *$prev.get_unchecked_mut(after_r as usize) = l as u8;
                 }
-                *$ids.get_unchecked_mut(l) = *$cached_ids.get_unchecked(l);
+                *$ids.get_unchecked_mut(l) = best_id;
             }
 
             unsafe {
@@ -132,51 +134,21 @@ impl BpeTokenizer {
         let slice_len = slice.len();
 
         match len {
-            2 => {
-                generate_bpe_loop!(2, self, len, cached_ranks, cached_ids, prev, next, ids, count, slice, slice_len);
-            }
-            3 => {
-                generate_bpe_loop!(3, self, len, cached_ranks, cached_ids, prev, next, ids, count, slice, slice_len);
-            }
-            4 => {
-                generate_bpe_loop!(4, self, len, cached_ranks, cached_ids, prev, next, ids, count, slice, slice_len);
-            }
-            5 => {
-                generate_bpe_loop!(5, self, len, cached_ranks, cached_ids, prev, next, ids, count, slice, slice_len);
-            }
-            6 => {
-                generate_bpe_loop!(6, self, len, cached_ranks, cached_ids, prev, next, ids, count, slice, slice_len);
-            }
-            7 => {
-                generate_bpe_loop!(7, self, len, cached_ranks, cached_ids, prev, next, ids, count, slice, slice_len);
-            }
-            8 => {
-                generate_bpe_loop!(8, self, len, cached_ranks, cached_ids, prev, next, ids, count, slice, slice_len);
-            }
-            9 => {
-                generate_bpe_loop!(9, self, len, cached_ranks, cached_ids, prev, next, ids, count, slice, slice_len);
-            }
-            10 => {
-                generate_bpe_loop!(10, self, len, cached_ranks, cached_ids, prev, next, ids, count, slice, slice_len);
-            }
-            11 => {
-                generate_bpe_loop!(11, self, len, cached_ranks, cached_ids, prev, next, ids, count, slice, slice_len);
-            }
-            12 => {
-                generate_bpe_loop!(12, self, len, cached_ranks, cached_ids, prev, next, ids, count, slice, slice_len);
-            }
-            13 => {
-                generate_bpe_loop!(13, self, len, cached_ranks, cached_ids, prev, next, ids, count, slice, slice_len);
-            }
-            14 => {
-                generate_bpe_loop!(14, self, len, cached_ranks, cached_ids, prev, next, ids, count, slice, slice_len);
-            }
-            15 => {
-                generate_bpe_loop!(15, self, len, cached_ranks, cached_ids, prev, next, ids, count, slice, slice_len);
-            }
-            16 => {
-                generate_bpe_loop!(16, self, len, cached_ranks, cached_ids, prev, next, ids, count, slice, slice_len);
-            }
+            2 => generate_bpe_loop!(2, self, len, cached_ranks, cached_ids, prev, next, ids),
+            3 => generate_bpe_loop!(3, self, len, cached_ranks, cached_ids, prev, next, ids),
+            4 => generate_bpe_loop!(4, self, len, cached_ranks, cached_ids, prev, next, ids),
+            5 => generate_bpe_loop!(5, self, len, cached_ranks, cached_ids, prev, next, ids),
+            6 => generate_bpe_loop!(6, self, len, cached_ranks, cached_ids, prev, next, ids),
+            7 => generate_bpe_loop!(7, self, len, cached_ranks, cached_ids, prev, next, ids),
+            8 => generate_bpe_loop!(8, self, len, cached_ranks, cached_ids, prev, next, ids),
+            9 => generate_bpe_loop!(9, self, len, cached_ranks, cached_ids, prev, next, ids),
+            10 => generate_bpe_loop!(10, self, len, cached_ranks, cached_ids, prev, next, ids),
+            11 => generate_bpe_loop!(11, self, len, cached_ranks, cached_ids, prev, next, ids),
+            12 => generate_bpe_loop!(12, self, len, cached_ranks, cached_ids, prev, next, ids),
+            13 => generate_bpe_loop!(13, self, len, cached_ranks, cached_ids, prev, next, ids),
+            14 => generate_bpe_loop!(14, self, len, cached_ranks, cached_ids, prev, next, ids),
+            15 => generate_bpe_loop!(15, self, len, cached_ranks, cached_ids, prev, next, ids),
+            16 => generate_bpe_loop!(16, self, len, cached_ranks, cached_ids, prev, next, ids),
             _ => unsafe { std::hint::unreachable_unchecked() },
         }
 
