@@ -4,41 +4,33 @@ use super::simd_splitter::{SimdSplitter, TokenSpan};
 use crate::cuda::PinnedHostBuffer;
 
 impl BpeTokenizer {
-    pub fn encode(&self, text: &str) -> Vec<u32> {
+    #[inline(always)]
+    pub fn encode<'a>(&self, text: &str, ctx: &'a mut TokenizationContext) -> &'a [u32] {
         if text.is_empty() {
-            return Vec::new();
+            return &[];
         }
 
-        let max_possible_tokens = text.len() + 1;
-        let mut tmp_buffer = vec![0u32; max_possible_tokens];
-        let mut spans_buffer = vec![TokenSpan { start: 0, end: 0 }; (text.len() / 2).max(16)];
-
-        let mut spans_count = SimdSplitter::split(text, &mut spans_buffer);
-        if spans_count == spans_buffer.len() && spans_buffer.len() < max_possible_tokens {
-            spans_buffer.resize(max_possible_tokens, TokenSpan { start: 0, end: 0 });
-            spans_count = SimdSplitter::split(text, &mut spans_buffer);
-        }
-
-        let mut ctx = TokenizationContext::new(self.vocab_size);
-        let mut token_count = 0;
         let text_bytes = text.as_bytes();
+        let text_len = text_bytes.len();
+
+        ctx.reset(text_len);
+
+        let mut spans_count = SimdSplitter::split(text, &mut ctx.spans_buffer);
+
+        if spans_count == ctx.spans_buffer.len() {
+            ctx.spans_buffer.resize(text_len + 1, TokenSpan { start: 0, end: 0 });
+            spans_count = SimdSplitter::split(text, &mut ctx.spans_buffer);
+        }
+
+        let mut token_count = 0;
 
         for i in 0..spans_count {
-            let span = unsafe { *spans_buffer.get_unchecked(i) };
+            let span = unsafe { *ctx.spans_buffer.get_unchecked(i) };
             let chunk = unsafe { text_bytes.get_unchecked(span.start as usize..span.end as usize) };
-            let buffer_len = tmp_buffer.len();
-            if token_count < buffer_len {
-                unsafe {
-                    let ptr = tmp_buffer.get_unchecked_mut(token_count..);
-                    self.encode_single_chunk(chunk, ptr, &mut token_count, &mut ctx);
-                }
-            } else {
-                break;
-            }
+            self.encode_single_chunk(chunk, &mut ctx.tokens_buffer, &mut token_count, &mut ctx);
         }
 
-        tmp_buffer.truncate(token_count);
-        tmp_buffer
+        unsafe { ctx.tokens_buffer.get_unchecked(..token_count) }
     }
 
     pub fn encode_to_pinned(&self, text: &str, pinned_dst: &mut PinnedHostBuffer) -> usize {
