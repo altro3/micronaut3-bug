@@ -1,7 +1,20 @@
 use super::bpe_tokenizer::BpeTokenizer;
 use super::context::TokenizationContext;
 
+macro_rules! find_min_rank {
+    ($N:expr, $cached_ranks:expr, $min_rank:expr, $best_left:expr) => {
+        for i in 0..$N {
+            let rk = unsafe { *$cached_ranks.get_unchecked(i) };
+            if rk < $min_rank {
+                $min_rank = rk;
+                $best_left = i;
+            }
+        }
+    };
+}
+
 impl BpeTokenizer {
+    #[inline(always)]
     pub fn encode_single_chunk(&self, bytes: &[u8], slice: &mut [u32], token_count: &mut usize, ctx: &mut TokenizationContext) {
         let len = bytes.len();
         if len == 0 {
@@ -60,12 +73,25 @@ impl BpeTokenizer {
             let mut min_rank = u32::MAX;
             let mut best_left = usize::MAX;
 
-            for i in 0..len {
-                let rk = unsafe { *cached_ranks.get_unchecked(i) };
-                if rk < min_rank {
-                    min_rank = rk;
-                    best_left = i;
-                }
+            // Хинт компилятору: разворачиваем поиск минимума в константные Jump-блоки.
+            // Никаких динамических циклов и ветвлений на неопределенную длину.
+            match len {
+                2 => find_min_rank!(2, cached_ranks, min_rank, best_left),
+                3 => find_min_rank!(3, cached_ranks, min_rank, best_left),
+                4 => find_min_rank!(4, cached_ranks, min_rank, best_left),
+                5 => find_min_rank!(5, cached_ranks, min_rank, best_left),
+                6 => find_min_rank!(6, cached_ranks, min_rank, best_left),
+                7 => find_min_rank!(7, cached_ranks, min_rank, best_left),
+                8 => find_min_rank!(8, cached_ranks, min_rank, best_left),
+                9 => find_min_rank!(9, cached_ranks, min_rank, best_left),
+                10 => find_min_rank!(10, cached_ranks, min_rank, best_left),
+                11 => find_min_rank!(11, cached_ranks, min_rank, best_left),
+                12 => find_min_rank!(12, cached_ranks, min_rank, best_left),
+                13 => find_min_rank!(13, cached_ranks, min_rank, best_left),
+                14 => find_min_rank!(14, cached_ranks, min_rank, best_left),
+                15 => find_min_rank!(15, cached_ranks, min_rank, best_left),
+                16 => find_min_rank!(16, cached_ranks, min_rank, best_left),
+                _ => unsafe { std::hint::unreachable_unchecked() },
             }
 
             if best_left == usize::MAX {
