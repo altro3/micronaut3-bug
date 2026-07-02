@@ -8,8 +8,6 @@ mod encoder_short;
 pub mod factory;
 pub mod simd;
 pub mod trainer;
-pub mod trie;
 
 pub use bpe_tokenizer::BpeTokenizer;
 pub use simd::simd_splitter::SimdSplitter;
-pub use trainer::BpeTrainer;
