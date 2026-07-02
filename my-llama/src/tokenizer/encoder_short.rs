@@ -61,10 +61,12 @@ impl BpeTokenizer {
         for i in 0..len - 1 {
             let id_l = unsafe { *ids.get_unchecked(i) };
             let id_r = unsafe { *ids.get_unchecked(i + 1) };
-            if let Some(val) = self.get_pair_value(id_l, id_r) {
+
+            let packed = self.get_pair_packed(id_l, id_r);
+            if packed != u64::MAX {
                 unsafe {
-                    *cached_ranks.get_unchecked_mut(i) = val.rank;
-                    *cached_ids.get_unchecked_mut(i) = val.id;
+                    *cached_ranks.get_unchecked_mut(i) = (packed >> 32) as u32;
+                    *cached_ids.get_unchecked_mut(i) = packed as u32;
                 }
             }
         }
@@ -73,8 +75,6 @@ impl BpeTokenizer {
             let mut min_rank = u32::MAX;
             let mut best_left = usize::MAX;
 
-            // Хинт компилятору: разворачиваем поиск минимума в константные Jump-блоки.
-            // Никаких динамических циклов и ветвлений на неопределенную длину.
             match len {
                 2 => find_min_rank!(2, cached_ranks, min_rank, best_left),
                 3 => find_min_rank!(3, cached_ranks, min_rank, best_left),
@@ -118,10 +118,12 @@ impl BpeTokenizer {
             if (after_r as usize) < len {
                 let id_l = unsafe { *ids.get_unchecked(l) };
                 let id_after = unsafe { *ids.get_unchecked(after_r as usize) };
-                if let Some(val) = self.get_pair_value(id_l, id_after) {
+
+                let packed = self.get_pair_packed(id_l, id_after);
+                if packed != u64::MAX {
                     unsafe {
-                        *cached_ranks.get_unchecked_mut(l) = val.rank;
-                        *cached_ids.get_unchecked_mut(l) = val.id;
+                        *cached_ranks.get_unchecked_mut(l) = (packed >> 32) as u32;
+                        *cached_ids.get_unchecked_mut(l) = packed as u32;
                     }
                 }
             }
@@ -130,10 +132,12 @@ impl BpeTokenizer {
             if before_l < len {
                 let id_before = unsafe { *ids.get_unchecked(before_l) };
                 let id_l = unsafe { *ids.get_unchecked(l) };
-                if let Some(val) = self.get_pair_value(id_before, id_l) {
+
+                let packed = self.get_pair_packed(id_before, id_l);
+                if packed != u64::MAX {
                     unsafe {
-                        *cached_ranks.get_unchecked_mut(before_l) = val.rank;
-                        *cached_ids.get_unchecked_mut(before_l) = val.id;
+                        *cached_ranks.get_unchecked_mut(before_l) = (packed >> 32) as u32;
+                        *cached_ids.get_unchecked_mut(before_l) = packed as u32;
                     }
                 } else {
                     unsafe {
