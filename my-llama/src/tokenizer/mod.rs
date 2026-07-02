@@ -9,6 +9,8 @@ pub mod factory;
 pub mod simd_splitter;
 pub mod trainer;
 pub mod trie;
+pub mod arch;
+pub mod macros;
 
 pub use bpe_tokenizer::BpeTokenizer;
 pub use bpe_types::BpePair;

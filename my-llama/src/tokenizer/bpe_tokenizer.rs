@@ -6,7 +6,7 @@ pub struct BpeTokenizer {
     pub(crate) hash_mask: u64,
     pub(crate) byte_pair_ranks: [u64; 65536],
     pub(crate) byte_fallback: [u32; 256],
-    pub(crate) id_to_byte: [i16; 513],
+    pub(crate) id_to_byte: [i16; 512],
     pub eos_token_id: u32,
     pub(crate) vocab_size: usize,
 }
@@ -14,7 +14,7 @@ pub struct BpeTokenizer {
 impl BpeTokenizer {
     pub fn new(raw_pairs: &[(u64, BpeValue)], byte_fallback: [u32; 256], eos_token_id: u32, vocab_size: usize) -> Self {
         let mut byte_pair_ranks = [u64::MAX; 65536];
-        let mut id_to_byte = [-1i16; 513];
+        let mut id_to_byte = [-1i16; 512];
 
         let required_size = raw_pairs.len() * 2;
         let table_size = required_size.max(65536).next_power_of_two();
@@ -31,14 +31,12 @@ impl BpeTokenizer {
         }
 
         for &(pack, val) in raw_pairs.iter() {
-            let left = (pack >> 32) as u32;
-            let right = pack as u32;
-
             let packed_val = ((val.rank as u64) << 32) | (val.id as u64);
 
-            let mut h = pack ^ (pack >> 33);
-            h = h.wrapping_mul(0xff51afd7ed558ccd);
-            h = h ^ (h >> 33);
+            let mut h = pack;
+            h ^= h >> 30;
+            h = h.wrapping_mul(0xbf58476d1ce4e5b9);
+            h ^= h >> 27;
 
             let idx = (h & hash_mask) as usize;
             let mut target_idx = idx;
@@ -48,6 +46,9 @@ impl BpeTokenizer {
             }
             keys_flat[target_idx] = pack;
             values_flat[target_idx] = packed_val;
+
+            let left = (pack >> 32) as u32;
+            let right = pack as u32;
 
             let b1 = if left < 512 { id_to_byte[left as usize] } else { -1 };
             let b2 = if right < 512 { id_to_byte[right as usize] } else { -1 };
@@ -72,20 +73,27 @@ impl BpeTokenizer {
     #[inline(always)]
     pub(crate) fn get_pair_packed(&self, left: u32, right: u32) -> u64 {
         let pack = ((left as u64) << 32) | (right as u64);
-        let mut h = pack ^ (pack >> 33);
-        h = h.wrapping_mul(0xff51afd7ed558ccd);
-        h = h ^ (h >> 33);
 
-        let idx_left = if left < 512 { left as usize } else { 512 };
-        let idx_right = if right < 512 { right as usize } else { 512 };
+        let m1 = left < 512;
+        let m2 = right < 512;
 
-        let b1 = unsafe { *self.id_to_byte.get_unchecked(idx_left) };
-        let b2 = unsafe { *self.id_to_byte.get_unchecked(idx_right) };
+        let idx_l = (left * m1 as u32) as usize;
+        let idx_r = (right * m2 as u32) as usize;
 
-        if (b1 >= 0) & (b2 >= 0) {
+        let b1 = unsafe { *self.id_to_byte.get_unchecked(idx_l) };
+        let b2 = unsafe { *self.id_to_byte.get_unchecked(idx_r) };
+
+        let is_valid_byte_pair = (b1 >= 0) & (b2 >= 0) & m1 & m2;
+
+        if is_valid_byte_pair {
             let flat_idx = ((b1 as usize) << 8) | (b2 as usize);
             return unsafe { *self.byte_pair_ranks.get_unchecked(flat_idx) };
         }
+
+        let mut h = pack;
+        h ^= h >> 31;
+        h ^= h << 21;
+        h ^= h >> 4;
 
         let mask = self.hash_mask as usize;
         let mut idx = (h as usize) & mask;
