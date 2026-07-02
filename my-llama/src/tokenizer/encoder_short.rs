@@ -29,47 +29,43 @@ impl BpeTokenizer {
             return;
         }
 
-        let prev = unsafe { ctx.short_prev.get_unchecked_mut(..len + 1) };
-        let next = unsafe { ctx.short_next.get_unchecked_mut(..len + 1) };
-        let ids = unsafe { ctx.short_token_ids.get_unchecked_mut(..len + 1) };
+        let mut cached_ranks = [u32::MAX; 16];
+        let mut cached_ids = [0u32; 16];
 
-        unsafe {
-            *ids.get_unchecked_mut(16) = u32::MAX;
-        }
+        let prev = unsafe { ctx.short_prev.get_unchecked_mut(..len) };
+        let next = unsafe { ctx.short_next.get_unchecked_mut(..len) };
+        let ids = unsafe { ctx.short_token_ids.get_unchecked_mut(..len) };
 
         for i in 0..len {
             unsafe {
-                *prev.get_unchecked_mut(i) = i.wrapping_sub(1) as u8;
+                let id = *self.byte_fallback.get_unchecked(*bytes.get_unchecked(i) as usize);
+                *ids.get_unchecked_mut(i) = id;
+                *prev.get_unchecked_mut(i) = if i == 0 { 0xFF } else { (i - 1) as u8 };
                 *next.get_unchecked_mut(i) = (i + 1) as u8;
-                *ids.get_unchecked_mut(i) = *self.byte_fallback.get_unchecked(*bytes.get_unchecked(i) as usize);
+            }
+        }
+
+        for i in 0..len - 1 {
+            let id_l = unsafe { *ids.get_unchecked(i) };
+            let id_r = unsafe { *ids.get_unchecked(i + 1) };
+            if let Some(val) = self.get_pair_value(id_l, id_r) {
+                unsafe {
+                    *cached_ranks.get_unchecked_mut(i) = val.rank;
+                    *cached_ids.get_unchecked_mut(i) = val.id;
+                }
             }
         }
 
         loop {
             let mut min_rank = u32::MAX;
             let mut best_left = usize::MAX;
-            let mut best_id = 0u32;
 
-            let mut i = 0;
-            while i < len {
-                let r = unsafe { *next.get_unchecked(i) as usize };
-                let safe_r = if r < len { r } else { 16 };
-
-                let id_l = unsafe { *ids.get_unchecked(i) };
-                let id_r = unsafe { *ids.get_unchecked(safe_r) };
-
-                if let Some(val) = self.get_pair_value(id_l, id_r) {
-                    if val.rank < min_rank {
-                        min_rank = val.rank;
-                        best_id = val.id;
-                        best_left = i;
-                    }
+            for i in 0..len {
+                let rk = unsafe { *cached_ranks.get_unchecked(i) };
+                if rk < min_rank {
+                    min_rank = rk;
+                    best_left = i;
                 }
-
-                if r >= len {
-                    break;
-                }
-                i = r;
             }
 
             if best_left == usize::MAX {
@@ -85,7 +81,39 @@ impl BpeTokenizer {
                 if (after_r as usize) < len {
                     *prev.get_unchecked_mut(after_r as usize) = l as u8;
                 }
-                *ids.get_unchecked_mut(l) = best_id;
+                *ids.get_unchecked_mut(l) = *cached_ids.get_unchecked(l);
+            }
+
+            unsafe {
+                *cached_ranks.get_unchecked_mut(l) = u32::MAX;
+                *cached_ranks.get_unchecked_mut(r) = u32::MAX;
+            }
+
+            if (after_r as usize) < len {
+                let id_l = unsafe { *ids.get_unchecked(l) };
+                let id_after = unsafe { *ids.get_unchecked(after_r as usize) };
+                if let Some(val) = self.get_pair_value(id_l, id_after) {
+                    unsafe {
+                        *cached_ranks.get_unchecked_mut(l) = val.rank;
+                        *cached_ids.get_unchecked_mut(l) = val.id;
+                    }
+                }
+            }
+
+            let before_l = unsafe { *prev.get_unchecked(l) as usize };
+            if before_l < len {
+                let id_before = unsafe { *ids.get_unchecked(before_l) };
+                let id_l = unsafe { *ids.get_unchecked(l) };
+                if let Some(val) = self.get_pair_value(id_before, id_l) {
+                    unsafe {
+                        *cached_ranks.get_unchecked_mut(before_l) = val.rank;
+                        *cached_ids.get_unchecked_mut(before_l) = val.id;
+                    }
+                } else {
+                    unsafe {
+                        *cached_ranks.get_unchecked_mut(before_l) = u32::MAX;
+                    }
+                }
             }
         }
 
