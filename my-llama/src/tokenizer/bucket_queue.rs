@@ -24,12 +24,10 @@ impl BucketQueue {
             let word_count = (end_word - start_word) + 1;
 
             let bitset_ptr = bitset.as_mut_ptr();
-            let mut i = 0;
-            while i < word_count {
+            for i in 0..word_count {
                 unsafe {
                     *bitset_ptr.add(start_word + i) = 0;
                 }
-                i += 1;
             }
         }
 
@@ -53,21 +51,17 @@ impl BucketQueue {
     ) -> (usize, usize) {
         let r = rank as usize;
 
-        let new_min = if r < min_rank { r } else { min_rank };
-        let new_max = if r > max_rank_dirty { r } else { max_rank_dirty };
+        let new_min = min_rank.min(r);
+        let new_max = max_rank_dirty.max(r);
 
         let word_idx = r >> 6;
         let bit_idx = r & 63;
-        let left_idx_u32 = left_idx as u32;
 
         unsafe {
             let head = *buckets.get_unchecked(r);
-            if head == left_idx_u32 {
-                return (new_min, new_max);
-            }
 
             *next_node.get_unchecked_mut(left_idx) = head;
-            *buckets.get_unchecked_mut(r) = left_idx_u32;
+            *buckets.get_unchecked_mut(r) = left_idx as u32;
             *bitset.get_unchecked_mut(word_idx) |= 1 << bit_idx;
         }
 
@@ -85,7 +79,7 @@ impl BucketQueue {
         let mut word_idx = min_rank >> 6;
         let bit_offset = min_rank & 63;
         let bitset_len = bitset.len();
-        let bitset_ptr = bitset.as_ptr();
+        let bitset_ptr = bitset.as_mut_ptr(); // Используем mut-указатель для сквозных операций
 
         unsafe {
             let mut word = *bitset_ptr.add(word_idx) & (!0u64 << bit_offset);
@@ -100,22 +94,20 @@ impl BucketQueue {
                     let w3 = *bitset_ptr.add(word_idx + 3);
 
                     if (w0 | w1 | w2 | w3) != 0 {
-                        if w0 != 0 {
-                            word = w0;
-                            break;
-                        }
-                        if w1 != 0 {
-                            word = w1;
-                            word_idx += 1;
-                            break;
-                        }
-                        if w2 != 0 {
-                            word = w2;
-                            word_idx += 2;
-                            break;
-                        }
-                        word = w3;
-                        word_idx += 3;
+                        let m0 = (w0 != 0) as usize;
+                        let m1 = (w1 != 0) as usize;
+                        let m2 = (w2 != 0) as usize;
+
+                        let is_w0_zero = m0 ^ 1;
+                        let is_w1_zero = m1 ^ 1;
+
+                        let delta = is_w0_zero * (1 + is_w1_zero * (1 + (m2 ^ 1)));
+                        word_idx += delta;
+
+                        let choice1 = if w0 != 0 { w0 } else { w1 };
+                        let choice2 = if w2 != 0 { w2 } else { w3 };
+                        word = if (w0 | w1) != 0 { choice1 } else { choice2 };
+
                         break;
                     }
                     word_idx += 4;
@@ -147,7 +139,7 @@ impl BucketQueue {
             *next_node.get_unchecked_mut(head_idx) = u32::MAX;
 
             if next == u32::MAX {
-                *bitset.get_unchecked_mut(word_idx) &= !(1 << tz);
+                *bitset_ptr.add(word_idx) &= !(1 << tz);
             }
 
             (((actual_rank as u64) << 32) | (head as u64), actual_rank)
