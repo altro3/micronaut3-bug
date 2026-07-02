@@ -1,102 +1,103 @@
-pub struct BucketQueue {
-    buckets: Vec<u32>,
-    next_node: Vec<u32>,
-    min_rank: usize,
-    max_rank_dirty: usize,
-}
+pub struct BucketQueue;
 
 impl BucketQueue {
-    pub fn with_capacity(vocab_size: usize, chunk_len: usize) -> Self {
-        Self {
-            buckets: vec![u32::MAX; vocab_size],
-            next_node: vec![u32::MAX; chunk_len.max(512)],
-            min_rank: vocab_size,
-            max_rank_dirty: 0,
-        }
-    }
-
     #[inline(always)]
-    pub fn clear(&mut self, chunk_len: usize) {
-        if self.min_rank <= self.max_rank_dirty {
-            let end = self.max_rank_dirty.min(self.buckets.len() - 1);
+    pub fn clear(buckets: &mut [u32], bitset: &mut [u64], next_node: &mut [u32], min_rank: &mut usize, max_rank_dirty: &mut usize, chunk_len: usize) {
+        if *min_rank <= *max_rank_dirty {
+            let start_bucket = *min_rank;
+            let end_bucket = (*max_rank_dirty).min(buckets.len() - 1);
+            let count = (end_bucket - start_bucket) + 1;
+
             unsafe {
-                let ptr = self.buckets.as_mut_ptr().add(self.min_rank);
-                let count = (end - self.min_rank) + 1;
-                std::ptr::write_bytes(ptr, 0xFF, count);
+                std::ptr::write_bytes(buckets.as_mut_ptr().add(start_bucket), 0xFF, count);
+            }
+
+            let start_word = start_bucket >> 6;
+            let end_word = end_bucket >> 6;
+            let word_count = (end_word - start_word) + 1;
+            unsafe {
+                std::ptr::write_bytes(bitset.as_mut_ptr().add(start_word), 0x00, word_count * 8);
             }
         }
 
-        let end_next = chunk_len.min(self.next_node.len());
+        let end_next = chunk_len.min(next_node.len());
         unsafe {
-            std::ptr::write_bytes(self.next_node.as_mut_ptr(), 0xFF, end_next);
+            std::ptr::write_bytes(next_node.as_mut_ptr(), 0xFF, end_next);
         }
 
-        self.min_rank = self.buckets.len();
-        self.max_rank_dirty = 0;
+        *min_rank = buckets.len();
+        *max_rank_dirty = 0;
     }
 
     #[inline(always)]
-    pub fn next_node_len(&self) -> usize {
-        self.next_node.len()
-    }
-
-    #[inline(always)]
-    pub fn reserve_chunk_len(&mut self, new_len: usize) {
-        if new_len > self.next_node.len() {
-            let additional = new_len - self.next_node.len();
-            self.next_node.reserve(additional);
-            unsafe {
-                let old_len = self.next_node.len();
-                self.next_node.set_len(new_len);
-                let ptr = self.next_node.as_mut_ptr().add(old_len);
-                // Здесь вы изначально написали правильно — additional передается без умножения
-                std::ptr::write_bytes(ptr, 0xFF, additional);
-            }
-        }
-    }
-
-    #[inline(always)]
-    pub fn push(&mut self, rank: u32, left_idx: usize) {
+    pub fn push(
+        buckets: &mut [u32],
+        bitset: &mut [u64],
+        next_node: &mut [u32],
+        min_rank: &mut usize,
+        max_rank_dirty: &mut usize,
+        rank: u32,
+        left_idx: usize,
+    ) {
         let r = rank as usize;
-        if r < self.min_rank {
-            self.min_rank = r;
+        if r < *min_rank {
+            *min_rank = r;
         }
-        if r > self.max_rank_dirty {
-            self.max_rank_dirty = r;
+        if r > *max_rank_dirty {
+            *max_rank_dirty = r;
         }
 
         unsafe {
-            let head = *self.buckets.get_unchecked(r);
+            let head = *buckets.get_unchecked(r);
             if head == left_idx as u32 {
                 return;
             }
 
-            *self.next_node.get_unchecked_mut(left_idx) = head;
-            *self.buckets.get_unchecked_mut(r) = left_idx as u32;
+            *next_node.get_unchecked_mut(left_idx) = head;
+            *buckets.get_unchecked_mut(r) = left_idx as u32;
+
+            let word_idx = r >> 6;
+            let bit_idx = r & 63;
+            *bitset.get_unchecked_mut(word_idx) |= 1 << bit_idx;
         }
     }
 
     #[inline(always)]
-    pub fn pop_packed(&mut self) -> u64 {
-        let len = self.buckets.len();
+    pub fn pop_packed(buckets: &mut [u32], bitset: &mut [u64], next_node: &mut [u32], min_rank: &mut usize) -> u64 {
+        let buckets_len = buckets.len();
+        let mut curr_rank = *min_rank;
 
-        while self.min_rank < len {
-            let head = unsafe { *self.buckets.get_unchecked(self.min_rank) };
+        while curr_rank < buckets_len {
+            let word_idx = curr_rank >> 6;
+            let bit_offset = curr_rank & 63;
 
-            if head != u32::MAX {
-                unsafe {
+            unsafe {
+                let word = *bitset.get_unchecked(word_idx) & (!0u64 << bit_offset);
+
+                if word != 0 {
+                    let tz = word.trailing_zeros() as usize;
+                    let actual_rank = (word_idx << 6) + tz;
+
+                    let head = *buckets.get_unchecked(actual_rank);
                     let head_idx = head as usize;
-                    let next = *self.next_node.get_unchecked(head_idx);
+                    let next = *next_node.get_unchecked(head_idx);
 
-                    *self.buckets.get_unchecked_mut(self.min_rank) = next;
-                    *self.next_node.get_unchecked_mut(head_idx) = u32::MAX;
+                    *buckets.get_unchecked_mut(actual_rank) = next;
+                    *next_node.get_unchecked_mut(head_idx) = u32::MAX;
 
-                    return ((self.min_rank as u64) << 32) | (head as u64);
+                    if next == u32::MAX {
+                        *bitset.get_unchecked_mut(word_idx) &= !(1 << tz);
+                    }
+
+                    *min_rank = actual_rank;
+                    return ((actual_rank as u64) << 32) | (head as u64);
                 }
             }
-            self.min_rank += 1;
+
+            curr_rank = (word_idx + 1) << 6;
         }
 
+        *min_rank = buckets_len;
         u64::MAX
     }
 }
