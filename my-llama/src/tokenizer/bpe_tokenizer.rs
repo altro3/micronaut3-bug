@@ -43,7 +43,7 @@ impl BpeTokenizer {
             let idx = (h & hash_mask) as usize;
             let mut target_idx = idx;
 
-            while keys_flat[target_idx] != u64::MAX {
+            while keys_flat[target_idx] != u64::MAX && keys_flat[target_idx] != pack {
                 target_idx = (target_idx + 1) & (table_size - 1);
             }
             keys_flat[target_idx] = pack;
@@ -71,6 +71,11 @@ impl BpeTokenizer {
 
     #[inline(always)]
     pub(crate) fn get_pair_packed(&self, left: u32, right: u32) -> u64 {
+        let pack = ((left as u64) << 32) | (right as u64);
+        let mut h = pack ^ (pack >> 33);
+        h = h.wrapping_mul(0xff51afd7ed558ccd);
+        h = h ^ (h >> 33);
+
         let idx_left = if left < 512 { left as usize } else { 512 };
         let idx_right = if right < 512 { right as usize } else { 512 };
 
@@ -81,11 +86,6 @@ impl BpeTokenizer {
             let flat_idx = ((b1 as usize) << 8) | (b2 as usize);
             return unsafe { *self.byte_pair_ranks.get_unchecked(flat_idx) };
         }
-
-        let pack = ((left as u64) << 32) | (right as u64);
-        let mut h = pack ^ (pack >> 33);
-        h = h.wrapping_mul(0xff51afd7ed558ccd);
-        h = h ^ (h >> 33);
 
         let mask = self.hash_mask as usize;
         let mut idx = (h as usize) & mask;
@@ -104,3 +104,6 @@ impl BpeTokenizer {
         }
     }
 }
+
+unsafe impl Send for BpeTokenizer {}
+unsafe impl Sync for BpeTokenizer {}
