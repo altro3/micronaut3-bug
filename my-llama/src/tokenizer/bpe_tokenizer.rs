@@ -34,12 +34,10 @@ impl BpeTokenizer {
             let packed_val = ((val.rank as u64) << 32) | (val.id as u64);
 
             let mut h = pack;
-            h ^= h >> 30;
-            h = h.wrapping_mul(0xbf58476d1ce4e5b9);
-            h ^= h >> 27;
+            h = h.wrapping_mul(0x517cc1b727220a95);
+            h ^= h >> 32;
 
-            let idx = (h & hash_mask) as usize;
-            let mut target_idx = idx;
+            let mut target_idx = (h & hash_mask) as usize;
 
             while keys_flat[target_idx] != u64::MAX && keys_flat[target_idx] != pack {
                 target_idx = (target_idx + 1) & (table_size - 1);
@@ -72,28 +70,21 @@ impl BpeTokenizer {
 
     #[inline(always)]
     pub(crate) fn get_pair_packed(&self, left: u32, right: u32) -> u64 {
-        let pack = ((left as u64) << 32) | (right as u64);
+        if (left | right) < 512 {
+            let b1 = unsafe { *self.id_to_byte.get_unchecked(left as usize) };
+            let b2 = unsafe { *self.id_to_byte.get_unchecked(right as usize) };
 
-        let m1 = left < 512;
-        let m2 = right < 512;
-
-        let idx_l = (left * m1 as u32) as usize;
-        let idx_r = (right * m2 as u32) as usize;
-
-        let b1 = unsafe { *self.id_to_byte.get_unchecked(idx_l) };
-        let b2 = unsafe { *self.id_to_byte.get_unchecked(idx_r) };
-
-        let is_valid_byte_pair = (b1 >= 0) & (b2 >= 0) & m1 & m2;
-
-        if is_valid_byte_pair {
-            let flat_idx = ((b1 as usize) << 8) | (b2 as usize);
-            return unsafe { *self.byte_pair_ranks.get_unchecked(flat_idx) };
+            if (b1 | b2) >= 0 {
+                let flat_idx = ((b1 as usize) << 8) | (b2 as usize);
+                return unsafe { *self.byte_pair_ranks.get_unchecked(flat_idx) };
+            }
         }
 
+        let pack = ((left as u64) << 32) | (right as u64);
+
         let mut h = pack;
-        h ^= h >> 31;
-        h ^= h << 21;
-        h ^= h >> 4;
+        h = h.wrapping_mul(0x517cc1b727220a95);
+        h ^= h >> 32;
 
         let mask = self.hash_mask as usize;
         let mut idx = (h as usize) & mask;
