@@ -24,10 +24,12 @@ impl BucketQueue {
             let word_count = (end_word - start_word) + 1;
 
             let bitset_ptr = bitset.as_mut_ptr();
-            for i in 0..word_count {
+            let mut i = 0;
+            while i < word_count {
                 unsafe {
                     *bitset_ptr.add(start_word + i) = 0;
                 }
+                i += 1;
             }
         }
 
@@ -51,15 +53,14 @@ impl BucketQueue {
     ) -> (usize, usize) {
         let r = rank as usize;
 
-        let new_min = min_rank.min(r);
-        let new_max = max_rank_dirty.max(r);
+        let new_min = if r < min_rank { r } else { min_rank };
+        let new_max = if r > max_rank_dirty { r } else { max_rank_dirty };
 
         let word_idx = r >> 6;
         let bit_idx = r & 63;
 
         unsafe {
             let head = *buckets.get_unchecked(r);
-
             *next_node.get_unchecked_mut(left_idx) = head;
             *buckets.get_unchecked_mut(r) = left_idx as u32;
             *bitset.get_unchecked_mut(word_idx) |= 1 << bit_idx;
@@ -79,10 +80,11 @@ impl BucketQueue {
         let mut word_idx = min_rank >> 6;
         let bit_offset = min_rank & 63;
         let bitset_len = bitset.len();
-        let bitset_ptr = bitset.as_mut_ptr(); // Используем mut-указатель для сквозных операций
+        let bitset_ptr = bitset.as_mut_ptr();
 
         unsafe {
-            let mut word = *bitset_ptr.add(word_idx) & (!0u64 << bit_offset);
+            let raw_word = *bitset_ptr.add(word_idx);
+            let mut word = raw_word & (!0u64 << bit_offset);
 
             if word == 0 {
                 word_idx += 1;
@@ -93,7 +95,9 @@ impl BucketQueue {
                     let w2 = *bitset_ptr.add(word_idx + 2);
                     let w3 = *bitset_ptr.add(word_idx + 3);
 
-                    if (w0 | w1 | w2 | w3) != 0 {
+                    let combined = w0 | w1 | w2 | w3;
+
+                    if combined != 0 {
                         let m0 = (w0 != 0) as usize;
                         let m1 = (w1 != 0) as usize;
                         let m2 = (w2 != 0) as usize;
@@ -101,12 +105,17 @@ impl BucketQueue {
                         let is_w0_zero = m0 ^ 1;
                         let is_w1_zero = m1 ^ 1;
 
-                        let delta = is_w0_zero * (1 + is_w1_zero * (1 + (m2 ^ 1)));
+                        let delta = is_w0_zero + (is_w0_zero & is_w1_zero) + (is_w0_zero & is_w1_zero & (m2 ^ 1));
                         word_idx += delta;
 
-                        let choice1 = if w0 != 0 { w0 } else { w1 };
-                        let choice2 = if w2 != 0 { w2 } else { w3 };
-                        word = if (w0 | w1) != 0 { choice1 } else { choice2 };
+                        let mask_w0 = -((w0 != 0) as i64) as u64;
+                        let choice1 = (w0 & mask_w0) | (w1 & !mask_w0);
+
+                        let mask_w2 = -((w2 != 0) as i64) as u64;
+                        let choice2 = (w2 & mask_w2) | (w3 & !mask_w2);
+
+                        let any_left_mask = -(((w0 | w1) != 0) as i64) as u64;
+                        word = (choice1 & any_left_mask) | (choice2 & !any_left_mask);
 
                         break;
                     }
@@ -135,12 +144,16 @@ impl BucketQueue {
             let head_idx = head as usize;
             let next = *next_node.get_unchecked(head_idx);
 
+            let origin_word = *bitset_ptr.add(word_idx);
+            let mask_update = !(1 << tz);
+            let updated_bitset_word = origin_word & mask_update;
+
+            let is_next_max_mask = -((next == u32::MAX) as i64) as u64;
+            let final_bitset_word = (updated_bitset_word & is_next_max_mask) | (origin_word & !is_next_max_mask);
+
+            *bitset_ptr.add(word_idx) = final_bitset_word;
             *buckets.get_unchecked_mut(actual_rank) = next;
             *next_node.get_unchecked_mut(head_idx) = u32::MAX;
-
-            if next == u32::MAX {
-                *bitset_ptr.add(word_idx) &= !(1 << tz);
-            }
 
             (((actual_rank as u64) << 32) | (head as u64), actual_rank)
         }
