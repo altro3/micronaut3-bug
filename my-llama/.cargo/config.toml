@@ -1,2 +1,2 @@
 [build]
-rustflags = ["-C", "target-cpu=native", "link-arg=/STACK:16777216"]
+rustflags = ["-C", "target-cpu=native"]

@@ -50,7 +50,6 @@ impl BpeTrainer {
                     while end_pos < text_bytes.len() && text_bytes[end_pos] > 32 {
                         end_pos += 1;
                     }
-
                     let local_chunk = &text_bytes[start_pos..end_pos];
                     let mut i = 0;
                     while i < local_chunk.len() {
@@ -67,7 +66,7 @@ impl BpeTrainer {
             }
         });
 
-        let mut counts_map: HashMap<Vec<u8>, u32> = HashMap::with_capacity(65536);
+        let mut counts_map = HashMap::with_capacity(65536);
         for local_map in global_maps {
             for (k, v) in *local_map {
                 counts_map.insert(k, v);
@@ -146,8 +145,8 @@ impl BpeTrainer {
 
                 let u1 = unsafe { std::str::from_utf8_unchecked(TrainerUtils::byte_to_unicode_encode_fast(id_to_bytes.get(&id1).unwrap(), &mut b1)) };
                 let u2 = unsafe { std::str::from_utf8_unchecked(TrainerUtils::byte_to_unicode_encode_fast(id_to_bytes.get(&id2).unwrap(), &mut b2)) };
-                merges.push(format!("{} {}", u1, u2));
 
+                merges.push(format!("{} {}", u1, u2));
                 batch_merges.push((id1, id2, current_id, pack));
                 current_id += 1;
             }
