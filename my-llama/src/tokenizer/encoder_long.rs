@@ -9,14 +9,11 @@ impl BpeTokenizer {
             ctx.heap.reserve_chunk_len(len + 256);
         }
 
-        ctx.long_ids.clear();
-        ctx.long_prev.clear();
-        ctx.long_next.clear();
-
         if ctx.long_ids.capacity() < len {
-            ctx.long_ids.reserve(len);
-            ctx.long_prev.reserve(len);
-            ctx.long_next.reserve(len);
+            let additional = len - ctx.long_ids.len();
+            ctx.long_ids.reserve(additional);
+            ctx.long_prev.reserve(additional);
+            ctx.long_next.reserve(additional);
         }
 
         unsafe {
@@ -83,6 +80,7 @@ impl BpeTokenizer {
                 *ctx.long_ids.get_unchecked_mut(l) = target_id;
 
                 *ctx.long_next.get_unchecked_mut(r_idx) = -1;
+                *ctx.long_prev.get_unchecked_mut(r_idx) = -1;
                 *ctx.long_ids.get_unchecked_mut(r_idx) = u32::MAX;
 
                 if l_prev != -1 {
