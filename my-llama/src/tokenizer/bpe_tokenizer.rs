@@ -1,5 +1,8 @@
+use super::bpe_types::BpeValue;
+
 pub struct BpeTokenizer {
-    pub(crate) pair_ranks_flat: Vec<u64>,
+    pub(crate) keys_flat: Vec<u64>,
+    pub(crate) values_flat: Vec<u64>,
     pub(crate) hash_mask: u64,
     pub(crate) byte_pair_ranks: [u64; 65536],
     pub(crate) byte_fallback: [u32; 256],
@@ -9,16 +12,16 @@ pub struct BpeTokenizer {
 }
 
 impl BpeTokenizer {
-    pub fn new(raw_pair_ranks: rustc_hash::FxHashMap<u64, u32>, byte_fallback: [u32; 256], eos_token_id: u32, vocab_size: usize) -> Self {
+    pub fn new(raw_pair_ranks: rustc_hash::FxHashMap<u64, BpeValue>, byte_fallback: [u32; 256], eos_token_id: u32, vocab_size: usize) -> Self {
         let mut byte_pair_ranks = [u64::MAX; 65536];
         let mut id_to_byte = [-1i16; 513];
 
-        let required_size = raw_pair_ranks.len() * 4;
-
+        let required_size = raw_pair_ranks.len() * 2;
         let table_size = required_size.max(65536).next_power_of_two();
         let hash_mask = (table_size - 1) as u64;
 
-        let mut pair_ranks_flat = vec![u64::MAX; table_size];
+        let mut keys_flat = vec![u64::MAX; table_size];
+        let mut values_flat = vec![u64::MAX; table_size];
 
         for b in 0..=255 {
             let id = byte_fallback[b] as usize;
@@ -27,24 +30,25 @@ impl BpeTokenizer {
             }
         }
 
-        for (&pack, &rank) in raw_pair_ranks.iter() {
+        for (&pack, &val) in raw_pair_ranks.iter() {
             let left = (pack >> 32) as u32;
             let right = pack as u32;
 
-            let token_id = 0u32;
-            let packed_val = ((rank as u64) << 32) | (token_id as u64);
+            let packed_val = ((val.rank as u64) << 32) | (val.id as u64);
 
             let mut h = pack ^ (pack >> 33);
             h = h.wrapping_mul(0xff51afd7ed558ccd);
             h = h ^ (h >> 33);
 
             let idx = (h & hash_mask) as usize;
-
             let mut target_idx = idx;
-            while pair_ranks_flat[target_idx] != u64::MAX {
+
+            // Линейное зондирование при коллизии в конструкторе
+            while keys_flat[target_idx] != u64::MAX {
                 target_idx = (target_idx + 1) & (table_size - 1);
             }
-            pair_ranks_flat[target_idx] = packed_val;
+            keys_flat[target_idx] = pack;
+            values_flat[target_idx] = packed_val;
 
             let b1 = if left < 512 { id_to_byte[left as usize] } else { -1 };
             let b2 = if right < 512 { id_to_byte[right as usize] } else { -1 };
@@ -55,7 +59,8 @@ impl BpeTokenizer {
         }
 
         Self {
-            pair_ranks_flat,
+            keys_flat,
+            values_flat,
             hash_mask,
             byte_pair_ranks,
             byte_fallback,
@@ -82,8 +87,24 @@ impl BpeTokenizer {
         let mut h = pack ^ (pack >> 33);
         h = h.wrapping_mul(0xff51afd7ed558ccd);
         h = h ^ (h >> 33);
-        let idx = (h & self.hash_mask) as usize;
 
-        unsafe { *self.pair_ranks_flat.get_unchecked(idx) }
+        let mask = self.hash_mask as usize;
+        let mut idx = (h as usize) & mask;
+
+        loop {
+            let key = unsafe { *self.keys_flat.get_unchecked(idx) };
+
+            if key == pack {
+                return unsafe { *self.values_flat.get_unchecked(idx) };
+            }
+            if key == u64::MAX {
+                return u64::MAX;
+            }
+
+            idx = (idx + 1) & mask;
+        }
     }
 }
+
+unsafe impl Send for BpeTokenizer {}
+unsafe impl Sync for BpeTokenizer {}
