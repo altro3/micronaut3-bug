@@ -1,4 +1,4 @@
-use my_llama::token::{BpeTokenizer, BpeValue};
+use my_llama::tokenizer::{BpeTokenizer, BpeValue};
 use rustc_hash::FxHashMap;
 
 fn create_test_tokenizer() -> BpeTokenizer {

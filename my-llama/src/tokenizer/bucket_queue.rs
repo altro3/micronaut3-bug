@@ -1,4 +1,4 @@
-use crate::token::bpe_types::BpePair;
+use crate::tokenizer::bpe_types::BpePair;
 
 pub struct BucketQueue {
     buckets: Vec<u32>,

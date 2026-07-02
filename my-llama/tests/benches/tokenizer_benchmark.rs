@@ -1,5 +1,5 @@
 use criterion::{criterion_group, criterion_main, Criterion, Throughput};
-use my_llama::token::{BpeTokenizer, BpeValue};
+use my_llama::tokenizer::{BpeTokenizer, BpeValue};
 use rustc_hash::FxHashMap;
 
 fn generate_heavy_tokenizer() -> BpeTokenizer {

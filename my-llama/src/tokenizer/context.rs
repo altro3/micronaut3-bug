@@ -1,4 +1,4 @@
-use crate::token::bucket_queue::BucketQueue;
+use crate::tokenizer::bucket_queue::BucketQueue;
 
 pub struct TokenizationContext {
     pub prev: Vec<usize>,

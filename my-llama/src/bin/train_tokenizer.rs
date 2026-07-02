@@ -1,5 +1,5 @@
-use my_llama::token::factory::TokenizerFactory;
-use my_llama::token::BpeTrainer;
+use my_llama::tokenizer::factory::TokenizerFactory;
+use my_llama::tokenizer::BpeTrainer;
 use std::fs;
 use std::time::Instant;
 
