@@ -1,8 +1,6 @@
-use super::bpe_types::BpeValue;
-use rustc_hash::FxHashMap;
-
 pub struct BpeTokenizer {
-    pub(crate) pair_ranks: FxHashMap<u64, BpeValue>,
+    pub(crate) pair_ranks_flat: Vec<u64>,
+    pub(crate) hash_mask: u64,
     pub(crate) byte_pair_ranks: [u64; 65536],
     pub(crate) byte_fallback: [u32; 256],
     pub(crate) id_to_byte: [i16; 513],
@@ -11,9 +9,16 @@ pub struct BpeTokenizer {
 }
 
 impl BpeTokenizer {
-    pub fn new(pair_ranks: FxHashMap<u64, BpeValue>, byte_fallback: [u32; 256], eos_token_id: u32, vocab_size: usize) -> Self {
+    pub fn new(raw_pair_ranks: rustc_hash::FxHashMap<u64, u32>, byte_fallback: [u32; 256], eos_token_id: u32, vocab_size: usize) -> Self {
         let mut byte_pair_ranks = [u64::MAX; 65536];
         let mut id_to_byte = [-1i16; 513];
+
+        let required_size = raw_pair_ranks.len() * 4;
+
+        let table_size = required_size.max(65536).next_power_of_two();
+        let hash_mask = (table_size - 1) as u64;
+
+        let mut pair_ranks_flat = vec![u64::MAX; table_size];
 
         for b in 0..=255 {
             let id = byte_fallback[b] as usize;
@@ -22,19 +27,36 @@ impl BpeTokenizer {
             }
         }
 
-        for b1 in 0..=255 {
-            for b2 in 0..=255 {
-                let id1 = byte_fallback[b1];
-                let id2 = byte_fallback[b2];
-                let pack = ((id1 as u64) << 32) | (id2 as u64);
-                if let Some(&val) = pair_ranks.get(&pack) {
-                    byte_pair_ranks[(b1 << 8) | b2] = ((val.rank as u64) << 32) | (val.id as u64);
-                }
+        for (&pack, &rank) in raw_pair_ranks.iter() {
+            let left = (pack >> 32) as u32;
+            let right = pack as u32;
+
+            let token_id = 0u32;
+            let packed_val = ((rank as u64) << 32) | (token_id as u64);
+
+            let mut h = pack ^ (pack >> 33);
+            h = h.wrapping_mul(0xff51afd7ed558ccd);
+            h = h ^ (h >> 33);
+
+            let idx = (h & hash_mask) as usize;
+
+            let mut target_idx = idx;
+            while pair_ranks_flat[target_idx] != u64::MAX {
+                target_idx = (target_idx + 1) & (table_size - 1);
+            }
+            pair_ranks_flat[target_idx] = packed_val;
+
+            let b1 = if left < 512 { id_to_byte[left as usize] } else { -1 };
+            let b2 = if right < 512 { id_to_byte[right as usize] } else { -1 };
+
+            if b1 >= 0 && b2 >= 0 {
+                byte_pair_ranks[((b1 as usize) << 8) | (b2 as usize)] = packed_val;
             }
         }
 
         Self {
-            pair_ranks,
+            pair_ranks_flat,
+            hash_mask,
             byte_pair_ranks,
             byte_fallback,
             id_to_byte,
@@ -57,8 +79,11 @@ impl BpeTokenizer {
         }
 
         let pack = ((left as u64) << 32) | (right as u64);
-        self.pair_ranks
-            .get(&pack)
-            .map_or(u64::MAX, |val| ((val.rank as u64) << 32) | (val.id as u64))
+        let mut h = pack ^ (pack >> 33);
+        h = h.wrapping_mul(0xff51afd7ed558ccd);
+        h = h ^ (h >> 33);
+        let idx = (h & self.hash_mask) as usize;
+
+        unsafe { *self.pair_ranks_flat.get_unchecked(idx) }
     }
 }
