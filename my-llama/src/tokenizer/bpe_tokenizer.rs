@@ -5,7 +5,7 @@ pub struct BpeTokenizer {
     pub(crate) pair_ranks: FxHashMap<u64, BpeValue>,
     pub(crate) byte_pair_ranks: Box<[[u64; 256]; 256]>,
     pub(crate) byte_fallback: [u32; 256],
-    pub(crate) id_to_byte: [i16; 512],
+    pub(crate) id_to_byte: [i16; 513],
     pub eos_token_id: u32,
     pub(crate) vocab_size: usize,
 }
@@ -13,7 +13,7 @@ pub struct BpeTokenizer {
 impl BpeTokenizer {
     pub fn new(pair_ranks: FxHashMap<u64, BpeValue>, byte_fallback: [u32; 256], eos_token_id: u32) -> Self {
         let mut byte_pair_ranks = Box::new([[u64::MAX; 256]; 256]);
-        let mut id_to_byte = [-1i16; 512];
+        let mut id_to_byte = [-1i16; 513];
 
         let vocab_size = (pair_ranks.len() * 2).max(160000);
 
@@ -47,18 +47,13 @@ impl BpeTokenizer {
 
     #[inline(always)]
     pub(crate) fn get_pair_value(&self, left: u32, right: u32) -> Option<BpeValue> {
-        let mask_left = (left < 512) as usize;
-        let mask_right = (right < 512) as usize;
-
-        let idx_left = (left as usize) * mask_left;
-        let idx_right = (right as usize) * mask_right;
+        let idx_left = if left < 512 { left as usize } else { 512 };
+        let idx_right = if right < 512 { right as usize } else { 512 };
 
         let b1 = unsafe { *self.id_to_byte.get_unchecked(idx_left) };
         let b2 = unsafe { *self.id_to_byte.get_unchecked(idx_right) };
 
-        let is_valid = (b1 >= 0) & (b2 >= 0) & (mask_left != 0) & (mask_right != 0);
-
-        if is_valid {
+        if (b1 >= 0) & (b2 >= 0) {
             let packed = unsafe { *self.byte_pair_ranks.get_unchecked(b1 as usize).get_unchecked(b2 as usize) };
 
             if packed != u64::MAX {

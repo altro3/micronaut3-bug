@@ -25,9 +25,17 @@ impl BpeTokenizer {
 
     fn encode_short_chunk(&self, bytes: &[u8], slice: &mut [u32], token_count: &mut usize, ctx: &mut TokenizationContext) {
         let len = bytes.len();
-        let prev = unsafe { ctx.short_prev.get_unchecked_mut(..len) };
-        let next = unsafe { ctx.short_next.get_unchecked_mut(..len) };
-        let ids = unsafe { ctx.short_token_ids.get_unchecked_mut(..len) };
+        if len > 16 {
+            return;
+        }
+
+        let prev = unsafe { ctx.short_prev.get_unchecked_mut(..len + 1) };
+        let next = unsafe { ctx.short_next.get_unchecked_mut(..len + 1) };
+        let ids = unsafe { ctx.short_token_ids.get_unchecked_mut(..len + 1) };
+
+        unsafe {
+            *ids.get_unchecked_mut(16) = u32::MAX;
+        }
 
         for i in 0..len {
             unsafe {
@@ -45,12 +53,10 @@ impl BpeTokenizer {
             let mut i = 0;
             while i < len {
                 let r = unsafe { *next.get_unchecked(i) as usize };
-                if r >= len {
-                    break;
-                }
+                let safe_r = if r < len { r } else { 16 };
 
                 let id_l = unsafe { *ids.get_unchecked(i) };
-                let id_r = unsafe { *ids.get_unchecked(r) };
+                let id_r = unsafe { *ids.get_unchecked(safe_r) };
 
                 if let Some(val) = self.get_pair_value(id_l, id_r) {
                     if val.rank < min_rank {
@@ -58,6 +64,10 @@ impl BpeTokenizer {
                         best_id = val.id;
                         best_left = i;
                     }
+                }
+
+                if r >= len {
+                    break;
                 }
                 i = r;
             }
@@ -80,15 +90,19 @@ impl BpeTokenizer {
         }
 
         let mut i = 0;
+        let mut count = *token_count;
+        let slice_len = slice.len();
+
         while i < len {
-            if *token_count >= slice.len() {
+            if count >= slice_len {
                 break;
             }
             unsafe {
-                *slice.get_unchecked_mut(*token_count) = *ids.get_unchecked(i);
-                *token_count += 1;
+                *slice.get_unchecked_mut(count) = *ids.get_unchecked(i);
+                count += 1;
                 i = *next.get_unchecked(i) as usize;
             }
         }
+        *token_count = count;
     }
 }
