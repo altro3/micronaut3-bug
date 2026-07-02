@@ -31,14 +31,16 @@ impl SimdSplitter {
 
         let bytes = text.as_bytes();
         let len = bytes.len();
-        let mut tokens_found = 0;
         let mut idx = 0;
 
         let buffer_len = ids_buffer.len();
-        let ids_ptr = ids_buffer.as_mut_ptr();
-        let fallback_ptr = byte_fallback.as_ptr();
 
-        let lookup_mask = unsafe { _mm256_load_si256(LOOKUP_MASK.data.as_ptr() as *const __m256i) };
+        let mut write_ptr = ids_buffer.as_mut_ptr();
+        let end_write_ptr = unsafe { write_ptr.add(buffer_len) };
+
+        let fallback_u8_ptr = (byte_fallback as *const [u32; 256]) as *const u8;
+
+        let lookup_mask = unsafe { _mm256_load_si256((&LOOKUP_MASK.data as *const [i8; 32]) as *const __m256i) };
         let low_nibble_mask = _mm256_set1_epi8(0x0F);
         let non_printable_mask = _mm256_set1_epi8(33);
 
@@ -95,15 +97,17 @@ impl SimdSplitter {
                     while m != 0 {
                         let tz = m.trailing_zeros() as usize;
 
-                        if tokens_found >= buffer_len {
-                            return tokens_found;
+                        if write_ptr >= end_write_ptr {
+                            return buffer_len;
                         }
 
                         unsafe {
                             let byte_val = *$arr.get_unchecked(tz);
-                            *ids_ptr.add(tokens_found) = *fallback_ptr.add(byte_val as usize);
+                            let token_id = *(fallback_u8_ptr.add((byte_val as usize) * 4) as *const u32);
+
+                            *write_ptr = token_id;
+                            write_ptr = write_ptr.add(1);
                         }
-                        tokens_found += 1;
                         m &= m - 1;
                     }
                 }};
@@ -122,18 +126,19 @@ impl SimdSplitter {
             let is_delim = if b <= 32 { ((1u64 << b) & 0x10000000600u64) != 0 } else { false };
 
             if !is_delim {
-                if tokens_found >= buffer_len {
-                    return tokens_found;
+                if write_ptr >= end_write_ptr {
+                    return buffer_len;
                 }
                 unsafe {
-                    *ids_ptr.add(tokens_found) = *fallback_ptr.add(b as usize);
+                    let token_id = *(fallback_u8_ptr.add((b as usize) * 4) as *const u32);
+                    *write_ptr = token_id;
+                    write_ptr = write_ptr.add(1);
                 }
-                tokens_found += 1;
             }
             idx += 1;
         }
 
-        tokens_found
+        unsafe { write_ptr.offset_from(ids_buffer.as_ptr()) as usize }
     }
 
     #[inline(always)]
@@ -150,7 +155,7 @@ impl SimdSplitter {
                     break;
                 }
                 unsafe {
-                    *ids_buffer.get_unchecked_mut(tokens_found) = *byte_fallback.get_unchecked(b as usize);
+                    *ids_buffer.get_unchecked_mut(tokens_found) = byte_fallback[b as usize];
                 }
                 tokens_found += 1;
             }
