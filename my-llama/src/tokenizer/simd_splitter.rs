@@ -77,8 +77,6 @@ impl SimdSplitter {
                 let mut success = true;
 
                 if mask != 0 {
-                    // Проверяем, один ли бит установлен в маске (быстрый путь)
-                    // (mask & (mask - 1)) == 0 означает, что пробел ровно ОДИН на все 32 байта
                     if (mask & (mask - 1)) == 0 {
                         let trailing_zeros = mask.trailing_zeros() as usize;
                         let split_position = $chunk_offset + trailing_zeros;
@@ -86,8 +84,7 @@ impl SimdSplitter {
                         if split_position > current_token_start {
                             if *tokens_found < tokens_buffer.len() {
                                 unsafe {
-                                    let cell = tokens_buffer.as_mut_ptr().add(*tokens_found);
-                                    *cell = TokenSpan {
+                                    *tokens_buffer.get_unchecked_mut(*tokens_found) = TokenSpan {
                                         start: current_token_start as u32,
                                         end: split_position as u32,
                                     };
@@ -100,28 +97,26 @@ impl SimdSplitter {
                         current_token_start = split_position + 1;
                     } else {
                         let mut temp_mask = mask;
-                        unsafe {
-                            let dest_ptr = tokens_buffer.as_mut_ptr();
-                            while temp_mask != 0 {
-                                let trailing_zeros = temp_mask.trailing_zeros() as usize;
-                                let split_position = $chunk_offset + trailing_zeros;
+                        while temp_mask != 0 {
+                            let trailing_zeros = temp_mask.trailing_zeros() as usize;
+                            let split_position = $chunk_offset + trailing_zeros;
 
-                                if split_position > current_token_start {
-                                    if *tokens_found < tokens_buffer.len() {
-                                        let cell = dest_ptr.add(*tokens_found);
-                                        *cell = TokenSpan {
+                            if split_position > current_token_start {
+                                if *tokens_found < tokens_buffer.len() {
+                                    unsafe {
+                                        *tokens_buffer.get_unchecked_mut(*tokens_found) = TokenSpan {
                                             start: current_token_start as u32,
                                             end: split_position as u32,
                                         };
-                                        *tokens_found += 1;
-                                    } else {
-                                        success = false;
-                                        break;
                                     }
+                                    *tokens_found += 1;
+                                } else {
+                                    success = false;
+                                    break;
                                 }
-                                current_token_start = split_position + 1;
-                                temp_mask &= temp_mask - 1;
                             }
+                            current_token_start = split_position + 1;
+                            temp_mask &= temp_mask - 1;
                         }
                     }
                 }
@@ -143,7 +138,6 @@ impl SimdSplitter {
                 let match_newline_1 = _mm256_cmpeq_epi8(memory_chunk_1, vector_newline);
                 let match_carriage_1 = _mm256_cmpeq_epi8(memory_chunk_1, vector_carriage);
                 let match_tab_1 = _mm256_cmpeq_epi8(memory_chunk_1, vector_tab);
-
                 let combined_matches_1 = _mm256_or_si256(
                     _mm256_or_si256(match_space_1, match_newline_1),
                     _mm256_or_si256(match_carriage_1, match_tab_1),
@@ -154,7 +148,6 @@ impl SimdSplitter {
                 let match_newline_2 = _mm256_cmpeq_epi8(memory_chunk_2, vector_newline);
                 let match_carriage_2 = _mm256_cmpeq_epi8(memory_chunk_2, vector_carriage);
                 let match_tab_2 = _mm256_cmpeq_epi8(memory_chunk_2, vector_tab);
-
                 let combined_matches_2 = _mm256_or_si256(
                     _mm256_or_si256(match_space_2, match_newline_2),
                     _mm256_or_si256(match_carriage_2, match_tab_2),
