@@ -1,9 +1,8 @@
-use crate::tokenizer::bpe_types::BpePair;
-
 pub struct BucketQueue {
     buckets: Vec<u32>,
     next_node: Vec<u32>,
     min_rank: usize,
+    max_rank_dirty: usize,
 }
 
 impl BucketQueue {
@@ -12,14 +11,28 @@ impl BucketQueue {
             buckets: vec![u32::MAX; vocab_size],
             next_node: vec![u32::MAX; chunk_len.max(512)],
             min_rank: vocab_size,
+            max_rank_dirty: 0,
         }
     }
 
     #[inline(always)]
-    pub fn clear(&mut self) {
+    pub fn clear(&mut self, chunk_len: usize) {
+        if self.min_rank <= self.max_rank_dirty {
+            let end = self.max_rank_dirty.min(self.buckets.len() - 1);
+            unsafe {
+                let ptr = self.buckets.as_mut_ptr().add(self.min_rank);
+                // Заполняем u32::MAX (побайтово 0xFF) строго измененный диапазон
+                std::ptr::write_bytes(ptr, 0xFF, (end - self.min_rank) + 1);
+            }
+        }
+
+        unsafe {
+            let end_next = chunk_len.min(self.next_node.len());
+            std::ptr::write_bytes(self.next_node.as_mut_ptr(), 0xFF, end_next);
+        }
+
         self.min_rank = self.buckets.len();
-        self.next_node.fill(u32::MAX);
-        self.buckets.fill(u32::MAX);
+        self.max_rank_dirty = 0;
     }
 
     #[inline(always)]
@@ -30,7 +43,14 @@ impl BucketQueue {
     #[inline(always)]
     pub fn reserve_chunk_len(&mut self, new_len: usize) {
         if new_len > self.next_node.len() {
-            self.next_node.resize(new_len, u32::MAX);
+            let additional = new_len - self.next_node.len();
+            self.next_node.reserve(additional);
+            unsafe {
+                let old_len = self.next_node.len();
+                self.next_node.set_len(new_len);
+                let ptr = self.next_node.as_mut_ptr().add(old_len);
+                std::ptr::write_bytes(ptr, 0xFF, additional);
+            }
         }
     }
 
@@ -40,9 +60,8 @@ impl BucketQueue {
         if r < self.min_rank {
             self.min_rank = r;
         }
-
-        if left_idx >= self.next_node.len() {
-            self.next_node.resize(left_idx + 256, u32::MAX);
+        if r > self.max_rank_dirty {
+            self.max_rank_dirty = r;
         }
 
         unsafe {
@@ -57,29 +76,26 @@ impl BucketQueue {
     }
 
     #[inline(always)]
-    pub fn pop(&mut self) -> Option<BpePair> {
+    pub fn pop_packed(&mut self) -> u64 {
         let len = self.buckets.len();
+
         while self.min_rank < len {
             let head = unsafe { *self.buckets.get_unchecked(self.min_rank) };
+
             if head != u32::MAX {
                 unsafe {
-                    let next = *self.next_node.get_unchecked(head as usize);
-                    if next == head || next == u32::MAX {
-                        *self.buckets.get_unchecked_mut(self.min_rank) = u32::MAX;
-                    } else {
-                        *self.buckets.get_unchecked_mut(self.min_rank) = next;
-                    }
+                    let head_idx = head as usize;
+                    let next = *self.next_node.get_unchecked(head_idx);
 
-                    *self.next_node.get_unchecked_mut(head as usize) = u32::MAX;
+                    *self.buckets.get_unchecked_mut(self.min_rank) = next;
+                    *self.next_node.get_unchecked_mut(head_idx) = u32::MAX;
 
-                    return Some(BpePair {
-                        rank: self.min_rank as u32,
-                        left_idx: head as usize,
-                    });
+                    return ((self.min_rank as u64) << 32) | (head as u64);
                 }
             }
             self.min_rank += 1;
         }
-        None
+
+        u64::MAX
     }
 }

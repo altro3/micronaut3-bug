@@ -9,11 +9,14 @@ impl BpeTokenizer {
             ctx.heap.reserve_chunk_len(len + 256);
         }
 
+        ctx.long_ids.clear();
+        ctx.long_prev.clear();
+        ctx.long_next.clear();
+
         if ctx.long_ids.capacity() < len {
-            let reserve_len = len - ctx.long_ids.len();
-            ctx.long_ids.reserve(reserve_len);
-            ctx.long_prev.reserve(reserve_len);
-            ctx.long_next.reserve(reserve_len);
+            ctx.long_ids.reserve(len);
+            ctx.long_prev.reserve(len);
+            ctx.long_next.reserve(len);
         }
 
         unsafe {
@@ -32,7 +35,6 @@ impl BpeTokenizer {
             }
         }
 
-        // Шаг 2: Первичный расчет и заполнение кучи приоритетов
         for i in 0..len - 1 {
             unsafe {
                 let id1 = *ctx.long_ids.get_unchecked(i);
@@ -46,9 +48,14 @@ impl BpeTokenizer {
             }
         }
 
-        while let Some(pair) = ctx.heap.pop() {
-            let l = pair.left_idx;
-            let rank = pair.rank;
+        loop {
+            let pair_packed = ctx.heap.pop_packed(); // Должен возвращать u64
+            if pair_packed == u64::MAX {
+                break;
+            }
+
+            let rank = (pair_packed >> 32) as u32;
+            let l = pair_packed as u32 as usize;
 
             let r = unsafe { *ctx.long_next.get_unchecked(l) };
             if r == -1 {
@@ -76,6 +83,7 @@ impl BpeTokenizer {
                 *ctx.long_ids.get_unchecked_mut(l) = target_id;
 
                 *ctx.long_next.get_unchecked_mut(r_idx) = -1;
+                *ctx.long_ids.get_unchecked_mut(r_idx) = u32::MAX;
 
                 if l_prev != -1 {
                     let l_prev_idx = l_prev as usize;
