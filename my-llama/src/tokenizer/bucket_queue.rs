@@ -19,6 +19,7 @@ impl BucketQueue {
     pub fn clear(&mut self) {
         self.min_rank = self.buckets.len();
         self.next_node.fill(u32::MAX);
+        self.buckets.fill(u32::MAX);
     }
 
     #[inline(always)]
