@@ -1,5 +1,3 @@
-use super::bpe_types::BpeValue;
-
 pub struct BpeTokenizer {
     pub(crate) keys_flat: Vec<u64>,
     pub(crate) values_flat: Vec<u64>,
@@ -12,7 +10,7 @@ pub struct BpeTokenizer {
 }
 
 impl BpeTokenizer {
-    pub fn new(raw_pairs: &[(u64, BpeValue)], byte_fallback: [u32; 256], eos_token_id: u32, vocab_size: usize) -> Self {
+    pub fn new(raw_pairs: &[(u64, (u32, u32))], byte_fallback: [u32; 256], eos_token_id: u32, vocab_size: usize) -> Self {
         let mut byte_pair_ranks = [u64::MAX; 65536];
         let mut id_to_byte = [-1i16; 512];
 
@@ -30,8 +28,8 @@ impl BpeTokenizer {
             }
         }
 
-        for &(pack, val) in raw_pairs.iter() {
-            let packed_val = ((val.rank as u64) << 32) | (val.id as u64);
+        for &(pack, (rank, id)) in raw_pairs.iter() {
+            let packed_val = ((rank as u64) << 32) | (id as u64);
 
             let mut h = pack;
             h = h.wrapping_mul(0x517cc1b727220a95);

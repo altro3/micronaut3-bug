@@ -2,7 +2,7 @@ use super::bpe_tokenizer::BpeTokenizer;
 use super::context::TokenizationContext;
 
 macro_rules! generate_bpe_loop {
-    ($N:expr, $self:expr, $len:expr, $cached_ranks:expr, $cached_ids:expr, $prev:expr, $next:expr, $ids:expr) => {
+    ($N:expr, $self:expr, $len:expr, $cached_ranks:ident, $cached_ids:ident, $prev:ident, $next:ident, $ids:ident) => {
         loop {
             let mut min_rank = u32::MAX;
             let mut best_left = usize::MAX;
@@ -89,13 +89,13 @@ impl BpeTokenizer {
             return;
         }
         if len <= 16 {
-            self.encode_short_chunk(bytes, slice, token_count, ctx);
+            self.encode_short_chunk(bytes, slice, token_count);
         } else {
             self.encode_long_chunk(bytes, slice, token_count, ctx);
         }
     }
 
-    fn encode_short_chunk(&self, bytes: &[u8], slice: &mut [u32], token_count: &mut usize, ctx: &mut TokenizationContext) {
+    fn encode_short_chunk(&self, bytes: &[u8], slice: &mut [u32], token_count: &mut usize) {
         let len = bytes.len();
         if len > 16 {
             return;
@@ -103,10 +103,9 @@ impl BpeTokenizer {
 
         let mut cached_ranks = [u32::MAX; 16];
         let mut cached_ids = [0u32; 16];
-
-        let prev = unsafe { ctx.short_prev.get_unchecked_mut(..len) };
-        let next = unsafe { ctx.short_next.get_unchecked_mut(..len) };
-        let ids = unsafe { ctx.short_token_ids.get_unchecked_mut(..len) };
+        let mut prev = [0u8; 16];
+        let mut next = [0u8; 16];
+        let mut ids = [0u32; 16];
 
         for i in 0..len {
             unsafe {

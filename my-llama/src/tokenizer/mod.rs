@@ -11,7 +11,5 @@ pub mod trainer;
 pub mod trie;
 
 pub use bpe_tokenizer::BpeTokenizer;
-pub use bpe_types::BpePair;
-pub use bpe_types::BpeValue;
 pub use simd::simd_splitter::SimdSplitter;
 pub use trainer::BpeTrainer;
