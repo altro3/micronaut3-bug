@@ -6,13 +6,12 @@ mod encoder_api;
 mod encoder_long;
 mod encoder_short;
 pub mod factory;
-pub mod simd_splitter;
+pub mod simd;
 pub mod trainer;
 pub mod trie;
-pub mod arch;
-pub mod macros;
 
 pub use bpe_tokenizer::BpeTokenizer;
 pub use bpe_types::BpePair;
 pub use bpe_types::BpeValue;
+pub use simd::simd_splitter::SimdSplitter;
 pub use trainer::BpeTrainer;

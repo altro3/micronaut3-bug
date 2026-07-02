@@ -6,6 +6,7 @@ pub fn consume_tail(
     write_ptr: &mut *mut u32,
     end_write_ptr: *mut u32,
     fallback_ptr: *const u32,
+    buf_start_ptr: *const u32,
     buffer_len: usize,
 ) -> usize {
     while *idx < len {
@@ -19,9 +20,13 @@ pub fn consume_tail(
             unsafe {
                 **write_ptr = *fallback_ptr.add(b as usize);
             }
-            *write_ptr = unsafe { (*write_ptr).add(1) };
+            unsafe {
+                *write_ptr = (*write_ptr).add(1);
+            }
         }
         *idx += 1;
     }
-    unsafe { (*write_ptr).offset_from(bytes_ptr as *const u32) as usize }
+    unsafe {
+        (*write_ptr).offset_from(buf_start_ptr) as usize
+    }
 }
