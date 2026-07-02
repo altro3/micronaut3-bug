@@ -12,11 +12,11 @@ pub struct BpeTokenizer {
 }
 
 impl BpeTokenizer {
-    pub fn new(raw_pair_ranks: rustc_hash::FxHashMap<u64, BpeValue>, byte_fallback: [u32; 256], eos_token_id: u32, vocab_size: usize) -> Self {
+    pub fn new(raw_pairs: &[(u64, BpeValue)], byte_fallback: [u32; 256], eos_token_id: u32, vocab_size: usize) -> Self {
         let mut byte_pair_ranks = [u64::MAX; 65536];
         let mut id_to_byte = [-1i16; 513];
 
-        let required_size = raw_pair_ranks.len() * 2;
+        let required_size = raw_pairs.len() * 2;
         let table_size = required_size.max(65536).next_power_of_two();
         let hash_mask = (table_size - 1) as u64;
 
@@ -30,7 +30,7 @@ impl BpeTokenizer {
             }
         }
 
-        for (&pack, &val) in raw_pair_ranks.iter() {
+        for &(pack, val) in raw_pairs.iter() {
             let left = (pack >> 32) as u32;
             let right = pack as u32;
 
@@ -43,7 +43,6 @@ impl BpeTokenizer {
             let idx = (h & hash_mask) as usize;
             let mut target_idx = idx;
 
-            // Линейное зондирование при коллизии в конструкторе
             while keys_flat[target_idx] != u64::MAX {
                 target_idx = (target_idx + 1) & (table_size - 1);
             }
@@ -105,6 +104,3 @@ impl BpeTokenizer {
         }
     }
 }
-
-unsafe impl Send for BpeTokenizer {}
-unsafe impl Sync for BpeTokenizer {}
