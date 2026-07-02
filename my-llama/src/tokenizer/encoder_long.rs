@@ -2,7 +2,7 @@ use super::bpe_tokenizer::BpeTokenizer;
 use super::context::TokenizationContext;
 
 impl BpeTokenizer {
-    pub(crate) fn encode_long_chunk(&self, bytes: &[u8], slice: &mut [u32], token_count: &mut usize, ctx: &mut TokenizationContext) {
+    pub(crate) fn encode_long_chunk(&self, bytes: &[u8], token_count: &mut usize, ctx: &mut TokenizationContext) {
         let len = bytes.len();
         if len == 0 {
             return;
@@ -25,26 +25,21 @@ impl BpeTokenizer {
             ctx.heap.next_node.resize(len + 256, u32::MAX);
         }
 
-        let mut min_rank = ctx.heap.buckets.len();
-        let mut max_rank_dirty = ctx.heap.buckets.len() - 1;
-
-        let (n_min, n_max) = ctx.heap.clear(min_rank, max_rank_dirty, len);
-        min_rank = n_min;
-        max_rank_dirty = n_max;
-
-        let fallback_ptr = self.byte_fallback.as_ptr();
-        let bytes_ptr = bytes.as_ptr();
+        ctx.heap.clear(len);
 
         let long_ids_ptr = ctx.long_ids.as_mut_ptr();
         let long_prev_ptr = ctx.long_prev.as_mut_ptr();
         let long_next_ptr = ctx.long_next.as_mut_ptr();
+        let tokens_buffer_ptr = ctx.tokens_buffer.as_ptr();
+
+        unsafe {
+            std::ptr::copy_nonoverlapping(tokens_buffer_ptr, long_ids_ptr, len);
+        }
 
         for i in 0..len {
             unsafe {
-                let id = *fallback_ptr.add(*bytes_ptr.add(i) as usize);
-                std::ptr::write(long_ids_ptr.add(i), id);
-                std::ptr::write(long_prev_ptr.add(i), if i == 0 { -1 } else { (i - 1) as i32 });
-                std::ptr::write(long_next_ptr.add(i), if i == len - 1 { -1 } else { (i + 1) as i32 });
+                *long_prev_ptr.add(i) = if i == 0 { -1 } else { (i - 1) as i32 };
+                *long_next_ptr.add(i) = if i == len - 1 { -1 } else { (i + 1) as i32 };
             }
         }
 
@@ -55,24 +50,19 @@ impl BpeTokenizer {
 
                 let packed = self.get_pair_packed(id1, id2);
                 if packed != u64::MAX {
-                    let rank = (packed >> 32) as u32;
-                    let (n_min, n_max) = ctx.heap.push(min_rank, max_rank_dirty, rank, i);
-                    min_rank = n_min;
-                    max_rank_dirty = n_max;
+                    ctx.heap.push((packed >> 32) as u32, i);
                 }
             }
         }
 
         loop {
-            let (packed_pair, new_min) = ctx.heap.pop_packed(min_rank);
-            min_rank = new_min;
-
+            let packed_pair = ctx.heap.pop_packed();
             if packed_pair == u64::MAX {
                 break;
             }
 
             let rank = (packed_pair >> 32) as u32;
-            let l = packed_pair as u32 as usize;
+            let l = (packed_pair as u32) as usize;
 
             unsafe {
                 let r = *long_next_ptr.add(l);
@@ -108,9 +98,7 @@ impl BpeTokenizer {
                     let id_prev = *long_ids_ptr.add(l_prev_idx);
                     let packed_l = self.get_pair_packed(id_prev, target_id);
                     if packed_l != u64::MAX {
-                        let (n_min, n_max) = ctx.heap.push(min_rank, max_rank_dirty, (packed_l >> 32) as u32, l_prev_idx);
-                        min_rank = n_min;
-                        max_rank_dirty = n_max;
+                        ctx.heap.push((packed_l >> 32) as u32, l_prev_idx);
                     }
                 }
 
@@ -119,9 +107,7 @@ impl BpeTokenizer {
                     let id_after = *long_ids_ptr.add(after_r_idx);
                     let packed_r = self.get_pair_packed(target_id, id_after);
                     if packed_r != u64::MAX {
-                        let (n_min, n_max) = ctx.heap.push(min_rank, max_rank_dirty, (packed_r >> 32) as u32, l);
-                        min_rank = n_min;
-                        max_rank_dirty = n_max;
+                        ctx.heap.push((packed_r >> 32) as u32, l);
                     }
                 }
             }
@@ -129,14 +115,15 @@ impl BpeTokenizer {
 
         let mut i = 0usize;
         let mut count = *token_count;
-        let slice_len = slice.len();
+        let out_tokens_ptr = ctx.tokens_buffer.as_mut_ptr();
+        let max_slice_len = ctx.tokens_buffer.capacity();
 
         while i < len {
-            if count >= slice_len {
+            if count >= max_slice_len {
                 break;
             }
             unsafe {
-                *slice.get_unchecked_mut(count) = *long_ids_ptr.add(i);
+                *out_tokens_ptr.add(count) = *long_ids_ptr.add(i);
                 count += 1;
 
                 let next_node = *long_next_ptr.add(i);
