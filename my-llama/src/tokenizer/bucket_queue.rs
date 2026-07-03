@@ -27,25 +27,20 @@ impl BucketQueue {
         if self.min_rank_dirty <= self.max_rank_dirty {
             let start_bucket = self.min_rank_dirty;
             let end_bucket = self.max_rank_dirty.min(self.buckets.len() - 1);
-            let count = (end_bucket - start_bucket) + 1;
 
-            unsafe {
-                std::ptr::write_bytes(self.buckets.as_mut_ptr().add(start_bucket), 0xFF, count * 4);
-            }
+            if start_bucket <= end_bucket {
+                self.buckets[start_bucket..=end_bucket].fill(u32::MAX);
 
-            let start_word = start_bucket >> 6;
-            let end_word = end_bucket >> 6;
-            let word_count = (end_word - start_word) + 1;
-
-            unsafe {
-                std::ptr::write_bytes(self.bitset.as_mut_ptr().add(start_word), 0, word_count * 8);
+                let start_word = start_bucket >> 6;
+                let end_word = (end_bucket >> 6).min(self.bitset.len() - 1);
+                if start_word <= end_word {
+                    self.bitset[start_word..=end_word].fill(0);
+                }
             }
         }
 
         let end_next = chunk_len.min(self.next_node.len());
-        unsafe {
-            std::ptr::write_bytes(self.next_node.as_mut_ptr(), 0xFF, end_next * 4);
-        }
+        self.next_node[..end_next].fill(u32::MAX);
 
         self.min_rank_dirty = self.buckets.len();
         self.max_rank_dirty = 0;
@@ -67,7 +62,6 @@ impl BucketQueue {
 
             *self.next_node.get_unchecked_mut(left_idx) = head;
             *head_ptr = left_idx as u32;
-
             *self.bitset.get_unchecked_mut(word_idx) |= 1u64 << bit_idx;
         }
     }
@@ -92,8 +86,8 @@ impl BucketQueue {
                 word_idx += 1;
 
                 while word_idx + 4 <= bitset_len {
-                    let vec_data = std::ptr::read_unaligned(bitset_ptr.add(word_idx) as *const __m256i);
-
+                    let current_ptr = bitset_ptr.add(word_idx);
+                    let vec_data = std::ptr::read_unaligned(current_ptr as *const __m256i);
                     let zeroes = _mm256_setzero_si256();
                     let cmp = _mm256_cmpeq_epi64(vec_data, zeroes);
                     let mask = _mm256_movemask_epi8(cmp) as u32;
@@ -101,7 +95,7 @@ impl BucketQueue {
                     if mask != 0xFFFFFFFF {
                         let inv_mask = !mask;
                         let first_nonzero_byte_idx = inv_mask.trailing_zeros() as usize;
-                        let target_word_offset = first_nonzero_byte_idx >> 3; // 0..3
+                        let target_word_offset = first_nonzero_byte_idx >> 3;
 
                         word_idx += target_word_offset;
                         word = *bitset_ptr.add(word_idx);
@@ -127,6 +121,12 @@ impl BucketQueue {
 
             let tz = word.trailing_zeros() as usize;
             let actual_rank = (word_idx << 6) + tz;
+
+            if actual_rank >= buckets_len {
+                self.min_rank_dirty = buckets_len;
+                return u64::MAX;
+            }
+
             self.min_rank_dirty = actual_rank;
 
             let bucket_ptr = self.buckets.get_unchecked_mut(actual_rank);
@@ -145,5 +145,33 @@ impl BucketQueue {
 
             ((actual_rank as u64) << 32) | (head as u64)
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_bucket_queue_isolated() {
+        let vocab_size = 1000;
+        let max_chunk_capacity = 100;
+        let mut queue = BucketQueue::with_capacity(vocab_size, max_chunk_capacity);
+
+        // Пушим минимальный набор
+        queue.push(50, 5);
+        queue.push(100, 10);
+
+        let p1 = queue.pop_packed();
+        assert_ne!(p1, u64::MAX);
+        assert_eq!((p1 >> 32) as u32, 50);
+        assert_eq!((p1 & 0xFFFFFFFF) as usize, 5);
+
+        let p2 = queue.pop_packed();
+        assert_ne!(p2, u64::MAX);
+        assert_eq!((p2 >> 32) as u32, 100);
+        assert_eq!((p2 & 0xFFFFFFFF) as usize, 10);
+
+        assert_eq!(queue.pop_packed(), u64::MAX);
     }
 }

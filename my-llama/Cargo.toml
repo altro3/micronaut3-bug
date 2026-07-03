@@ -44,9 +44,9 @@ harness = false
 name = "splitter_test"
 path = "tests/tokenizer/splitter/splitter_test.rs"
 
-[[test]]
-name = "bucket_queue_test"
-path = "tests/tokenizer/bucket_queue_test.rs"
+#[[test]]
+#name = "bucket_queue_test"
+#path = "tests/tokenizer/bucket_queue_test.rs"
 
 [profile.release]
 opt-level = 3
@@ -63,3 +63,7 @@ codegen-units = 16
 [profile.dev]
 opt-level = 1
 debug = true
+panic = "abort"
+
+[profile.test]
+panic = "abort"
