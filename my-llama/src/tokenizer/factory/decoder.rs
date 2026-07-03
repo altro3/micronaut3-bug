@@ -3,20 +3,25 @@ pub struct FactoryUtils;
 impl FactoryUtils {
     #[inline(always)]
     pub fn fxhash64(b: &[u8]) -> u64 {
-        let (mut hash, mut c, len) = (0u64, 0, b.len());
+        let len = b.len();
+        let mut hash = 0u64;
+        let mut c = 0;
+        let ptr = b.as_ptr();
+
         while c + 8 <= len {
-            let mut block = 0u64;
-            unsafe {
-                std::ptr::copy_nonoverlapping(b.as_ptr().add(c), &mut block as *mut u64 as *mut u8, 8);
-            }
+            let block = unsafe { std::ptr::read_unaligned(ptr.add(c) as *const u64) };
             hash = hash.rotate_left(5) ^ block;
             hash = hash.wrapping_mul(0x517cc1b727220a95);
             c += 8;
         }
+
         if c < len {
             let mut block = 0u64;
-            unsafe {
-                std::ptr::copy_nonoverlapping(b.as_ptr().add(c), &mut block as *mut u64 as *mut u8, len - c);
+            let mut shift = 0;
+            while c < len {
+                block |= (unsafe { *ptr.add(c) } as u64) << shift;
+                shift += 8;
+                c += 1;
             }
             hash = hash.rotate_left(5) ^ block;
             hash = hash.wrapping_mul(0x517cc1b727220a95);
@@ -25,43 +30,70 @@ impl FactoryUtils {
     }
 
     #[inline(always)]
-    pub fn decode_inplace(s: &[u8], buf: &mut [u8; 128]) -> usize {
-        let (mut w, mut i, len) = (0, 0, s.len());
-        while i < len && w < 128 {
-            let b0 = s[i];
-            let u = if b0 < 0x80 {
-                i += 1;
-                b0 as u32
-            } else if (b0 & 0xE0) == 0xC0 && i + 1 < len {
-                let u = (((b0 & 0x1F) as u32) << 6) | ((s[i + 1] & 0x3F) as u32);
-                i += 2;
-                u
-            } else if (b0 & 0xF0) == 0xE0 && i + 2 < len {
-                let u = (((b0 & 0x0F) as u32) << 12) | (((s[i + 1] & 0x3F) as u32) << 6) | ((s[i + 2] & 0x3F) as u32);
-                i += 3;
-                u
-            } else {
-                i += 1;
-                continue;
-            };
+    pub fn decode_inplace(s: &[u8], buf: &mut [u8]) -> usize {
+        let len = s.len();
+        let buf_len = buf.len();
+        let s_ptr = s.as_ptr();
+        let buf_ptr = buf.as_mut_ptr();
 
-            buf[w] = match u {
-                0..=32 | 127..=159 => u as u8,
-                33..=126 => u as u8,
-                0x0100..=0x011F => (u - 0x0100 + 33) as u8,
-                0x0120..=0x013E => (u - 0x0120 + 127) as u8,
-                0x013F..=0x015F => (u - 0x0180 + 223) as u8,
-                _ => u as u8,
-            };
-            w += 1;
+        let (mut i, mut w) = (0, 0);
+
+        unsafe {
+            while i < len && w < buf_len {
+                let b0 = *s_ptr.add(i);
+                let mut cp: u32;
+
+                if b0 < 0x80 {
+                    cp = b0 as u32;
+                    i += 1;
+                } else if (b0 & 0xE0) == 0xC0 && i + 1 < len {
+                    cp = ((b0 & 0x1F) as u32) << 6;
+                    cp |= (*s_ptr.add(i + 1) & 0x3F) as u32;
+                    i += 2;
+                } else if (b0 & 0xF0) == 0xE0 && i + 2 < len {
+                    cp = ((b0 & 0x0F) as u32) << 12;
+                    cp |= ((*s_ptr.add(i + 1) & 0x3F) as u32) << 6;
+                    cp |= (*s_ptr.add(i + 2) & 0x3F) as u32;
+                    i += 3;
+                } else if (b0 & 0xF8) == 0xF0 && i + 3 < len {
+                    cp = ((b0 & 0x07) as u32) << 18;
+                    cp |= ((*s_ptr.add(i + 1) & 0x3F) as u32) << 12;
+                    cp |= ((*s_ptr.add(i + 2) & 0x3F) as u32) << 6;
+                    cp |= (*s_ptr.add(i + 3) & 0x3F) as u32;
+                    i += 4;
+                } else {
+                    i += 1;
+                    continue;
+                }
+
+                let raw_byte = match cp {
+                    0x00..=0x7F => cp as u8,
+                    0x0100..=0x0120 => (cp - 0x0100) as u8,
+                    0x0121..=0x017D => (cp - 0x0121 + 33) as u8,
+                    0x017E..=0x01AC => (cp - 0x017E + 127) as u8,
+                    0x01AD..=0x01FF => (cp - 0x01AD + 174) as u8,
+                    _ => cp as u8,
+                };
+
+                *buf_ptr.add(w) = raw_byte;
+                w += 1;
+            }
         }
         w
     }
 
     #[inline(always)]
     pub fn parse_u32(bytes: &[u8]) -> u32 {
-        bytes
-            .iter()
-            .fold(0u32, |acc, &b| if b.is_ascii_digit() { acc * 10 + (b - b'0') as u32 } else { acc })
+        let mut val = 0u32;
+        let len = bytes.len();
+        let ptr = bytes.as_ptr();
+
+        for i in 0..len {
+            unsafe {
+                let digit = *ptr.add(i) - b'0';
+                val = val * 10 + digit as u32;
+            }
+        }
+        val
     }
 }
