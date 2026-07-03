@@ -6,8 +6,6 @@ edition = "2024"
 [build-dependencies]
 cc = "1.2"
 
-[dependencies]
-
 [dev-dependencies]
 criterion = { version = "0.8", features = ["html_reports"] }
 
@@ -42,6 +40,10 @@ name = "trainer_benchmark"
 path = "tests/benches/trainer_bench.rs"
 harness = false
 
+[[test]]
+name = "splitter_test"
+path = "tests/tokenizer/splitter/splitter_test.rs"
+
 [profile.release]
 opt-level = 3
 lto = "thin"
@@ -53,3 +55,7 @@ strip = "symbols"
 opt-level = 3
 lto = "fat"
 codegen-units = 16
+
+[profile.dev]
+opt-level = 1
+debug = true
