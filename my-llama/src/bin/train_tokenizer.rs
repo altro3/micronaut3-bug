@@ -4,6 +4,17 @@ use std::fs;
 use std::time::Instant;
 
 fn main() -> std::io::Result<()> {
+    let stack_size = 32 * 1024 * 1024;
+
+    let handle = std::thread::Builder::new()
+        .name("ultra-runtime".to_string())
+        .stack_size(stack_size)
+        .spawn(|| run_benchmark())?;
+
+    handle.join().unwrap()
+}
+
+fn run_benchmark() -> std::io::Result<()> {
     let input_path = "data/input.txt";
     let model_path = "data/my_bpe_model.json";
     fs::create_dir_all("data")?;
@@ -20,7 +31,6 @@ fn main() -> std::io::Result<()> {
         ];
 
         let mut big_text = String::with_capacity(16 * 1024 * 1024);
-        // Циклически перемешиваем и дублируем блоки для создания структурных повторений
         for i in 0..150_000 {
             big_text.push_str(blocks[i % blocks.len()]);
         }
@@ -34,7 +44,7 @@ fn main() -> std::io::Result<()> {
         total_bytes as f64 / (1024.0 * 1024.0)
     );
 
-    // 1. ОБУЧЕНИЕ: Выставляем честный размер словаря в 8000 токенов
+    // 1. ОБУЧЕНИЕ (теперь защищено большим стеком)
     let config = TrainerConfig::default();
     let trainer = BpeTrainer::new(8000, config);
 
@@ -42,16 +52,16 @@ fn main() -> std::io::Result<()> {
     trainer.train(&text_content, model_path)?;
     println!("[Ультра-Тест] Время обучения словаря: {:?}", start_train.elapsed());
 
-    // 2. ЗАГРУЗКА: Читаем через нашу AVX2 фабрику с зеркальным UTF-8 декодером
+    // 2. ЗАГРУЗКА ЧЕРЕЗ НАШУ SIMD ФАБРИКУ
     println!("\n[Ультра-Тест] Загружаем хаос-модель через фабрику...");
     let tokenizer = TokenizerFactory::from_file(model_path)?;
 
-    // 3. ЭНКОДИНГ: Нарезаем грязный текст на 64 независимые батч-строки
+    // 3. ПОДГОТОВКА БАТЧА
     let mut batch_texts = Vec::with_capacity(64);
     let chunk_size = text_content.len() / 64;
     let mut current_idx = 0;
 
-    for _ in 0..63 {
+    for _ in 0..32 {
         let mut end_idx = current_idx + chunk_size;
         while end_idx < text_content.len() && !text_content.is_char_boundary(end_idx) {
             end_idx += 1;
@@ -64,8 +74,16 @@ fn main() -> std::io::Result<()> {
     }
 
     let batch_bytes: usize = batch_texts.iter().map(|s| s.len()).sum();
-    println!("[Ультра-Тест] Токенизируем многоязычный БАТЧ на P-ядрах Arrow Lake...");
 
+    // --- ФАЗА ПРОГРЕВА (WARM-UP) ---
+    println!("[Ультра-Тест] Разгон процессора и прогрев кэша (Warm-up)...");
+    for _ in 0..3 {
+        std::hint::black_box(tokenizer.encode_parallel(&batch_texts));
+    }
+
+    println!("[Ультра-Тест] Токенизируем многоязычный БАТЧ на P-ядрах...");
+
+    // 3. ЧИСТЫЙ ЗАМЕР ВРЕМЕНИ ЭНКОДЕРА
     let start_parallel = Instant::now();
     let parallel_results = tokenizer.encode_parallel(&batch_texts);
     let duration_parallel = start_parallel.elapsed();

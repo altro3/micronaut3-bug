@@ -2,6 +2,7 @@ pub mod bpe_tokenizer;
 pub mod bpe_types;
 pub mod bucket_queue;
 pub mod context;
+pub mod decoder;
 mod encoder_api;
 mod encoder_long;
 mod encoder_short;

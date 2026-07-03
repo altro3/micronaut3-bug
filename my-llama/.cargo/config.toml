@@ -1,2 +1,5 @@
 [build]
 rustflags = ["-C", "target-cpu=native"]
+
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-C", "link-args=/STACK:33554432"]

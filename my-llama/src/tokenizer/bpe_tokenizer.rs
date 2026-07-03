@@ -5,14 +5,23 @@ pub struct BpeTokenizer {
     pub(crate) values_flat: Vec<u64>,
     pub(crate) hash_mask: u64,
     pub(crate) byte_pair_ranks: [u64; 65536],
-    pub(crate) byte_fallback: [u32; 256],
+    pub byte_fallback: [u32; 256],
     pub(crate) id_to_byte: [u8; 512],
     pub eos_token_id: u32,
     pub(crate) vocab_size: usize,
+    pub(crate) vocab_bytes_flat: Vec<u8>,
+    pub(crate) vocab_offsets_flat: Vec<u64>,
 }
 
 impl BpeTokenizer {
-    pub fn new(raw_pairs: &[(u64, (BpeRank, TokenId))], byte_fallback: [u32; 256], eos_token_id: u32, vocab_size: usize) -> Self {
+    pub fn new(
+        raw_pairs: &[(u64, (BpeRank, TokenId))],
+        byte_fallback: [u32; 256],
+        eos_token_id: u32,
+        vocab_size: usize,
+        // ДОБАВЛЕНО: Фабрика передаст сюда плоский массив токенов, собранный при парсинге JSON
+        vocab_compiled_tokens: &[Vec<u8>],
+    ) -> Self {
         let mut tmp_ranks = vec![u64::MAX; 65536];
         let mut id_to_byte = [0xFFu8; 512];
 
@@ -61,6 +70,21 @@ impl BpeTokenizer {
         let mut byte_pair_ranks = [u64::MAX; 65536];
         byte_pair_ranks.copy_from_slice(&tmp_ranks);
 
+        // СБОРКА ОБРАТНОГО СЛОВАРЯ РАНТАЙМА
+        let mut vocab_bytes_flat = Vec::with_capacity(vocab_size * 8);
+        let mut vocab_offsets_flat = vec![0u64; vocab_size.max(260000)]; // С запасом под размер Qwen
+
+        for (id, token_bytes) in vocab_compiled_tokens.iter().enumerate() {
+            let offset = vocab_bytes_flat.len() as u64;
+            let length = token_bytes.len() as u64;
+
+            vocab_bytes_flat.extend_from_slice(token_bytes);
+
+            if id < vocab_offsets_flat.len() {
+                vocab_offsets_flat[id] = (offset << 32) | length;
+            }
+        }
+
         Self {
             keys_flat,
             values_flat,
@@ -70,6 +94,8 @@ impl BpeTokenizer {
             id_to_byte,
             eos_token_id,
             vocab_size,
+            vocab_bytes_flat,
+            vocab_offsets_flat,
         }
     }
 

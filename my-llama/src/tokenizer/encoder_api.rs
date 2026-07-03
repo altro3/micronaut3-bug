@@ -3,6 +3,7 @@ use super::context::TokenizationContext;
 use crate::cuda::PinnedHostBuffer;
 use crate::tokenizer::SimdSplitter;
 use std::arch::x86_64::*;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 impl BpeTokenizer {
     #[inline(always)]
@@ -159,7 +160,6 @@ impl BpeTokenizer {
 
         let optimal_chunk_capacity = (max_text_len + 64).max(512).next_power_of_two();
 
-        use std::sync::atomic::{AtomicUsize, Ordering};
         let task_index = AtomicUsize::new(0);
         let num_threads = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(8);
 
@@ -168,16 +168,15 @@ impl BpeTokenizer {
             .collect();
 
         let base_address = results.as_mut_ptr() as usize;
-        let mut contexts_chunks = contexts.chunks_mut(1);
+        let contexts_ptr = contexts.as_mut_ptr() as usize;
 
         std::thread::scope(|scope| {
-            for _ in 0..num_threads {
+            for thread_id in 0..num_threads {
                 let task_index = &task_index;
                 let base_address = base_address;
-                let thread_ctx_slice = contexts_chunks.next().unwrap();
 
                 scope.spawn(move || {
-                    let ctx = unsafe { thread_ctx_slice.get_unchecked_mut(0) };
+                    let ctx = unsafe { &mut *(contexts_ptr as *mut TokenizationContext).add(thread_id) };
                     let target_ptr = base_address as *mut Vec<u32>;
 
                     loop {

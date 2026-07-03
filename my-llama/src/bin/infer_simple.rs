@@ -5,21 +5,28 @@ use std::collections::HashMap;
 fn main() {
     println!("=== ИНИЦИАЛИЗАЦИЯ ЧИСТОГО ТЕСТОВОГО СЛОВАРЯ BPE ===");
 
-    let mut raw_pairs = Vec::new();
+    let mut raw_pairs = Vec::with_capacity(64);
     let mut byte_fallback = [0u32; 256];
-    let mut vocab_builder = HashMap::new();
+    let mut vocab_builder = HashMap::with_capacity(512);
+
+    // ДОБАВЛЕНО: Буфер для упорядоченной компиляции обратного словаря
+    // Выделяем с запасом (в тесте будет около 300 токенов, берем 512)
+    let mut vocab_compiled_tokens = vec![Vec::new(); 512];
 
     // 1. Базовые байты (0..255)
     for b in 0..=255 {
         byte_fallback[b] = b as u32;
         let c = b as u8;
-        let byte_string = String::from_utf8(vec![c])
-            .unwrap_or_else(|_| format!("\\x{:02x}", b));
+
+        // Для вывода в консоль
+        let byte_string = String::from_utf8(vec![c]).unwrap_or_else(|_| format!("\\x{:02x}", b));
         vocab_builder.insert(b as u32, byte_string);
+
+        // ДОБАВЛЕНО: Пишем сырые базовые байты в обратный вокабуляр по индексу ID
+        vocab_compiled_tokens[b] = vec![c];
     }
 
     // 2. ВРУЧНУЮ собираем железную иерархию токенов для слова encode_parallel
-    // Никакого хаоса рангов — строим цепочку строго снизу вверх!
     let mut current_id = 256u32;
     let mut current_rank = 0u32;
 
@@ -27,6 +34,14 @@ fn main() {
         let pack = ((left as u64) << 32) | (right as u64);
         raw_pairs.push((pack, (current_rank, current_id)));
         vocab_builder.insert(current_id, text_repr.to_string());
+
+        // ДОБАВЛЕНО: Кладем байты нового составного токена строго по его ID
+        let id_idx = current_id as usize;
+        if id_idx >= vocab_compiled_tokens.len() {
+            vocab_compiled_tokens.resize(id_idx + 64, Vec::new());
+        }
+        vocab_compiled_tokens[id_idx] = text_repr.as_bytes().to_vec();
+
         let allocated_id = current_id;
         current_id += 1;
         current_rank += 1;
@@ -49,12 +64,10 @@ fn main() {
     let t_paralle = add_explicit_pair(t_parall, b'e' as u32, "paralle");
     let t_parallel = add_explicit_pair(t_paralle, b'l' as u32, "parallel");
 
-    // Склеиваем их через подчеркивание: encode + _ -> encode_
     let t_encode_box = add_explicit_pair(t_encode, b'_' as u32, "encode_");
-    // Финал: encode_ + parallel -> encode_parallel (Наивысший приоритет!)
+    // Финал: encode_ + parallel -> encode_parallel
     let _t_encode_parallel = add_explicit_pair(t_encode_box, t_parallel, "encode_parallel");
 
-    // Добавим для кучи частые токены кода
     let t_pu = add_explicit_pair(b'p' as u32, b'u' as u32, "pu");
     let _t_pub = add_explicit_pair(t_pu, b'b' as u32, "pub");
     let t_un = add_explicit_pair(b'u' as u32, b'n' as u32, "un");
@@ -65,14 +78,15 @@ fn main() {
     let _t_fn = add_explicit_pair(b'f' as u32, b'n' as u32, "fn");
 
     let vocab_size = current_id as usize;
+
+    vocab_compiled_tokens.truncate(vocab_size);
+
     println!("Словарь собран. Чистый размер: {} токенов.", vocab_size);
     println!("Правил слияния BPE (raw_pairs): {}\n", raw_pairs.len());
 
-    // Инициализируем токенизатор
-    let tokenizer = BpeTokenizer::new(&raw_pairs, byte_fallback, current_id, vocab_size);
+    let tokenizer = BpeTokenizer::new(&raw_pairs, byte_fallback, current_id, vocab_size, &vocab_compiled_tokens);
     let mut ctx = TokenizationContext::new(vocab_size, 4096);
 
-    // Чистый текст БЕЗ лишнего мусора, строго под наши правила
     let input_text = "pub unsafe fn encode_parallel";
 
     println!("=== ЗАПУСК ТОКЕНИЗАЦИИ БОЕВОГО ТЕКСТА ===");
@@ -93,6 +107,13 @@ fn main() {
         println!("│ {:<8} │ {:<11} │ {:<32} │", i, token_id, clean_str);
     }
     println!("└──────────┴─────────────┴──────────────────────────────────┘");
+
+    // ДОБАВЛЕНО ДЛЯ ПРОВЕРКИ: Тестируем рантайм-метод decode, который мы вынесли в decoder.rs!
+    println!("\n=== ЗАПУСК ГИПЕРЗВУКОВОГО ДЕКОДЕРА ===");
+    let decoded_output = tokenizer.decode(tokens);
+    println!("Раскодированный текст: '{}'", decoded_output);
+    assert_eq!(input_text, decoded_output, "КРИТИЧЕСКИЙ СБОЙ: Итоговый текст раскодирован с ошибками!");
+    println!("Верификация успешна: Обратное декодирование совпало на 100%!");
 
     println!("\nСтатистика:");
     println!("Исходный размер : {} байт", input_text.len());

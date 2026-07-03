@@ -1,0 +1,218 @@
+{
+  "version": "1.0",
+  "truncation": null,
+  "padding": null,
+  "added_tokens": [
+    {
+      "id": 248044,
+      "content": "<|endoftext|>",
+      "single_word": false,
+      "lstrip": false,
+      "rstrip": false,
+      "normalized": false,
+      "special": true
+    },
+  ],
+  "normalizer": {
+    "type": "NFC"
+  },
+  "pre_tokenizer": {
+    "type": "Sequence",
+    "pretokenizers": [
+      {
+        "type": "Split",
+        "pattern": {
+          "Regex": "(?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\\r\\n\\p{L}\\p{N}]?[\\p{L}\\p{M}]+|\\p{N}| ?[^\\s\\p{L}\\p{M}\\p{N}]+[\\r\\n]*|\\s*[\\r\\n]+|\\s+(?!\\S)|\\s+"
+        },
+        "behavior": "Isolated",
+        "invert": false
+      },
+      {
+        "type": "ByteLevel",
+        "add_prefix_space": false,
+        "trim_offsets": false,
+        "use_regex": false
+      }
+    ]
+  },
+  "post_processor": {
+    "type": "ByteLevel",
+    "add_prefix_space": false,
+    "trim_offsets": false,
+    "use_regex": false
+  },
+  "decoder": {
+    "type": "ByteLevel",
+    "add_prefix_space": false,
+    "trim_offsets": false,
+    "use_regex": false
+  },
+  "model": {
+    "type": "BPE",
+    "dropout": null,
+    "unk_token": null,
+    "continuing_subword_prefix": "",
+    "end_of_word_suffix": "",
+    "fuse_unk": false,
+    "byte_fallback": false,
+    "ignore_merges": false,
+    "vocab": {
+      "Ġas": 430,
+      "ect": 431,
+      "ke": 432,
+      "rom": 433,
+      "Ġ//": 434,
+      "con": 435,
+      "ĠL": 436,
+      "(\"": 437,
+      "qu": 438,
+      "lass": 439,
+      "Ġwith": 440,
+      "iz": 441,
+      "de": 442,
+      "ĠN": 443,
+      "Ġal": 444,
+      "op": 445,
+      "up": 446,
+      "get": 447,
+      "ile": 448,
+      "Ġan": 449,
+      "ata": 450,
+      "ore": 451,
+      "ri": 452,
+      "Ġpro": 453,
+      "ĉĉĉĉ": 454,
+      "ter": 455,
+      "ain": 456,
+      "ĠW": 457,
+      "ĠE": 458,
+      "Ġcom": 459,
+      "Ġreturn": 460,
+      "art": 461,
+      "ĠH": 462,
+      "ack": 463,
+      "import": 464,
+      "ublic": 465,
+      "Ġor": 466,
+      "est": 467
+    },
+    "merges": [
+      [
+        "Ġ",
+        "Ġ"
+      ],
+      [
+        "ĠĠ",
+        "ĠĠ"
+      ],
+      [
+        "i",
+        "n"
+      ],
+      [
+        "Ġ",
+        "t"
+      ],
+      [
+        "ĠĠĠĠ",
+        "ĠĠĠĠ"
+      ],
+      [
+        "e",
+        "r"
+      ],
+      [
+        "ĠĠ",
+        "Ġ"
+      ],
+      [
+        "o",
+        "n"
+      ],
+      [
+        "Ġ",
+        "a"
+      ],
+      [
+        "r",
+        "e"
+      ],
+      [
+        "a",
+        "t"
+      ],
+      [
+        "s",
+        "t"
+      ],
+      [
+        "e",
+        "n"
+      ],
+      [
+        "o",
+        "r"
+      ],
+      [
+        "Ġt",
+        "h"
+      ],
+      [
+        "Ċ",
+        "Ċ"
+      ],
+      [
+        "Ġ",
+        "c"
+      ],
+      [
+        "l",
+        "e"
+      ],
+      [
+        "Ġ",
+        "s"
+      ],
+      [
+        "i",
+        "t"
+      ],
+      [
+        "a",
+        "n"
+      ],
+      [
+        "a",
+        "r"
+      ],
+      [
+        "a",
+        "l"
+      ],
+      [
+        "Ġth",
+        "e"
+      ],
+      [
+        "Ġ",
+        "p"
+      ],
+      [
+        "Ġ",
+        "f"
+      ],
+      [
+        "o",
+        "u"
+      ],
+      [
+        "Ġ",
+        "="
+      ],
+      [
+        "i",
+        "s"
+      ]
+    ]
+  }
+}

@@ -9,9 +9,13 @@ mod integration_tests {
         let mut raw_pairs = Vec::new();
         let mut byte_fallback = [0u32; 256];
 
-        // 1. Инициализируем byte_fallback: пусть байты 0..255 маппятся в ID токенов 0..255
+        // Создаем временный вектор векторов под размер словаря (512 токенов)
+        let mut vocab_compiled_tokens = vec![Vec::new(); 512];
+
+        // 1. Инициализируем byte_fallback и базовый вокабуляр для одиночных байт
         for b in 0..=255 {
             byte_fallback[b] = b as u32;
+            vocab_compiled_tokens[b] = vec![b as u8];
         }
 
         // 2. Создаем правила слияния (rules).
@@ -19,21 +23,27 @@ mod integration_tests {
         // Правило 1: 'h' (104) + 'e' (101) -> Токен ID 256, Ранг 1 (высокий приоритет)
         let pack_he = ((104u64) << 32) | 101u64;
         raw_pairs.push((pack_he, (1, 256)));
+        vocab_compiled_tokens[256] = b"he".to_vec();
 
         // Правило 2: 'l' (108) + 'l' (108) -> Токен ID 257, Ранг 2
         let pack_ll = ((108u64) << 32) | 108u64;
         raw_pairs.push((pack_ll, (2, 257)));
+        vocab_compiled_tokens[257] = b"ll".to_vec();
 
         // Правило 3: 'o' (111) + ',' (44) -> Токен ID 258, Ранг 3
         let pack_o_comma = ((111u64) << 32) | 44u64;
         raw_pairs.push((pack_o_comma, (3, 258)));
+        vocab_compiled_tokens[258] = b"o,".to_vec();
 
         // Правило 4: Токен 256 ("he") + токен 257 ("ll") -> Токен ID 259 ("hell"), Ранг 0 (наивысший приоритет!)
         let pack_hell = ((256u64) << 32) | 257u64;
         raw_pairs.push((pack_hell, (0, 259)));
+        vocab_compiled_tokens[259] = b"hell".to_vec();
 
-        BpeTokenizer::new(&raw_pairs, byte_fallback, 50256, 512)
+        // Передаем ссылку на скомпилированный вектор токенов пятым аргументом
+        BpeTokenizer::new(&raw_pairs, byte_fallback, 50256, 512, &vocab_compiled_tokens)
     }
+
 
     #[test]
     fn test_single_thread_and_short_path_correctness() {
