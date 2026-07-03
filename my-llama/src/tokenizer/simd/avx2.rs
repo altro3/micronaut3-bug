@@ -12,16 +12,14 @@ pub fn split(text: &str, offsets_buffer: &mut [u32], len_buffer: &mut [u32]) -> 
     let mut token_count = 0;
     let max_tokens = offsets_buffer.len();
 
-    let v_space = _mm256_set1_epi8(32);
     let v_newline = _mm256_set1_epi8(10);
-    let v_tab = _mm256_set1_epi8(9);
     let v_carriage = _mm256_set1_epi8(13);
 
     let mut current_token_start = 0u32;
 
     let mut is_current_token_letter = {
         let first = unsafe { *bytes.get_unchecked(0) };
-        !(first == 32 || first == 10 || first == 9 || first == 13)
+        !(first == 10 || first == 13)
     };
 
     while idx + 32 <= len {
@@ -29,13 +27,10 @@ pub fn split(text: &str, offsets_buffer: &mut [u32], len_buffer: &mut [u32]) -> 
         let chunk = unsafe { _mm256_loadu_si256(base_ptr as *const __m256i) };
 
         unsafe {
-            let cmp_space = _mm256_cmpeq_epi8(chunk, v_space);
             let cmp_newline = _mm256_cmpeq_epi8(chunk, v_newline);
-            let cmp_tab = _mm256_cmpeq_epi8(chunk, v_tab);
             let cmp_carriage = _mm256_cmpeq_epi8(chunk, v_carriage);
 
-            let delim = _mm256_or_si256(_mm256_or_si256(cmp_space, cmp_newline), _mm256_or_si256(cmp_tab, cmp_carriage));
-
+            let delim = _mm256_or_si256(cmp_newline, cmp_carriage);
             let delim_mask = _mm256_movemask_epi8(delim) as u32;
             let valid_mask = delim_mask ^ 0xFFFFFFFF;
 
@@ -56,13 +51,12 @@ pub fn split(text: &str, offsets_buffer: &mut [u32], len_buffer: &mut [u32]) -> 
                 }
             }
         }
-
         idx += 32;
     }
 
     while idx < len {
         let b = unsafe { *bytes.get_unchecked(idx) };
-        let is_letter = !(b == 32 || b == 10 || b == 9 || b == 13);
+        let is_letter = !(b == 10 || b == 13);
 
         if is_letter != is_current_token_letter {
             let current_global_idx = idx as u32;
