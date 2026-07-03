@@ -30,9 +30,7 @@ impl TokenizerFactory {
         let mut text_to_id_table = InlineHashTable::new();
         let mut vocab_size = 0;
 
-        // ДОБАВЛЕНО: Временный буфер для упорядоченной компиляции обратного словаря (ID -> Токен)
-        // Выделяем с запасом под размер вокабуляра Qwen (обычно ~152 000, ставим 260 000 для защиты)
-        let mut vocab_compiled_tokens = vec![Vec::new(); 260000];
+        let mut vocab_compiled_tokens = Vec::with_capacity(260000);
 
         unsafe {
             let base = file_ptr;
@@ -136,12 +134,13 @@ impl TokenizerFactory {
                                 }
                             }
 
-                            // ДОБАВЛЕНО: Сохраняем очищенные байты токена в упорядоченный вектор обратного словаря рантайма
                             let id_idx = id as usize;
                             if id_idx >= vocab_compiled_tokens.len() {
-                                vocab_compiled_tokens.resize(id_idx + 65536, Vec::new());
+                                vocab_compiled_tokens.resize(id_idx + 1, Vec::new());
                             }
-                            *vocab_compiled_tokens.get_unchecked_mut(id_idx) = clean_tok[..clen].to_vec();
+                            unsafe {
+                                *vocab_compiled_tokens.get_unchecked_mut(id_idx) = clean_tok[..clen].to_vec();
+                            }
 
                             let h = FactoryUtils::fxhash64(&clean_tok[..clen]);
                             text_to_id_table.insert(h, id);
@@ -153,8 +152,7 @@ impl TokenizerFactory {
                 }
             }
 
-            // Усекаем вектор строго до максимального задействованного ID, убирая хвосты
-            vocab_compiled_tokens.truncate(vocab_size.max(256));
+            vocab_compiled_tokens.shrink_to_fit();
 
             for b in 0..=255 {
                 if *byte_fallback.get_unchecked(b) == 0 {
