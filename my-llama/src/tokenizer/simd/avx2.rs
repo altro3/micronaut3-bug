@@ -12,21 +12,30 @@ static LOOKUP_MASK: AlignedLookup = AlignedLookup {
 };
 
 #[target_feature(enable = "avx2,bmi2")]
-pub unsafe fn split(text: &str, offsets_buffer: &mut [u32], len_buffer: &mut [u32]) -> usize {
+pub fn split(text: &str, offsets_buffer: &mut [u32], len_buffer: &mut [u32]) -> usize {
     let bytes = text.as_bytes();
     let len = bytes.len();
+    if len == 0 {
+        return 0;
+    }
+
     let mut idx = 0;
     let mut token_count = 0;
     let max_tokens = offsets_buffer.len();
 
     let lookup_mask = unsafe { _mm256_load_si256((&LOOKUP_MASK.data as *const [i8; 32]) as *const __m256i) };
     let low_nibble_mask = _mm256_set1_epi8(0x0F);
-
     let non_printable_mask_unsigned = _mm256_set1_epi8((33u8 ^ 0x80u8) as i8);
     let sign_bit = _mm256_set1_epi8(i8::MIN);
 
-    let mut was_in_word = false;
-    let mut current_word_start = 0u32;
+    // Текущий открытый токен стартует с самого начала текста
+    let mut current_token_start = 0u32;
+
+    // Какое состояние у нас сейчас открыто: true — буквы, false — пробелы
+    let mut is_current_token_letter = {
+        let first = unsafe { *bytes.get_unchecked(0) };
+        !(first == 32 || first == 10 || first == 9 || first == 13)
+    };
 
     while idx + 32 <= len {
         let base_ptr = unsafe { bytes.as_ptr().add(idx) };
@@ -41,51 +50,26 @@ pub unsafe fn split(text: &str, offsets_buffer: &mut [u32], len_buffer: &mut [u3
         );
 
         let delim_mask = _mm256_movemask_epi8(delim) as u32;
-        let valid_mask = delim_mask ^ 0xFFFFFFFF;
+        let valid_mask = delim_mask ^ 0xFFFFFFFF; // 1 — буква, 0 — пробел
 
-        let mut bits = valid_mask;
-        let mut bit_offset = 0;
+        for bit_idx in 0..32 {
+            let is_bit_letter = (valid_mask & (1 << bit_idx)) != 0;
 
-        while bits != 0 {
-            let tz = bits.trailing_zeros() as usize;
+            // Если тип символа изменился — закрываем старый токен и открываем новый!
+            if is_bit_letter != is_current_token_letter {
+                let current_global_idx = (idx + bit_idx) as u32;
 
-            bits >>= tz;
-            bit_offset += tz;
-
-            let run_len = (!bits).trailing_zeros() as usize;
-
-            if !was_in_word {
-                current_word_start = (idx + bit_offset) as u32;
-            }
-
-            let word_end = idx + bit_offset + run_len;
-
-            if word_end < idx + 32 || (word_end == idx + 32 && (delim_mask & (1 << 31)) != 0) {
                 if token_count < max_tokens {
                     unsafe {
-                        *offsets_buffer.get_unchecked_mut(token_count) = current_word_start;
-                        *len_buffer.get_unchecked_mut(token_count) = (word_end as u32) - current_word_start;
+                        *offsets_buffer.get_unchecked_mut(token_count) = current_token_start;
+                        *len_buffer.get_unchecked_mut(token_count) = current_global_idx - current_token_start;
                     }
                     token_count += 1;
                 }
-                was_in_word = false;
-            } else {
-                was_in_word = true;
-            }
 
-            bits >>= run_len;
-            bit_offset += run_len;
-        }
-
-        if (valid_mask & (1 << 31)) == 0 && was_in_word {
-            if token_count < max_tokens {
-                unsafe {
-                    *offsets_buffer.get_unchecked_mut(token_count) = current_word_start;
-                    *len_buffer.get_unchecked_mut(token_count) = ((idx + 32) as u32) - current_word_start;
-                }
-                token_count += 1;
+                current_token_start = current_global_idx;
+                is_current_token_letter = is_bit_letter;
             }
-            was_in_word = false;
         }
 
         idx += 32;
@@ -93,30 +77,28 @@ pub unsafe fn split(text: &str, offsets_buffer: &mut [u32], len_buffer: &mut [u3
 
     while idx < len {
         let b = unsafe { *bytes.get_unchecked(idx) };
-        let is_delim = b == 32 || b == 10 || b == 9 || b == 13;
+        let is_letter = !(b == 32 || b == 10 || b == 9 || b == 13);
 
-        if !is_delim {
-            if !was_in_word {
-                current_word_start = idx as u32;
-                was_in_word = true;
-            }
-        } else if was_in_word {
+        if is_letter != is_current_token_letter {
+            let current_global_idx = idx as u32;
             if token_count < max_tokens {
                 unsafe {
-                    *offsets_buffer.get_unchecked_mut(token_count) = current_word_start;
-                    *len_buffer.get_unchecked_mut(token_count) = (idx as u32) - current_word_start;
+                    *offsets_buffer.get_unchecked_mut(token_count) = current_token_start;
+                    *len_buffer.get_unchecked_mut(token_count) = current_global_idx - current_token_start;
                 }
                 token_count += 1;
             }
-            was_in_word = false;
+            current_token_start = current_global_idx;
+            is_current_token_letter = is_letter;
         }
         idx += 1;
     }
 
-    if was_in_word && token_count < max_tokens {
+    // Закрываем самый последний токен всего текста
+    if token_count < max_tokens {
         unsafe {
-            *offsets_buffer.get_unchecked_mut(token_count) = current_word_start;
-            *len_buffer.get_unchecked_mut(token_count) = (len as u32) - current_word_start;
+            *offsets_buffer.get_unchecked_mut(token_count) = current_token_start;
+            *len_buffer.get_unchecked_mut(token_count) = (len as u32) - current_token_start;
         }
         token_count += 1;
     }

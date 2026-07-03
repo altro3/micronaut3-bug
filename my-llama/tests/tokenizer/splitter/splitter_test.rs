@@ -3,78 +3,80 @@ mod tests {
     use my_llama::tokenizer::simd::simd_splitter::SimdSplitter;
 
     #[test]
-    fn test_russian_prompt_zero_copy_offsets_validation() {
-        // Наш точный промпт на русском языке
-        let russian_prompt = "Привет! Ты — мощная языковая модель Llama.\n\
-    Твоя задача — обрабатывать огромные объемы текста на русском языке.\t\
-    SIMD-алгоритмы помогают делать это на космической скорости в 2026 году!";
+    fn test_multilang_prompt_strict_zero_copy_splitter() {
+        // Тяжелый мультиязычный промпт со спецсимволами, табами, кодом и иероглифами.
+        let complex_prompt = "Привет! Ты — мощная языковая модель Llama-3.1-v2.\n\
+    \tdef train_fast_tokenizer(data: &[u8]) -> usize {\n\
+    \t    let speed = \"космическая скорость\"; // SIMD-алгоритмы помогают!\n\
+    \t    println!(\"Performance: {}, CPU: Arrow Lake\", speed);\n\
+    \t}\n\
+    Unbelievable industrial-grade artificial intelligence performance test on Rust.\n\
+    === Юникод тест: 🚀🤖🔥 ===\n\
+    === Азиатский тест (Иероглифы): 人工智能 / 大语言模型 / 速度 ===\n\
+    \n\
+    \t\t[SYSTEM OVERRIDE]: active_mode = true;\r\n  ";
 
-        // Выделяем буферы под координаты токенов (максимум по числу символов)
-        let mut simd_offsets = vec![0u32; russian_prompt.len()];
-        let mut simd_lens = vec![0u32; russian_prompt.len()];
+        let mut simd_offsets = vec![0u32; complex_prompt.len()];
+        let mut simd_lens = vec![0u32; complex_prompt.len()];
 
-        // 1. Запускаем рекордно быстрый сплиттер через фасад SimdSplitter
-        let token_count = SimdSplitter::split(russian_prompt, &mut simd_offsets, &mut simd_lens);
+        // 1. Вызываем наш ИИ-сплиттер
+        let token_count = SimdSplitter::split(complex_prompt, &mut simd_offsets, &mut simd_lens);
 
-        // 2. СТРОИМ МАССИВ СЛОВ ИЗ РЕЗУЛЬТАТОВ SIMD
-        // Мы берем оригинальную строку и делаем zero-copy срезы по координатам из буфера
-        let mut simd_extracted_words: Vec<&str> = Vec::new();
-
+        // 2. Вырезаем слова и пробельные токены без копирования памяти
+        let mut simd_extracted_tokens: Vec<&str> = Vec::new();
         for i in 0..token_count {
             let start = simd_offsets[i] as usize;
             let len = simd_lens[i] as usize;
-
-            let word_slice = &russian_prompt[start..start + len];
-            simd_extracted_words.push(word_slice);
+            simd_extracted_tokens.push(&complex_prompt[start..start + len]);
         }
 
-        println!("--- РЕЗУЛЬТАТ СЛИЧЕНИЯ ИЗ ZERO-COPY SIMD ---");
-        for (idx, word) in simd_extracted_words.iter().enumerate() {
-            println!("SIMD Токен №{}: '{}'", idx, word);
+        println!("--- MULTILANG LLM SPLITTER OUTPUT (ZERO-COPY) ---");
+        for (idx, token) in simd_extracted_tokens.iter().enumerate() {
+            let visual_token = token
+                .replace(" ", "[SPACE]")
+                .replace("\n", "[NEWLINE\\n]")
+                .replace("\t", "[TAB\\t]")
+                .replace("\r", "[CR\\r]");
+            println!("Token #{:02}: '{}'", idx, visual_token);
         }
 
-        // 3. ЦИКЛ СТРОГО ПО МАССИВУ СЛОВ ИЗ SIMD (Твое жесткое условие)
-        let mut last_found_offset = 0;
-        let mut total_verified = 0;
+        // 3. Контроль порядка и границ UTF-8
+        let mut current_offset = 0;
 
-        for (simd_idx, actual_word) in simd_extracted_words.iter().enumerate() {
-            // Проверка 1: Слово гарантированно должно быть подстрокой оригинала
-            assert!(
-                russian_prompt.contains(actual_word),
-                "ОШИБКА! Робот выдумал токен №{}: '{}'",
-                simd_idx,
-                actual_word
-            );
+        for (idx, token) in simd_extracted_tokens.iter().enumerate() {
+            let token_len = token.len();
 
-            // Проверка 2: Контроль индексов. Ищем слово в оригинальном промпте, начиная со шва предыдущего
-            let local_idx = russian_prompt[last_found_offset..]
-                .find(actual_word)
-                .expect("Нарушен хронологический порядок токенов в памяти!");
+            let original_chunk = &complex_prompt[current_offset..current_offset + token_len];
 
-            let absolute_idx = last_found_offset + local_idx;
-
-            // Проверяем, что координата из буфера совпадает с физическим find в строке
             assert_eq!(
-                absolute_idx, simd_offsets[simd_idx] as usize,
-                "ОШИБКА! Сплиттер выдал неверный индекс для слова '{}'. Ожидали {}, получили {}",
-                actual_word, absolute_idx, simd_offsets[simd_idx]
+                *token, original_chunk,
+                "ERROR! Token #{} '{}' is out of sync with original text. Expected '{}'",
+                idx, token, original_chunk
             );
 
-            last_found_offset = absolute_idx + actual_word.len();
-            total_verified += 1;
+            let first_byte = token.as_bytes()[0];
+            let is_whitespace_token = first_byte == 32 || first_byte == 10 || first_byte == 9 || first_byte == 13;
+
+            for &b in token.as_bytes() {
+                let current_byte_is_whitespace = b == 32 || b == 10 || b == 9 || b == 13;
+                assert_eq!(
+                    is_whitespace_token, current_byte_is_whitespace,
+                    "ERROR! Token #{} '{}' mixed letters and spaces together!",
+                    idx, token
+                );
+            }
+
+            current_offset += token_len;
         }
 
-        // 4. Проверяем, что собрали ровно все 27 слов
+        // 4. Финальная склейка без потерь
+        let reconstructed_prompt: String = simd_extracted_tokens.concat();
         assert_eq!(
-            total_verified, 27,
-            "ОШИБКА! Должно быть 27 токенов, а SIMD выдал только {}.",
-            total_verified
+            reconstructed_prompt, complex_prompt,
+            "ERROR! Data corruption! Reconstructed text does not match original prompt."
         );
 
-        println!("--- МИРОВОЙ РЕКОРД ПОДТВЕРЖДЕН ---");
-        println!(
-            "Сплиттер без единого аллокатора памяти и копирования нарезал {} чистых слов.",
-            total_verified
-        );
+        println!("--- MULTILANG LLM SPLITTER INTEGRATION TEST PASSED ---");
+        println!("Total tokens generated: {}", token_count);
     }
 }
