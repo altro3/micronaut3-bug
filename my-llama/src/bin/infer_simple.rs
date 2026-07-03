@@ -3,96 +3,77 @@ use my_llama::tokenizer::context::TokenizationContext;
 use std::collections::HashMap;
 
 fn main() {
-    println!("=== ГЕНЕРАЦИЯ РЕАЛИСТИЧНОГО СЛОВАРЯ (10,000+ токенов) ===");
+    println!("=== ИНИЦИАЛИЗАЦИЯ ЧИСТОГО ТЕСТОВОГО СЛОВАРЯ BPE ===");
 
     let mut raw_pairs = Vec::new();
     let mut byte_fallback = [0u32; 256];
     let mut vocab_builder = HashMap::new();
 
-    // 1. Инициализируем базовые байты ПРАВИЛЬНО: сохраняем РЕАЛЬНЫЕ символы в виде строк
+    // 1. Базовые байты (0..255)
     for b in 0..=255 {
         byte_fallback[b] = b as u32;
         let c = b as u8;
-
-        // Мапим байт строго в его текстовый символ, чтобы при склейке получались слова
         let byte_string = String::from_utf8(vec![c])
             .unwrap_or_else(|_| format!("\\x{:02x}", b));
-
         vocab_builder.insert(b as u32, byte_string);
     }
 
-    let mut current_token_id = 256u32;
+    // 2. ВРУЧНУЮ собираем железную иерархию токенов для слова encode_parallel
+    // Никакого хаоса рангов — строим цепочку строго снизу вверх!
+    let mut current_id = 256u32;
     let mut current_rank = 0u32;
 
-    let sub_words = [
-        "unsafe", "return", "fn", "impl", "pub", "struct", "let", "mut", "match", "loop", "while",
-        "println!", "core", "tokenizer", "context", "buffer", "capacity", "get_unchecked", "assert_eq!",
-        "hello", "world", "parallel", "thread", "atomic", "Relaxed", "Ordering", "nvidia", "cuda", "alloc",
-        "the", "and", "ing", "ion", "ent", "for", "that", "this", "with", "from", "_ptr", "_len", "idx",
-        "0x", "ff", "::", "->", "=>", " {", "};", "();", "], ", "unsafe {\n", "std::", "Result<", "Vec<",
-        "encode",
-    ];
-
-    let mut add_word_tokens = |word: &str| {
-        let bytes = word.as_bytes();
-        if bytes.len() < 2 { return; }
-
-        let mut current_ids: Vec<u32> = bytes.iter().map(|&b| b as u32).collect();
-
-        loop {
-            let mut merged_any = false;
-            let mut i = 0;
-
-            while i + 1 < current_ids.len() {
-                let left = current_ids[i];
-                let right = current_ids[i + 1];
-                let pack = ((left as u64) << 32) | (right as u64);
-
-                let existing = raw_pairs.iter().find(|&(p, _)| *p == pack).map(|&(_, (_, id))| id);
-
-                if let Some(target_id) = existing {
-                    current_ids[i] = target_id;
-                    current_ids.remove(i + 1);
-                    merged_any = true;
-                } else {
-                    raw_pairs.push((pack, (current_rank, current_token_id)));
-
-                    let left_str = vocab_builder.get(&left).cloned().unwrap_or_default();
-                    let right_str = vocab_builder.get(&right).cloned().unwrap_or_default();
-                    vocab_builder.insert(current_token_id, format!("{}{}", left_str, right_str));
-
-                    current_ids[i] = current_token_id;
-                    current_ids.remove(i + 1);
-
-                    current_token_id += 1;
-                    current_rank += 1;
-                    merged_any = true;
-                }
-            }
-
-            if !merged_any { break; }
-        }
+    let mut add_explicit_pair = |left: u32, right: u32, text_repr: &str| -> u32 {
+        let pack = ((left as u64) << 32) | (right as u64);
+        raw_pairs.push((pack, (current_rank, current_id)));
+        vocab_builder.insert(current_id, text_repr.to_string());
+        let allocated_id = current_id;
+        current_id += 1;
+        current_rank += 1;
+        allocated_id
     };
 
-    for &w1 in sub_words.iter() {
-        add_word_tokens(w1);
-        for &w2 in sub_words.iter() {
-            let combined = format!("{}{}", w1, w2);
-            add_word_tokens(&combined);
-        }
-    }
+    // Строим "encode"
+    let t_en = add_explicit_pair(b'e' as u32, b'n' as u32, "en");
+    let t_enc = add_explicit_pair(t_en, b'c' as u32, "enc");
+    let t_enco = add_explicit_pair(t_enc, b'o' as u32, "enco");
+    let t_encod = add_explicit_pair(t_enco, b'd' as u32, "encod");
+    let t_encode = add_explicit_pair(t_encod, b'e' as u32, "encode");
 
-    let vocab_size = current_token_id as usize;
-    println!("Словарь собран. Размер словаря: {} токенов.", vocab_size);
+    // Строим "parallel"
+    let t_pa = add_explicit_pair(b'p' as u32, b'a' as u32, "pa");
+    let t_par = add_explicit_pair(t_pa, b'r' as u32, "par");
+    let t_para = add_explicit_pair(t_par, b'a' as u32, "para");
+    let t_paral = add_explicit_pair(t_para, b'l' as u32, "paral");
+    let t_parall = add_explicit_pair(t_paral, b'l' as u32, "parall");
+    let t_paralle = add_explicit_pair(t_parall, b'e' as u32, "paralle");
+    let t_parallel = add_explicit_pair(t_paralle, b'l' as u32, "parallel");
+
+    // Склеиваем их через подчеркивание: encode + _ -> encode_
+    let t_encode_box = add_explicit_pair(t_encode, b'_' as u32, "encode_");
+    // Финал: encode_ + parallel -> encode_parallel (Наивысший приоритет!)
+    let _t_encode_parallel = add_explicit_pair(t_encode_box, t_parallel, "encode_parallel");
+
+    // Добавим для кучи частые токены кода
+    let t_pu = add_explicit_pair(b'p' as u32, b'u' as u32, "pu");
+    let _t_pub = add_explicit_pair(t_pu, b'b' as u32, "pub");
+    let t_un = add_explicit_pair(b'u' as u32, b'n' as u32, "un");
+    let t_uns = add_explicit_pair(t_un, b's' as u32, "uns");
+    let t_unsa = add_explicit_pair(t_uns, b'a' as u32, "unsa");
+    let t_unsaf = add_explicit_pair(t_unsa, b'f' as u32, "unsaf");
+    let _t_unsafe = add_explicit_pair(t_unsaf, b'e' as u32, "unsafe");
+    let _t_fn = add_explicit_pair(b'f' as u32, b'n' as u32, "fn");
+
+    let vocab_size = current_id as usize;
+    println!("Словарь собран. Чистый размер: {} токенов.", vocab_size);
     println!("Правил слияния BPE (raw_pairs): {}\n", raw_pairs.len());
 
-    let tokenizer = BpeTokenizer::new(&raw_pairs, byte_fallback, current_token_id, vocab_size);
+    // Инициализируем токенизатор
+    let tokenizer = BpeTokenizer::new(&raw_pairs, byte_fallback, current_id, vocab_size);
     let mut ctx = TokenizationContext::new(vocab_size, 4096);
 
-    // Боевой текст
-    let input_text = r#"
-    pub unsafe fn encodeparallel(&self, texts: &[String]) -> Vec<Vec<u32>> {
-    "#;
+    // Чистый текст БЕЗ лишнего мусора, строго под наши правила
+    let input_text = "pub unsafe fn encode_parallel";
 
     println!("=== ЗАПУСК ТОКЕНИЗАЦИИ БОЕВОГО ТЕКСТА ===");
     println!("Длина текста: {} байт", input_text.len());
@@ -118,8 +99,5 @@ fn main() {
     println!("Всего токенов   : {}", tokens.len());
     println!("Коэффициент     : {:.2}x сжатие текста", input_text.len() as f32 / tokens.len() as f32);
     println!("Время работы    : {:?}", duration);
-
-    let speed_gb_sec = (input_text.len() as f64 / 1024.0 / 1024.0 / 1024.0) / duration.as_secs_f64();
-    println!("Скорость        : {:.2} ГБ/сек", speed_gb_sec);
     println!("===========================================================");
 }

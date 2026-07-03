@@ -89,47 +89,51 @@ impl BpeTokenizer {
         let mut h = pack.wrapping_mul(0x517cc1b727220a95);
         h ^= h >> 47;
 
-        let mask = self.hash_mask as usize;
-        let mut idx = (h as usize) & mask;
+        let mask = self.hash_mask;
+        let mut idx = (h & mask) as usize;
 
         unsafe {
-            let k0 = *self.keys_flat.get_unchecked(idx);
+            let keys_ptr = self.keys_flat.as_ptr();
+            let values_ptr = self.values_flat.as_ptr();
+            let table_mask = mask as usize;
+
+            let k0 = *keys_ptr.add(idx);
             if k0 == pack {
-                return *self.values_flat.get_unchecked(idx);
+                return *values_ptr.add(idx);
             }
             if k0 == u64::MAX {
                 return u64::MAX;
             }
-            idx = (idx + 1) & mask;
+            idx = (idx + 1) & table_mask;
 
-            let k1 = *self.keys_flat.get_unchecked(idx);
+            let k1 = *keys_ptr.add(idx);
             if k1 == pack {
-                return *self.values_flat.get_unchecked(idx);
+                return *values_ptr.add(idx);
             }
             if k1 == u64::MAX {
                 return u64::MAX;
             }
-            idx = (idx + 1) & mask;
+            idx = (idx + 1) & table_mask;
 
-            let k2 = *self.keys_flat.get_unchecked(idx);
+            let k2 = *keys_ptr.add(idx);
             if k2 == pack {
-                return *self.values_flat.get_unchecked(idx);
+                return *values_ptr.add(idx);
             }
             if k2 == u64::MAX {
                 return u64::MAX;
             }
-            idx = (idx + 1) & mask;
-        }
+            idx = (idx + 1) & table_mask;
 
-        loop {
-            let key = unsafe { *self.keys_flat.get_unchecked(idx) };
-            if key == pack {
-                return unsafe { *self.values_flat.get_unchecked(idx) };
+            loop {
+                let key = *keys_ptr.add(idx);
+                if key == pack {
+                    return *values_ptr.add(idx);
+                }
+                if key == u64::MAX {
+                    return u64::MAX;
+                }
+                idx = (idx + 1) & table_mask;
             }
-            if key == u64::MAX {
-                return u64::MAX;
-            }
-            idx = (idx + 1) & mask;
         }
     }
 }
