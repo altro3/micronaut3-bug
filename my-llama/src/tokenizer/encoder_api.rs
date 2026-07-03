@@ -12,15 +12,46 @@ impl BpeTokenizer {
         }
 
         let text_bytes = text.as_bytes();
-        ctx.reset(text_bytes.len());
+        let text_len = text_bytes.len();
 
-        let tokens_found = SimdSplitter::split(text, &mut ctx.tokens_buffer, &mut ctx.tokens_lens_buffer);
+        if text_len + 1 > ctx.long_ids.capacity() {
+            let new_cap = (text_len + 1).next_power_of_two();
+            ctx.long_ids.reserve_exact(new_cap - ctx.long_ids.len());
+            ctx.tokens_lens_buffer.reserve_exact(new_cap - ctx.tokens_lens_buffer.len());
+        }
+
+        unsafe {
+            ctx.long_ids.set_len(text_len + 1);
+            ctx.tokens_lens_buffer.set_len(text_len + 1);
+        }
+
+        let tokens_found = SimdSplitter::split(text, &mut ctx.long_ids, &mut ctx.tokens_lens_buffer);
         if tokens_found == 0 {
             return &[];
         }
 
+        let offsets_ptr = ctx.long_ids.as_ptr();
+        let lengths_ptr = ctx.tokens_lens_buffer.as_ptr();
+
         let mut token_count = 0;
-        self.encode_long_chunk(text_bytes, &mut token_count, ctx);
+        ctx.tokens_buffer.clear();
+
+        if text_len > ctx.tokens_buffer.capacity() {
+            ctx.tokens_buffer.reserve(text_len - ctx.tokens_buffer.len());
+        }
+
+        for i in 0..tokens_found {
+            unsafe {
+                let offset = *offsets_ptr.add(i) as usize;
+                let length = *lengths_ptr.add(i) as usize;
+                let chunk_bytes = &text_bytes[offset..offset + length];
+
+                let capacity = ctx.tokens_buffer.capacity();
+                let slice = std::slice::from_raw_parts_mut(ctx.tokens_buffer.as_mut_ptr(), capacity);
+
+                self.encode_single_chunk(chunk_bytes, slice, &mut token_count, ctx);
+            }
+        }
 
         unsafe { ctx.tokens_buffer.get_unchecked(..token_count) }
     }
@@ -40,15 +71,46 @@ impl BpeTokenizer {
         }
 
         let text_bytes = text.as_bytes();
-        ctx.reset(text_bytes.len());
+        let text_len = text_bytes.len();
 
-        let tokens_found = SimdSplitter::split(text, &mut ctx.tokens_buffer, &mut ctx.tokens_lens_buffer);
+        if text_len + 1 > ctx.long_ids.capacity() {
+            let new_cap = (text_len + 1).next_power_of_two();
+            ctx.long_ids.reserve_exact(new_cap - ctx.long_ids.len());
+            ctx.tokens_lens_buffer.reserve_exact(new_cap - ctx.tokens_lens_buffer.len());
+        }
+
+        unsafe {
+            ctx.long_ids.set_len(text_len + 1);
+            ctx.tokens_lens_buffer.set_len(text_len + 1);
+        }
+
+        let tokens_found = SimdSplitter::split(text, &mut ctx.long_ids, &mut ctx.tokens_lens_buffer);
         if tokens_found == 0 {
             return 0;
         }
 
+        let offsets_ptr = ctx.long_ids.as_ptr();
+        let lengths_ptr = ctx.tokens_lens_buffer.as_ptr();
+
         let mut token_count = 0;
-        self.encode_long_chunk(text_bytes, &mut token_count, ctx);
+        ctx.tokens_buffer.clear();
+
+        if text_len > ctx.tokens_buffer.capacity() {
+            ctx.tokens_buffer.reserve(text_len - ctx.tokens_buffer.len());
+        }
+
+        for i in 0..tokens_found {
+            unsafe {
+                let offset = *offsets_ptr.add(i) as usize;
+                let length = *lengths_ptr.add(i) as usize;
+                let chunk_bytes = &text_bytes[offset..offset + length];
+
+                let capacity = ctx.tokens_buffer.capacity();
+                let target_slice = std::slice::from_raw_parts_mut(ctx.tokens_buffer.as_mut_ptr(), capacity);
+
+                self.encode_single_chunk(chunk_bytes, target_slice, &mut token_count, ctx);
+            }
+        }
 
         let tokens_to_copy = token_count.min(slice_len);
 
@@ -61,7 +123,7 @@ impl BpeTokenizer {
                 let chunk = _mm256_loadu_si256(src_ptr.add(offset) as *const __m256i);
                 let floats = _mm256_cvtepi32_ps(chunk);
 
-                _mm256_storeu_ps(dst_ptr.add(offset), floats);
+                _mm256_stream_ps(dst_ptr.add(offset), floats);
                 offset += 8;
             }
 
@@ -70,6 +132,8 @@ impl BpeTokenizer {
                 *dst_ptr.add(offset) = token_id as f32;
                 offset += 1;
             }
+
+            _mm_sfence();
         }
 
         tokens_to_copy
@@ -81,28 +145,48 @@ impl BpeTokenizer {
         }
 
         let total_texts = texts.len();
+        let mut results = vec![Vec::new(); total_texts];
 
-        let mut results = Vec::with_capacity(total_texts);
-        results.resize_with(total_texts, Vec::new);
+        let mut max_text_len = 0;
 
-        let base_results_ptr = results.as_mut_ptr();
+        for i in 0..total_texts {
+            unsafe {
+                let text_len = texts.get_unchecked(i).len();
+                if text_len > max_text_len {
+                    max_text_len = text_len;
+                }
+                if text_len > 0 {
+                    results.get_unchecked_mut(i).reserve_exact(text_len);
+                }
+            }
+        }
 
-        struct UnsafePtrWrapper(*mut Vec<u32>);
-        unsafe impl Send for UnsafePtrWrapper {}
-        unsafe impl Sync for UnsafePtrWrapper {}
-        let shared_results = UnsafePtrWrapper(base_results_ptr);
+        let optimal_chunk_capacity = (max_text_len + 64).max(512).next_power_of_two();
 
         use std::sync::atomic::{AtomicUsize, Ordering};
         let task_index = AtomicUsize::new(0);
         let num_threads = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(8);
 
+        // 2. Инициализируем контексты в главном потоке
+        let mut contexts: Vec<TokenizationContext> = (0..num_threads)
+            .map(|_| TokenizationContext::new(self.vocab_size, optimal_chunk_capacity))
+            .collect();
+
+        let base_address = results.as_mut_ptr() as usize;
+
+        let mut contexts_chunks = contexts.chunks_mut(1);
+
         std::thread::scope(|scope| {
             for _ in 0..num_threads {
-                let shared_results = &shared_results;
                 let task_index = &task_index;
+                let base_address = base_address;
+
+                let thread_ctx_slice = contexts_chunks.next().unwrap();
 
                 scope.spawn(move || {
-                    let mut ctx = TokenizationContext::new(self.vocab_size, 4096);
+                    let ctx = unsafe { thread_ctx_slice.get_unchecked_mut(0) };
+
+                    let target_ptr = base_address as *mut Vec<u32>;
 
                     loop {
                         let idx = task_index.fetch_add(1, Ordering::Relaxed);
@@ -116,25 +200,48 @@ impl BpeTokenizer {
                         }
 
                         let text_bytes = text.as_bytes();
-                        ctx.reset(text_bytes.len());
+                        let text_len = text_bytes.len();
 
-                        let tokens_found = SimdSplitter::split(text, &mut ctx.tokens_buffer, &mut ctx.tokens_lens_buffer);
+                        if text_len + 1 > ctx.long_ids.capacity() {
+                            let new_cap = (text_len + 1).next_power_of_two();
+                            ctx.long_ids.reserve_exact(new_cap - ctx.long_ids.len());
+                            ctx.tokens_lens_buffer.reserve_exact(new_cap - ctx.tokens_lens_buffer.len());
+                        }
+
+                        unsafe {
+                            ctx.long_ids.set_len(text_len + 1);
+                            ctx.tokens_lens_buffer.set_len(text_len + 1);
+                        }
+
+                        let tokens_found = SimdSplitter::split(text, &mut ctx.long_ids, &mut ctx.tokens_lens_buffer);
                         if tokens_found == 0 {
                             continue;
                         }
 
-                        let mut token_count = 0;
-                        self.encode_long_chunk(text_bytes, &mut token_count, &mut ctx);
+                        let offsets_ptr = ctx.long_ids.as_ptr();
+                        let lengths_ptr = ctx.tokens_lens_buffer.as_ptr();
 
-                        let mut local_res = Vec::with_capacity(token_count);
-                        unsafe {
-                            std::ptr::copy_nonoverlapping(ctx.tokens_buffer.as_ptr(), local_res.as_mut_ptr(), token_count);
-                            local_res.set_len(token_count);
+                        let mut token_count = 0;
+                        ctx.tokens_buffer.clear();
+
+                        for i in 0..tokens_found {
+                            unsafe {
+                                let offset = *offsets_ptr.add(i) as usize;
+                                let length = *lengths_ptr.add(i) as usize;
+                                let chunk_bytes = &text_bytes[offset..offset + length];
+
+                                let capacity = ctx.tokens_buffer.capacity();
+                                let target_slice = std::slice::from_raw_parts_mut(ctx.tokens_buffer.as_mut_ptr(), capacity);
+
+                                self.encode_single_chunk(chunk_bytes, target_slice, &mut token_count, ctx);
+                            }
                         }
 
                         unsafe {
-                            let target_res_ptr = shared_results.0.add(idx);
-                            std::ptr::write(target_res_ptr, local_res);
+                            let out_vec_ptr = target_ptr.add(idx);
+                            (*out_vec_ptr).reserve_exact(token_count);
+                            std::ptr::copy_nonoverlapping(ctx.tokens_buffer.as_ptr(), (*out_vec_ptr).as_mut_ptr(), token_count);
+                            (*out_vec_ptr).set_len(token_count);
                         }
                     }
                 });
