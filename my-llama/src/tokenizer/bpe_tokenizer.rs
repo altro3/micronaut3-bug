@@ -38,11 +38,26 @@ impl BpeTokenizer {
             }
         }
 
+        println!(
+            "[ОРАКУЛ-КОНСТРУКТОР] id_to_byte[140] = {}, id_to_byte[119] = {}",
+            id_to_byte[140], id_to_byte[119]
+        );
+
         for &(pack, (rank, id)) in raw_pairs.iter() {
             let packed_val = ((rank as u64) << 32) | (id as u64);
 
             let mut h = pack.wrapping_mul(0x517cc1b727220a95);
             h ^= h >> 47;
+
+            let left = (pack >> 32) as u32;
+            let right = pack as u32;
+
+            if left == 140 && right == 119 {
+                println!("[ОРАКУЛ-КОНСТРУКТОР] Найдено правило (140, 119) в raw_pairs!");
+                println!("  |-> Прилетевший rank={}, mid_id={}", rank, id);
+                let target_idx = (h & hash_mask) as usize;
+                println!("  |-> Вычисленный стартовый индекс в хэш-таблице: {}", target_idx);
+            }
 
             let mut target_idx = (h & hash_mask) as usize;
             while keys_flat[target_idx] != u64::MAX && keys_flat[target_idx] != pack {
@@ -53,14 +68,23 @@ impl BpeTokenizer {
                 keys_flat[target_idx] = pack;
                 values_flat[target_idx] = packed_val;
 
-                let left = (pack >> 32) as u32;
-                let right = pack as u32;
-
                 if left < 512 && right < 512 {
                     let b1 = id_to_byte[left as usize];
                     let b2 = id_to_byte[right as usize];
+
+                    if left == 140 && right == 119 {
+                        println!("  |-> Запись в быстрый путь: b1={}, b2={}", b1, b2);
+                    }
+
                     if b1 != 0xFF && b2 != 0xFF {
-                        tmp_ranks[((b1 as usize) << 8) | (b2 as usize)] = packed_val;
+                        let flat_idx = ((b1 as usize) << 8) | (b2 as usize);
+                        tmp_ranks[flat_idx] = packed_val;
+
+                        if left == 140 && right == 119 {
+                            println!("  |-> [УСПЕХ] Записано в tmp_ranks по flat_idx={}. Значение={}", flat_idx, packed_val);
+                        }
+                    } else if left == 140 && right == 119 {
+                        println!("  |-> [БАГ] Запись в быстрый путь пропущена, так как b1 или b2 равен 0xFF!");
                     }
                 }
             }

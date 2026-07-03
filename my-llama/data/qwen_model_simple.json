@@ -11,7 +11,7 @@
       "rstrip": false,
       "normalized": false,
       "special": true
-    },
+    }
   ],
   "normalizer": {
     "type": "NFC"
