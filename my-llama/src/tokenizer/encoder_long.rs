@@ -25,11 +25,20 @@ impl BpeTokenizer {
             ctx.heap.next_node.resize(len + 256, u32::MAX);
         }
 
+        if len > ctx.long_ranks.capacity() {
+            ctx.long_ranks.reserve_exact(len.next_power_of_two() - ctx.long_ranks.len());
+        }
+        unsafe {
+            ctx.long_ranks.set_len(len);
+            std::ptr::write_bytes(ctx.long_ranks.as_mut_ptr(), 0xFF, len);
+        }
+
         ctx.heap.clear(len);
 
         let long_ids_ptr = ctx.long_ids.as_mut_ptr();
         let long_prev_ptr = ctx.long_prev.as_mut_ptr();
         let long_next_ptr = ctx.long_next.as_mut_ptr();
+        let long_ranks_ptr = ctx.long_ranks.as_mut_ptr();
         let fallback_ptr = self.byte_fallback.as_ptr();
 
         let mut idx = 0;
@@ -76,7 +85,9 @@ impl BpeTokenizer {
 
                 let packed = self.get_pair_packed(id1, id2);
                 if packed != u64::MAX {
-                    ctx.heap.push((packed >> 32) as u32, i);
+                    let r = (packed >> 32) as u32;
+                    *long_ranks_ptr.add(i) = r;
+                    ctx.heap.push(r, i);
                 }
             }
         }
@@ -91,6 +102,10 @@ impl BpeTokenizer {
             let l = (packed_pair as u32) as usize;
 
             unsafe {
+                if *long_ranks_ptr.add(l) != rank {
+                    continue;
+                }
+
                 let r = *long_next_ptr.add(l);
                 if r == -1 {
                     continue;
@@ -115,6 +130,8 @@ impl BpeTokenizer {
                 }
                 *long_ids_ptr.add(l) = target_id;
 
+                *long_ranks_ptr.add(l) = u32::MAX;
+                *long_ranks_ptr.add(r_idx) = u32::MAX;
                 *long_next_ptr.add(r_idx) = -1;
                 *long_prev_ptr.add(r_idx) = -1;
 
@@ -123,7 +140,11 @@ impl BpeTokenizer {
                     let id_prev = *long_ids_ptr.add(l_prev_idx);
                     let packed_l = self.get_pair_packed(id_prev, target_id);
                     if packed_l != u64::MAX {
-                        ctx.heap.push((packed_l >> 32) as u32, l_prev_idx);
+                        let r_l = (packed_l >> 32) as u32;
+                        *long_ranks_ptr.add(l_prev_idx) = r_l;
+                        ctx.heap.push(r_l, l_prev_idx);
+                    } else {
+                        *long_ranks_ptr.add(l_prev_idx) = u32::MAX;
                     }
                 }
 
@@ -132,7 +153,11 @@ impl BpeTokenizer {
                     let id_after = *long_ids_ptr.add(after_r_idx);
                     let packed_r = self.get_pair_packed(target_id, id_after);
                     if packed_r != u64::MAX {
-                        ctx.heap.push((packed_r >> 32) as u32, l);
+                        let r_r = (packed_r >> 32) as u32;
+                        *long_ranks_ptr.add(l) = r_r;
+                        ctx.heap.push(r_r, l);
+                    } else {
+                        *long_ranks_ptr.add(l) = u32::MAX;
                     }
                 }
             }
@@ -147,7 +172,6 @@ impl BpeTokenizer {
         }
 
         let out_tokens_ptr = ctx.tokens_buffer.as_mut_ptr();
-
         unsafe {
             while i != -1 {
                 let idx = i as usize;
@@ -155,8 +179,6 @@ impl BpeTokenizer {
                 count += 1;
                 i = *long_next_ptr.add(idx);
             }
-
-            // Фиксируем реальный размер, когда данные уже на месте
             ctx.tokens_buffer.set_len(count);
         }
 

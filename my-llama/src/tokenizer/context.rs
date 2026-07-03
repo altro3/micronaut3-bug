@@ -6,6 +6,7 @@ pub struct TokenizationContext {
     pub short_prev: [u8; 16],
     pub short_next: [u8; 16],
 
+    pub long_ranks: Vec<u32>,
     pub chunk_offsets: Vec<u32>,
     pub tokens_buffer: Vec<u32>,
     pub tokens_lens_buffer: Vec<u32>,
@@ -25,6 +26,7 @@ impl TokenizationContext {
             chunk_offsets: Vec::with_capacity(max_chunk_capacity),
             tokens_buffer: Vec::with_capacity(max_chunk_capacity * 2),
             tokens_lens_buffer: Vec::with_capacity(max_chunk_capacity * 2),
+            long_ranks: Vec::with_capacity(max_chunk_capacity),
             long_ids: Vec::with_capacity(max_chunk_capacity),
             long_prev: Vec::with_capacity(max_chunk_capacity),
             long_next: Vec::with_capacity(max_chunk_capacity),

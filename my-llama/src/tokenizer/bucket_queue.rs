@@ -127,8 +127,6 @@ impl BucketQueue {
                 return u64::MAX;
             }
 
-            self.min_rank_dirty = actual_rank;
-
             let bucket_ptr = self.buckets.get_unchecked_mut(actual_rank);
             let head = *bucket_ptr;
             let head_idx = head as usize;
@@ -142,6 +140,12 @@ impl BucketQueue {
             *self.bitset.get_unchecked_mut(word_idx) &= bit_clear_mask;
             *bucket_ptr = next;
             *next_ptr = u32::MAX;
+
+            if next == u32::MAX {
+                self.min_rank_dirty = actual_rank + 1;
+            } else {
+                self.min_rank_dirty = actual_rank;
+            }
 
             ((actual_rank as u64) << 32) | (head as u64)
         }
