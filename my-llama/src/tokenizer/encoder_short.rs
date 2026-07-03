@@ -65,23 +65,43 @@ impl BpeTokenizer {
                 let packed = self.get_pair_packed(id_l, id_r);
                 if packed != u64::MAX {
                     (*nodes_ptr.add(i)).rank = (packed >> 32) as u32;
-                    (*nodes_ptr.add(i)).id = packed as u32; // Сохраняем целевой ID токена
                 }
             }
         }
 
         loop {
-            let mut min_rank = u32::MAX;
-            let mut best_left = 0xFFu8;
+            let mut min_rank: u32 = u32::MAX;
+            let mut best_left: usize = 0xFF;
 
-            for i in 0..15 {
-                unsafe {
-                    let rk = (*nodes_ptr.add(i)).rank;
-                    if rk < min_rank {
-                        min_rank = rk;
-                        best_left = i as u8;
-                    }
+            unsafe {
+                macro_rules! check_rank {
+                    ($idx:expr) => {
+                        if $idx < len {
+                            let r = (*nodes_ptr.add($idx)).rank;
+                            if r < min_rank {
+                                min_rank = r;
+                                best_left = $idx;
+                            }
+                        }
+                    };
                 }
+
+                check_rank!(0);
+                check_rank!(1);
+                check_rank!(2);
+                check_rank!(3);
+                check_rank!(4);
+                check_rank!(5);
+                check_rank!(6);
+                check_rank!(7);
+                check_rank!(8);
+                check_rank!(9);
+                check_rank!(10);
+                check_rank!(11);
+                check_rank!(12);
+                check_rank!(13);
+                check_rank!(14);
+                check_rank!(15);
             }
 
             if min_rank == u32::MAX || best_left == 0xFF {
@@ -89,18 +109,19 @@ impl BpeTokenizer {
             }
 
             unsafe {
-                let l_idx = best_left as usize;
-                let node_l = nodes_ptr.add(l_idx);
-
+                let node_l = nodes_ptr.add(best_left);
                 let r_idx = (*node_l).next as usize;
                 let node_r = nodes_ptr.add(r_idx);
 
-                let after_r_idx = (*node_r).next;
+                let packed_merge = self.get_pair_packed((*node_l).id, (*node_r).id);
+                let new_token_id = packed_merge as u32;
+                (*node_l).id = new_token_id;
 
-                // Сливаем узлы: l поглощает r
+                let after_r_idx = (*node_r).next;
                 (*node_l).next = after_r_idx;
+
                 if after_r_idx != 0xFF {
-                    (*nodes_ptr.add(after_r_idx as usize)).prev = best_left;
+                    (*nodes_ptr.add(after_r_idx as usize)).prev = best_left as u8;
                 }
 
                 (*node_r).rank = u32::MAX;
@@ -108,15 +129,9 @@ impl BpeTokenizer {
                 (*node_r).prev = 0xFF;
 
                 if after_r_idx != 0xFF {
-                    let id_l = (*node_l).id;
                     let id_after = (*nodes_ptr.add(after_r_idx as usize)).id;
-                    let packed = self.get_pair_packed(id_l, id_after);
-                    if packed != u64::MAX {
-                        (*node_l).rank = (packed >> 32) as u32;
-                        (*node_l).id = packed as u32;
-                    } else {
-                        (*node_l).rank = u32::MAX;
-                    }
+                    let packed = self.get_pair_packed(new_token_id, id_after);
+                    (*node_l).rank = if packed != u64::MAX { (packed >> 32) as u32 } else { u32::MAX };
                 } else {
                     (*node_l).rank = u32::MAX;
                 }
@@ -124,15 +139,8 @@ impl BpeTokenizer {
                 let before_l_idx = (*node_l).prev;
                 if before_l_idx != 0xFF {
                     let node_before = nodes_ptr.add(before_l_idx as usize);
-                    let id_before = (*node_before).id;
-                    let id_l = (*node_l).id;
-                    let packed = self.get_pair_packed(id_before, id_l);
-                    if packed != u64::MAX {
-                        (*node_before).rank = (packed >> 32) as u32;
-                        (*node_before).id = packed as u32;
-                    } else {
-                        (*node_before).rank = u32::MAX;
-                    }
+                    let packed = self.get_pair_packed((*node_before).id, new_token_id);
+                    (*node_before).rank = if packed != u64::MAX { (packed >> 32) as u32 } else { u32::MAX };
                 }
             }
         }
@@ -146,10 +154,10 @@ impl BpeTokenizer {
                 break;
             }
             unsafe {
-                let node = *nodes_ptr.add(curr_idx);
-                *slice.get_unchecked_mut(count) = node.id;
+                let node = nodes_ptr.add(curr_idx);
+                *slice.get_unchecked_mut(count) = (*node).id;
                 count += 1;
-                curr_idx = node.next as usize;
+                curr_idx = (*node).next as usize;
             }
         }
         *token_count = count;
