@@ -91,16 +91,7 @@ fn main() {
 
     // Боевой текст
     let input_text = r#"
-    pub unsafe fn encode_parallel(&self, texts: &[String]) -> Vec<Vec<u32>> {
-        let mut ctx = TokenizationContext::new(self.vocab_size, optimal_chunk_capacity);
-        loop {
-            let idx = task_index.fetch_add(1, Ordering::Relaxed);
-            if idx >= total_texts { break; }
-            let text = unsafe { texts.get_unchecked(idx) };
-            println!("hello world from nvidia cuda tokenizer core!");
-            assert_eq!(ctx.tokens_buffer.capacity(), 4096);
-        }
-    }
+    pub unsafe fn encodeparallel(&self, texts: &[String]) -> Vec<Vec<u32>> {
     "#;
 
     println!("=== ЗАПУСК ТОКЕНИЗАЦИИ БОЕВОГО ТЕКСТА ===");

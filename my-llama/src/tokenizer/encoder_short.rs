@@ -28,7 +28,6 @@ impl BpeTokenizer {
             return;
         }
 
-        // Диспетчеризация путей слияния по длине чанка
         if len <= 16 {
             self.encode_short_chunk(bytes, token_count, ctx);
         } else {
@@ -58,27 +57,31 @@ impl BpeTokenizer {
             }
         }
 
-        for i in 0..(len - 1) {
+        loop {
             unsafe {
-                let id_l = (*nodes_ptr.add(i)).id;
-                let id_r = (*nodes_ptr.add(i + 1)).id;
-                let packed = self.get_pair_packed(id_l, id_r);
-                if packed != u64::MAX {
-                    (*nodes_ptr.add(i)).rank = (packed >> 32) as u32;
+                let mut curr = 0usize;
+                loop {
+                    let node_curr = nodes_ptr.add(curr);
+                    let r_idx = (*node_curr).next;
+
+                    if r_idx != 0xFF {
+                        let node_next = nodes_ptr.add(r_idx as usize);
+                        let packed = self.get_pair_packed((*node_curr).id, (*node_next).id);
+                        (*node_curr).rank = if packed != u64::MAX { (packed >> 32) as u32 } else { u32::MAX };
+                        curr = r_idx as usize;
+                    } else {
+                        (*node_curr).rank = u32::MAX;
+                        break;
+                    }
                 }
             }
-        }
 
-        loop {
             let mut min_rank: u32 = u32::MAX;
             let mut best_left: usize = 0xFF;
 
-            // ИСПРАВЛЕНИЕ: Ищем минимум ТОЛЬКО по живым узлам связного списка.
-            // Никаких фантомных рангов из удаленных нод.
-            // Конвейер Arrow Lake развернет этот цикл, так как глубина максимум 16 итераций.
             unsafe {
                 let mut curr = 0usize;
-                while curr < len {
+                loop {
                     let r = (*nodes_ptr.add(curr)).rank;
                     if r < min_rank {
                         min_rank = r;
@@ -102,14 +105,7 @@ impl BpeTokenizer {
                 let node_r = nodes_ptr.add(r_idx);
 
                 let packed_merge = self.get_pair_packed((*node_l).id, (*node_r).id);
-                if packed_merge == u64::MAX {
-                    // Страховка: если пара невалидна, сбрасываем ранг и ищем дальше
-                    (*node_l).rank = u32::MAX;
-                    continue;
-                }
-
-                let new_token_id = packed_merge as u32;
-                (*node_l).id = new_token_id;
+                (*node_l).id = packed_merge as u32;
 
                 let after_r_idx = (*node_r).next;
                 (*node_l).next = after_r_idx;
@@ -118,26 +114,9 @@ impl BpeTokenizer {
                     (*nodes_ptr.add(after_r_idx as usize)).prev = best_left as u8;
                 }
 
-                // Инвалидируем поглощенный узел полностью
                 (*node_r).rank = u32::MAX;
                 (*node_r).next = 0xFF;
                 (*node_r).prev = 0xFF;
-
-                // Пересчитываем текущую ноду с её НОВЫМ правым соседом
-                if after_r_idx != 0xFF {
-                    let id_after = (*nodes_ptr.add(after_r_idx as usize)).id;
-                    let packed = self.get_pair_packed(new_token_id, id_after);
-                    (*node_l).rank = if packed != u64::MAX { (packed >> 32) as u32 } else { u32::MAX };
-                } else {
-                    (*node_l).rank = u32::MAX;
-                }
-
-                let before_l_idx = (*node_l).prev;
-                if before_l_idx != 0xFF {
-                    let node_before = nodes_ptr.add(before_l_idx as usize);
-                    let packed = self.get_pair_packed((*node_before).id, new_token_id);
-                    (*node_before).rank = if packed != u64::MAX { (packed >> 32) as u32 } else { u32::MAX };
-                }
             }
         }
 
