@@ -19,6 +19,43 @@ impl BpeTokenizer {
             return;
         }
 
+        if len > 6 && bytes[0] >= 128 {
+            static DEBUG_DONE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+            if !DEBUG_DONE.swap(true, std::sync::atomic::Ordering::Relaxed) {
+                println!("\n[РАНТАЙМ-ОРАКУЛ] Перехвачен кириллический чанк! Длина: {} байт", len);
+                println!("|-> Сырые байты чанка: {:?}", bytes);
+
+                let mut start_ids = Vec::with_capacity(len);
+                for &b in bytes {
+                    start_ids.push(self.byte_fallback[b as usize]);
+                }
+                println!("|-> Стартовые ID токенов из byte_fallback: {:?}", start_ids);
+
+                if start_ids.len() >= 2 {
+                    let id1 = start_ids[0];
+                    let id2 = start_ids[1];
+                    let packed_res = self.get_pair_packed(id1, id2);
+
+                    if packed_res == u64::MAX {
+                        println!("|-> [КРИТИЧЕСКИЙ БАГ] get_pair_packed({}, {}) вернул u64::MAX!", id1, id2);
+                        println!(
+                            "    |-> Это значит, что пары ({}, {}) физически нет в загруженной хэш-таблице мёрджей,",
+                            id1, id2
+                        );
+                        println!("        ЛИБО рантайм-энкодер и фабрика используют разные ID для этих байт.");
+                    } else {
+                        let mid_id = packed_res as u32;
+                        let rank = (packed_res >> 32) as u32;
+                        println!(
+                            "|-> [ИНСАЙТ] get_pair_packed({}, {}) РАБОТАЕТ! Найдено слияние в токен ID: {}, ранг: {}",
+                            id1, id2, mid_id, rank
+                        );
+                    }
+                }
+                println!("=================================================================\n");
+            }
+        }
+
         if len == 1 {
             unsafe {
                 let out_tokens_ptr = ctx.tokens_buffer.as_mut_ptr();
@@ -54,13 +91,16 @@ impl BpeTokenizer {
                 (*node).id = id;
                 (*node).prev = if i == 0 { 0xFF } else { (i - 1) as u8 };
                 (*node).next = if i == len - 1 { 0xFF } else { (i + 1) as u8 };
+                (*node).rank = u32::MAX;
             }
         }
 
+        let head_idx = 0usize;
+
         loop {
             unsafe {
-                let mut curr = 0usize;
-                loop {
+                let mut curr = head_idx;
+                while curr != 0xFF {
                     let node_curr = nodes_ptr.add(curr);
                     let r_idx = (*node_curr).next;
 
@@ -80,18 +120,14 @@ impl BpeTokenizer {
             let mut best_left: usize = 0xFF;
 
             unsafe {
-                let mut curr = 0usize;
-                loop {
+                let mut curr = head_idx;
+                while curr != 0xFF {
                     let r = (*nodes_ptr.add(curr)).rank;
                     if r < min_rank {
                         min_rank = r;
                         best_left = curr;
                     }
-                    let next_node = (*nodes_ptr.add(curr)).next;
-                    if next_node == 0xFF {
-                        break;
-                    }
-                    curr = next_node as usize;
+                    curr = (*nodes_ptr.add(curr)).next as usize;
                 }
             }
 
@@ -120,7 +156,7 @@ impl BpeTokenizer {
             }
         }
 
-        let mut curr_idx = 0usize;
+        let mut curr_idx = head_idx;
         let mut count = *token_count;
         let out_tokens_ptr = ctx.tokens_buffer.as_mut_ptr();
 

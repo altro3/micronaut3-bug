@@ -1,9 +1,9 @@
 use crate::tokenizer::bpe_types::{BpeRank, TokenId};
 
 pub struct BpeTokenizer {
-    pub(crate) keys_flat: Vec<u64>,
-    pub(crate) values_flat: Vec<u64>,
-    pub(crate) hash_mask: u64,
+    pub keys_flat: Vec<u64>,
+    pub values_flat: Vec<u64>,
+    pub hash_mask: u64,
     pub(crate) byte_pair_ranks: [u64; 65536],
     pub byte_fallback: [u32; 256],
     pub(crate) id_to_byte: [u8; 512],
@@ -19,7 +19,6 @@ impl BpeTokenizer {
         byte_fallback: [u32; 256],
         eos_token_id: u32,
         vocab_size: usize,
-        // ДОБАВЛЕНО: Фабрика передаст сюда плоский массив токенов, собранный при парсинге JSON
         vocab_compiled_tokens: &[Vec<u8>],
     ) -> Self {
         let mut tmp_ranks = vec![u64::MAX; 65536];
@@ -70,19 +69,18 @@ impl BpeTokenizer {
         let mut byte_pair_ranks = [u64::MAX; 65536];
         byte_pair_ranks.copy_from_slice(&tmp_ranks);
 
-        // СБОРКА ОБРАТНОГО СЛОВАРЯ РАНТАЙМА
         let mut vocab_bytes_flat = Vec::with_capacity(vocab_size * 8);
-        let mut vocab_offsets_flat = vec![0u64; vocab_size.max(260000)]; // С запасом под размер Qwen
+        let mut vocab_offsets_flat = vec![0u64; vocab_compiled_tokens.len().max(vocab_size)];
 
         for (id, token_bytes) in vocab_compiled_tokens.iter().enumerate() {
+            if token_bytes.is_empty() {
+                continue;
+            }
             let offset = vocab_bytes_flat.len() as u64;
             let length = token_bytes.len() as u64;
 
             vocab_bytes_flat.extend_from_slice(token_bytes);
-
-            if id < vocab_offsets_flat.len() {
-                vocab_offsets_flat[id] = (offset << 32) | length;
-            }
+            vocab_offsets_flat[id] = (offset << 32) | length;
         }
 
         Self {
@@ -105,7 +103,7 @@ impl BpeTokenizer {
             let b1 = unsafe { *self.id_to_byte.get_unchecked(left as usize) };
             let b2 = unsafe { *self.id_to_byte.get_unchecked(right as usize) };
 
-            if (b1 | b2) != 0xFF {
+            if b1 != 0xFF && b2 != 0xFF {
                 let flat_idx = ((b1 as usize) << 8) | (b2 as usize);
                 return unsafe { *self.byte_pair_ranks.get_unchecked(flat_idx) };
             }
@@ -122,33 +120,6 @@ impl BpeTokenizer {
             let keys_ptr = self.keys_flat.as_ptr();
             let values_ptr = self.values_flat.as_ptr();
             let table_mask = mask as usize;
-
-            let k0 = *keys_ptr.add(idx);
-            if k0 == pack {
-                return *values_ptr.add(idx);
-            }
-            if k0 == u64::MAX {
-                return u64::MAX;
-            }
-            idx = (idx + 1) & table_mask;
-
-            let k1 = *keys_ptr.add(idx);
-            if k1 == pack {
-                return *values_ptr.add(idx);
-            }
-            if k1 == u64::MAX {
-                return u64::MAX;
-            }
-            idx = (idx + 1) & table_mask;
-
-            let k2 = *keys_ptr.add(idx);
-            if k2 == pack {
-                return *values_ptr.add(idx);
-            }
-            if k2 == u64::MAX {
-                return u64::MAX;
-            }
-            idx = (idx + 1) & table_mask;
 
             loop {
                 let key = *keys_ptr.add(idx);

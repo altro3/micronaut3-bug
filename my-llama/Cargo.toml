@@ -26,6 +26,10 @@ name = "train_tokenizer"
 path = "src/bin/train_tokenizer.rs"
 
 [[bin]]
+name = "load_tokenizer"
+path = "src/bin/load_tokenizer.rs"
+
+[[bin]]
 name = "infer_simple"
 path = "src/bin/infer_simple.rs"
 

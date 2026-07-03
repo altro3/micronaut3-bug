@@ -32,13 +32,10 @@ impl FactoryUtils {
     #[inline(always)]
     pub fn decode_inplace(s: &[u8], buf: &mut [u8]) -> usize {
         let len = s.len();
-        if len == 0 {
-            return 0;
-        }
+        if len == 0 { return 0; }
 
-        let mut i = 0;
-        let mut cp: u32 = 0;
         let b0 = s[0];
+        let mut cp: u32 = 0;
 
         if b0 < 0x80 {
             cp = b0 as u32;
@@ -52,10 +49,10 @@ impl FactoryUtils {
 
         let raw_byte = match cp {
             0x00..=0x7F => cp as u8,
-            0x0100..=0x0120 => (cp - 0x0100) as u8,
-            0x0121..=0x017D => (cp - 0x0121 + 33) as u8,
-            0x017E..=0x01AC => (cp - 0x017E + 127) as u8,
-            0x01AD..=0x01FF => (cp - 0x01AD + 174) as u8,
+            0x00A0..=0x00FF => cp as u8,
+            0x0100..=0x011F => (cp - 0x0100) as u8,       // Баовые байты 0..31
+            0x0120..=0x013F => (cp - 0x0120 + 127) as u8, // Управляющие байты 127..159
+            0x0140 => 173,                                // Мягкий перенос (soft hyphen)
             _ => cp as u8,
         };
 

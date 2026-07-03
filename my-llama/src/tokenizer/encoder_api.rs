@@ -160,6 +160,7 @@ impl BpeTokenizer {
 
         let optimal_chunk_capacity = (max_text_len + 64).max(512).next_power_of_two();
 
+        use std::sync::atomic::{AtomicUsize, Ordering};
         let task_index = AtomicUsize::new(0);
         let num_threads = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(8);
 
@@ -169,15 +170,20 @@ impl BpeTokenizer {
 
         let base_address = results.as_mut_ptr() as usize;
 
+        let mut remaining_contexts = &mut contexts[..];
+
         std::thread::scope(|scope| {
-            for thread_id in 0..num_threads {
+            for _ in 0..num_threads {
                 let task_index = &task_index;
                 let base_address = base_address;
 
-                let ctx_ptr = &mut *contexts[thread_id] as *mut TokenizationContext as usize;
+                let (current_slice, rest) = std::mem::take(&mut remaining_contexts).split_at_mut(1);
+                remaining_contexts = rest;
+
+                let ctx_box = &mut current_slice[0];
 
                 scope.spawn(move || {
-                    let ctx = unsafe { &mut *(ctx_ptr as *mut TokenizationContext) };
+                    let ctx = &mut **ctx_box;
                     let target_ptr = base_address as *mut Vec<u32>;
 
                     loop {

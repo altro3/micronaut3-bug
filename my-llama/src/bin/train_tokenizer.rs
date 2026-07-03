@@ -16,10 +16,22 @@ fn main() -> std::io::Result<()> {
 
 fn run_benchmark() -> std::io::Result<()> {
     let input_path = "data/input.txt";
-    let model_path = "data/my_bpe_model.json";
+    let mut model_path = "data/my_bpe_model.json";
     fs::create_dir_all("data")?;
 
-    if !std::path::Path::new(input_path).exists() {
+    // Проверяем, существует ли файл
+    let file_exists = std::path::Path::new(input_path).exists();
+    let mut is_huge_dataset = false;
+
+    if file_exists {
+        let metadata = fs::metadata(input_path)?;
+        // Если файл весит больше 10 МБ, значит пользователь положил туда свой большой текст
+        if metadata.len() > 10 * 1024 * 1024 {
+            is_huge_dataset = true;
+        }
+    }
+
+    if !file_exists {
         println!("[Ультра-Тест] Генерирую грязный многоязычный хаос-датасет...");
 
         let blocks = vec![
@@ -40,20 +52,31 @@ fn run_benchmark() -> std::io::Result<()> {
     let text_content = fs::read_to_string(input_path)?;
     let total_bytes = text_content.len();
     println!(
-        "[Ультра-Тест] Размер исходного хаос-текста: {:.2} МБ",
+        "[Ультра-Тест] Размер исходного текста: {:.2} МБ",
         total_bytes as f64 / (1024.0 * 1024.0)
     );
 
-    // 1. ОБУЧЕНИЕ (теперь защищено большим стеком)
-    let config = TrainerConfig::default();
-    let trainer = BpeTrainer::new(8000, config);
+    // Логика переключения: обучаем маленькую модель только на сгенерированном хаос-тексте.
+    // Если подсунут огромный файл на 750 МБ — используем готовую промышленную модель Qwen!
+    if is_huge_dataset {
+        model_path = "data/qwen_model.json";
+        println!("[Ультра-Тест] Обнаружен огромный датасет. Пропускаем обучение, используем промышленную модель Qwen.");
+        assert!(
+            std::path::Path::new(model_path).exists(),
+            "Критическая ошибка: Положите оригинальный файл Qwen tokenizer.json по пути data/qwen_model.json"
+        );
+    } else {
+        println!("[Ультра-Тест] Запуск обучения маленькой BPE-модели на сгенерированном тексте...");
+        let config = TrainerConfig::default();
+        let trainer = BpeTrainer::new(250000, config);
 
-    let start_train = Instant::now();
-    trainer.train(&text_content, model_path)?;
-    println!("[Ультра-Тест] Время обучения словаря: {:?}", start_train.elapsed());
+        let start_train = Instant::now();
+        trainer.train(&text_content, model_path)?;
+        println!("[Ультра-Тест] Время обучения словаря: {:?}", start_train.elapsed());
+    }
 
-    // 2. ЗАГРУЗКА ЧЕРЕЗ НАШУ SIMD ФАБРИКУ
-    println!("\n[Ультра-Тест] Загружаем хаос-модель через фабрику...");
+    // 2. ЗАГРУЗКА ЧЕРЕЗ НАШУ SIMD ФАБРИКУ (Возвращает Box<BpeTokenizer>)
+    println!("\n[Ультра-Тест] Загружаем модель через фабрику...");
     let tokenizer = TokenizerFactory::from_file(model_path)?;
 
     // 3. ПОДГОТОВКА БАТЧА
@@ -81,7 +104,7 @@ fn run_benchmark() -> std::io::Result<()> {
         std::hint::black_box(tokenizer.encode_parallel(&batch_texts));
     }
 
-    println!("[Ультра-Тест] Токенизируем многоязычный БАТЧ на P-ядрах...");
+    println!("[Ультра-Тест] Токенизируем БАТЧ на P-ядрах...");
 
     // 3. ЧИСТЫЙ ЗАМЕР ВРЕМЕНИ ЭНКОДЕРА
     let start_parallel = Instant::now();
@@ -101,6 +124,14 @@ fn run_benchmark() -> std::io::Result<()> {
         speed_parallel,
         speed_parallel / 1024.0
     );
+
+    // Дополнительный микро-тест: Проверяем, что рантайм-декодер работает и на огромном батче результатов
+    println!("[Ультра-Тест] Проверка целостности: декодируем один чанк обратно...");
+    if let Some(first_tokens) = parallel_results.first() {
+        let decoded_sample = tokenizer.decode(first_tokens);
+        assert!(!decoded_sample.is_empty(), "Декодер вернул пустую строку!");
+        println!("|-> Декодер стабилен, UTF-8 валиден.");
+    }
 
     Ok(())
 }

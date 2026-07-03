@@ -69,10 +69,10 @@ impl BpeTokenizer {
 
                 let raw_byte = match cp {
                     0x00..=0x7F => cp as u8,
-                    0x0100..=0x0120 => (cp - 0x0100) as u8,
-                    0x0121..=0x017D => (cp - 0x0121 + 33) as u8,
-                    0x017E..=0x01AC => (cp - 0x017E + 127) as u8,
-                    0x01AD..=0x01FF => (cp - 0x01AD + 174) as u8,
+                    0x00A0..=0x00FF => cp as u8,
+                    0x0100..=0x011F => (cp - 0x0100) as u8,
+                    0x0120..=0x013F => (cp - 0x0120 + 127) as u8,
+                    0x0140 => 173,
                     _ => b0,
                 };
 
