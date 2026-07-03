@@ -28,10 +28,8 @@ pub fn split(text: &str, offsets_buffer: &mut [u32], len_buffer: &mut [u32]) -> 
     let non_printable_mask_unsigned = _mm256_set1_epi8((33u8 ^ 0x80u8) as i8);
     let sign_bit = _mm256_set1_epi8(i8::MIN);
 
-    // Текущий открытый токен стартует с самого начала текста
     let mut current_token_start = 0u32;
 
-    // Какое состояние у нас сейчас открыто: true — буквы, false — пробелы
     let mut is_current_token_letter = {
         let first = unsafe { *bytes.get_unchecked(0) };
         !(first == 32 || first == 10 || first == 9 || first == 13)
@@ -50,12 +48,11 @@ pub fn split(text: &str, offsets_buffer: &mut [u32], len_buffer: &mut [u32]) -> 
         );
 
         let delim_mask = _mm256_movemask_epi8(delim) as u32;
-        let valid_mask = delim_mask ^ 0xFFFFFFFF; // 1 — буква, 0 — пробел
+        let valid_mask = delim_mask ^ 0xFFFFFFFF;
 
         for bit_idx in 0..32 {
             let is_bit_letter = (valid_mask & (1 << bit_idx)) != 0;
 
-            // Если тип символа изменился — закрываем старый токен и открываем новый!
             if is_bit_letter != is_current_token_letter {
                 let current_global_idx = (idx + bit_idx) as u32;
 
@@ -94,7 +91,6 @@ pub fn split(text: &str, offsets_buffer: &mut [u32], len_buffer: &mut [u32]) -> 
         idx += 1;
     }
 
-    // Закрываем самый последний токен всего текста
     if token_count < max_tokens {
         unsafe {
             *offsets_buffer.get_unchecked_mut(token_count) = current_token_start;
