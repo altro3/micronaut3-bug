@@ -24,7 +24,6 @@ fn main() {
     let mut current_token_id = 256u32;
     let mut current_rank = 0u32;
 
-    // Список реалистичных под-слов для генерации правил слияния
     let sub_words = [
         "unsafe", "return", "fn", "impl", "pub", "struct", "let", "mut", "match", "loop", "while",
         "println!", "core", "tokenizer", "context", "buffer", "capacity", "get_unchecked", "assert_eq!",
@@ -34,39 +33,47 @@ fn main() {
         "encode",
     ];
 
-    // Идеальный иерархический сборщик BPE правил из строк
     let mut add_word_tokens = |word: &str| {
         let bytes = word.as_bytes();
         if bytes.len() < 2 { return; }
 
         let mut current_ids: Vec<u32> = bytes.iter().map(|&b| b as u32).collect();
 
-        let mut i = 0;
-        while i + 1 < current_ids.len() {
-            let left = current_ids[i];
-            let right = current_ids[i + 1];
-            let pack = ((left as u64) << 32) | (right as u64);
+        loop {
+            let mut merged_any = false;
+            let mut i = 0;
 
-            if !raw_pairs.iter().any(|&(p, _)| p == pack) {
-                raw_pairs.push((pack, (current_rank, current_token_id)));
+            while i + 1 < current_ids.len() {
+                let left = current_ids[i];
+                let right = current_ids[i + 1];
+                let pack = ((left as u64) << 32) | (right as u64);
 
-                // Клеим реальные строки букв ("u" + "nsafe" -> "unsafe")
-                let left_str = vocab_builder.get(&left).cloned().unwrap_or_default();
-                let right_str = vocab_builder.get(&right).cloned().unwrap_or_default();
-                vocab_builder.insert(current_token_id, format!("{}{}", left_str, right_str));
+                let existing = raw_pairs.iter().find(|&(p, _)| *p == pack).map(|&(_, (_, id))| id);
 
-                current_ids[i] = current_token_id;
-                current_ids.remove(i + 1);
+                if let Some(target_id) = existing {
+                    current_ids[i] = target_id;
+                    current_ids.remove(i + 1);
+                    merged_any = true;
+                } else {
+                    raw_pairs.push((pack, (current_rank, current_token_id)));
 
-                current_token_id += 1;
-                current_rank += 1;
-            } else {
-                i += 1;
+                    let left_str = vocab_builder.get(&left).cloned().unwrap_or_default();
+                    let right_str = vocab_builder.get(&right).cloned().unwrap_or_default();
+                    vocab_builder.insert(current_token_id, format!("{}{}", left_str, right_str));
+
+                    current_ids[i] = current_token_id;
+                    current_ids.remove(i + 1);
+
+                    current_token_id += 1;
+                    current_rank += 1;
+                    merged_any = true;
+                }
             }
+
+            if !merged_any { break; }
         }
     };
 
-    // Комбинаторный взрыв для построения промышленного словаря
     for &w1 in sub_words.iter() {
         add_word_tokens(w1);
         for &w2 in sub_words.iter() {

@@ -40,17 +40,20 @@ impl BpeTokenizer {
             while keys_flat[target_idx] != u64::MAX && keys_flat[target_idx] != pack {
                 target_idx = (target_idx + 1) & (table_size - 1);
             }
-            keys_flat[target_idx] = pack;
-            values_flat[target_idx] = packed_val;
 
-            let left = (pack >> 32) as u32;
-            let right = pack as u32;
+            if keys_flat[target_idx] == u64::MAX {
+                keys_flat[target_idx] = pack;
+                values_flat[target_idx] = packed_val;
 
-            if left < 512 && right < 512 {
-                let b1 = id_to_byte[left as usize];
-                let b2 = id_to_byte[right as usize];
-                if b1 != 0xFF && b2 != 0xFF {
-                    tmp_ranks[((b1 as usize) << 8) | (b2 as usize)] = packed_val;
+                let left = (pack >> 32) as u32;
+                let right = pack as u32;
+
+                if left < 512 && right < 512 {
+                    let b1 = id_to_byte[left as usize];
+                    let b2 = id_to_byte[right as usize];
+                    if b1 != 0xFF && b2 != 0xFF {
+                        tmp_ranks[((b1 as usize) << 8) | (b2 as usize)] = packed_val;
+                    }
                 }
             }
         }
