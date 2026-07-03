@@ -13,30 +13,30 @@ struct ShortNode {
 
 impl BpeTokenizer {
     #[inline(always)]
-    pub fn encode_single_chunk(&self, bytes: &[u8], slice: &mut [u32], token_count: &mut usize, ctx: &mut TokenizationContext) {
+    pub fn encode_single_chunk(&self, bytes: &[u8], token_count: &mut usize, ctx: &mut TokenizationContext) {
         let len = bytes.len();
         if len == 0 {
             return;
         }
 
         if len == 1 {
-            if *token_count < slice.len() {
-                unsafe {
-                    *slice.get_unchecked_mut(*token_count) = *self.byte_fallback.get_unchecked(*bytes.get_unchecked(0) as usize);
-                }
+            unsafe {
+                let out_tokens_ptr = ctx.tokens_buffer.as_mut_ptr();
+                *out_tokens_ptr.add(*token_count) = *self.byte_fallback.get_unchecked(*bytes.get_unchecked(0) as usize);
                 *token_count += 1;
             }
             return;
         }
 
+        // Диспетчеризация путей слияния по длине чанка
         if len <= 16 {
-            self.encode_short_chunk(bytes, slice, token_count);
+            self.encode_short_chunk(bytes, token_count, ctx);
         } else {
             self.encode_long_chunk(bytes, token_count, ctx);
         }
     }
 
-    fn encode_short_chunk(&self, bytes: &[u8], slice: &mut [u32], token_count: &mut usize) {
+    fn encode_short_chunk(&self, bytes: &[u8], token_count: &mut usize, ctx: &mut TokenizationContext) {
         let len = bytes.len();
 
         let mut nodes = [ShortNode {
@@ -73,35 +73,23 @@ impl BpeTokenizer {
             let mut min_rank: u32 = u32::MAX;
             let mut best_left: usize = 0xFF;
 
+            // ИСПРАВЛЕНИЕ: Ищем минимум ТОЛЬКО по живым узлам связного списка.
+            // Никаких фантомных рангов из удаленных нод.
+            // Конвейер Arrow Lake развернет этот цикл, так как глубина максимум 16 итераций.
             unsafe {
-                macro_rules! check_rank {
-                    ($idx:expr) => {
-                        if $idx < len {
-                            let r = (*nodes_ptr.add($idx)).rank;
-                            if r < min_rank {
-                                min_rank = r;
-                                best_left = $idx;
-                            }
-                        }
-                    };
+                let mut curr = 0usize;
+                while curr < len {
+                    let r = (*nodes_ptr.add(curr)).rank;
+                    if r < min_rank {
+                        min_rank = r;
+                        best_left = curr;
+                    }
+                    let next_node = (*nodes_ptr.add(curr)).next;
+                    if next_node == 0xFF {
+                        break;
+                    }
+                    curr = next_node as usize;
                 }
-
-                check_rank!(0);
-                check_rank!(1);
-                check_rank!(2);
-                check_rank!(3);
-                check_rank!(4);
-                check_rank!(5);
-                check_rank!(6);
-                check_rank!(7);
-                check_rank!(8);
-                check_rank!(9);
-                check_rank!(10);
-                check_rank!(11);
-                check_rank!(12);
-                check_rank!(13);
-                check_rank!(14);
-                check_rank!(15);
             }
 
             if min_rank == u32::MAX || best_left == 0xFF {
@@ -114,6 +102,12 @@ impl BpeTokenizer {
                 let node_r = nodes_ptr.add(r_idx);
 
                 let packed_merge = self.get_pair_packed((*node_l).id, (*node_r).id);
+                if packed_merge == u64::MAX {
+                    // Страховка: если пара невалидна, сбрасываем ранг и ищем дальше
+                    (*node_l).rank = u32::MAX;
+                    continue;
+                }
+
                 let new_token_id = packed_merge as u32;
                 (*node_l).id = new_token_id;
 
@@ -124,10 +118,12 @@ impl BpeTokenizer {
                     (*nodes_ptr.add(after_r_idx as usize)).prev = best_left as u8;
                 }
 
+                // Инвалидируем поглощенный узел полностью
                 (*node_r).rank = u32::MAX;
                 (*node_r).next = 0xFF;
                 (*node_r).prev = 0xFF;
 
+                // Пересчитываем текущую ноду с её НОВЫМ правым соседом
                 if after_r_idx != 0xFF {
                     let id_after = (*nodes_ptr.add(after_r_idx as usize)).id;
                     let packed = self.get_pair_packed(new_token_id, id_after);
@@ -147,18 +143,16 @@ impl BpeTokenizer {
 
         let mut curr_idx = 0usize;
         let mut count = *token_count;
-        let slice_len = slice.len();
+        let out_tokens_ptr = ctx.tokens_buffer.as_mut_ptr();
 
-        while curr_idx != 0xFF {
-            if count >= slice_len {
-                break;
-            }
-            unsafe {
+        unsafe {
+            while curr_idx != 0xFF {
                 let node = nodes_ptr.add(curr_idx);
-                *slice.get_unchecked_mut(count) = (*node).id;
+                *out_tokens_ptr.add(count) = (*node).id;
                 count += 1;
                 curr_idx = (*node).next as usize;
             }
+            ctx.tokens_buffer.set_len(count);
         }
         *token_count = count;
     }

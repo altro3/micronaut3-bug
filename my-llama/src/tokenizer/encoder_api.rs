@@ -14,23 +14,25 @@ impl BpeTokenizer {
         let text_bytes = text.as_bytes();
         let text_len = text_bytes.len();
 
-        if text_len + 1 > ctx.long_ids.capacity() {
+        // Гарантируем емкость буферов сплиттера
+        if text_len + 1 > ctx.tokens_lens_buffer.capacity() {
             let new_cap = (text_len + 1).next_power_of_two();
-            ctx.long_ids.reserve_exact(new_cap - ctx.long_ids.len());
             ctx.tokens_lens_buffer.reserve_exact(new_cap - ctx.tokens_lens_buffer.len());
+            // Если у тебя поле называется chunk_offsets, резервируем его:
+            ctx.chunk_offsets.reserve_exact(new_cap - ctx.chunk_offsets.len());
         }
 
         unsafe {
-            ctx.long_ids.set_len(text_len + 1);
             ctx.tokens_lens_buffer.set_len(text_len + 1);
+            ctx.chunk_offsets.set_len(text_len + 1);
         }
 
-        let tokens_found = SimdSplitter::split(text, &mut ctx.long_ids, &mut ctx.tokens_lens_buffer);
+        let tokens_found = SimdSplitter::split(text, &mut ctx.chunk_offsets, &mut ctx.tokens_lens_buffer);
         if tokens_found == 0 {
             return &[];
         }
 
-        let offsets_ptr = ctx.long_ids.as_ptr();
+        let offsets_ptr = ctx.chunk_offsets.as_ptr();
         let lengths_ptr = ctx.tokens_lens_buffer.as_ptr();
 
         let mut token_count = 0;
@@ -53,7 +55,10 @@ impl BpeTokenizer {
             }
         }
 
-        unsafe { ctx.tokens_buffer.get_unchecked(..token_count) }
+        unsafe {
+            ctx.tokens_buffer.set_len(token_count);
+            ctx.tokens_buffer.get_unchecked(..token_count)
+        }
     }
 
     pub fn encode_to_pinned(&self, text: &str, pinned_dst: &mut PinnedHostBuffer, ctx: &mut TokenizationContext) -> usize {

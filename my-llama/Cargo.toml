@@ -25,6 +25,10 @@ path = "src/bin/train.rs"
 name = "train_tokenizer"
 path = "src/bin/train_tokenizer.rs"
 
+[[bin]]
+name = "infer_simple"
+path = "src/bin/infer_simple.rs"
+
 #[[bench]]
 #name = "tokenizer_benchmark"
 #path = "tests/benches/tokenizer_benchmark.rs"
@@ -44,9 +48,9 @@ harness = false
 name = "splitter_test"
 path = "tests/tokenizer/splitter/splitter_test.rs"
 
-#[[test]]
-#name = "bucket_queue_test"
-#path = "tests/tokenizer/bucket_queue_test.rs"
+[[test]]
+name = "tokenizer_integration_tests"
+path = "tests/tokenizer/tokenizer_integration_tests.rs"
 
 [profile.release]
 opt-level = 3

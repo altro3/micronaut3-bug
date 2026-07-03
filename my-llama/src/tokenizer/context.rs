@@ -6,6 +6,7 @@ pub struct TokenizationContext {
     pub short_prev: [u8; 16],
     pub short_next: [u8; 16],
 
+    pub chunk_offsets: Vec<u32>,
     pub tokens_buffer: Vec<u32>,
     pub tokens_lens_buffer: Vec<u32>,
     pub long_ids: Vec<u32>,
@@ -21,6 +22,7 @@ impl TokenizationContext {
             short_token_ids: [0; 16],
             short_prev: [0; 16],
             short_next: [0; 16],
+            chunk_offsets: Vec::with_capacity(max_chunk_capacity),
             tokens_buffer: Vec::with_capacity(max_chunk_capacity * 2),
             tokens_lens_buffer: Vec::with_capacity(max_chunk_capacity * 2),
             long_ids: Vec::with_capacity(max_chunk_capacity),
@@ -38,10 +40,12 @@ impl TokenizationContext {
             let new_capacity = required_len.next_power_of_two();
             self.tokens_buffer.reserve(new_capacity - self.tokens_buffer.len());
             self.tokens_lens_buffer.reserve(new_capacity - self.tokens_lens_buffer.len());
+            self.chunk_offsets.reserve(new_capacity - self.chunk_offsets.len());
         }
 
         self.tokens_buffer.resize(required_len, 0);
         self.tokens_lens_buffer.resize(required_len, 0);
+        self.chunk_offsets.resize(required_len, 0);
 
         if text_len > self.long_ids.capacity() {
             let new_long_cap = text_len.next_power_of_two();
