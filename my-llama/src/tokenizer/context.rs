@@ -1,6 +1,6 @@
 use crate::tokenizer::bucket_queue::BucketQueue;
 
-#[repr(align(64))]
+#[repr(C, align(64))]
 pub struct TokenizationContext {
     pub short_token_ids: [u32; 16],
     pub short_prev: [u8; 16],
