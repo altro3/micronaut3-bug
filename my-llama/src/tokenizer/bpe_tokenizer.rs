@@ -1,3 +1,5 @@
+use crate::tokenizer::bpe_types::{BpeRank, TokenId};
+
 pub struct BpeTokenizer {
     pub(crate) keys_flat: Vec<u64>,
     pub(crate) values_flat: Vec<u64>,
@@ -10,8 +12,8 @@ pub struct BpeTokenizer {
 }
 
 impl BpeTokenizer {
-    pub fn new(raw_pairs: &[(u64, (u32, u32))], byte_fallback: [u32; 256], eos_token_id: u32, vocab_size: usize) -> Self {
-        let mut byte_pair_ranks = [u64::MAX; 65536];
+    pub fn new(raw_pairs: &[(u64, (BpeRank, TokenId))], byte_fallback: [u32; 256], eos_token_id: u32, vocab_size: usize) -> Self {
+        let mut tmp_ranks = vec![u64::MAX; 65536];
         let mut id_to_byte = [0xFFu8; 512];
 
         let required_size = raw_pairs.len() * 2;
@@ -48,10 +50,13 @@ impl BpeTokenizer {
                 let b1 = id_to_byte[left as usize];
                 let b2 = id_to_byte[right as usize];
                 if b1 != 0xFF && b2 != 0xFF {
-                    byte_pair_ranks[((b1 as usize) << 8) | (b2 as usize)] = packed_val;
+                    tmp_ranks[((b1 as usize) << 8) | (b2 as usize)] = packed_val;
                 }
             }
         }
+
+        let mut byte_pair_ranks = [u64::MAX; 65536];
+        byte_pair_ranks.copy_from_slice(&tmp_ranks);
 
         Self {
             keys_flat,
@@ -67,21 +72,14 @@ impl BpeTokenizer {
 
     #[inline(always)]
     pub(crate) fn get_pair_packed(&self, left: u32, right: u32) -> u64 {
-        let is_low = ((left | right) < 512) as u64;
+        if (left | right) < 512 {
+            let b1 = unsafe { *self.id_to_byte.get_unchecked(left as usize) };
+            let b2 = unsafe { *self.id_to_byte.get_unchecked(right as usize) };
 
-        let low_idx_left = (left as usize) & 511;
-        let low_idx_right = (right as usize) & 511;
-
-        let b1 = unsafe { *self.id_to_byte.get_unchecked(low_idx_left) };
-        let b2 = unsafe { *self.id_to_byte.get_unchecked(low_idx_right) };
-
-        let is_valid_bytes = ((b1 | b2) != 0xFF) as u64;
-
-        let fast_path_mask = is_low & is_valid_bytes;
-
-        if fast_path_mask != 0 {
-            let flat_idx = ((b1 as usize) << 8) | (b2 as usize);
-            return unsafe { *self.byte_pair_ranks.get_unchecked(flat_idx) };
+            if (b1 | b2) != 0xFF {
+                let flat_idx = ((b1 as usize) << 8) | (b2 as usize);
+                return unsafe { *self.byte_pair_ranks.get_unchecked(flat_idx) };
+            }
         }
 
         let pack = ((left as u64) << 32) | (right as u64);
