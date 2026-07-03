@@ -14,7 +14,7 @@ impl BpeTokenizer {
         let text_bytes = text.as_bytes();
         ctx.reset(text_bytes.len());
 
-        let tokens_found = SimdSplitter::split(text, &mut ctx.tokens_buffer, &self.byte_fallback);
+        let tokens_found = SimdSplitter::split(text, &mut ctx.tokens_buffer, &mut ctx.tokens_lens_buffer);
         if tokens_found == 0 {
             return &[];
         }
@@ -42,7 +42,7 @@ impl BpeTokenizer {
         let text_bytes = text.as_bytes();
         ctx.reset(text_bytes.len());
 
-        let tokens_found = SimdSplitter::split(text, &mut ctx.tokens_buffer, &self.byte_fallback);
+        let tokens_found = SimdSplitter::split(text, &mut ctx.tokens_buffer, &mut ctx.tokens_lens_buffer);
         if tokens_found == 0 {
             return 0;
         }
@@ -118,7 +118,7 @@ impl BpeTokenizer {
                         let text_bytes = text.as_bytes();
                         ctx.reset(text_bytes.len());
 
-                        let tokens_found = SimdSplitter::split(text, &mut ctx.tokens_buffer, &self.byte_fallback);
+                        let tokens_found = SimdSplitter::split(text, &mut ctx.tokens_buffer, &mut ctx.tokens_lens_buffer);
                         if tokens_found == 0 {
                             continue;
                         }

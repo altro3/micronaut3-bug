@@ -3,6 +3,7 @@ use crate::tokenizer::bucket_queue::BucketQueue;
 #[repr(align(64))]
 pub struct TokenizationContext {
     pub tokens_buffer: Vec<u32>,
+    pub tokens_lens_buffer: Vec<u32>,
     pub long_ids: Vec<u32>,
     pub long_prev: Vec<i32>,
     pub long_next: Vec<i32>,
@@ -16,6 +17,7 @@ impl TokenizationContext {
     pub fn new(vocab_size: usize, max_chunk_capacity: usize) -> Self {
         Self {
             tokens_buffer: Vec::with_capacity(max_chunk_capacity * 2),
+            tokens_lens_buffer: Vec::with_capacity(max_chunk_capacity * 2),
             long_ids: Vec::with_capacity(max_chunk_capacity),
             long_prev: Vec::with_capacity(max_chunk_capacity),
             long_next: Vec::with_capacity(max_chunk_capacity),
@@ -34,12 +36,17 @@ impl TokenizationContext {
         if required_len <= current_capacity {
             unsafe {
                 self.tokens_buffer.set_len(required_len);
+                self.tokens_lens_buffer.set_len(required_len);
             }
         } else {
             let new_capacity = required_len.next_power_of_two().max(current_capacity * 2);
+
             self.tokens_buffer.reserve_exact(new_capacity - self.tokens_buffer.len());
+            self.tokens_lens_buffer.reserve_exact(new_capacity - self.tokens_lens_buffer.len());
+
             unsafe {
                 self.tokens_buffer.set_len(required_len);
+                self.tokens_lens_buffer.set_len(required_len);
             }
         }
 

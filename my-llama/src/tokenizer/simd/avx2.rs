@@ -1,4 +1,3 @@
-use crate::tokenizer::simd::utils::consume_tail;
 use std::arch::x86_64::*;
 
 #[repr(align(32))]
@@ -13,23 +12,21 @@ static LOOKUP_MASK: AlignedLookup = AlignedLookup {
 };
 
 #[target_feature(enable = "avx2,bmi2")]
-pub fn split(text: &str, ids_buffer: &mut [u32], byte_fallback: &[u32; 256]) -> usize {
+pub unsafe fn split(text: &str, offsets_buffer: &mut [u32], len_buffer: &mut [u32]) -> usize {
     let bytes = text.as_bytes();
     let len = bytes.len();
     let mut idx = 0;
-
-    let buffer_len = ids_buffer.len();
-    let buf_start_ptr = ids_buffer.as_mut_ptr();
-    let mut write_ptr = buf_start_ptr;
-    let end_write_ptr = unsafe { write_ptr.add(buffer_len) };
-
-    let fallback_ptr = byte_fallback.as_ptr();
+    let mut token_count = 0;
+    let max_tokens = offsets_buffer.len();
 
     let lookup_mask = unsafe { _mm256_load_si256((&LOOKUP_MASK.data as *const [i8; 32]) as *const __m256i) };
     let low_nibble_mask = _mm256_set1_epi8(0x0F);
 
     let non_printable_mask_unsigned = _mm256_set1_epi8((33u8 ^ 0x80u8) as i8);
     let sign_bit = _mm256_set1_epi8(i8::MIN);
+
+    let mut was_in_word = false;
+    let mut current_word_start = 0u32;
 
     while idx + 32 <= len {
         let base_ptr = unsafe { bytes.as_ptr().add(idx) };
@@ -44,35 +41,85 @@ pub fn split(text: &str, ids_buffer: &mut [u32], byte_fallback: &[u32; 256]) -> 
         );
 
         let delim_mask = _mm256_movemask_epi8(delim) as u32;
-        let mut valid_mask = delim_mask ^ 0xFFFFFFFF;
+        let valid_mask = delim_mask ^ 0xFFFFFFFF;
 
-        while valid_mask != 0 {
-            if write_ptr >= end_write_ptr {
-                return buffer_len;
+        let mut bits = valid_mask;
+        let mut bit_offset = 0;
+
+        while bits != 0 {
+            let tz = bits.trailing_zeros() as usize;
+
+            bits >>= tz;
+            bit_offset += tz;
+
+            let run_len = (!bits).trailing_zeros() as usize;
+
+            if !was_in_word {
+                current_word_start = (idx + bit_offset) as u32;
             }
 
-            let tz = valid_mask.trailing_zeros() as usize;
+            let word_end = idx + bit_offset + run_len;
 
-            unsafe {
-                let byte_val = *base_ptr.add(tz);
-                *write_ptr = *fallback_ptr.add(byte_val as usize);
-                write_ptr = write_ptr.add(1);
+            if word_end < idx + 32 || (word_end == idx + 32 && (delim_mask & (1 << 31)) != 0) {
+                if token_count < max_tokens {
+                    unsafe {
+                        *offsets_buffer.get_unchecked_mut(token_count) = current_word_start;
+                        *len_buffer.get_unchecked_mut(token_count) = (word_end as u32) - current_word_start;
+                    }
+                    token_count += 1;
+                }
+                was_in_word = false;
+            } else {
+                was_in_word = true;
             }
 
-            valid_mask &= valid_mask - 1;
+            bits >>= run_len;
+            bit_offset += run_len;
+        }
+
+        if (valid_mask & (1 << 31)) == 0 && was_in_word {
+            if token_count < max_tokens {
+                unsafe {
+                    *offsets_buffer.get_unchecked_mut(token_count) = current_word_start;
+                    *len_buffer.get_unchecked_mut(token_count) = ((idx + 32) as u32) - current_word_start;
+                }
+                token_count += 1;
+            }
+            was_in_word = false;
         }
 
         idx += 32;
     }
 
-    consume_tail(
-        bytes.as_ptr(),
-        len,
-        &mut idx,
-        &mut write_ptr,
-        end_write_ptr,
-        byte_fallback.as_ptr(),
-        buf_start_ptr,
-        buffer_len,
-    )
+    while idx < len {
+        let b = unsafe { *bytes.get_unchecked(idx) };
+        let is_delim = b == 32 || b == 10 || b == 9 || b == 13;
+
+        if !is_delim {
+            if !was_in_word {
+                current_word_start = idx as u32;
+                was_in_word = true;
+            }
+        } else if was_in_word {
+            if token_count < max_tokens {
+                unsafe {
+                    *offsets_buffer.get_unchecked_mut(token_count) = current_word_start;
+                    *len_buffer.get_unchecked_mut(token_count) = (idx as u32) - current_word_start;
+                }
+                token_count += 1;
+            }
+            was_in_word = false;
+        }
+        idx += 1;
+    }
+
+    if was_in_word && token_count < max_tokens {
+        unsafe {
+            *offsets_buffer.get_unchecked_mut(token_count) = current_word_start;
+            *len_buffer.get_unchecked_mut(token_count) = (len as u32) - current_word_start;
+        }
+        token_count += 1;
+    }
+
+    token_count
 }
