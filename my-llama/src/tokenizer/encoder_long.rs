@@ -30,20 +30,46 @@ impl BpeTokenizer {
         let long_ids_ptr = ctx.long_ids.as_mut_ptr();
         let long_prev_ptr = ctx.long_prev.as_mut_ptr();
         let long_next_ptr = ctx.long_next.as_mut_ptr();
-        let tokens_buffer_ptr = ctx.tokens_buffer.as_ptr();
+        let fallback_ptr = self.byte_fallback.as_ptr();
 
+        let mut idx = 0;
         unsafe {
-            std::ptr::copy_nonoverlapping(tokens_buffer_ptr, long_ids_ptr, len);
-        }
+            while idx + 4 <= len {
+                let b0 = *bytes.get_unchecked(idx) as usize;
+                let b1 = *bytes.get_unchecked(idx + 1) as usize;
+                let b2 = *bytes.get_unchecked(idx + 2) as usize;
+                let b3 = *bytes.get_unchecked(idx + 3) as usize;
 
-        for i in 0..len {
-            unsafe {
-                *long_prev_ptr.add(i) = if i == 0 { -1 } else { (i - 1) as i32 };
-                *long_next_ptr.add(i) = if i == len - 1 { -1 } else { (i + 1) as i32 };
+                *long_ids_ptr.add(idx) = *fallback_ptr.add(b0);
+                *long_ids_ptr.add(idx + 1) = *fallback_ptr.add(b1);
+                *long_ids_ptr.add(idx + 2) = *fallback_ptr.add(b2);
+                *long_ids_ptr.add(idx + 3) = *fallback_ptr.add(b3);
+
+                *long_prev_ptr.add(idx) = idx as i32 - 1;
+                *long_next_ptr.add(idx) = idx as i32 + 1;
+
+                *long_prev_ptr.add(idx + 1) = idx as i32;
+                *long_next_ptr.add(idx + 1) = idx as i32 + 2;
+
+                *long_prev_ptr.add(idx + 2) = idx as i32 + 1;
+                *long_next_ptr.add(idx + 2) = idx as i32 + 3;
+
+                *long_prev_ptr.add(idx + 3) = idx as i32 + 2;
+                *long_next_ptr.add(idx + 3) = idx as i32 + 4;
+
+                idx += 4;
             }
+            while idx < len {
+                let b = *bytes.get_unchecked(idx) as usize;
+                *long_ids_ptr.add(idx) = *fallback_ptr.add(b);
+                *long_prev_ptr.add(idx) = idx as i32 - 1;
+                *long_next_ptr.add(idx) = idx as i32 + 1;
+                idx += 1;
+            }
+            *long_next_ptr.add(len - 1) = -1;
         }
 
-        for i in 0..len - 1 {
+        for i in 0..(len - 1) {
             unsafe {
                 let id1 = *long_ids_ptr.add(i);
                 let id2 = *long_ids_ptr.add(i + 1);
@@ -91,7 +117,6 @@ impl BpeTokenizer {
 
                 *long_next_ptr.add(r_idx) = -1;
                 *long_prev_ptr.add(r_idx) = -1;
-                *long_ids_ptr.add(r_idx) = u32::MAX;
 
                 if l_prev != -1 {
                     let l_prev_idx = l_prev as usize;
@@ -113,26 +138,28 @@ impl BpeTokenizer {
             }
         }
 
-        let mut i = 0usize;
+        let mut i = 0i32;
         let mut count = *token_count;
-        let out_tokens_ptr = ctx.tokens_buffer.as_mut_ptr();
-        let max_slice_len = ctx.tokens_buffer.capacity();
 
-        while i < len {
-            if count >= max_slice_len {
-                break;
-            }
-            unsafe {
-                *out_tokens_ptr.add(count) = *long_ids_ptr.add(i);
-                count += 1;
-
-                let next_node = *long_next_ptr.add(i);
-                if next_node == -1 {
-                    break;
-                }
-                i = next_node as usize;
-            }
+        let required_capacity = count + len;
+        if required_capacity > ctx.tokens_buffer.capacity() {
+            ctx.tokens_buffer.reserve(required_capacity - ctx.tokens_buffer.len());
         }
+
+        let out_tokens_ptr = ctx.tokens_buffer.as_mut_ptr();
+
+        unsafe {
+            while i != -1 {
+                let idx = i as usize;
+                *out_tokens_ptr.add(count) = *long_ids_ptr.add(idx);
+                count += 1;
+                i = *long_next_ptr.add(idx);
+            }
+
+            // Фиксируем реальный размер, когда данные уже на месте
+            ctx.tokens_buffer.set_len(count);
+        }
+
         *token_count = count;
     }
 }
