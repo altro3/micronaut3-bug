@@ -1,14 +1,20 @@
 use super::bpe_types::FlatBpeNode;
 use crate::tokenizer::bpe::heap_types::MergePair;
 
+#[repr(C, align(16))]
+#[derive(Clone, Copy)]
+pub struct BpeCacheEntry {
+    pub key: u64,
+    pub val: u64,
+}
+
 #[repr(C, align(64))]
 pub struct TokenizationContext {
     pub short_token_ids: [u32; 16],
     pub short_prev: [u8; 16],
     pub short_next: [u8; 16],
 
-    pub bpe_cache_keys: Vec<u64>,
-    pub bpe_cache_vals: Vec<u64>,
+    pub bpe_direct_cache: Vec<BpeCacheEntry>,
 
     pub nodes: Vec<FlatBpeNode>,
     pub long_ranks: Vec<u32>,
@@ -30,8 +36,15 @@ impl TokenizationContext {
             short_prev: [0; 16],
             short_next: [0; 16],
 
-            bpe_cache_keys: vec![u64::MAX; 4096],
-            bpe_cache_vals: vec![u64::MAX; 4096],
+            // Инициализируем 16к ячеек интерливинг-кэша.
+            // Ключ u64::MAX гарантирует отсутствие ложных попаданий на старте.
+            bpe_direct_cache: vec![
+                BpeCacheEntry {
+                    key: u64::MAX,
+                    val: u64::MAX
+                };
+                16384
+            ],
 
             chunk_offsets: Vec::with_capacity(max_chunk_capacity),
             tokens_lens_buffer: Vec::with_capacity(max_chunk_capacity),

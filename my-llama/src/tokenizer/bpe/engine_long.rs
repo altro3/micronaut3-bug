@@ -17,9 +17,18 @@ impl LongBpeEngine {
         let mut heap = BinaryHeap::from(heap_vec);
 
         let mut gens = std::mem::take(&mut ctx.bpe_generations);
-        gens.clear();
-        gens.resize(len, 0u16);
+
+        if len > gens.capacity() {
+            gens.reserve(len - gens.len());
+        }
+        unsafe {
+            gens.set_len(len);
+        }
+
         let gen_ptr = gens.as_mut_ptr();
+        unsafe {
+            std::ptr::write_bytes(gen_ptr, 0u8, len * size_of::<u16>());
+        }
 
         unsafe {
             for i in 0..len {

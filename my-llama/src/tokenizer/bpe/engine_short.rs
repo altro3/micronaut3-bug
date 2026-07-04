@@ -13,23 +13,23 @@ impl ShortBpeEngine {
         let mut ranks = [u32::MAX; 32];
 
         unsafe {
-            let cache_keys_ptr = ctx.bpe_cache_keys.as_mut_ptr();
-            let cache_vals_ptr = ctx.bpe_cache_vals.as_mut_ptr();
+            let cache_ptr = ctx.bpe_direct_cache.as_mut_ptr();
 
             macro_rules! get_pair_cached {
                 ($left:expr, $right:expr) => {{
                     let l = $left;
                     let r = $right;
                     let pack = ((l as u64) << 32) | (r as u64);
-                    let cache_idx = ((l ^ r) & 0xFFF) as usize;
 
-                    let cached_key = *cache_keys_ptr.add(cache_idx);
-                    if cached_key == pack {
-                        *cache_vals_ptr.add(cache_idx)
+                    let cache_idx = ((l ^ r) & 0x3FFF) as usize;
+                    let slot_ptr = cache_ptr.add(cache_idx);
+
+                    if (*slot_ptr).key == pack {
+                        (*slot_ptr).val
                     } else {
                         let res = data.get_pair_packed(l, r);
-                        *cache_keys_ptr.add(cache_idx) = pack;
-                        *cache_vals_ptr.add(cache_idx) = res;
+                        (*slot_ptr).key = pack;
+                        (*slot_ptr).val = res;
                         res
                     }
                 }};
