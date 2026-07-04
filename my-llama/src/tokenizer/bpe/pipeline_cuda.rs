@@ -12,7 +12,7 @@ impl TokenizerPipeline {
         if text.is_empty() {
             if slice_len > 0 {
                 unsafe {
-                    *slice.get_unchecked_mut(0) = self.merge_table.eos_token_id as f32;
+                    *slice.get_unchecked_mut(0) = self.tokenizer.eos_token_id as f32;
                 }
                 return 1;
             }
@@ -34,7 +34,7 @@ impl TokenizerPipeline {
             unsafe {
                 let offset = *offsets_ptr.add(i) as usize;
                 let length = *lengths_ptr.add(i) as usize;
-                LongBpeEngine::merge(&self.merge_table, &bytes[offset..offset + length], &mut token_count, ctx);
+                LongBpeEngine::merge(&self.tokenizer, &bytes[offset..offset + length], &mut token_count, ctx);
             }
         }
 

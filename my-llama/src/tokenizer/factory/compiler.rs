@@ -15,9 +15,8 @@ impl DictCompiler {
         let eos_token_id = Self::extract_eos(&root);
         let vocab_size = root.model.vocab.len();
 
-        let mut byte_fallback = [0u32; 256];
+        let mut byte_fallback = [u32::MAX; 256];
         let mut vocab_compiled_tokens = vec![Vec::new(); vocab_size.max(260000)];
-
         for (token_str, &id) in root.model.vocab.iter() {
             let raw_bytes = HfByteDecoder::decode_string(token_str);
             let id_idx = id as usize;
@@ -32,7 +31,7 @@ impl DictCompiler {
             }
         }
 
-        Self::fill_missing_fallbacks(&mut byte_fallback);
+        Self::fill_qwen_byte_fallbacks(&root, &mut byte_fallback);
 
         let mut raw_pairs = Vec::with_capacity(root.model.merges.len());
         for (rank, pair) in root.model.merges.iter().enumerate() {
@@ -71,10 +70,15 @@ impl DictCompiler {
         248044
     }
 
-    fn fill_missing_fallbacks(fallback: &mut [u32; 256]) {
+    fn fill_qwen_byte_fallbacks(root: &QwenJsonModel, fallback: &mut [u32; 256]) {
         for b in 0..=255 {
-            if fallback[b] == 0 {
-                fallback[b] = b as u32;
+            if fallback[b] == u32::MAX {
+                let byte_token_name = format!("<|byte_{:02X}|>", b);
+                if let Some(&id) = root.model.vocab.get(&byte_token_name) {
+                    fallback[b] = id;
+                } else {
+                    fallback[b] = (root.model.vocab.len() as u32) + (b as u32);
+                }
             }
         }
     }

@@ -1,18 +1,20 @@
 use super::context::TokenizationContext;
-use crate::tokenizer::bpe::engine_long::LongBpeEngine;
-use crate::tokenizer::bpe::engine_short::ShortBpeEngine;
+use crate::tokenizer::bpe::dispatcher::BpeEngineDispatcher;
 use crate::tokenizer::dfa::runtime::FlatDfaRuntime;
-use std::sync::atomic::{AtomicUsize, Ordering};
 use crate::tokenizer::BpeTokenizer;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 pub struct TokenizerPipeline {
-    pub merge_table: BpeTokenizer,
+    pub tokenizer: BpeTokenizer,
     pub dfa_splitter: FlatDfaRuntime,
 }
 
 impl TokenizerPipeline {
     pub fn new(merge_table: BpeTokenizer, dfa_splitter: FlatDfaRuntime) -> Self {
-        Self { merge_table, dfa_splitter }
+        Self {
+            tokenizer: merge_table,
+            dfa_splitter,
+        }
     }
 
     #[inline(always)]
@@ -32,13 +34,9 @@ impl TokenizerPipeline {
             unsafe {
                 let offset = *offsets_ptr.add(i) as usize;
                 let length = *lengths_ptr.add(i) as usize;
-                let chunk_bytes = &bytes[offset..offset + length];
+                let chunk_bytes = bytes.get_unchecked(offset..offset + length);
 
-                if length <= 16 {
-                    ShortBpeEngine::merge(&self.merge_table, chunk_bytes, &mut token_count, ctx);
-                } else {
-                    LongBpeEngine::merge(&self.merge_table, chunk_bytes, &mut token_count, ctx);
-                }
+                BpeEngineDispatcher::merge(&self.tokenizer, chunk_bytes, &mut token_count, ctx);
             }
         }
 
