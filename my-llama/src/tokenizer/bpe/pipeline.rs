@@ -22,16 +22,9 @@ impl TokenizerPipeline {
         let bytes = text.as_bytes();
         ctx.reset_all(bytes.len());
 
-        let dfa_start = unsafe { std::arch::x86_64::_rdtsc() };
-
         let tokens_found = self
             .dfa_splitter
             .split_streaming(bytes, &mut ctx.chunk_offsets, &mut ctx.tokens_lens_buffer);
-
-        let dfa_end = unsafe { std::arch::x86_64::_rdtsc() };
-        crate::tokenizer::bpe::dispatcher::DFA_CYCLES.with(|c| c.set(c.get() + (dfa_end - dfa_start)));
-
-        let loop_start = unsafe { std::arch::x86_64::_rdtsc() };
 
         let mut token_count = 0;
         let offsets_ptr = ctx.chunk_offsets.as_ptr();
@@ -46,9 +39,6 @@ impl TokenizerPipeline {
                 BpeEngineDispatcher::merge(&self.tokenizer, chunk_bytes, &mut token_count, ctx);
             }
         }
-
-        let loop_end = unsafe { std::arch::x86_64::_rdtsc() };
-        crate::tokenizer::bpe::dispatcher::DISPATCH_LOOP_CYCLES.with(|c| c.set(c.get() + (loop_end - loop_start)));
 
         unsafe { ctx.tokens_buffer.get_unchecked(..token_count) }
     }
@@ -88,39 +78,6 @@ impl TokenizerPipeline {
                             std::ptr::copy_nonoverlapping(tokens.as_ptr(), (*out_vec_ptr).as_mut_ptr(), tokens.len());
                             (*out_vec_ptr).set_len(tokens.len());
                         }
-                    }
-
-                    let calls = crate::tokenizer::bpe::dispatcher::CALL_COUNT.with(|c| c.get());
-                    let fb = crate::tokenizer::bpe::dispatcher::FALLBACK_CYCLES.with(|c| c.get());
-                    let short = crate::tokenizer::bpe::dispatcher::SHORT_CYCLES.with(|c| c.get());
-                    let long = crate::tokenizer::bpe::dispatcher::LONG_CYCLES.with(|c| c.get());
-
-                    let dfa_cycles = crate::tokenizer::bpe::dispatcher::DFA_CYCLES.with(|c| c.get());
-                    let total_bpe_loop = crate::tokenizer::bpe::dispatcher::DISPATCH_LOOP_CYCLES.with(|c| c.get());
-
-                    let total_pipeline_cycles = dfa_cycles + total_bpe_loop;
-
-                    if calls > 0 && total_pipeline_cycles > 0 {
-                        println!("[ПРОФАЙЛЕР ПАЙПЛАЙНА] Распределение нагрузки на ядро CPU:");
-                        println!(
-                            "|-> Сплиттер (DFA Runtime)       : {:.1}% тактов",
-                            (dfa_cycles as f64 / total_pipeline_cycles as f64) * 100.0
-                        );
-                        println!(
-                            "|-> BPE Цикл (Слияние + Накладные): {:.1}% тактов",
-                            (total_bpe_loop as f64 / total_pipeline_cycles as f64) * 100.0
-                        );
-
-                        let bpe_internal_all = fb + short + long;
-                        if bpe_internal_all > 0 {
-                            println!(
-                                "    └── Внутри BPE -> FB: {:.1}% | Short: {:.1}% | Long: {:.1}%",
-                                (fb as f64 / bpe_internal_all as f64) * 100.0,
-                                (short as f64 / bpe_internal_all as f64) * 100.0,
-                                (long as f64 / bpe_internal_all as f64) * 100.0
-                            );
-                        }
-                        println!("======================================================================");
                     }
                 });
             }

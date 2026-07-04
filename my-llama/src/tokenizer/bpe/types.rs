@@ -1,5 +1,16 @@
 use std::cmp::Ordering;
 
+pub type TokenId = u32;
+pub type BpeRank = u32;
+
+#[derive(Clone, Copy)]
+#[repr(C, packed)]
+pub struct FlatBpeNode {
+    pub id: u32,
+    pub next: u16,
+    pub prev: u16,
+}
+
 #[derive(Copy, Clone, Eq, PartialEq)]
 pub struct MergePair {
     pub rank: u32,

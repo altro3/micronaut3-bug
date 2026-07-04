@@ -1,5 +1,4 @@
-use super::bpe_types::FlatBpeNode;
-use crate::tokenizer::bpe::heap_types::MergePair;
+use super::types::{FlatBpeNode, MergePair};
 
 #[repr(C, align(16))]
 #[derive(Clone, Copy)]

@@ -1,7 +1,5 @@
 use super::context::TokenizationContext;
-use super::heap_types::MergePair;
 use crate::tokenizer::BpeTokenizer;
-use std::collections::BinaryHeap;
 
 pub struct LongBpeEngine;
 
@@ -9,121 +7,68 @@ impl LongBpeEngine {
     #[inline(always)]
     pub fn merge(data: &BpeTokenizer, bytes: &[u8], token_count: &mut usize, ctx: &mut TokenizationContext) {
         let len = bytes.len();
-        let nodes_ptr = ctx.nodes.as_mut_ptr();
-        let fallback_ptr = data.byte_fallback.as_ptr();
-
-        let mut heap_vec = std::mem::take(&mut ctx.bpe_heap);
-        heap_vec.clear();
-        let mut heap = BinaryHeap::from(heap_vec);
-
-        let mut gens = std::mem::take(&mut ctx.bpe_generations);
-
-        if len > gens.capacity() {
-            gens.reserve(len - gens.len());
-        }
-        unsafe {
-            gens.set_len(len);
-        }
-
-        let gen_ptr = gens.as_mut_ptr();
-        unsafe {
-            std::ptr::write_bytes(gen_ptr, 0u8, len * size_of::<u16>());
+        if len == 0 {
+            return;
         }
 
         unsafe {
-            for i in 0..len {
-                let b = *bytes.get_unchecked(i) as usize;
-                let node = nodes_ptr.add(i);
-                (*node).id = *fallback_ptr.add(b);
-                (*node).next = if i == len - 1 { 0xFFFF } else { (i + 1) as u16 };
-                (*node).prev = if i == 0 { 0xFFFF } else { (i - 1) as u16 };
-            }
-
-            for i in 0..(len - 1) {
-                let packed = data.get_pair_packed((*nodes_ptr.add(i)).id, (*nodes_ptr.add(i + 1)).id);
-                if packed != u64::MAX {
-                    heap.push(MergePair {
-                        rank: (packed >> 32) as u32,
-                        left_idx: i as u16,
-                        generation: 0,
-                    });
-                }
-            }
-
-            while let Some(pair) = heap.pop() {
-                let left_idx = pair.left_idx as usize;
-                if pair.generation != *gen_ptr.add(left_idx) {
-                    continue;
-                }
-
-                let node_l = nodes_ptr.add(left_idx);
-                let right_idx = (*node_l).next as usize;
-                if right_idx == 0xFFFF {
-                    continue;
-                }
-                let node_r = nodes_ptr.add(right_idx);
-
-                let packed = data.get_pair_packed((*node_l).id, (*node_r).id);
-                if packed == u64::MAX || (packed >> 32) as u32 != pair.rank {
-                    continue;
-                }
-
-                (*node_l).id = packed as u32;
-                let after_r = (*node_r).next;
-                (*node_l).next = after_r;
-
-                *gen_ptr.add(left_idx) += 1;
-                *gen_ptr.add(right_idx) += 1;
-                let current_gen = *gen_ptr.add(left_idx);
-
-                if after_r != 0xFFFF {
-                    let after_r_idx = after_r as usize;
-                    (*nodes_ptr.add(after_r_idx)).prev = left_idx as u16;
-
-                    let packed_r = data.get_pair_packed((*node_l).id, (*nodes_ptr.add(after_r_idx)).id);
-                    if packed_r != u64::MAX {
-                        heap.push(MergePair {
-                            rank: (packed_r >> 32) as u32,
-                            left_idx: left_idx as u16,
-                            generation: current_gen,
-                        });
-                    }
-                }
-
-                let prev_idx = (*node_l).prev;
-                if prev_idx != 0xFFFF {
-                    let p_idx = prev_idx as usize;
-                    *gen_ptr.add(p_idx) += 1;
-
-                    let packed_l = data.get_pair_packed((*nodes_ptr.add(p_idx)).id, (*node_l).id);
-                    if packed_l != u64::MAX {
-                        heap.push(MergePair {
-                            rank: (packed_l >> 32) as u32,
-                            left_idx: prev_idx,
-                            generation: *gen_ptr.add(p_idx),
-                        });
-                    }
-                }
-            }
-
-            let mut curr = 0usize;
-            let mut count = *token_count;
             let out_ptr = ctx.tokens_buffer.as_mut_ptr();
-            loop {
-                let node = nodes_ptr.add(curr);
-                *out_ptr.add(count) = (*node).id;
-                count += 1;
-                let next = (*node).next;
-                if next == 0xFFFF {
-                    break;
+            let mut count = *token_count;
+
+            let trie_ptr = data.trie_nodes.as_ptr();
+            let root_table_ptr = data.trie_root_offsets.as_ptr();
+            let fallback_ptr = data.byte_fallback.as_ptr();
+            let bytes_ptr = bytes.as_ptr();
+
+            let mut start_idx = 0usize;
+
+            while start_idx < len {
+                let mut best_token_id = u32::MAX;
+                let mut best_len = 0usize;
+
+                let first_byte = *bytes_ptr.add(start_idx) as usize;
+                let curr_offset = *root_table_ptr.add(first_byte);
+
+                if curr_offset != u32::MAX {
+                    let mut curr_idx = start_idx + 1;
+                    let first_node = *trie_ptr.add(curr_offset as usize);
+
+                    if first_node.token_id != u32::MAX {
+                        best_token_id = first_node.token_id;
+                        best_len = 1;
+                    }
+
+                    let mut next_children = first_node.children_offset;
+
+                    while curr_idx < len && next_children != u32::MAX {
+                        let next_byte = *bytes_ptr.add(curr_idx) as usize;
+                        let child_node_ptr = trie_ptr.add((next_children as usize) + next_byte);
+                        let child_node = *child_node_ptr;
+
+                        if child_node.token_id != u32::MAX {
+                            best_token_id = child_node.token_id;
+                            best_len = curr_idx - start_idx + 1;
+                        }
+
+                        next_children = child_node.children_offset;
+                        curr_idx += 1;
+                    }
                 }
-                curr = next as usize;
+
+                if best_token_id != u32::MAX {
+                    *out_ptr.add(count) = best_token_id;
+                    count += 1;
+                    start_idx += best_len;
+                } else {
+                    let b = *bytes_ptr.add(start_idx) as usize;
+                    *out_ptr.add(count) = *fallback_ptr.add(b);
+                    count += 1;
+                    start_idx += 1;
+                }
             }
+
             *token_count = count;
             ctx.tokens_buffer.set_len(count);
         }
-
-        ctx.bpe_heap = heap.into_vec();
-        ctx.bpe_generations = gens;
     }
 }

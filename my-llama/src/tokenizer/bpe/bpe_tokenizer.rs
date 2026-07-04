@@ -1,12 +1,5 @@
-use crate::tokenizer::bpe::bpe_types::{BpeRank, TokenId};
-use std::cell::Cell;
+use crate::tokenizer::bpe::types::{BpeRank, TokenId};
 use crate::tokenizer::factory::types::FlatTrieNode;
-
-thread_local! {
-    pub static FAST_PATH_COUNT: Cell<u64> = const { Cell::new(0) };
-    pub static SLOW_PATH_COUNT: Cell<u64> = const { Cell::new(0) };
-    pub static HASH_COLLISION_STEPS: Cell<u64> = const { Cell::new(0) };
-}
 
 pub struct BpeTokenizer {
     pub keys_flat: Vec<u64>,

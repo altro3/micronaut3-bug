@@ -1,5 +1,5 @@
-use regex_automata::dfa::Automaton;
 use regex_automata::dfa::dense::DFA;
+use regex_automata::dfa::Automaton;
 
 pub struct FlatDfaRuntime {
     dfa: DFA<Vec<u32>>,
@@ -38,7 +38,6 @@ impl FlatDfaRuntime {
                         let start = last_end;
                         let end = half_match.offset();
 
-                        // Исключаем пустые совпадения (длина 0), чтобы не уйти в бесконечный цикл
                         if end == start {
                             last_end += 1;
                             continue;
@@ -57,7 +56,6 @@ impl FlatDfaRuntime {
                 }
             }
 
-            // Если регулярка не доела хвост текста до конца — аккуратно дописываем его как один чанк
             if last_end < len && token_count < max_tokens {
                 *offsets_ptr.add(token_count) = last_end as u32;
                 *len_ptr.add(token_count) = (len - last_end) as u32;
