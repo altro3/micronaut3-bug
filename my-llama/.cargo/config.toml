@@ -2,4 +2,9 @@
 rustflags = ["-C", "target-cpu=native"]
 
 [target.x86_64-pc-windows-msvc]
-rustflags = ["-C", "link-args=/STACK:33554432"]
+rustflags = [
+    "-C", "target-cpu=native",      # Включает все векторные инструкции твоего конкретного CPU
+    "-C", "opt-level=3",            # Максимальная агрессивная оптимизация кода
+    "-C", "llvm-args=-unroll-threshold=500", # Разрешает LLVM жестко разворачивать мелкие циклы (наш случай!)
+    "-C", "link-args=/STACK:33554432"
+]

@@ -9,13 +9,19 @@ impl DfaCompiler {
     pub fn compile_qwen_dfa(raw_qwen_regex: &str, trans_path: &str, accept_path: &str) -> Result<()> {
         println!("[DFA-КОМПИЛЯТОР] Построение детерминированного автомата (DFA) из динамического паттерна...");
 
-        let qwen_regex = raw_qwen_regex.replace(r"\s+(?!\S)", r"\s+").replace(r"\s+(?!\S)", r"\s+");
+        let qwen_regex = raw_qwen_regex.replace(r"\s+(?!\S)", r"\s+");
+
+        let syntax_config = regex_automata::util::syntax::Config::new().unicode(true).utf8(true);
 
         let dfa_config = Config::new().minimize(true).byte_classes(false);
 
-        let dfa: DFA<Vec<u32>> = Builder::new().configure(dfa_config).build(&qwen_regex).unwrap_or_else(|e| {
-            panic!("Критическая ошибка компиляции очищенного паттерна: {:?}\nПаттерн: {}", e, qwen_regex);
-        });
+        let dfa: DFA<Vec<u32>> = Builder::new()
+            .syntax(syntax_config)
+            .configure(dfa_config)
+            .build(&qwen_regex)
+            .unwrap_or_else(|e| {
+                panic!("Критическая ошибка компиляции очищенного паттерна: {:?}\nПаттерн: {}", e, qwen_regex);
+            });
 
         println!("[DFA-КОМПИЛЯТОР] Сериализация матрицы переходов...");
         let mut dfa_bytes = vec![0u8; dfa.write_to_len()];

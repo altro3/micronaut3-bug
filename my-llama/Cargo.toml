@@ -68,6 +68,3 @@ codegen-units = 16
 opt-level = 1
 debug = true
 panic = "abort"
-
-[profile.test]
-panic = "abort"
