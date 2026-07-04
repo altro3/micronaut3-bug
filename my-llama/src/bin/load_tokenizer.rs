@@ -7,7 +7,6 @@ use my_llama::tokenizer::factory::compiler::DictCompiler;
 use my_llama::tokenizer::BpeTokenizer;
 use std::fs::File;
 use std::time::Instant;
-use my_llama::tokenizer::bpe::dispatcher::{CALL_COUNT, FALLBACK_CYCLES, LONG_CYCLES, SHORT_CYCLES, TOTAL_BYTES_PROCESSED};
 
 fn main() -> std::io::Result<()> {
     let stack_size = 32 * 1024 * 1024;
@@ -128,24 +127,5 @@ fn run_pure_tokenizer_benchmark() -> std::io::Result<()> {
         println!("|-> Декодер стабилен. Время восстановления одного чанка: {:?}", duration_decode);
     }
 
-    let calls = CALL_COUNT.with(|c| c.get());
-    let fb = FALLBACK_CYCLES.with(|c| c.get());
-    let short = SHORT_CYCLES.with(|c| c.get());
-    let long = LONG_CYCLES.with(|c| c.get());
-    let bytes = TOTAL_BYTES_PROCESSED.with(|c| c.get());
-
-    let total_cycles = fb + short + long;
-
-    if calls > 0 && total_cycles > 0 {
-        let avg_len = bytes as f64 / calls as f64;
-        println!(
-            "[THREAD] Calls: {} | AvgLen: {:.1}b | FB: {:.1}% | Short: {:.1}% | Long: {:.1}%",
-            calls,
-            avg_len,
-            (fb as f64 / total_cycles as f64) * 100.0,
-            (short as f64 / total_cycles as f64) * 100.0,
-            (long as f64 / total_cycles as f64) * 100.0
-        );
-    }
     Ok(())
 }

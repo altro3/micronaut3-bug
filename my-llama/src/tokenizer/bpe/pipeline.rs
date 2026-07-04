@@ -1,5 +1,6 @@
 use super::context::TokenizationContext;
-use crate::tokenizer::bpe::dispatcher::BpeEngineDispatcher;
+use crate::tokenizer::bpe::bpe_tokenizer::{FAST_PATH_COUNT, HASH_COLLISION_STEPS, SLOW_PATH_COUNT};
+use crate::tokenizer::bpe::dispatcher::{BpeEngineDispatcher, CALL_COUNT, FALLBACK_CYCLES, LONG_CYCLES, SHORT_CYCLES, TOTAL_BYTES_PROCESSED};
 use crate::tokenizer::dfa::runtime::FlatDfaRuntime;
 use crate::tokenizer::BpeTokenizer;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -80,17 +81,32 @@ impl TokenizerPipeline {
                         }
                     }
 
-                    // --- СБОР И ВЫВОД МЕТРИК ИЗ THREAD-LOCAL ПЕРЕД СМЕРТЬЮ ПОТОКА ---
-                    let calls = crate::tokenizer::bpe::dispatcher::CALL_COUNT.with(|c| c.get());
-                    let fb = crate::tokenizer::bpe::dispatcher::FALLBACK_CYCLES.with(|c| c.get());
-                    let short = crate::tokenizer::bpe::dispatcher::SHORT_CYCLES.with(|c| c.get());
-                    let long = crate::tokenizer::bpe::dispatcher::LONG_CYCLES.with(|c| c.get());
-                    let bytes = crate::tokenizer::bpe::dispatcher::TOTAL_BYTES_PROCESSED.with(|c| c.get());
+                    let calls = CALL_COUNT.get();
+                    let fb = FALLBACK_CYCLES.get();
+                    let short = SHORT_CYCLES.get();
+                    let long = LONG_CYCLES.get();
+                    let bytes = TOTAL_BYTES_PROCESSED.get();
+
+                    let fast_lookups = FAST_PATH_COUNT.get();
+                    let slow_lookups = SLOW_PATH_COUNT.get();
+                    let collision_steps = HASH_COLLISION_STEPS.get();
 
                     let total_cycles = fb + short + long;
 
                     if calls > 0 && total_cycles > 0 {
                         let avg_len = bytes as f64 / calls as f64;
+                        let total_lookups = fast_lookups + slow_lookups;
+                        let hit_rate = if total_lookups > 0 {
+                            (fast_lookups as f64 / total_lookups as f64) * 100.0
+                        } else {
+                            0.0
+                        };
+                        let avg_collision = if slow_lookups > 0 {
+                            collision_steps as f64 / slow_lookups as f64
+                        } else {
+                            0.0
+                        };
+
                         println!(
                             "[ПОТОК] Вызовов: {} | СрДлина: {:.1}б | Такты -> FB: {:.1}% | Short: {:.1}% | Long: {:.1}%",
                             calls,
@@ -98,6 +114,10 @@ impl TokenizerPipeline {
                             (fb as f64 / total_cycles as f64) * 100.0,
                             (short as f64 / total_cycles as f64) * 100.0,
                             (long as f64 / total_cycles as f64) * 100.0
+                        );
+                        println!(
+                            "        [ЛУКАПЫ] Всего: {} | БыстрыйПуть: {:.1}% | ТяжелыйПуть: {} | СрКоллизий на хэше: {:.2}",
+                            total_lookups, hit_rate, slow_lookups, avg_collision
                         );
                     }
                 });
