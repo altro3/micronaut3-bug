@@ -1,2 +1,2 @@
-pub mod avx2;
-pub mod simd_splitter;
+pub mod simd_scaner_avx2;
+pub mod simd_path;

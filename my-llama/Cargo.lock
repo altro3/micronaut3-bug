@@ -276,7 +276,6 @@ dependencies = [
  "cc",
  "criterion",
  "regex-automata",
- "regex-syntax",
  "serde",
  "serde_json",
 ]
