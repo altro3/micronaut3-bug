@@ -1,36 +1,42 @@
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-#[derive(Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct AddedToken {
     pub id: u32,
     pub content: String,
+    pub single_word: bool,
+    pub lstrip: bool,
+    pub rstrip: bool,
+    pub normalized: bool,
+    pub special: bool,
 }
 
-#[derive(Deserialize)]
+#[derive(Serialize, Deserialize)]
 pub struct BpeModelFields {
     pub vocab: HashMap<String, u32>,
     pub merges: Vec<[String; 2]>,
 }
 
-#[derive(Deserialize)]
+#[derive(Serialize, Deserialize)]
 pub struct RegexPattern {
     #[serde(rename = "Regex")]
     pub regex: String,
 }
 
-#[derive(Deserialize)]
+#[derive(Serialize, Deserialize)]
 pub struct PreTokenizerEntry {
     pub pattern: Option<RegexPattern>,
 }
 
-#[derive(Deserialize)]
+#[derive(Serialize, Deserialize)]
 pub struct PreTokenizerFields {
     pub pretokenizers: Vec<PreTokenizerEntry>,
 }
 
-#[derive(Deserialize)]
+#[derive(Serialize, Deserialize)]
 pub struct QwenJsonModel {
+    pub version: String,
     pub added_tokens: Option<Vec<AddedToken>>,
     pub pre_tokenizer: PreTokenizerFields,
     pub model: BpeModelFields,
@@ -50,9 +56,6 @@ pub struct CompiledVocabulary {
 #[derive(Copy, Clone, Debug)]
 #[repr(C, align(8))]
 pub struct FlatTrieNode {
-    // Если этот узел — конец валидного токена, тут лежит его ID. Если нет — u32::MAX
     pub token_id: u32,
-    // Смещение в общем массиве узлов `trie_nodes`, где лежат 256 дочерних переходов для этого узла.
-    // Если детей нет (лист дерева) — u32::MAX
     pub children_offset: u32,
 }

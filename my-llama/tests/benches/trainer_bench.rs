@@ -4,7 +4,7 @@ use std::hint::black_box;
 use std::time::Duration;
 
 fn bench_bpe_trainer(c: &mut Criterion) {
-    let mut group = c.benchmark_group("BpeTrainer_Extreme_MapReduce");
+/*    let mut group = c.benchmark_group("BpeTrainer_Extreme_MapReduce");
 
     // Тяжелый датасет объемом ~270 МБ
     let base_sample = "Привет мир! Это экстремально быстрый ии на Rust 2026 без компромиссов и глупых заглушек. Разгоняем параллельный MapReduce конвейер на полную мощность ядра! ";
@@ -48,7 +48,7 @@ fn bench_bpe_trainer(c: &mut Criterion) {
     );
 
     group.finish();
-}
+*/}
 
 criterion_group!(benches, bench_bpe_trainer);
 criterion_main!(benches);

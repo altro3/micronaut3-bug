@@ -35,6 +35,7 @@ pub struct BpeWorker {
     pub table_keys: Vec<u64>,
     pub table_stats: Vec<i64>,
     pub table_heads: Vec<u32>,
+    // Изменяем структуру: теперьnext_node хранит связи для каждого слова отдельно
     pub next_node: Vec<u32>,
     pub mask: usize,
 }
@@ -49,23 +50,21 @@ impl BpeWorker {
             table_keys: vec![u64::MAX; table_size],
             table_stats: vec![0; table_size],
             table_heads: vec![u32::MAX; table_size],
-            next_node: vec![u32::MAX; max_words * 8],
+            // Жестко выделяем буфер под цепочки переходов на базе количества уникальных слов
+            next_node: vec![u32::MAX; max_words],
             mask,
         };
 
-        let words_base_ptr = worker.words.as_ptr();
-        let counts_base_ptr = worker.word_counts.as_ptr();
-
         for w_idx in 0..max_words {
             unsafe {
-                let word_ptr = words_base_ptr.add(w_idx);
-                let len = (*word_ptr).len();
+                let word = worker.words.get_unchecked(w_idx);
+                let len = word.len();
                 if len < 2 {
                     continue;
                 }
 
-                let weight = *counts_base_ptr.add(w_idx) as i64;
-                let data_ptr = (*word_ptr).as_ptr();
+                let weight = *worker.word_counts.get_unchecked(w_idx) as i64;
+                let data_ptr = word.as_ptr();
 
                 for i in 0..len - 1 {
                     let pack = ((*data_ptr.add(i)) as u64) << 32 | (*data_ptr.add(i + 1)) as u64;
@@ -85,7 +84,7 @@ impl BpeWorker {
                 if self.table_heads[idx] != w_idx {
                     let old_head = self.table_heads[idx];
                     self.table_heads[idx] = w_idx;
-                    self.next_node[w_idx as usize] = old_head;
+                    unsafe { *self.next_node.get_unchecked_mut(w_idx as usize) = old_head };
                 }
                 return;
             }
@@ -94,7 +93,7 @@ impl BpeWorker {
                 self.table_stats[idx] = weight;
                 let old_head = self.table_heads[idx];
                 self.table_heads[idx] = w_idx;
-                self.next_node[w_idx as usize] = old_head;
+                unsafe { *self.next_node.get_unchecked_mut(w_idx as usize) = old_head };
                 return;
             }
             idx = (idx + 1) & self.mask;
@@ -102,13 +101,17 @@ impl BpeWorker {
     }
 
     #[inline(always)]
-    pub unsafe fn merge_tokens_inplace(&mut self, w_idx: usize, id1: u32, id2: u32, new_id: u32, weight: i64) {
+    pub fn merge_tokens_inplace(&mut self, w_idx: usize, id1: u32, id2: u32, new_id: u32, weight: i64) {
         let word = unsafe { self.words.get_unchecked_mut(w_idx) };
         let len = word.len();
         if len < 2 {
             return;
         }
-        let (mut r_ptr, mut w_ptr, end_ptr, mut new_len) = (word.as_ptr(), word.as_mut_ptr(), unsafe { word.as_ptr().add(len) }, 0);
+
+        let mut r_ptr = word.as_ptr();
+        let mut w_ptr = word.as_mut_ptr();
+        let end_ptr = unsafe { word.as_ptr().add(len) };
+        let mut new_len = 0;
 
         unsafe {
             while r_ptr < end_ptr {
@@ -122,9 +125,10 @@ impl BpeWorker {
                 w_ptr = w_ptr.add(1);
                 new_len += 1;
             }
+            word.set_len(new_len);
         }
-        unsafe { word.set_len(new_len) };
 
+        // Пересчитываем только изменившиеся пары внутри сжатого слова
         if new_len >= 2 {
             for i in 0..new_len - 1 {
                 let curr_id = unsafe { *word.get_unchecked(i) };
@@ -139,7 +143,7 @@ impl BpeWorker {
                             if self.table_heads[idx] != w_idx as u32 {
                                 let old_head = self.table_heads[idx];
                                 self.table_heads[idx] = w_idx as u32;
-                                self.next_node[w_idx] = old_head;
+                                unsafe { *self.next_node.get_unchecked_mut(w_idx) = old_head };
                             }
                             break;
                         }
@@ -148,7 +152,7 @@ impl BpeWorker {
                             self.table_stats[idx] = weight;
                             let old_head = self.table_heads[idx];
                             self.table_heads[idx] = w_idx as u32;
-                            self.next_node[w_idx] = old_head;
+                            unsafe { *self.next_node.get_unchecked_mut(w_idx) = old_head };
                             break;
                         }
                         idx = (idx + 1) & self.mask;
