@@ -1,4 +1,4 @@
-use regex_automata::dfa::dense::DFA;
+use regex_automata::dfa::dense::{Builder, Config, DFA};
 use regex_automata::dfa::Automaton;
 use std::fs::File;
 use std::io::{BufWriter, Result, Write};
@@ -11,14 +11,11 @@ impl DfaCompiler {
 
         let qwen_regex = raw_qwen_regex.replace(r"\s+(?!\S)", r"\s+").replace(r"\s+(?!\S)", r"\s+");
 
-        let dfa_config = regex_automata::dfa::dense::Config::new().minimize(true).byte_classes(false);
+        let dfa_config = Config::new().minimize(true).byte_classes(false);
 
-        let dfa: DFA<Vec<u32>> = regex_automata::dfa::dense::Builder::new()
-            .configure(dfa_config)
-            .build(&qwen_regex)
-            .unwrap_or_else(|e| {
-                panic!("Критическая ошибка компиляции очищенного паттерна: {:?}\nПаттерн: {}", e, qwen_regex);
-            });
+        let dfa: DFA<Vec<u32>> = Builder::new().configure(dfa_config).build(&qwen_regex).unwrap_or_else(|e| {
+            panic!("Критическая ошибка компиляции очищенного паттерна: {:?}\nПаттерн: {}", e, qwen_regex);
+        });
 
         println!("[DFA-КОМПИЛЯТОР] Сериализация матрицы переходов...");
         let mut dfa_bytes = vec![0u8; dfa.write_to_len()];

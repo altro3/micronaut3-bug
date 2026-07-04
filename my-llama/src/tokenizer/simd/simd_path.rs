@@ -10,8 +10,8 @@ impl SimdPath {
             if is_x86_feature_detected!("avx2") {
                 if curr_idx + 32 <= len {
                     unsafe {
-                        if SimdScanner::is_pure_ascii_chunk(chunk_ptr(bytes_ptr, curr_idx))
-                            && SimdScanner::has_no_spaces(chunk_ptr(bytes_ptr, curr_idx))
+                        if SimdScanner::is_pure_ascii_chunk(bytes_ptr.add(curr_idx))
+                            && SimdScanner::has_no_spaces(bytes_ptr.add(curr_idx))
                         {
                             return Some(true);
                         }
@@ -21,9 +21,4 @@ impl SimdPath {
         }
         None
     }
-}
-
-#[inline(always)]
-unsafe fn chunk_ptr(base: *const u8, offset: usize) -> *const u8 {
-    base.add(offset)
 }
