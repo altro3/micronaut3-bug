@@ -1,5 +1,5 @@
-use regex_automata::dfa::dense::DFA;
 use regex_automata::dfa::Automaton;
+use regex_automata::dfa::dense::DFA;
 
 pub struct FlatDfaRuntime {
     dfa: DFA<Vec<u32>>,
@@ -12,6 +12,7 @@ impl FlatDfaRuntime {
 
         Self { dfa }
     }
+
     #[inline(always)]
     pub fn split_streaming(&self, bytes: &[u8], offsets_buffer: &mut [u32], len_buffer: &mut [u32]) -> usize {
         let len = bytes.len();
@@ -21,53 +22,45 @@ impl FlatDfaRuntime {
 
         let mut token_count = 0;
         let max_tokens = offsets_buffer.len();
-        let bytes_ptr = bytes.as_ptr();
 
-        let mut start_idx = 0usize;
-        let mut curr_idx = 0usize;
-
-        let mut state = self.dfa.start_state_forward(&regex_automata::Input::new("")).unwrap();
-        let mut last_accept_idx = None;
+        let mut input = regex_automata::Input::new(bytes);
+        let mut last_end = 0usize;
 
         unsafe {
-            while curr_idx < len && token_count < max_tokens {
-                let byte = *bytes_ptr.add(curr_idx);
-                let next_state = self.dfa.next_state(state, byte);
+            let offsets_ptr = offsets_buffer.as_mut_ptr();
+            let len_ptr = len_buffer.as_mut_ptr();
 
-                if self.dfa.is_dead_state(next_state) || self.dfa.is_quit_state(next_state) {
-                    if let Some(accept_idx) = last_accept_idx {
-                        let token_len = accept_idx - start_idx;
-                        *offsets_buffer.get_unchecked_mut(token_count) = start_idx as u32;
-                        *len_buffer.get_unchecked_mut(token_count) = token_len as u32;
+            while last_end < len && token_count < max_tokens {
+                input.set_span(last_end..len);
+
+                match self.dfa.try_search_fwd(&input) {
+                    Ok(Some(half_match)) => {
+                        let start = last_end;
+                        let end = half_match.offset();
+
+                        // Исключаем пустые совпадения (длина 0), чтобы не уйти в бесконечный цикл
+                        if end == start {
+                            last_end += 1;
+                            continue;
+                        }
+
+                        let match_len = end - start;
+                        *offsets_ptr.add(token_count) = start as u32;
+                        *len_ptr.add(token_count) = match_len as u32;
                         token_count += 1;
 
-                        start_idx = accept_idx;
-                        curr_idx = start_idx;
-                    } else {
-                        *offsets_buffer.get_unchecked_mut(token_count) = start_idx as u32;
-                        *len_buffer.get_unchecked_mut(token_count) = 1;
-                        token_count += 1;
-
-                        start_idx += 1;
-                        curr_idx = start_idx;
+                        last_end = end;
                     }
-                    state = self.dfa.start_state_forward(&regex_automata::Input::new("")).unwrap();
-                    last_accept_idx = None;
-                    continue;
-                }
-
-                state = next_state;
-                curr_idx += 1;
-
-                if self.dfa.is_match_state(state) {
-                    last_accept_idx = Some(curr_idx);
+                    _ => {
+                        break;
+                    }
                 }
             }
 
-            if start_idx < len && token_count < max_tokens {
-                let final_len = last_accept_idx.unwrap_or(len) - start_idx;
-                *offsets_buffer.get_unchecked_mut(token_count) = start_idx as u32;
-                *len_buffer.get_unchecked_mut(token_count) = if final_len > 0 { final_len as u32 } else { (len - start_idx) as u32 };
+            // Если регулярка не доела хвост текста до конца — аккуратно дописываем его как один чанк
+            if last_end < len && token_count < max_tokens {
+                *offsets_ptr.add(token_count) = last_end as u32;
+                *len_ptr.add(token_count) = (len - last_end) as u32;
                 token_count += 1;
             }
         }

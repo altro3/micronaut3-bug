@@ -10,8 +10,9 @@ thread_local! {
     pub static SHORT_CYCLES: Cell<u64> = const { Cell::new(0) };
     pub static LONG_CYCLES: Cell<u64> = const { Cell::new(0) };
     pub static TOTAL_BYTES_PROCESSED: Cell<u64> = const { Cell::new(0) };
+    pub static DFA_CYCLES: Cell<u64> = const { Cell::new(0) };
+    pub static DISPATCH_LOOP_CYCLES: Cell<u64> = const { Cell::new(0) };
 
-    // Метрики эффективности L1/L2 кэша контекста
     pub static CACHE_HITS: Cell<u64> = const { Cell::new(0) };
     pub static CACHE_MISSES: Cell<u64> = const { Cell::new(0) };
 }

@@ -5,12 +5,28 @@ use std::arch::x86_64::*;
 pub struct ShortBpeEngine;
 
 impl ShortBpeEngine {
+    // Холодная функция для обработки промахов кэша.
+    // #[inline(never)] заставляет компилятор убрать этот код из горячей зоны, разгружая регистры процессора.
+    #[inline(never)]
+    unsafe fn alloc_pair_cold(
+        data: &BpeTokenizer,
+        cache_ptr: *mut crate::tokenizer::bpe::context::BpeCacheEntry,
+        cache_idx: usize,
+        pack: u64,
+        left: u32,
+        right: u32,
+    ) -> u64 {
+        crate::tokenizer::bpe::dispatcher::CACHE_MISSES.with(|c| c.set(c.get() + 1));
+        let res = data.get_pair_packed(left, right);
+        let slot_ptr = cache_ptr.add(cache_idx);
+        (*slot_ptr).key = pack;
+        (*slot_ptr).val = res;
+        res
+    }
+
     #[inline(always)]
     pub fn merge(data: &BpeTokenizer, bytes: &[u8], token_count: &mut usize, ctx: &mut TokenizationContext) {
-        let mut len = bytes.len();
-        if len == 0 {
-            return;
-        }
+        let len = bytes.len();
 
         let mut ids = [0u32; 32];
         let mut next = [0u16; 32];
@@ -23,29 +39,24 @@ impl ShortBpeEngine {
         unsafe {
             let cache_ptr = ctx.bpe_direct_cache.as_mut_ptr();
 
-            // Оптимальный L2-Friendly кэш под маску 0x7FFF (32768 слотов = 512КБ)
-            macro_rules! get_pair_cached {
-                ($left:expr, $right:expr) => {{
-                    let l = $left as u64;
-                    let r = $right as u64;
-                    let pack = (l << 32) | r;
+            // Инлайн-функция лукапа. Теперь она весит пару байт и идеально ложится в ветвление CPU
+            let get_pair = |left: u32, right: u32| {
+                let l = left as u64;
+                let r = right as u64;
+                let pack = (l << 32) | r;
 
-                    let hash = pack.wrapping_mul(0x9E3779B97F4A7C15);
-                    let cache_idx = ((hash ^ (hash >> 28)) & 0x7FFF) as usize;
-                    let slot_ptr = cache_ptr.add(cache_idx);
+                let hash = pack.wrapping_mul(0x9E3779B97F4A7C15);
+                let cache_idx = ((hash ^ (hash >> 28)) & 0x7FFF) as usize;
+                let slot_ptr = cache_ptr.add(cache_idx);
 
-                    if (*slot_ptr).key == pack {
-                        crate::tokenizer::bpe::dispatcher::CACHE_HITS.with(|c| c.set(c.get() + 1));
-                        (*slot_ptr).val
-                    } else {
-                        crate::tokenizer::bpe::dispatcher::CACHE_MISSES.with(|c| c.set(c.get() + 1));
-                        let res = data.get_pair_packed($left, $right);
-                        (*slot_ptr).key = pack;
-                        (*slot_ptr).val = res;
-                        res
-                    }
-                }};
-            }
+                if (*slot_ptr).key == pack {
+                    crate::tokenizer::bpe::dispatcher::CACHE_HITS.with(|c| c.set(c.get() + 1));
+                    (*slot_ptr).val
+                } else {
+                    // Проваливаемся в холодную зону только в 2% случаев
+                    Self::alloc_pair_cold(data, cache_ptr, cache_idx, pack, left, right)
+                }
+            };
 
             let fallback_ptr = data.byte_fallback.as_ptr();
             for i in 0..len {
@@ -56,18 +67,16 @@ impl ShortBpeEngine {
             }
 
             for i in 0..(len - 1) {
-                let packed = get_pair_cached!(*ids.get_unchecked(i), *ids.get_unchecked(i + 1));
+                let packed = get_pair(*ids.get_unchecked(i), *ids.get_unchecked(i + 1));
                 *ranks.0.get_unchecked_mut(i) = if packed != u64::MAX { (packed >> 32) as u32 } else { u32::MAX };
             }
 
             loop {
+                // Адаптивный поиск минимума (компилятор теперь может оптимизировать этот блок без помех!)
                 let (min_rank, best_left) = if len <= 9 {
-                    // --- ДИНАМИЧЕСКИЙ ПУТЬ 1: Ультра-короткие чанки (основной поток кириллицы Qwen) ---
-                    // Скалярный развернутый поиск минимума. Компилятор положит это в регистры общего назначения.
                     let mut m_rank = u32::MAX;
                     let mut b_left = 0xFFFFusize;
                     let mut i = 0usize;
-
                     loop {
                         let r = *ranks.0.get_unchecked(i);
                         if r < m_rank {
@@ -75,15 +84,11 @@ impl ShortBpeEngine {
                             b_left = i;
                         }
                         let n = *next.get_unchecked(i);
-                        if n == 0xFFFF {
-                            break;
-                        }
+                        if n == 0xFFFF { break; }
                         i = n as usize;
                     }
                     (m_rank, b_left)
                 } else if len <= 17 {
-                    // --- ДИНАМИЧЕСКИЙ ПУТЬ 2: Средние чанки (до 16 рангов) ---
-                    // Используем ровно два AVX2 регистра, никаких тяжелых 4-регистровых пермутаций
                     let r0 = _mm256_load_si256(ranks.0.as_ptr() as *const __m256i);
                     let r1 = _mm256_load_si256(ranks.0.as_ptr().add(8) as *const __m256i);
 
@@ -108,7 +113,6 @@ impl ShortBpeEngine {
                         (m_rank, b_left)
                     }
                 } else {
-                    // --- ДИНАМИЧЕСКИЙ ПУТЬ 3: Полный AVX2 (только для длинных кусков) ---
                     let r0 = _mm256_load_si256(ranks.0.as_ptr() as *const __m256i);
                     let r1 = _mm256_load_si256(ranks.0.as_ptr().add(8) as *const __m256i);
                     let r2 = _mm256_load_si256(ranks.0.as_ptr().add(16) as *const __m256i);
@@ -150,7 +154,7 @@ impl ShortBpeEngine {
                 }
 
                 let right_idx = *next.get_unchecked(best_left) as usize;
-                let packed = get_pair_cached!(*ids.get_unchecked(best_left), *ids.get_unchecked(right_idx));
+                let packed = get_pair(*ids.get_unchecked(best_left), *ids.get_unchecked(right_idx));
 
                 *ids.get_unchecked_mut(best_left) = packed as u32;
                 let after_r = *next.get_unchecked(right_idx);
@@ -162,7 +166,7 @@ impl ShortBpeEngine {
                 *ranks.0.get_unchecked_mut(right_idx) = u32::MAX;
 
                 if after_r != 0xFFFF {
-                    let packed_r = get_pair_cached!(*ids.get_unchecked(best_left), *ids.get_unchecked(after_r as usize));
+                    let packed_r = get_pair(*ids.get_unchecked(best_left), *ids.get_unchecked(after_r as usize));
                     *ranks.0.get_unchecked_mut(best_left) = if packed_r != u64::MAX { (packed_r >> 32) as u32 } else { u32::MAX };
                 } else {
                     *ranks.0.get_unchecked_mut(best_left) = u32::MAX;
@@ -171,7 +175,7 @@ impl ShortBpeEngine {
                 let p_idx = *prev.get_unchecked(best_left);
                 if p_idx != 0xFFFF {
                     let p = p_idx as usize;
-                    let packed_l = get_pair_cached!(*ids.get_unchecked(p), *ids.get_unchecked(best_left));
+                    let packed_l = get_pair(*ids.get_unchecked(p), *ids.get_unchecked(best_left));
                     *ranks.0.get_unchecked_mut(p) = if packed_l != u64::MAX { (packed_l >> 32) as u32 } else { u32::MAX };
                 }
             }
