@@ -14,8 +14,25 @@ pub struct BpeModelFields {
 }
 
 #[derive(Deserialize)]
+pub struct RegexPattern {
+    #[serde(rename = "Regex")]
+    pub regex: String,
+}
+
+#[derive(Deserialize)]
+pub struct PreTokenizerEntry {
+    pub pattern: Option<RegexPattern>,
+}
+
+#[derive(Deserialize)]
+pub struct PreTokenizerFields {
+    pub pretokenizers: Vec<PreTokenizerEntry>,
+}
+
+#[derive(Deserialize)]
 pub struct QwenJsonModel {
     pub added_tokens: Option<Vec<AddedToken>>,
+    pub pre_tokenizer: PreTokenizerFields,
     pub model: BpeModelFields,
 }
 
@@ -25,4 +42,5 @@ pub struct CompiledVocabulary {
     pub eos_token_id: u32,
     pub vocab_size: usize,
     pub vocab_compiled_tokens: Vec<Vec<u8>>,
+    pub extracted_regex: String,
 }

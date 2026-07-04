@@ -1,29 +1,18 @@
-use super::table::DfaTransitionTable;
+use regex_automata::dfa::dense::DFA;
+use regex_automata::dfa::Automaton;
 
 pub struct FlatDfaRuntime {
-    table: DfaTransitionTable,
+    dfa: DFA<Vec<u32>>,
 }
 
 impl FlatDfaRuntime {
-    pub fn from_binary_dump(num_states: usize, trans_bytes: &[u8], accept_bytes: &[u8]) -> Self {
-        let mut table = DfaTransitionTable::new(num_states);
-        unsafe {
-            let dst_ptr = table.ptr_mut();
-            std::ptr::copy_nonoverlapping(trans_bytes.as_ptr(), dst_ptr as *mut u8, trans_bytes.len());
+    pub fn from_binary_dump(_num_states: usize, trans_bytes: &[u8], _accept_bytes: &[u8]) -> Self {
+        let (borrowed_dfa, _) = DFA::from_bytes(trans_bytes).expect("Критический сбой десериализации матрицы DFA!");
+        let dfa = borrowed_dfa.to_owned();
 
-            for state in 0..num_states {
-                for byte in 0..=255 {
-                    let idx = (state << 8) | byte;
-                    let target_state = *dst_ptr.add(idx);
-                    if target_state != 0xFFFF && *accept_bytes.get_unchecked(target_state as usize) != 0 {
-                        *dst_ptr.add(idx) = target_state | 0x8000;
-                    }
-                }
-            }
-        }
-        Self { table }
+        Self { dfa }
     }
-
+    /// Потоковая нарезка токенов по жадному принципу БЕЗ BACKTRACKING-откатов по тексту
     #[inline(always)]
     pub fn split_streaming(&self, bytes: &[u8], offsets_buffer: &mut [u32], len_buffer: &mut [u32]) -> usize {
         let len = bytes.len();
@@ -37,15 +26,18 @@ impl FlatDfaRuntime {
 
         let mut start_idx = 0usize;
         let mut curr_idx = 0usize;
-        let mut state = 0u16;
+
+        // Стартовое состояние forward-поиска по умолчанию для пустого ввода
+        let mut state = self.dfa.start_state_forward(&regex_automata::Input::new("")).unwrap();
         let mut last_accept_idx = None;
 
         unsafe {
             while curr_idx < len && token_count < max_tokens {
                 let byte = *bytes_ptr.add(curr_idx);
-                let raw_next = self.table.get_next_state(state, byte);
+                let next_state = self.dfa.next_state(state, byte);
 
-                if raw_next == 0xFFFF {
+                if self.dfa.is_dead_state(next_state) || self.dfa.is_quit_state(next_state) {
+                    // Споткнулись. Фиксируем токен по последней успешной принимающей точке
                     if let Some(accept_idx) = last_accept_idx {
                         let token_len = accept_idx - start_idx;
                         *offsets_buffer.get_unchecked_mut(token_count) = start_idx as u32;
@@ -53,8 +45,9 @@ impl FlatDfaRuntime {
                         token_count += 1;
 
                         start_idx = accept_idx;
-                        curr_idx = start_idx;
+                        curr_idx = start_idx; // Прыгаем вперед, никакого backtracking по старым буквам!
                     } else {
+                        //Fallback на 1 байт, если регулярка не смогла сожрать кусок текста
                         *offsets_buffer.get_unchecked_mut(token_count) = start_idx as u32;
                         *len_buffer.get_unchecked_mut(token_count) = 1;
                         token_count += 1;
@@ -62,19 +55,20 @@ impl FlatDfaRuntime {
                         start_idx += 1;
                         curr_idx = start_idx;
                     }
-                    state = 0;
+                    state = self.dfa.start_state_forward(&regex_automata::Input::new("")).unwrap();
                     last_accept_idx = None;
                     continue;
                 }
 
-                state = raw_next & 0x7FFF;
+                state = next_state;
                 curr_idx += 1;
 
-                if (raw_next & 0x8000) != 0 {
+                if self.dfa.is_match_state(state) {
                     last_accept_idx = Some(curr_idx);
                 }
             }
 
+            // Добираем финальный кусок текста
             if start_idx < len && token_count < max_tokens {
                 let final_len = last_accept_idx.unwrap_or(len) - start_idx;
                 *offsets_buffer.get_unchecked_mut(token_count) = start_idx as u32;

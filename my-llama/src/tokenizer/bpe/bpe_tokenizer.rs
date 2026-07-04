@@ -8,7 +8,6 @@ pub struct BpeTokenizer {
     pub byte_fallback: [u32; 256],
     pub(crate) id_to_byte: [u8; 512],
     pub eos_token_id: u32,
-    pub(crate) vocab_size: usize,
     pub(crate) vocab_bytes_flat: Vec<u8>,
     pub(crate) vocab_offsets_flat: Vec<u64>,
 }
@@ -90,7 +89,6 @@ impl BpeTokenizer {
             byte_fallback,
             id_to_byte,
             eos_token_id,
-            vocab_size,
             vocab_bytes_flat,
             vocab_offsets_flat,
         }

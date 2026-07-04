@@ -50,12 +50,18 @@ impl DictCompiler {
             }
         }
 
+        let extracted_regex = root.pre_tokenizer.pretokenizers.first()
+            .and_then(|entry| entry.pattern.as_ref())
+            .map(|p| p.regex.clone())
+            .unwrap_or_else(|| r"(?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\r\n\p{L}\p{N}]+|\p{L}+|\p{N}{1,3}".to_string());
+
         Ok(CompiledVocabulary {
             byte_fallback,
             raw_pairs,
             eos_token_id,
             vocab_size,
             vocab_compiled_tokens,
+            extracted_regex,
         })
     }
 
