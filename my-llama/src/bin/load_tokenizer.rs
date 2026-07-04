@@ -1,11 +1,13 @@
+use memmap2::Mmap;
 use my_llama::tokenizer::bpe::context::TokenizationContext;
 use my_llama::tokenizer::bpe::pipeline::TokenizerPipeline;
 use my_llama::tokenizer::dfa::compiler::DfaCompiler;
 use my_llama::tokenizer::dfa::runtime::FlatDfaRuntime;
 use my_llama::tokenizer::factory::compiler::DictCompiler;
 use my_llama::tokenizer::BpeTokenizer;
-use std::fs;
+use std::fs::File;
 use std::time::Instant;
+use my_llama::tokenizer::bpe::dispatcher::{CALL_COUNT, FALLBACK_CYCLES, LONG_CYCLES, SHORT_CYCLES, TOTAL_BYTES_PROCESSED};
 
 fn main() -> std::io::Result<()> {
     let stack_size = 32 * 1024 * 1024;
@@ -18,9 +20,9 @@ fn main() -> std::io::Result<()> {
 }
 
 fn run_pure_tokenizer_benchmark() -> std::io::Result<()> {
-    let input_path = "data/input1.txt";
+    let input_path = "data/input1_x4.txt";
     let model_path = "data/qwen_model.json";
-    let dfa_trans_path = "data/qwen_dfa_trans.bin"; // Твои бинарные дампы автомата
+    let dfa_trans_path = "data/qwen_dfa_trans.bin";
     let dfa_accept_path = "data/qwen_dfa_accept.bin";
 
     assert!(
@@ -32,15 +34,18 @@ fn run_pure_tokenizer_benchmark() -> std::io::Result<()> {
         "Положите qwen_model.json в data/qwen_model.json"
     );
 
-    println!("[РАНТАЙМ-БЕНЧМАРК] Считываю исходный текстовый дамп в память...");
-    let text_content = fs::read_to_string(input_path)?;
+    println!("[РАНТАЙМ-БЕНЧМАРК] Проецирую исходный текст через memmap2...");
+    let file = File::open(input_path)?;
+    let mmap_text = unsafe { Mmap::map(&file)? };
+
+    let text_content = std::str::from_utf8(&mmap_text).map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+
     let total_bytes = text_content.len();
     println!(
-        "[РАНТАЙМ-БЕНЧМАРК] Размер исходного текста: {:.2} МБ",
+        "[РАНТАЙМ-БЕНЧМАРК] Размер проецированного текста: {:.2} МБ (Потребление RAM процесса: ~0 байт)",
         total_bytes as f64 / 1024.0 / 1024.0
     );
 
-    // 1. ЗАГРУЗКА И ДИНАМИЧЕСКИЙ РАЗБОР JSON МОДЕЛИ
     println!("[РАНТАЙМ-БЕНЧМАРК] Загружаем промышленную модель Qwen через DictCompiler...");
     let start_factory = Instant::now();
     let compiled_vocab = DictCompiler::compile_from_json(model_path)?;
@@ -53,8 +58,6 @@ fn run_pure_tokenizer_benchmark() -> std::io::Result<()> {
         &compiled_vocab.vocab_compiled_tokens,
     );
 
-    // 2. АЛГОРИТМ УМНОГО КЭШИРОВАНИЯ ТАБЛИЦ DFA (Wordchipper-стиль):
-    // Если бинарники уже лежат в data/, компилятор DFA ДАЖЕ НЕ ВКЛЮЧАЕТСЯ
     if !std::path::Path::new(dfa_trans_path).exists() || !std::path::Path::new(dfa_accept_path).exists() {
         println!("[РАНТАЙМ-БЕНЧМАРК] Кэш таблиц переходов не найден. Запускаю разовую компиляцию DFA...");
         DfaCompiler::compile_qwen_dfa(&compiled_vocab.extracted_regex, dfa_trans_path, dfa_accept_path)?;
@@ -62,50 +65,46 @@ fn run_pure_tokenizer_benchmark() -> std::io::Result<()> {
         println!("[РАНТАЙМ-БЕНЧМАРК] Обнаружен готовый кэш DFA. Загружаю предкомпилированные таблицы...");
     }
 
-    // Мгновенная Zero-Copy десериализация кэша из файлов за доли миллисекунды
-    let trans_bytes = fs::read(dfa_trans_path)?;
-    let accept_bytes = fs::read(dfa_accept_path)?;
-    let dfa_runtime = FlatDfaRuntime::from_binary_dump(0, &trans_bytes, &accept_bytes);
+    let trans_file = File::open(dfa_trans_path)?;
+    let accept_file = File::open(dfa_accept_path)?;
+    let mmap_trans = unsafe { Mmap::map(&trans_file)? };
+    let mmap_accept = unsafe { Mmap::map(&accept_file)? };
 
-    // Собираем сквозной монолитный пайплайн инференса
+    let dfa_runtime = FlatDfaRuntime::from_binary_dump(0, &mmap_trans, &mmap_accept);
+
     let pipeline = TokenizerPipeline::new(bpe_tokenizer, dfa_runtime);
-    println!("[РАНТАЙМ-БЕНЧМАРК] Модель и DFA собраны в Pipeline за: {:?}", start_factory.elapsed());
+    println!("[РАНТАЙМ-БЕНЧМАРК] Модель и DFA собраны in Pipeline за: {:?}", start_factory.elapsed());
 
-    // 3. НАРЕЗКА БАТЧА ПО ГРАНИЦАМ СИМВОЛОВ UTF-8
-    let mut batch_texts = Vec::with_capacity(64);
+    let mut batch_texts: Vec<&str> = Vec::with_capacity(65);
     let chunk_size = text_content.len() / 64;
     let mut current_idx = 0;
     for _ in 0..64 {
         let mut end_idx = current_idx + chunk_size;
+        if end_idx >= text_content.len() {
+            break;
+        }
         while end_idx < text_content.len() && !text_content.is_char_boundary(end_idx) {
             end_idx += 1;
         }
-        batch_texts.push(text_content[current_idx..end_idx].to_string());
+        batch_texts.push(&text_content[current_idx..end_idx]);
         current_idx = end_idx;
     }
     if current_idx < text_content.len() {
-        batch_texts.push(text_content[current_idx..].to_string());
+        batch_texts.push(&text_content[current_idx..]);
     }
     let batch_bytes: usize = batch_texts.iter().map(|s| s.len()).sum();
 
-    // 4. ПРЕДВЫДЕЛЕНИЕ КОНТЕКСТОВ ДЛЯ ПОТОКОВ (Zero malloc рантайм)
-    let mut contexts: Vec<TokenizationContext> = std::iter::repeat_with(|| TokenizationContext::new(compiled_vocab.vocab_size, 2 * chunk_size))
-        .take(64)
+    let num_threads = 16;
+    let mut contexts: Vec<TokenizationContext> = std::iter::repeat_with(|| TokenizationContext::new(compiled_vocab.vocab_size, chunk_size / 2))
+        .take(num_threads)
         .collect();
 
-    // 5. ВАРМАП КЭША (Warm-up)
-    println!("[РАНТАЙМ-БЕНЧМАРК] Прогреваем L1/L2/L3 кэши процессора (Warm-up)...");
-    for _ in 0..2 {
-        std::hint::black_box(pipeline.encode_parallel(&batch_texts, &mut contexts));
-    }
-
-    // 6. БЕНЧМАРК ПАРАЛЛЕЛЬНОГО КОРПУСА КИРИЛЛИЦЫ
-    println!("[РАНТАЙМ-БЕНЧМАРК] Запускаю параллельное кодирование кириллицы на P-ядрах...");
+    println!("[РАНТАЙМ-БЕНЧМАРК] Запускаю параллельное кодирование кириллицы на ядрах...");
     let start_parallel = Instant::now();
+
     let parallel_results = pipeline.encode_parallel(&batch_texts, &mut contexts);
     let duration_parallel = start_parallel.elapsed();
 
-    // Метрики
     let total_tokens: usize = parallel_results.iter().map(|v| v.len()).sum();
     let speed_parallel_mib = (batch_bytes as f64 / 1024.0 / 1024.0) / duration_parallel.as_secs_f64();
 
@@ -121,7 +120,6 @@ fn run_pure_tokenizer_benchmark() -> std::io::Result<()> {
     );
     println!("======================================================================");
 
-    // 7. СТАБИЛЬНОСТЬ ОБРАТНОГО ДЕКОДЕРА
     if let Some(first_tokens) = parallel_results.first() {
         let start_decode = Instant::now();
         let decoded_sample = pipeline.tokenizer.decode(first_tokens);
@@ -130,5 +128,24 @@ fn run_pure_tokenizer_benchmark() -> std::io::Result<()> {
         println!("|-> Декодер стабилен. Время восстановления одного чанка: {:?}", duration_decode);
     }
 
+    let calls = CALL_COUNT.with(|c| c.get());
+    let fb = FALLBACK_CYCLES.with(|c| c.get());
+    let short = SHORT_CYCLES.with(|c| c.get());
+    let long = LONG_CYCLES.with(|c| c.get());
+    let bytes = TOTAL_BYTES_PROCESSED.with(|c| c.get());
+
+    let total_cycles = fb + short + long;
+
+    if calls > 0 && total_cycles > 0 {
+        let avg_len = bytes as f64 / calls as f64;
+        println!(
+            "[THREAD] Calls: {} | AvgLen: {:.1}b | FB: {:.1}% | Short: {:.1}% | Long: {:.1}%",
+            calls,
+            avg_len,
+            (fb as f64 / total_cycles as f64) * 100.0,
+            (short as f64 / total_cycles as f64) * 100.0,
+            (long as f64 / total_cycles as f64) * 100.0
+        );
+    }
     Ok(())
 }

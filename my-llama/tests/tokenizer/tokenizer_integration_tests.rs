@@ -1,5 +1,3 @@
-// Файл: tests/tokenizer/tokenizer_integration_tests.rs
-
 #[cfg(test)]
 mod integration_tests {
     use my_llama::cuda::PinnedHostBuffer;
@@ -73,12 +71,14 @@ mod integration_tests {
         let pipeline = create_pipeline();
         let mut texts = Vec::with_capacity(1000);
         for i in 0..1000 {
-            if i % 2 == 0 { texts.push("hello,world".to_string()); } else { texts.push("hello,hello,hello".to_string()); }
+            if i % 2 == 0 {
+                texts.push("hello,world");
+            } else {
+                texts.push("hello,hello,hello");
+            }
         }
 
-        let mut contexts: Vec<TokenizationContext> = std::iter::repeat_with(|| TokenizationContext::new(512, 1024))
-            .take(8)
-            .collect();
+        let mut contexts: Vec<TokenizationContext> = std::iter::repeat_with(|| TokenizationContext::new(512, 1024)).take(8).collect();
 
         let batch_results = pipeline.encode_parallel(&texts, &mut contexts);
         assert_eq!(batch_results.len(), 1000);
@@ -88,10 +88,10 @@ mod integration_tests {
 
 #[cfg(test)]
 mod real_data_validation_tests {
-    use my_llama::tokenizer::factory::compiler::DictCompiler;
-    use my_llama::tokenizer::bpe::pipeline::TokenizerPipeline;
     use my_llama::tokenizer::bpe::context::TokenizationContext;
+    use my_llama::tokenizer::bpe::pipeline::TokenizerPipeline;
     use my_llama::tokenizer::dfa::runtime::FlatDfaRuntime;
+    use my_llama::tokenizer::factory::compiler::DictCompiler;
     use my_llama::tokenizer::BpeTokenizer;
 
     fn create_mock_dfa() -> FlatDfaRuntime {
@@ -103,22 +103,28 @@ mod real_data_validation_tests {
     #[test]
     fn assert_qwen_model_parallel_encoding_integrity() {
         let real_model_path = "data/qwen_model.json";
-        if !std::path::Path::new(real_model_path).exists() { return; } // Пропускаем, если нет файла данных
+        if !std::path::Path::new(real_model_path).exists() {
+            return;
+        }
 
         let compiled_vocab = DictCompiler::compile_from_json(real_model_path).unwrap();
         let bpe_tokenizer = BpeTokenizer::new(
-            &compiled_vocab.raw_pairs, compiled_vocab.byte_fallback,
-            compiled_vocab.eos_token_id, compiled_vocab.vocab_size, &compiled_vocab.vocab_compiled_tokens,
+            &compiled_vocab.raw_pairs,
+            compiled_vocab.byte_fallback,
+            compiled_vocab.eos_token_id,
+            compiled_vocab.vocab_size,
+            &compiled_vocab.vocab_compiled_tokens,
         );
 
         let pipeline = TokenizerPipeline::new(bpe_tokenizer, create_mock_dfa());
-        let test_batch = vec!["The memory management subsystem is complex.".to_string()];
 
+        let test_batch: &[&str] = &["The memory management subsystem is complex."];
         let mut contexts: Vec<TokenizationContext> = std::iter::repeat_with(|| TokenizationContext::new(compiled_vocab.vocab_size, 1024))
             .take(1)
             .collect();
 
-        let encoded_results = pipeline.encode_parallel(&test_batch, &mut contexts);
+        let encoded_results = pipeline.encode_parallel(test_batch, &mut contexts);
         assert!(!encoded_results.is_empty());
+        assert!(!encoded_results[0].is_empty(), "Тестовая строка должна успешно токенизироваться!");
     }
 }

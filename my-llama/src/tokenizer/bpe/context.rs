@@ -36,12 +36,10 @@ impl TokenizationContext {
             short_prev: [0; 16],
             short_next: [0; 16],
 
-            // Инициализируем 16к ячеек интерливинг-кэша.
-            // Ключ u64::MAX гарантирует отсутствие ложных попаданий на старте.
             bpe_direct_cache: vec![
                 BpeCacheEntry {
                     key: u64::MAX,
-                    val: u64::MAX
+                    val: u64::MAX,
                 };
                 16384
             ],
@@ -68,7 +66,6 @@ impl TokenizationContext {
     #[inline(always)]
     pub fn reset_all(&mut self, text_len: usize) {
         self.tokens_buffer.clear();
-
         let required_len = text_len + 32;
         let safe_len = required_len.min(self.max_capacity + 64);
 
