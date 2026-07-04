@@ -78,12 +78,15 @@ impl BpeTrainer {
         }
         let mut current_id = self.config.start_token_id;
         let b_size = self.config.batch_size;
+        let mut iteration_counter = 0;
 
         println!("[ТРЕНЕР] Начинаю высокопроизводительный пакетный цикл слияния пар...");
 
         while id_to_bytes.len() < self.vocab_size {
+            iteration_counter += 1;
             let mut global_pair_counts: HashMap<u64, isize, BuildTrainerHasher> = HashMap::with_hasher(BuildTrainerHasher);
 
+            // Собираем статистику
             for worker in &workers {
                 let limit = worker.table_keys.len();
                 for idx in 0..limit {
@@ -98,17 +101,26 @@ impl BpeTrainer {
             let mut pairs_pool: Vec<(u64, isize)> = global_pair_counts.into_iter().collect();
             pairs_pool.sort_unstable_by_key(|&(_, count)| -count);
 
-            println!(
-                "[ОТЛАДКА BPE] Всего уникальных пар в пуле: {}. Частота топовой пары: {:?}",
-                pairs_pool.len(),
-                pairs_pool.first().map(|p| p.1)
-            );
-
             if pairs_pool.is_empty() || pairs_pool[0].1 <= 0 {
-                println!("[ТРЕНЕР] Больше нет доступных пар с положительной частотой. Остановка.");
+                println!("[ТРЕНЕР] Больше нет пар для слияния. Остановка.");
                 break;
             }
 
+            // РАСШИРЕННАЯ ОТЛАДКА БАТЧА
+            let top_pack = pairs_pool[0].0;
+            let top_id1 = (top_pack >> 32) as u32;
+            let top_id2 = top_pack as u32;
+            println!(
+                "[ИТЕРАЦИЯ #{}] Всего уникальных пар: {}. Топ-пара: [{} + {}] с частотой: {}. Целевой ID: {}",
+                iteration_counter,
+                pairs_pool.len(),
+                top_id1,
+                top_id2,
+                pairs_pool[0].1,
+                current_id
+            );
+
+            // Фильтрация независимых пар
             let mut batch_merges = Vec::with_capacity(b_size);
             let mut seen_tokens = std::collections::HashSet::with_capacity(b_size * 2);
 
@@ -129,21 +141,21 @@ impl BpeTrainer {
 
                 seen_tokens.insert(id1);
                 seen_tokens.insert(id2);
-
                 batch_merges.push((id1, id2, pack));
             }
 
             if batch_merges.is_empty() {
+                println!("[ТРЕНЕР] Предупреждение: Отфильтрованный батч пуст!");
                 break;
             }
 
+            // Формируем ID и пишем в словарь
             let mut final_batch_merges = Vec::with_capacity(batch_merges.len());
             for (id1, id2, old_pack) in batch_merges {
                 let mut merged_bytes = id_to_bytes.get(&id1).cloned().unwrap_or_default();
                 merged_bytes.extend_from_slice(&id_to_bytes.get(&id2).cloned().unwrap_or_default());
 
                 id_to_bytes.insert(current_id, merged_bytes.clone());
-
                 let qwen_str = Self::bytes_to_qwen_string(&merged_bytes);
                 vocab_json_output.insert(qwen_str, current_id);
 
@@ -152,64 +164,84 @@ impl BpeTrainer {
                 current_id += 1;
             }
 
-            // ИСПРАВЛЕНИЕ: std::thread::scope стоит СНАРУЖИ, управляя временем жизни всех потоков батча
+            let current_vocab_len = id_to_bytes.len();
+            if current_vocab_len % 5000 < final_batch_merges.len() || (self.vocab_size - current_vocab_len < b_size) {
+                println!(
+                    "[ПРОГРЕСС] Собрано токенов: {} / {} ({:.2}%)",
+                    current_vocab_len,
+                    self.vocab_size,
+                    (current_vocab_len as f64 / self.vocab_size as f64) * 100.0
+                );
+            }
+
             std::thread::scope(|scope| {
                 let merges_ref = &final_batch_merges;
 
-                // Цикл внутри скоупа позволяет Rust понять, что мы берем уникальную
-                // изменяемую ссылку (&mut) на КОНКРЕТНОГО воркера для каждого отдельного потока
-                for worker in &mut workers {
+                for (w_id, worker) in workers.iter_mut().enumerate() {
+                    let merges_ref = &final_batch_merges;
                     scope.spawn(move || {
-                        // 1. Применяем весь баг-фикс слияний без фантомных весов (weight = 0)
-                        for &(id1, id2, new_id, _) in merges_ref {
-                            for curr_w in 0..worker.words.len() {
-                                worker.merge_tokens_inplace(curr_w, id1, id2, new_id, 0);
+                        let table_len = worker.table_keys.len();
+
+                        // Буфер для сбора уникальных индексов слов, которые РЕАЛЬНО нужно изменить в этом батче.
+                        // Используем плоский вектор для максимального кэш-хита процессора.
+                        let mut words_to_modify = Vec::with_capacity(1024);
+
+                        for &(_, _, _, old_pack) in merges_ref {
+                            let base_idx = (old_pack.wrapping_mul(0x517cc1b727220a95) as usize) & worker.mask;
+                            let mut real_idx = base_idx;
+                            let mut probe_steps = 0;
+
+                            loop {
+                                if worker.table_keys[real_idx] == old_pack { break; }
+                                if worker.table_keys[real_idx] == u64::MAX { real_idx = usize::MAX; break; }
+                                probe_steps += 1;
+                                if probe_steps >= table_len { real_idx = usize::MAX; break; }
+                                real_idx = (real_idx + 1) & worker.mask;
+                            }
+
+                            if real_idx != usize::MAX {
+                                let head = worker.table_heads[real_idx];
+
+                                // Обнуляем статистику пары в таблице
+                                worker.table_stats[real_idx] = 0;
+                                worker.table_heads[real_idx] = u32::MAX;
+
+                                // Извлекаем всю цепочку слов для этой пары ДО того, как начнем их менять
+                                let mut curr_w = head as usize;
+                                while curr_w != u32::MAX as usize {
+                                    let next_w = worker.next_node[curr_w];
+
+                                    // Сразу же разрываем связь в next_node, очищая глобальный граф
+                                    worker.next_node[curr_w] = u32::MAX;
+
+                                    // Сохраняем индекс слова в наш локальный буфер
+                                    words_to_modify.push(curr_w);
+
+                                    curr_w = next_w as usize;
+                                }
                             }
                         }
 
-                        // 2. Полностью сбрасываем старую хэш-таблицу воркера
-                        worker.table_keys.fill(u64::MAX);
-                        worker.table_stats.fill(0);
-                        worker.table_heads.fill(u32::MAX);
-                        worker.next_node.fill(u32::MAX);
+                        // УДАЛЯЕМ ДУБЛИКАТЫ: Если слово содержало несколько пар из батча,
+                        // мы оставим его строго в ОДНОМ экземпляре. Петли физически исключены!
+                        words_to_modify.sort_unstable();
+                        words_to_modify.dedup();
 
-                        // 3. Быстрая пересборка таблицы по измененному вектору слов
-                        for w_idx in 0..worker.words.len() {
-                            // Вместо сохранения ссылки на весь вектор word,
-                            // мы берём только его длину
-                            let word_len = worker.words[w_idx].len();
-                            if word_len < 2 {
-                                continue;
-                            }
+                        // Теперь последовательно и абсолютно безопасно мутируем каждое измененное слово.
+                        // На Шаге 3 внутри merge_tokens_inplace они заново построят чистые, неломаные цепочки heads.
+                        for curr_w in words_to_modify {
+                            let weight = unsafe { *worker.word_counts.get_unchecked(curr_w) } as i64;
 
-                            let weight = worker.word_counts[w_idx] as i64;
-
-                            for i in 0..word_len - 1 {
-                                // Извлекаем ID токенов напрямую из вектора воркера.
-                                // Это не создаёт долгоживущих ссылок на структуры данных!
-                                let id1 = worker.words[w_idx][i] as u64;
-                                let id2 = worker.words[w_idx][i + 1] as u64;
-                                let pack = (id1 << 32) | id2;
-
-                                // Теперь Rust видит, что worker полностью свободен
-                                // для вызова изменяемого метода &mut self
-                                worker.insert_initial(pack, weight, w_idx as u32);
+                            // Прогоняем по слову ВСЕ слияния текущего батча за один раз!
+                            for &(id1, id2, new_id, _) in merges_ref {
+                                worker.merge_tokens_inplace(curr_w, id1, id2, new_id, weight);
                             }
                         }
                     });
                 }
-            }); // Все потоки гарантированно завершатся здесь перед следующей итерацией while
+            });
 
-            if current_id % 5000 == 0 || (self.vocab_size - id_to_bytes.len() < b_size) {
-                println!(
-                    "[ТРЕНЕР] Собрано токенов: {} / {} ({:.2}%)",
-                    id_to_bytes.len(),
-                    self.vocab_size,
-                    (id_to_bytes.len() as f64 / self.vocab_size as f64) * 100.0
-                );
-            }
         }
-
         println!("[ТРЕНЕР] Слияния завершены. Упаковываю структуры данных в JSON через Serde...");
 
         let file = File::create(output_json_path)?;
@@ -265,5 +297,4 @@ impl BpeTrainer {
         }
         result
     }
-
 }

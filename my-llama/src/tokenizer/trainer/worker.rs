@@ -102,10 +102,36 @@ impl BpeWorker {
     pub fn merge_tokens_inplace(&mut self, w_idx: usize, id1: u32, id2: u32, new_id: u32, weight: i64) {
         let word = unsafe { self.words.get_unchecked_mut(w_idx) };
         let len = word.len();
-        if len < 2 {
-            return;
+        if len < 2 { return; }
+
+        let table_len = self.table_keys.len();
+
+        // --- ШАГ 1: ТОЧЕЧНОЕ ВЫЧИТАНИЕ С ЗАЩИТОЙ ---
+        for i in 0..len - 1 {
+            unsafe {
+                let id_curr = *word.get_unchecked(i) as u64;
+                let id_next = *word.get_unchecked(i + 1) as u64;
+                let pack = (id_curr << 32) | id_next;
+
+                let mut idx = (pack.wrapping_mul(0x517cc1b727220a95) as usize) & self.mask;
+                let mut steps = 0;
+                loop {
+                    if self.table_keys[idx] == pack {
+                        self.table_stats[idx] -= weight;
+                        break;
+                    }
+                    if self.table_keys[idx] == u64::MAX { break; }
+
+                    steps += 1;
+                    if steps >= table_len {
+                        panic!("[ПАНИКА BPE] Вечный цикл на Шаге 1! Таблица воркера переполнена при вычитании пары.");
+                    }
+                    idx = (idx + 1) & self.mask;
+                }
+            }
         }
 
+        // --- ШАГ 2: PTR-СЛИЯНИЕ (БЕЗ ИЗМЕНЕНИЙ) ---
         let mut r_ptr = word.as_ptr();
         let mut w_ptr = word.as_mut_ptr();
         let end_ptr = unsafe { word.as_ptr().add(len) };
@@ -126,34 +152,49 @@ impl BpeWorker {
             word.set_len(new_len);
         }
 
+        // --- ШАГ 3: НАЧИСЛЕНИЕ ВЕСОВ С ГАРАНТИРОВАННОЙ ЗАЩИТОЙ ОТ ЗАЦИКЛИВАНИЯ ---
         if new_len >= 2 {
             for i in 0..new_len - 1 {
                 let curr_id = unsafe { *word.get_unchecked(i) };
                 let next_id = unsafe { *word.get_unchecked(i + 1) };
-                if curr_id == new_id || next_id == new_id {
-                    let pack = ((curr_id as u64) << 32) | (next_id as u64);
-                    let mut idx = (pack.wrapping_mul(0x517cc1b727220a95) as usize) & self.mask;
 
-                    loop {
-                        if self.table_keys[idx] == pack {
-                            self.table_stats[idx] += weight;
-                            if self.table_heads[idx] != w_idx as u32 {
-                                let old_head = self.table_heads[idx];
-                                self.table_heads[idx] = w_idx as u32;
-                                unsafe { *self.next_node.get_unchecked_mut(w_idx) = old_head };
-                            }
-                            break;
-                        }
-                        if self.table_keys[idx] == u64::MAX {
-                            self.table_keys[idx] = pack;
-                            self.table_stats[idx] = weight;
+                let pack = ((curr_id as u64) << 32) | (next_id as u64);
+                let mut idx = (pack.wrapping_mul(0x517cc1b727220a95) as usize) & self.mask;
+                let mut steps = 0;
+
+                loop {
+                    if self.table_keys[idx] == pack {
+                        self.table_stats[idx] += weight;
+
+                        // ИСПРАВЛЕНИЕ: Добавляем слово в цепочку heads ТОЛЬКО если
+                        // его там еще нет на текущей итерации.
+                        // Защищает от ситуации, когда пара дублируется в одном слове
+                        // и замыкает next_node[w_idx] = w_idx.
+                        if self.table_heads[idx] != w_idx as u32 {
                             let old_head = self.table_heads[idx];
                             self.table_heads[idx] = w_idx as u32;
                             unsafe { *self.next_node.get_unchecked_mut(w_idx) = old_head };
-                            break;
                         }
-                        idx = (idx + 1) & self.mask;
+                        break;
                     }
+                    if self.table_keys[idx] == u64::MAX {
+                        self.table_keys[idx] = pack;
+                        self.table_stats[idx] = weight;
+
+                        // ИСПРАВЛЕНИЕ аналогично: защита при создании новой ячейки
+                        if self.table_heads[idx] != w_idx as u32 {
+                            let old_head = self.table_heads[idx];
+                            self.table_heads[idx] = w_idx as u32;
+                            unsafe { *self.next_node.get_unchecked_mut(w_idx) = old_head };
+                        }
+                        break;
+                    }
+
+                    steps += 1;
+                    if steps >= table_len {
+                        panic!("[ПАНИКА BPE] Переполнение хэш-таблицы на Шаге 3.");
+                    }
+                    idx = (idx + 1) & self.mask;
                 }
             }
         }
