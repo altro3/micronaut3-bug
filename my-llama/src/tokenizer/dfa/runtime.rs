@@ -12,7 +12,6 @@ impl FlatDfaRuntime {
 
         Self { dfa }
     }
-    /// Потоковая нарезка токенов по жадному принципу БЕЗ BACKTRACKING-откатов по тексту
     #[inline(always)]
     pub fn split_streaming(&self, bytes: &[u8], offsets_buffer: &mut [u32], len_buffer: &mut [u32]) -> usize {
         let len = bytes.len();
@@ -27,7 +26,6 @@ impl FlatDfaRuntime {
         let mut start_idx = 0usize;
         let mut curr_idx = 0usize;
 
-        // Стартовое состояние forward-поиска по умолчанию для пустого ввода
         let mut state = self.dfa.start_state_forward(&regex_automata::Input::new("")).unwrap();
         let mut last_accept_idx = None;
 
@@ -37,7 +35,6 @@ impl FlatDfaRuntime {
                 let next_state = self.dfa.next_state(state, byte);
 
                 if self.dfa.is_dead_state(next_state) || self.dfa.is_quit_state(next_state) {
-                    // Споткнулись. Фиксируем токен по последней успешной принимающей точке
                     if let Some(accept_idx) = last_accept_idx {
                         let token_len = accept_idx - start_idx;
                         *offsets_buffer.get_unchecked_mut(token_count) = start_idx as u32;
@@ -45,9 +42,8 @@ impl FlatDfaRuntime {
                         token_count += 1;
 
                         start_idx = accept_idx;
-                        curr_idx = start_idx; // Прыгаем вперед, никакого backtracking по старым буквам!
+                        curr_idx = start_idx;
                     } else {
-                        //Fallback на 1 байт, если регулярка не смогла сожрать кусок текста
                         *offsets_buffer.get_unchecked_mut(token_count) = start_idx as u32;
                         *len_buffer.get_unchecked_mut(token_count) = 1;
                         token_count += 1;
@@ -68,7 +64,6 @@ impl FlatDfaRuntime {
                 }
             }
 
-            // Добираем финальный кусок текста
             if start_idx < len && token_count < max_tokens {
                 let final_len = last_accept_idx.unwrap_or(len) - start_idx;
                 *offsets_buffer.get_unchecked_mut(token_count) = start_idx as u32;
