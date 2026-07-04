@@ -1,3 +1,4 @@
+use crate::tokenizer::bpe::heap_types::MergePair;
 use super::bpe_types::FlatBpeNode;
 
 #[repr(C, align(64))]
@@ -14,7 +15,9 @@ pub struct TokenizationContext {
     pub tokens_lens_buffer: Vec<u32>,
 
     pub vocab_size: usize,
-    max_capacity: usize,
+    pub max_capacity: usize,
+    pub bpe_heap: Vec<MergePair>,
+    pub bpe_generations: Vec<u16>,
 }
 
 impl TokenizationContext {
@@ -37,6 +40,8 @@ impl TokenizationContext {
             ],
             vocab_size,
             max_capacity: max_chunk_capacity,
+            bpe_heap: Vec::with_capacity(max_chunk_capacity),
+            bpe_generations: Vec::with_capacity(max_chunk_capacity),
         }
     }
 
