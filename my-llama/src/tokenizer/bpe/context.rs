@@ -1,11 +1,14 @@
-use crate::tokenizer::bpe::heap_types::MergePair;
 use super::bpe_types::FlatBpeNode;
+use crate::tokenizer::bpe::heap_types::MergePair;
 
 #[repr(C, align(64))]
 pub struct TokenizationContext {
     pub short_token_ids: [u32; 16],
     pub short_prev: [u8; 16],
     pub short_next: [u8; 16],
+
+    pub bpe_cache_keys: Vec<u64>,
+    pub bpe_cache_vals: Vec<u64>,
 
     pub nodes: Vec<FlatBpeNode>,
     pub long_ranks: Vec<u32>,
@@ -26,6 +29,10 @@ impl TokenizationContext {
             short_token_ids: [0; 16],
             short_prev: [0; 16],
             short_next: [0; 16],
+
+            bpe_cache_keys: vec![u64::MAX; 4096],
+            bpe_cache_vals: vec![u64::MAX; 4096],
+
             chunk_offsets: Vec::with_capacity(max_chunk_capacity),
             tokens_lens_buffer: Vec::with_capacity(max_chunk_capacity),
             tokens_buffer: Vec::with_capacity(max_chunk_capacity * 2),

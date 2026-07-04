@@ -13,6 +13,28 @@ impl ShortBpeEngine {
         let mut ranks = [u32::MAX; 32];
 
         unsafe {
+            let cache_keys_ptr = ctx.bpe_cache_keys.as_mut_ptr();
+            let cache_vals_ptr = ctx.bpe_cache_vals.as_mut_ptr();
+
+            macro_rules! get_pair_cached {
+                ($left:expr, $right:expr) => {{
+                    let l = $left;
+                    let r = $right;
+                    let pack = ((l as u64) << 32) | (r as u64);
+                    let cache_idx = ((l ^ r) & 0xFFF) as usize;
+
+                    let cached_key = *cache_keys_ptr.add(cache_idx);
+                    if cached_key == pack {
+                        *cache_vals_ptr.add(cache_idx)
+                    } else {
+                        let res = data.get_pair_packed(l, r);
+                        *cache_keys_ptr.add(cache_idx) = pack;
+                        *cache_vals_ptr.add(cache_idx) = res;
+                        res
+                    }
+                }};
+            }
+
             let fallback_ptr = data.byte_fallback.as_ptr();
             for i in 0..len {
                 let b = *bytes.get_unchecked(i) as usize;
@@ -22,7 +44,7 @@ impl ShortBpeEngine {
             }
 
             for i in 0..(len - 1) {
-                let packed = data.get_pair_packed(*ids.get_unchecked(i), *ids.get_unchecked(i + 1));
+                let packed = get_pair_cached!(*ids.get_unchecked(i), *ids.get_unchecked(i + 1));
                 *ranks.get_unchecked_mut(i) = if packed != u64::MAX { (packed >> 32) as u32 } else { u32::MAX };
             }
 
@@ -47,7 +69,7 @@ impl ShortBpeEngine {
                 }
 
                 let right_idx = *next.get_unchecked(best_left) as usize;
-                let packed = data.get_pair_packed(*ids.get_unchecked(best_left), *ids.get_unchecked(right_idx));
+                let packed = get_pair_cached!(*ids.get_unchecked(best_left), *ids.get_unchecked(right_idx));
 
                 *ids.get_unchecked_mut(best_left) = packed as u32;
                 let after_r = *next.get_unchecked(right_idx);
@@ -59,7 +81,7 @@ impl ShortBpeEngine {
                 *ranks.get_unchecked_mut(right_idx) = u32::MAX;
 
                 if after_r != 0xFFFF {
-                    let packed_r = data.get_pair_packed(*ids.get_unchecked(best_left), *ids.get_unchecked(after_r as usize));
+                    let packed_r = get_pair_cached!(*ids.get_unchecked(best_left), *ids.get_unchecked(after_r as usize));
                     *ranks.get_unchecked_mut(best_left) = if packed_r != u64::MAX { (packed_r >> 32) as u32 } else { u32::MAX };
                 } else {
                     *ranks.get_unchecked_mut(best_left) = u32::MAX;
@@ -68,7 +90,7 @@ impl ShortBpeEngine {
                 let p_idx = *prev.get_unchecked(best_left);
                 if p_idx != 0xFFFF {
                     let p = p_idx as usize;
-                    let packed_l = data.get_pair_packed(*ids.get_unchecked(p), *ids.get_unchecked(best_left));
+                    let packed_l = get_pair_cached!(*ids.get_unchecked(p), *ids.get_unchecked(best_left));
                     *ranks.get_unchecked_mut(p) = if packed_l != u64::MAX { (packed_l >> 32) as u32 } else { u32::MAX };
                 }
             }
