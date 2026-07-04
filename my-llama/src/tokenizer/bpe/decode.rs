@@ -1,4 +1,4 @@
-use super::bpe_tokenizer::BpeTokenizer;
+use crate::tokenizer::bpe_tokenizer::BpeTokenizer;
 
 impl BpeTokenizer {
     pub fn decode(&self, tokens: &[u32]) -> String {
@@ -12,6 +12,7 @@ impl BpeTokenizer {
         let offsets_ptr = self.vocab_offsets_flat.as_ptr();
         let bytes_ptr = self.vocab_bytes_flat.as_ptr();
 
+        // 1. Быстрая сборка плоского массива Latin-1 байт через сырые указатели словаря
         for &token_id in tokens {
             let id = token_id as usize;
 
@@ -35,7 +36,6 @@ impl BpeTokenizer {
 
         unsafe {
             raw_buffer.set_len(w);
-
             let mut i = 0;
             let mut write_idx = 0;
             let res_ptr = raw_buffer.as_mut_ptr();
@@ -90,7 +90,6 @@ impl BpeTokenizer {
             }
 
             raw_buffer.set_len(write_idx);
-
             String::from_utf8_unchecked(raw_buffer)
         }
     }

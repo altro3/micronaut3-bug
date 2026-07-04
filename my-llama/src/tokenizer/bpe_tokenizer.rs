@@ -1,4 +1,4 @@
-use crate::tokenizer::bpe_types::{BpeRank, TokenId};
+use crate::tokenizer::bpe::bpe_types::{BpeRank, TokenId};
 
 pub struct BpeTokenizer {
     pub keys_flat: Vec<u64>,
@@ -38,26 +38,10 @@ impl BpeTokenizer {
             }
         }
 
-        println!(
-            "[ОРАКУЛ-КОНСТРУКТОР] id_to_byte[140] = {}, id_to_byte[119] = {}",
-            id_to_byte[140], id_to_byte[119]
-        );
-
         for &(pack, (rank, id)) in raw_pairs.iter() {
             let packed_val = ((rank as u64) << 32) | (id as u64);
-
             let mut h = pack.wrapping_mul(0x517cc1b727220a95);
             h ^= h >> 47;
-
-            let left = (pack >> 32) as u32;
-            let right = pack as u32;
-
-            if left == 140 && right == 119 {
-                println!("[ОРАКУЛ-КОНСТРУКТОР] Найдено правило (140, 119) в raw_pairs!");
-                println!("  |-> Прилетевший rank={}, mid_id={}", rank, id);
-                let target_idx = (h & hash_mask) as usize;
-                println!("  |-> Вычисленный стартовый индекс в хэш-таблице: {}", target_idx);
-            }
 
             let mut target_idx = (h & hash_mask) as usize;
             while keys_flat[target_idx] != u64::MAX && keys_flat[target_idx] != pack {
@@ -68,23 +52,15 @@ impl BpeTokenizer {
                 keys_flat[target_idx] = pack;
                 values_flat[target_idx] = packed_val;
 
+                let left = (pack >> 32) as u32;
+                let right = pack as u32;
+
                 if left < 512 && right < 512 {
                     let b1 = id_to_byte[left as usize];
                     let b2 = id_to_byte[right as usize];
-
-                    if left == 140 && right == 119 {
-                        println!("  |-> Запись в быстрый путь: b1={}, b2={}", b1, b2);
-                    }
-
                     if b1 != 0xFF && b2 != 0xFF {
                         let flat_idx = ((b1 as usize) << 8) | (b2 as usize);
                         tmp_ranks[flat_idx] = packed_val;
-
-                        if left == 140 && right == 119 {
-                            println!("  |-> [УСПЕХ] Записано в tmp_ranks по flat_idx={}. Значение={}", flat_idx, packed_val);
-                        }
-                    } else if left == 140 && right == 119 {
-                        println!("  |-> [БАГ] Запись в быстрый путь пропущена, так как b1 или b2 равен 0xFF!");
                     }
                 }
             }
@@ -102,7 +78,6 @@ impl BpeTokenizer {
             }
             let offset = vocab_bytes_flat.len() as u64;
             let length = token_bytes.len() as u64;
-
             vocab_bytes_flat.extend_from_slice(token_bytes);
             vocab_offsets_flat[id] = (offset << 32) | length;
         }
@@ -122,7 +97,7 @@ impl BpeTokenizer {
     }
 
     #[inline(always)]
-    pub(crate) fn get_pair_packed(&self, left: u32, right: u32) -> u64 {
+    pub fn get_pair_packed(&self, left: u32, right: u32) -> u64 {
         if (left | right) < 512 {
             let b1 = unsafe { *self.id_to_byte.get_unchecked(left as usize) };
             let b2 = unsafe { *self.id_to_byte.get_unchecked(right as usize) };

@@ -137,17 +137,14 @@ mod ultra_assert_tests {
             clen_q += 1;
         }
 
-        // Хэшируем очищенный токен из вокаба и токен из мёрджей
         let hash_from_vocab = FactoryUtils::fxhash64(&clean_vocab_quote[..clen_q]);
         let hash_from_merge = FactoryUtils::fxhash64(raw_merge_quote);
 
-        // ХЭШИ ОБЯЗАНЫ СОВПАДАТЬ, иначе мёрджи никогда не найдут свои ID!
         assert_eq!(
             hash_from_vocab, hash_from_merge,
             "Критический баг! Хэш кавычки из vocab после unescape не совпал с мёрджем!"
         );
 
-        // Проверяем то же самое для "Ġbut"
         let hash_but_vocab = FactoryUtils::fxhash64(raw_vocab_but);
         let hash_but_merge = FactoryUtils::fxhash64(raw_merge_but);
         assert_eq!(hash_but_vocab, hash_but_merge, "Хэши стандартных токенов разошлись!");
