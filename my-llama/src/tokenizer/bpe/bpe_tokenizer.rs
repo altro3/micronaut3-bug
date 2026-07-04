@@ -1,5 +1,6 @@
 use crate::tokenizer::bpe::bpe_types::{BpeRank, TokenId};
 use std::cell::Cell;
+use crate::tokenizer::factory::types::FlatTrieNode;
 
 thread_local! {
     pub static FAST_PATH_COUNT: Cell<u64> = const { Cell::new(0) };
@@ -17,6 +18,8 @@ pub struct BpeTokenizer {
     pub eos_token_id: u32,
     pub(crate) vocab_bytes_flat: Vec<u8>,
     pub(crate) vocab_offsets_flat: Vec<u64>,
+    pub trie_nodes: Vec<FlatTrieNode>,
+    pub trie_root_offsets: [u32; 256],
 }
 
 impl BpeTokenizer {
@@ -26,6 +29,8 @@ impl BpeTokenizer {
         eos_token_id: u32,
         vocab_size: usize,
         vocab_compiled_tokens: &[Vec<u8>],
+        trie_nodes: Vec<FlatTrieNode>,
+        trie_root_offsets: [u32; 256],
     ) -> Self {
         let mut tmp_ranks = vec![u64::MAX; 65536];
         let mut id_to_byte = [0xFFu8; 512];
@@ -98,6 +103,8 @@ impl BpeTokenizer {
             eos_token_id,
             vocab_bytes_flat,
             vocab_offsets_flat,
+            trie_nodes,
+            trie_root_offsets,
         }
     }
 

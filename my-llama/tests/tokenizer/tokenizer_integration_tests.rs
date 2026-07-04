@@ -4,6 +4,7 @@ mod integration_tests {
     use my_llama::tokenizer::bpe::context::TokenizationContext;
     use my_llama::tokenizer::bpe::pipeline::TokenizerPipeline;
     use my_llama::tokenizer::dfa::runtime::FlatDfaRuntime;
+    use my_llama::tokenizer::factory::types::FlatTrieNode;
     use my_llama::tokenizer::BpeTokenizer;
 
     fn create_mock_tokenizer() -> BpeTokenizer {
@@ -28,7 +29,66 @@ mod integration_tests {
         raw_pairs.push((((256u64) << 32) | 257u64, (0, 259)));
         vocab_compiled_tokens[259] = b"hell".to_vec();
 
-        BpeTokenizer::new(&raw_pairs, byte_fallback, 50256, 512, &vocab_compiled_tokens)
+        // --- ДЛЯ ТЕСТОВ: Ручная сборка плоского дерева под мок-токены ---
+        let mut trie_root_offsets = [u32::MAX; 256];
+        let mut trie_nodes = Vec::new();
+
+        // Добавляем 'h' -> 'e' -> 'l' -> 'l'
+        // Корень для 'h' (104)
+        trie_root_offsets[104] = trie_nodes.len() as u32; // Офсет 0
+        trie_nodes.resize(
+            trie_nodes.len() + 256,
+            FlatTrieNode {
+                token_id: u32::MAX,
+                children_offset: u32::MAX,
+            },
+        );
+        trie_nodes[101].token_id = 256; // "he" валиден
+
+        let he_children = trie_nodes.len() as u32; // Офсет 256
+        trie_nodes.resize(
+            trie_nodes.len() + 256,
+            FlatTrieNode {
+                token_id: u32::MAX,
+                children_offset: u32::MAX,
+            },
+        );
+        trie_nodes[101].children_offset = he_children;
+        trie_nodes[(he_children as usize) + 108].token_id = u32::MAX; // "hel" не токен
+
+        let hel_children = trie_nodes.len() as u32; // Офсет 512
+        trie_nodes.resize(
+            trie_nodes.len() + 256,
+            FlatTrieNode {
+                token_id: u32::MAX,
+                children_offset: u32::MAX,
+            },
+        );
+        trie_nodes[(he_children as usize) + 108].children_offset = hel_children;
+        trie_nodes[(hel_children as usize) + 108].token_id = 259; // "hell" валиден
+
+        // Добавляем 'o' -> ',' (111 -> 44)
+        trie_root_offsets[111] = trie_nodes.len() as u32; // Офсет 768
+        trie_nodes.resize(
+            trie_nodes.len() + 256,
+            FlatTrieNode {
+                token_id: u32::MAX,
+                children_offset: u32::MAX,
+            },
+        );
+        trie_nodes[768 + 44].token_id = 258; // "o," валиден
+
+        // Модифицированный конструктор BpeTokenizer
+        let tokenizer = BpeTokenizer::new(
+            &raw_pairs,
+            byte_fallback,
+            50256,
+            512,
+            &vocab_compiled_tokens,
+            trie_nodes,        // 6-й аргумент
+            trie_root_offsets, // 7-й аргумент
+        );
+        tokenizer
     }
 
     fn create_mock_dfa() -> FlatDfaRuntime {
@@ -69,6 +129,7 @@ mod integration_tests {
     #[test]
     fn test_encode_parallel_stress_and_safety() {
         let pipeline = create_pipeline();
+        // Вектор срезов под новую zero-copy сигнатуру &[&str]
         let mut texts = Vec::with_capacity(1000);
         for i in 0..1000 {
             if i % 2 == 0 {
@@ -114,6 +175,8 @@ mod real_data_validation_tests {
             compiled_vocab.eos_token_id,
             compiled_vocab.vocab_size,
             &compiled_vocab.vocab_compiled_tokens,
+            compiled_vocab.trie_nodes,
+            compiled_vocab.trie_root_offsets,
         );
 
         let pipeline = TokenizerPipeline::new(bpe_tokenizer, create_mock_dfa());

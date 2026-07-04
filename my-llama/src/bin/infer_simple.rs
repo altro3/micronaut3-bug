@@ -5,7 +5,7 @@ use my_llama::tokenizer::BpeTokenizer;
 use std::collections::HashMap;
 
 fn main() {
-    println!("=== ИНИЦИАЛИЗАЦИЯ ЧИСТОГО ТЕСТОВОГО СЛОВАРЯ BPE ===");
+/*    println!("=== ИНИЦИАЛИЗАЦИЯ ЧИСТОГО ТЕСТОВОГО СЛОВАРЯ BPE ===");
 
     let mut raw_pairs = Vec::with_capacity(64);
     let mut byte_fallback = [0u32; 256];
@@ -111,4 +111,4 @@ fn main() {
 
     println!("\nВремя работы: {:?}", duration);
     println!("===========================================================");
-}
+*/}

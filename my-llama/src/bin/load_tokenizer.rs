@@ -55,6 +55,8 @@ fn run_pure_tokenizer_benchmark() -> std::io::Result<()> {
         compiled_vocab.eos_token_id,
         compiled_vocab.vocab_size,
         &compiled_vocab.vocab_compiled_tokens,
+        compiled_vocab.trie_nodes,
+        compiled_vocab.trie_root_offsets,
     );
 
     if !std::path::Path::new(dfa_trans_path).exists() || !std::path::Path::new(dfa_accept_path).exists() {

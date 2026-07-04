@@ -1,7 +1,13 @@
 use super::decoder::HfByteDecoder;
-use super::types::{CompiledVocabulary, QwenJsonModel};
+use super::types::{CompiledVocabulary, FlatTrieNode, QwenJsonModel};
+use std::collections::VecDeque;
 use std::fs::File;
 use std::io::{BufReader, Error, ErrorKind, Result};
+
+struct BuilderNode {
+    token_id: u32,
+    children: [u32; 256],
+}
 
 pub struct DictCompiler;
 
@@ -33,24 +39,129 @@ impl DictCompiler {
 
         Self::fill_qwen_byte_fallbacks(&root, &mut byte_fallback);
 
-        let mut raw_pairs = Vec::with_capacity(root.model.merges.len());
-        for (rank, pair) in root.model.merges.iter().enumerate() {
-            let left_str = &pair[0];
-            let right_str = &pair[1];
+        println!("[ДИАГНОСТИКА TRIE] Начинаю BFS-сборку дерева. Всего токенов в словаре: {}", vocab_size);
 
-            if let (Some(&id1), Some(&id2)) = (root.model.vocab.get(left_str), root.model.vocab.get(right_str)) {
-                let mut merged_str = String::with_capacity(left_str.len() + right_str.len());
-                merged_str.push_str(left_str);
-                merged_str.push_str(right_str);
+        let mut trie_root_offsets = [u32::MAX; 256];
+        let mut trie_nodes = Vec::with_capacity(vocab_size * 2);
 
-                if let Some(&target_id) = root.model.vocab.get(&merged_str) {
-                    let packed_key = ((id1 as u64) << 32) | (id2 as u64);
-                    raw_pairs.push((packed_key, (rank as u32, target_id)));
+        // Корень сырого дерева-черновика всегда под индексом 0
+        let mut builder_nodes = vec![BuilderNode {
+            token_id: u32::MAX,
+            children: [u32::MAX; 256],
+        }];
+
+        let mut inserted_tokens = 0;
+        for id in 0..vocab_size {
+            let bytes = &vocab_compiled_tokens[id];
+            if bytes.is_empty() {
+                continue;
+            }
+
+            let mut curr_node_idx = 0usize;
+
+            for &byte in bytes.iter() {
+                let b = byte as usize;
+                let next_idx = builder_nodes[curr_node_idx].children[b];
+
+                if next_idx == u32::MAX {
+                    let new_idx = builder_nodes.len() as u32;
+                    builder_nodes.push(BuilderNode {
+                        token_id: u32::MAX,
+                        children: [u32::MAX; 256],
+                    });
+                    builder_nodes[curr_node_idx].children[b] = new_idx;
+                    curr_node_idx = new_idx as usize;
+                } else {
+                    curr_node_idx = next_idx as usize;
+                }
+            }
+            builder_nodes[curr_node_idx].token_id = id as u32;
+            inserted_tokens += 1;
+        }
+        println!("[ДИАГНОСТИКА TRIE] В дерево-черновик добавлено токенов: {}", inserted_tokens);
+
+        // --- ЛИНЕАРИЗАЦИЯ ЧЕРЕЗ BFS ОЧЕРЕДЬ (Гарантия 0 дубликатов) ---
+        // Очередь хранит пары: (индекс_в_builder_nodes, индекс_в_trie_nodes)
+        let mut queue = VecDeque::new();
+        let mut active_roots = 0;
+
+        // Инициализируем первый уровень дерева (корневые переходы по первому байту)
+        for b in 0..256 {
+            let child_builder_idx = builder_nodes[0].children[b];
+            if child_builder_idx != u32::MAX {
+                let flat_idx = trie_nodes.len() as u32;
+                trie_root_offsets[b] = flat_idx;
+                active_roots += 1;
+
+                trie_nodes.push(FlatTrieNode {
+                    token_id: builder_nodes[child_builder_idx as usize].token_id,
+                    children_offset: u32::MAX,
+                });
+
+                queue.push_back((child_builder_idx as usize, flat_idx as usize));
+            }
+        }
+
+        // Обходим граф по слоям
+        while let Some((b_idx, f_idx)) = queue.pop_front() {
+            let b_node = &builder_nodes[b_idx];
+
+            let mut has_children = false;
+            for &c in b_node.children.iter() {
+                if c != u32::MAX {
+                    has_children = true;
+                    break;
+                }
+            }
+
+            if has_children {
+                // Выделяем сплошной блок из 256 слотов под детей текущего узла
+                let children_offset = trie_nodes.len() as u32;
+                trie_nodes.resize(
+                    trie_nodes.len() + 256,
+                    FlatTrieNode {
+                        token_id: u32::MAX,
+                        children_offset: u32::MAX,
+                    },
+                );
+
+                // Привязываем смещение детей к родителю
+                trie_nodes[f_idx].children_offset = children_offset;
+
+                for b in 0..256 {
+                    let child_builder_idx = b_node.children[b];
+                    if child_builder_idx != u32::MAX {
+                        let target_flat_slot = (children_offset as usize) + b;
+
+                        // Записываем точные данные ребенка
+                        trie_nodes[target_flat_slot].token_id = builder_nodes[child_builder_idx as usize].token_id;
+
+                        // Пушим ребенка в очередь для обработки его поддеревьев на следующем слое
+                        queue.push_back((child_builder_idx as usize, target_flat_slot));
+                    }
                 }
             }
         }
 
-        let extracted_regex = root.pre_tokenizer.pretokenizers.first()
+        // Финальная валидация плоского дерева
+        let mut flattened_valid_tokens = 0;
+        for node in trie_nodes.iter() {
+            if node.token_id != u32::MAX {
+                flattened_valid_tokens += 1;
+            }
+        }
+
+        println!("[ДИАГНОСТИКА TRIE] BFS-линеаризация завершена.");
+        println!("  ├── Активных корневых переходов (1-й байт): {}", active_roots);
+        println!("  ├── Финальный размер массива trie_nodes: {}", trie_nodes.len());
+        println!("  └── Валидных ID токенов в плоском Trie: {}", flattened_valid_tokens);
+        println!("======================================================================");
+
+        let raw_pairs = Vec::new();
+        let extracted_regex = root
+            .pre_tokenizer
+            .pretokenizers
+            .first()
             .and_then(|entry| entry.pattern.as_ref())
             .map(|p| p.regex.clone())
             .unwrap_or_else(|| r"(?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\r\n\p{L}\p{N}]+|\p{L}+|\p{N}{1,3}".to_string());
@@ -62,6 +173,8 @@ impl DictCompiler {
             vocab_size,
             vocab_compiled_tokens,
             extracted_regex,
+            trie_nodes,
+            trie_root_offsets,
         })
     }
 

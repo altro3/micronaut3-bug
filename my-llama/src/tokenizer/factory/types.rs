@@ -43,4 +43,16 @@ pub struct CompiledVocabulary {
     pub vocab_size: usize,
     pub vocab_compiled_tokens: Vec<Vec<u8>>,
     pub extracted_regex: String,
+    pub trie_nodes: Vec<FlatTrieNode>,
+    pub trie_root_offsets: [u32; 256],
+}
+
+#[derive(Copy, Clone, Debug)]
+#[repr(C, align(8))]
+pub struct FlatTrieNode {
+    // Если этот узел — конец валидного токена, тут лежит его ID. Если нет — u32::MAX
+    pub token_id: u32,
+    // Смещение в общем массиве узлов `trie_nodes`, где лежат 256 дочерних переходов для этого узла.
+    // Если детей нет (лист дерева) — u32::MAX
+    pub children_offset: u32,
 }
