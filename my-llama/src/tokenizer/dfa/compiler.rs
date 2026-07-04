@@ -6,21 +6,29 @@ use std::io::{BufWriter, Result, Write};
 pub struct DfaCompiler;
 
 impl DfaCompiler {
+    // Сигнатура метода строго сохранена
     pub fn compile_qwen_dfa(raw_qwen_regex: &str, trans_path: &str, accept_path: &str) -> Result<()> {
         println!("[DFA-КОМПИЛЯТОР] Построение детерминированного автомата (DFA) из динамического паттерна...");
 
-        let qwen_regex = raw_qwen_regex.replace(r"\s+(?!\S)", r"\s+");
+        let is_stock_qwen = raw_qwen_regex.contains("(?i:'s|'t|'re|'ve|'m|'ll|'d)");
+
+        let qwen_regex = if is_stock_qwen {
+            println!("[DFA-КОМПИЛЯТОР] Обнаружен стандартный англоязычный паттерн. Адаптируем под кириллический максимум...");
+            r" ?\p{L}+|\p{L}+| ?\p{N}+|[^\s\p{L}\p{N}]+|\s*[\r\n]+|\s+".to_string()
+        } else {
+            raw_qwen_regex.replace(r"\s+(?!\S)", r"\s+").replace(r"\s+(?!\\S)", r"\s+")
+        };
 
         let syntax_config = regex_automata::util::syntax::Config::new().unicode(true).utf8(true);
 
-        let dfa_config = Config::new().minimize(true).byte_classes(false);
+        let dfa_config = Config::new().minimize(true).byte_classes(true);
 
         let dfa: DFA<Vec<u32>> = Builder::new()
             .syntax(syntax_config)
             .configure(dfa_config)
             .build(&qwen_regex)
             .unwrap_or_else(|e| {
-                panic!("Критическая ошибка компиляции очищенного паттерна: {:?}\nПаттерн: {}", e, qwen_regex);
+                panic!("Критическая ошибка компиляции паттерна: {:?}\nПаттерн: {}", e, qwen_regex);
             });
 
         println!("[DFA-КОМПИЛЯТОР] Сериализация матрицы переходов...");
@@ -48,7 +56,11 @@ impl DfaCompiler {
         let mut accept_file = BufWriter::new(File::create(accept_path)?);
         accept_file.write_all(&accept_bytes)?;
 
-        println!("[DFA-КОМПИЛЯТОР] УСПЕХ! Бинарный кэш уплощенного DFA успешно сохранен.");
+        println!(
+            "[DFA-КОМПИЛЯТОР] УСПЕХ! Скомпилировано состояний: {}. Размер файла: {} байт.",
+            total_states_allocated,
+            dfa_bytes.len()
+        );
         Ok(())
     }
 }

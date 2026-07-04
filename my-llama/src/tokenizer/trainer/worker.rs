@@ -35,7 +35,6 @@ pub struct BpeWorker {
     pub table_keys: Vec<u64>,
     pub table_stats: Vec<i64>,
     pub table_heads: Vec<u32>,
-    // Изменяем структуру: теперьnext_node хранит связи для каждого слова отдельно
     pub next_node: Vec<u32>,
     pub mask: usize,
 }
@@ -50,7 +49,6 @@ impl BpeWorker {
             table_keys: vec![u64::MAX; table_size],
             table_stats: vec![0; table_size],
             table_heads: vec![u32::MAX; table_size],
-            // Жестко выделяем буфер под цепочки переходов на базе количества уникальных слов
             next_node: vec![u32::MAX; max_words],
             mask,
         };
@@ -76,7 +74,7 @@ impl BpeWorker {
     }
 
     #[inline(always)]
-    fn insert_initial(&mut self, pack: u64, weight: i64, w_idx: u32) {
+    pub fn insert_initial(&mut self, pack: u64, weight: i64, w_idx: u32) {
         let mut idx = (pack.wrapping_mul(0x517cc1b727220a95) as usize) & self.mask;
         loop {
             if self.table_keys[idx] == pack {
@@ -128,7 +126,6 @@ impl BpeWorker {
             word.set_len(new_len);
         }
 
-        // Пересчитываем только изменившиеся пары внутри сжатого слова
         if new_len >= 2 {
             for i in 0..new_len - 1 {
                 let curr_id = unsafe { *word.get_unchecked(i) };
