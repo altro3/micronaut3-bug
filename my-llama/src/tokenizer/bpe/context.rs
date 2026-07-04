@@ -41,7 +41,7 @@ impl TokenizationContext {
                     key: u64::MAX,
                     val: u64::MAX,
                 };
-                16384
+                262144
             ],
 
             chunk_offsets: Vec::with_capacity(max_chunk_capacity),

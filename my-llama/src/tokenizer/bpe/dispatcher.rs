@@ -9,9 +9,11 @@ thread_local! {
     pub static FALLBACK_CYCLES: Cell<u64> = const { Cell::new(0) };
     pub static SHORT_CYCLES: Cell<u64> = const { Cell::new(0) };
     pub static LONG_CYCLES: Cell<u64> = const { Cell::new(0) };
-
-    // Дополнительные метрики для полной картины
     pub static TOTAL_BYTES_PROCESSED: Cell<u64> = const { Cell::new(0) };
+
+    // Метрики эффективности L1/L2 кэша контекста
+    pub static CACHE_HITS: Cell<u64> = const { Cell::new(0) };
+    pub static CACHE_MISSES: Cell<u64> = const { Cell::new(0) };
 }
 
 pub struct BpeEngineDispatcher;
@@ -29,7 +31,6 @@ impl BpeEngineDispatcher {
 
         if len == 1 {
             let start = unsafe { std::arch::x86_64::_rdtsc() };
-
             unsafe {
                 let b = *bytes.get_unchecked(0) as usize;
                 let token_id = *data.byte_fallback.get_unchecked(b);
@@ -37,7 +38,6 @@ impl BpeEngineDispatcher {
                 *token_count += 1;
                 ctx.tokens_buffer.set_len(*token_count);
             }
-
             let end = unsafe { std::arch::x86_64::_rdtsc() };
             FALLBACK_CYCLES.with(|c| c.set(c.get() + (end - start)));
             return;
@@ -45,16 +45,12 @@ impl BpeEngineDispatcher {
 
         if len <= 32 {
             let start = unsafe { std::arch::x86_64::_rdtsc() };
-
             ShortBpeEngine::merge(data, bytes, token_count, ctx);
-
             let end = unsafe { std::arch::x86_64::_rdtsc() };
             SHORT_CYCLES.with(|c| c.set(c.get() + (end - start)));
         } else {
             let start = unsafe { std::arch::x86_64::_rdtsc() };
-
             LongBpeEngine::merge(data, bytes, token_count, ctx);
-
             let end = unsafe { std::arch::x86_64::_rdtsc() };
             LONG_CYCLES.with(|c| c.set(c.get() + (end - start)));
         }

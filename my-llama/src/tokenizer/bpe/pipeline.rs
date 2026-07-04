@@ -1,6 +1,7 @@
 use super::context::TokenizationContext;
-use crate::tokenizer::bpe::bpe_tokenizer::{FAST_PATH_COUNT, HASH_COLLISION_STEPS, SLOW_PATH_COUNT};
-use crate::tokenizer::bpe::dispatcher::{BpeEngineDispatcher, CALL_COUNT, FALLBACK_CYCLES, LONG_CYCLES, SHORT_CYCLES, TOTAL_BYTES_PROCESSED};
+use crate::tokenizer::bpe::dispatcher::{
+    BpeEngineDispatcher, CACHE_HITS, CACHE_MISSES, CALL_COUNT, FALLBACK_CYCLES, LONG_CYCLES, SHORT_CYCLES, TOTAL_BYTES_PROCESSED,
+};
 use crate::tokenizer::dfa::runtime::FlatDfaRuntime;
 use crate::tokenizer::BpeTokenizer;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -87,22 +88,16 @@ impl TokenizerPipeline {
                     let long = LONG_CYCLES.get();
                     let bytes = TOTAL_BYTES_PROCESSED.get();
 
-                    let fast_lookups = FAST_PATH_COUNT.get();
-                    let slow_lookups = SLOW_PATH_COUNT.get();
-                    let collision_steps = HASH_COLLISION_STEPS.get();
+                    let hits = CACHE_HITS.get();
+                    let misses = CACHE_MISSES.get();
 
                     let total_cycles = fb + short + long;
 
                     if calls > 0 && total_cycles > 0 {
                         let avg_len = bytes as f64 / calls as f64;
-                        let total_lookups = fast_lookups + slow_lookups;
-                        let hit_rate = if total_lookups > 0 {
-                            (fast_lookups as f64 / total_lookups as f64) * 100.0
-                        } else {
-                            0.0
-                        };
-                        let avg_collision = if slow_lookups > 0 {
-                            collision_steps as f64 / slow_lookups as f64
+                        let total_cached_lookups = hits + misses;
+                        let hit_rate = if total_cached_lookups > 0 {
+                            (hits as f64 / total_cached_lookups as f64) * 100.0
                         } else {
                             0.0
                         };
@@ -116,8 +111,8 @@ impl TokenizerPipeline {
                             (long as f64 / total_cycles as f64) * 100.0
                         );
                         println!(
-                            "        [ЛУКАПЫ] Всего: {} | БыстрыйПуть: {:.1}% | ТяжелыйПуть: {} | СрКоллизий на хэше: {:.2}",
-                            total_lookups, hit_rate, slow_lookups, avg_collision
+                            "        [КЭШ КОНТЕКСТА] Всего лукапов: {} | Попадания (HitRate): {:.1}% | Промахи (Ушли в словарь): {}",
+                            total_cached_lookups, hit_rate, misses
                         );
                     }
                 });
