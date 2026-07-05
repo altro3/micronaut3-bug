@@ -12,7 +12,6 @@ rayon = "1.12"
 dary_heap = "0.3"
 fxhash = "0.2"
 regex = "1.12"
-rand = "0.10"
 
 [build-dependencies]
 cc = "1.2"

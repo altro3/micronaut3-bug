@@ -1,18 +1,9 @@
 use crate::tokenizer::trainer::position_index::{IsolatedWord, PositionIndex};
 pub struct ThreadDeltaWorker;
-use rand::RngExt;
 
 impl ThreadDeltaWorker {
     #[inline(always)]
-    pub fn merge_in_word(
-        word: &mut IsolatedWord,
-        word_idx: u32,
-        pair: (u32, u32),
-        new_id: u32,
-        index: &mut PositionIndex,
-        bpe_dropout: bool,
-        dropout_prob: f32,
-    ) -> Vec<(u32, u32)> {
+    pub fn merge_in_word(word: &mut IsolatedWord, word_idx: u32, pair: (u32, u32), new_id: u32, index: &mut PositionIndex) -> Vec<(u32, u32)> {
         let weight = word.weight;
         let mut added_pairs = Vec::new();
 
@@ -34,23 +25,14 @@ impl ThreadDeltaWorker {
             }
         }
 
-        let mut rng = rand::rng();
-
         let mut w = 0;
         let mut r = 0;
         let len = word.tokens.len();
         while r < len {
             if r < len - 1 && word.tokens[r] == pair.0 && word.tokens[r + 1] == pair.1 {
-                let rand_val: f32 = rng.random();
-                if bpe_dropout && rand_val < dropout_prob {
-                    word.tokens[w] = word.tokens[r];
-                    w += 1;
-                    r += 1;
-                } else {
-                    word.tokens[w] = new_id;
-                    w += 1;
-                    r += 2;
-                }
+                word.tokens[w] = new_id;
+                w += 1;
+                r += 2;
             } else {
                 word.tokens[w] = word.tokens[r];
                 w += 1;

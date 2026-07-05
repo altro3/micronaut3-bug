@@ -10,8 +10,6 @@ pub struct TrainerConfig {
     pub position_buffer_capacity: usize,
     pub index_rebuild_interval: usize,
     pub regex: String,
-    pub bpe_dropout: bool,
-    pub dropout_prob: f32,
 }
 
 impl Default for TrainerConfig {
@@ -29,8 +27,6 @@ impl Default for TrainerConfig {
             position_buffer_capacity: 65536,
             index_rebuild_interval: 16,
             regex: r"(?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\r\n\p{L}\p{N}]?\p{L}+|\p{N}+|(?:\s)[\r\n]*|\s+[\r\n]*|[\r\n]+".to_string(),
-            bpe_dropout: true,
-            dropout_prob: 0.1,
         }
     }
 }

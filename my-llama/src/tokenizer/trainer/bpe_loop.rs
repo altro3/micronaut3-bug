@@ -93,8 +93,7 @@ impl<'a> BpeLoopRunner<'a> {
             for w_idx in word_ids {
                 let word = &mut words[w_idx as usize];
 
-                let added_pairs =
-                    ThreadDeltaWorker::merge_in_word(word, w_idx, target_pair, new_id, index, self.config.bpe_dropout, self.config.dropout_prob);
+                let added_pairs = ThreadDeltaWorker::merge_in_word(word, w_idx, target_pair, new_id, index);
 
                 for p in added_pairs {
                     index.pair_to_words.entry(p).or_insert_with(Vec::new).push(w_idx);
