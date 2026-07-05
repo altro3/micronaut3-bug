@@ -4,15 +4,8 @@ pub struct ThreadDeltaWorker;
 
 impl ThreadDeltaWorker {
     #[inline(always)]
-    pub fn merge_in_word(
-        word: &mut IsolatedWord,
-        word_idx: u32,
-        pair: (u32, u32),
-        new_id: u32,
-        index: &mut PositionIndex,
-    ) -> (Vec<(u32, u32)>, Vec<(u32, u32)>) {
+    pub fn merge_in_word(word: &mut IsolatedWord, word_idx: u32, pair: (u32, u32), new_id: u32, index: &mut PositionIndex) -> Vec<(u32, u32)> {
         let weight = word.weight;
-        let mut deleted_pairs = Vec::new();
         let mut added_pairs = Vec::new();
 
         let mut has_pair = false;
@@ -23,12 +16,11 @@ impl ThreadDeltaWorker {
             }
         }
         if !has_pair {
-            return (deleted_pairs, added_pairs);
+            return added_pairs;
         }
 
         for window in word.tokens.windows(2) {
             let p = (window[0], window[1]);
-            deleted_pairs.push(p);
             if let Some(cnt) = index.pair_counts.get_mut(&p) {
                 *cnt -= weight;
             }
@@ -64,6 +56,6 @@ impl ThreadDeltaWorker {
             );
         }
 
-        (deleted_pairs, added_pairs)
+        added_pairs
     }
 }

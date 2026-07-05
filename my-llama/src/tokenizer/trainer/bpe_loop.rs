@@ -27,7 +27,7 @@ impl<'a> BpeLoopRunner<'a> {
         let mut current_id = self.config.start_token_id;
         let mut raw_merges = Vec::with_capacity(num_merges);
 
-        println!("\n================== [ЗАПУСК КАНОНИЧЕСКОГО BPE-ЦИКЛА В СТИЛЕ HUGGING FACE] ==================");
+        println!("\n================== [ЗАПУСК ЛЕНИВОГО ВЕКТОРНОГО BPE-ЦИКЛА] ==================");
         let loop_start = Instant::now();
 
         while merges_done < num_merges {
@@ -93,15 +93,7 @@ impl<'a> BpeLoopRunner<'a> {
             for w_idx in word_ids {
                 let word = &mut words[w_idx as usize];
 
-                let (deleted_pairs, added_pairs) = ThreadDeltaWorker::merge_in_word(word, w_idx, target_pair, new_id, index);
-
-                for p in deleted_pairs {
-                    if let Some(words_vec) = index.pair_to_words.get_mut(&p) {
-                        if let Some(pos) = words_vec.iter().position(|&x| x == w_idx) {
-                            words_vec.swap_remove(pos);
-                        }
-                    }
-                }
+                let added_pairs = ThreadDeltaWorker::merge_in_word(word, w_idx, target_pair, new_id, index);
 
                 for p in added_pairs {
                     let words_vec = index.pair_to_words.entry(p).or_insert_with(Vec::new);
@@ -120,7 +112,7 @@ impl<'a> BpeLoopRunner<'a> {
 
         if merges_done < 20 {
             println!(
-                "      ├── [ДЕТАЛИ МЁРЖА] Модифицировано уникальных слов: {} | Ленивых пушей в кучу: {}",
+                "      ├── [ДЕТАЛИ МЁРЖА] Затронуто слов: {} | Ленивых пушей в кучу: {}",
                 words_modified, total_lazy_pushes
             );
         }
