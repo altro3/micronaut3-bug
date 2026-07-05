@@ -30,7 +30,12 @@ impl BpeTrainer {
         let global_timer = Instant::now();
 
         let aggregator = CorpusAggregator::new(self.cyrillic_regex, self.config.initial_table_size);
-        let unique_words = aggregator.collect_unique_words(text_content.as_bytes(), self.config.num_threads, self.config.local_map_capacity);
+        let unique_words = aggregator.collect_unique_words(
+            text_content.as_bytes(),
+            text_content,
+            self.config.num_threads,
+            self.config.local_map_capacity,
+        );
 
         println!(
             "[HPC ТРЕНЕР] Собрано уникальных слов: {}. Индексация плоского корпуса...",
@@ -43,7 +48,7 @@ impl BpeTrainer {
             corpus.tokens.len()
         );
         let mut index = InvertedIndex::new(corpus.tokens.len());
-        index.rebuild(&corpus);
+        index.rebuild(&corpus, self.config.num_threads);
 
         let mut current_id = self.config.start_token_id;
         let mut iteration_count = 0;
@@ -144,13 +149,13 @@ impl BpeTrainer {
 
             let mut index_rebuilt = false;
             if iteration_count % self.config.index_rebuild_interval == 0 {
-                index.rebuild(&corpus);
+                index.rebuild(&corpus, self.config.num_threads);
                 index_rebuilt = true;
             }
 
             let progress = (current_id as f64 / self.vocab_size as f64) * 100.0;
             println!(
-                "[ПАКЕТНЫЙ ШАГ] Итерация: {:<4} | Токенов: {}/{} ({:.2}%) | Парей: {:<3} | Мутаций: {:<6} | Время: {:?} {}",
+                "[ПАКЕТНЫЙ ШАГ] Итерация: {:<4} | Токенов: {}/{} ({:.2}%) | Пар: {:<3} | Мутаций: {:<6} | Время: {:?} {}",
                 iteration_count,
                 current_id,
                 self.vocab_size,

@@ -15,13 +15,31 @@ impl CorpusAggregator {
         Self { dfa, initial_capacity }
     }
 
-    pub fn collect_unique_words(&self, text_bytes: &[u8], num_threads: usize, local_cap: usize) -> HashMap<Vec<u8>, usize> {
+    pub fn collect_unique_words(&self, text_bytes: &[u8], text_str: &str, num_threads: usize, local_cap: usize) -> HashMap<Vec<u8>, usize> {
         let chunk_size = (text_bytes.len() + num_threads - 1) / num_threads;
-        let chunks: Vec<&[u8]> = text_bytes.chunks(chunk_size).collect();
 
-        chunks
+        let mut boundaries = Vec::with_capacity(num_threads + 1);
+        boundaries.push(0);
+
+        for t_idx in 1..num_threads {
+            let mut pos = t_idx * chunk_size;
+            while pos < text_bytes.len() && !text_str.is_char_boundary(pos) {
+                pos += 1;
+            }
+            boundaries.push(pos.min(text_bytes.len()));
+        }
+        boundaries.push(text_bytes.len());
+
+        (0..num_threads)
             .into_par_iter()
-            .map(|chunk| {
+            .map(|t_idx| {
+                let start_pos = boundaries[t_idx];
+                let end_pos = boundaries[t_idx + 1];
+                if start_pos >= end_pos {
+                    return HashMap::new();
+                }
+
+                let chunk = &text_bytes[start_pos..end_pos];
                 let mut local_map = HashMap::with_capacity(local_cap);
                 let mut pos = 0;
 
