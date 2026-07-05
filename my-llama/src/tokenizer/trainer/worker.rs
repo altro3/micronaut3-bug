@@ -4,7 +4,7 @@ pub struct ThreadDeltaWorker;
 
 impl ThreadDeltaWorker {
     #[inline(always)]
-    pub fn merge_at_node<F>(corpus: &mut FlatCorpus, left_node_idx: i32, weight: i64, new_id: u32, mut on_pair_change: F) -> Option<i32>
+    pub fn merge_at_node<F>(corpus: &mut FlatCorpus, left_node_idx: i32, weight: i64, new_id: u32, mut on_pair_change: F) -> bool
     where
         F: FnMut((u32, u32), i64),
     {
@@ -12,13 +12,12 @@ impl ThreadDeltaWorker {
         let left_node = corpus.nodes[l_idx];
 
         if left_node.next == -1 {
-            return None;
+            return false;
         }
         let r_idx = left_node.next as usize;
         let right_node = corpus.nodes[r_idx];
 
         let target_pair = (left_node.id, right_node.id);
-
         let far_left_idx = left_node.prev;
         let far_right_idx = right_node.next;
 
@@ -46,6 +45,6 @@ impl ThreadDeltaWorker {
         corpus.nodes[r_idx].prev = -1;
         corpus.nodes[r_idx].next = -1;
 
-        Some(left_node_idx)
+        true
     }
 }

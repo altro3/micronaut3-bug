@@ -44,7 +44,8 @@ impl BpeTrainer {
         Self {
             vocab_size,
             config,
-            cyrillic_regex: r"(?i:'s|'t|'re|'ve|'m|'ll|'d)|\p{L}+|\p{N}+|[^\s\p{L}\p{N}]+|\s+",
+            // Официальный паттерн GPT-4 / Qwen2.5. На замапленном тексте работает идеально
+            cyrillic_regex: r"(?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\r\n\p{L}\p{N}]?\p{L}+|\p{N}+|(?:\s)[\r\n]*|\s+[\r\n]*|[\r\n]+",
         }
     }
 
@@ -85,6 +86,8 @@ impl BpeTrainer {
             }
         }
 
+        let mut spawned_positions: FxHashMap<(u32, u32), Vec<i32>> = FxHashMap::default();
+
         println!("[HPC ULTRA ТРЕНЕР] Шаг 3: Запуск BPE-цикла нулевого копирования...");
 
         while merges_done < num_merges {
@@ -106,12 +109,12 @@ impl BpeTrainer {
                 break;
             }
 
-            if merges_done % 2000 == 0 || merges_done < 5 {
+            if merges_done % 2000 == 0 || merges_done < 10 {
                 let mut b_res = id_to_bytes[job.pair.0 as usize].clone();
                 b_res.extend_from_slice(&id_to_bytes[job.pair.1 as usize]);
                 let clean_text = String::from_utf8_lossy(&b_res).into_owned();
                 println!(
-                    "[BPE LOOP] Мёрж #{:<5} | Сила сжатия: {} | Токен: '{}'",
+                    "[BPE LOOP] Мёрж #{:<5} | Сила сжатия: {:<10} | Токен: '{}'",
                     merges_done,
                     job.count,
                     clean_text.escape_debug()
@@ -126,29 +129,42 @@ impl BpeTrainer {
             merges.push([str_a, str_b]);
             id_to_bytes.push(merged_bytes);
 
-            let mut link_ptr = *index.pair_heads.get(&job.pair).unwrap_or(&-1);
-            let mut spawned_pairs = Vec::with_capacity(64);
+            if let Some(&(start, count)) = index.pair_slices.get(&job.pair) {
+                let slice = &index.positions[start..start + count];
+                for &n_idx in slice {
+                    let node = corpus.nodes[n_idx as usize];
+                    if node.next != -1 && node.id == job.pair.0 && corpus.nodes[node.next as usize].id == job.pair.1 {
+                        let w_idx = index.node_to_word[n_idx as usize];
+                        let weight = corpus.words[w_idx].weight;
 
-            while link_ptr != -1 {
-                let w_idx = index.word_indices[link_ptr as usize];
-                let n_idx = index.node_indices[link_ptr as usize];
-
-                let node = corpus.nodes[n_idx as usize];
-                if node.next != -1 && node.id == job.pair.0 && corpus.nodes[node.next as usize].id == job.pair.1 {
-                    let weight = corpus.words[w_idx].weight;
-
-                    ThreadDeltaWorker::merge_at_node(&mut corpus, n_idx, weight, current_id, |changed_pair, delta| {
-                        let c = index.pair_counts.entry(changed_pair).or_insert(0);
-                        *c += delta;
-                        if delta > 0 {
-                            spawned_pairs.push(changed_pair);
-                        }
-                    });
+                        ThreadDeltaWorker::merge_at_node(&mut corpus, n_idx, weight, current_id, |changed_pair, delta| {
+                            *index.pair_counts.entry(changed_pair).or_insert(0) += delta;
+                            if delta > 0 {
+                                spawned_positions.entry(changed_pair).or_insert_with(Vec::new).push(n_idx);
+                            }
+                        });
+                    }
                 }
-                link_ptr = index.links[link_ptr as usize];
             }
 
-            for p in spawned_pairs {
+            if let Some(dyn_slice) = spawned_positions.remove(&job.pair) {
+                for n_idx in dyn_slice {
+                    let node = corpus.nodes[n_idx as usize];
+                    if node.next != -1 && node.id == job.pair.0 && corpus.nodes[node.next as usize].id == job.pair.1 {
+                        let w_idx = index.node_to_word[n_idx as usize];
+                        let weight = corpus.words[w_idx].weight;
+
+                        ThreadDeltaWorker::merge_at_node(&mut corpus, n_idx, weight, current_id, |changed_pair, delta| {
+                            *index.pair_counts.entry(changed_pair).or_insert(0) += delta;
+                            if delta > 0 {
+                                spawned_positions.entry(changed_pair).or_insert_with(Vec::new).push(n_idx);
+                            }
+                        });
+                    }
+                }
+            }
+
+            for &p in spawned_positions.keys() {
                 let cnt = *index.pair_counts.get(&p).unwrap_or(&0);
                 if cnt > 0 {
                     heap.push(UltraJob { count: cnt, pair: p });
@@ -157,8 +173,9 @@ impl BpeTrainer {
 
             index.pair_counts.remove(&job.pair);
 
-            if merges_done > 0 && merges_done % self.config.index_rebuild_interval == 0 {
-                lazy_rebuild_index(&corpus, &mut index);
+            if merges_done > 0 && merges_done % 1000 == 0 {
+                spawned_positions.clear();
+                rebuild_flat_index(&corpus, &mut index);
             }
 
             current_id += 1;
@@ -177,37 +194,35 @@ impl BpeTrainer {
     }
 }
 
-fn lazy_rebuild_index(corpus: &FlatCorpus, index: &mut ProPairIndex) {
-    index.pair_heads.clear();
-    index.links.fill(-1);
-    index.word_indices.clear();
-    index.node_indices.clear();
+fn rebuild_flat_index(corpus: &FlatCorpus, index: &mut ProPairIndex) {
+    index.pair_slices.clear();
+    index.positions.clear();
+    index.node_to_word.clear();
+    index.node_to_word.resize(corpus.nodes.len(), 0);
 
-    let mut current_link_idx = 0;
+    let mut temp_map: FxHashMap<(u32, u32), Vec<i32>> = FxHashMap::default();
 
     for (w_idx, word) in corpus.words.iter().enumerate() {
-        let mut curr_node_idx = word.head;
-        while curr_node_idx != -1 {
-            let node = corpus.nodes[curr_node_idx as usize];
+        let mut curr = word.head;
+        while curr != -1 {
+            let node = corpus.nodes[curr as usize];
+            index.node_to_word[curr as usize] = w_idx;
+
             if node.next != -1 {
                 let next_node = corpus.nodes[node.next as usize];
                 let pair = (node.id, next_node.id);
-
                 if index.pair_counts.contains_key(&pair) {
-                    index.word_indices.push(w_idx);
-                    index.node_indices.push(curr_node_idx);
-
-                    let head = index.pair_heads.entry(pair).or_insert(-1);
-                    if index.links.len() <= current_link_idx {
-                        index.links.push(-1);
-                    }
-                    index.links[current_link_idx] = *head;
-                    *head = current_link_idx as i32;
-
-                    current_link_idx += 1;
+                    temp_map.entry(pair).or_insert_with(Vec::new).push(curr);
                 }
             }
-            curr_node_idx = node.next;
+            curr = node.next;
         }
+    }
+
+    for (pair, idxs) in temp_map {
+        let start = index.positions.len();
+        let count = idxs.len();
+        index.positions.extend_from_slice(&idxs);
+        index.pair_slices.insert(pair, (start, count));
     }
 }
