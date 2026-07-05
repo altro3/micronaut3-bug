@@ -1,52 +1,50 @@
 use std::collections::HashMap;
 
-pub struct FlatCorpus {
+pub struct WordEntry {
     pub tokens: Vec<u32>,
-    pub next: Vec<i32>,
-    pub prev: Vec<i32>,
-    pub word_starts: Vec<usize>,
-    pub word_counts: Vec<usize>,
+    pub weight: i64,
+}
+
+pub struct FlatCorpus {
+    pub words: Vec<WordEntry>,
 }
 
 impl FlatCorpus {
     pub fn build(unique_words: HashMap<Vec<u8>, usize>) -> (Self, HashMap<(u32, u32), i64>) {
-        let total_tokens: usize = unique_words.keys().map(|w| w.len()).sum();
-        let total_words = unique_words.len();
-
-        let mut corpus = Self {
-            tokens: Vec::with_capacity(total_tokens),
-            next: Vec::with_capacity(total_tokens),
-            prev: Vec::with_capacity(total_tokens),
-            word_starts: Vec::with_capacity(total_words),
-            word_counts: Vec::with_capacity(total_words),
-        };
-
-        let mut pair_stats: HashMap<(u32, u32), i64> = HashMap::with_capacity(total_words * 2);
-        let mut current_offset = 0;
+        let mut words = Vec::with_capacity(unique_words.len());
+        let mut pair_stats: HashMap<(u32, u32), i64> = HashMap::with_capacity(unique_words.len() * 2);
 
         for (bytes, count) in unique_words {
-            let w_len = bytes.len();
-            corpus.word_starts.push(current_offset);
-            corpus.word_counts.push(count);
+            if bytes.is_empty() { continue; }
+            let weight = count as i64;
 
-            for (i, &b) in bytes.iter().enumerate() {
-                corpus.tokens.push(b as u32);
-                corpus.next.push(if i == w_len - 1 { -1 } else { (current_offset + i + 1) as i32 });
-                corpus.prev.push(if i == 0 { -1 } else { (current_offset + i - 1) as i32 });
-
-                if i < w_len - 1 {
-                    let pair = (b as u32, bytes[i + 1] as u32);
-                    *pair_stats.entry(pair).or_insert(0) += count as i64;
+            // Если регулярка выдала огромную склейку (больше 24 байт),
+            // рассыпаем её на отдельные байты длиною в 1 токен, блокируя мёржи мусора
+            if bytes.len() > 24 {
+                for &b in &bytes {
+                    words.push(WordEntry {
+                        tokens: vec![b as u32],
+                        weight,
+                    });
                 }
+                continue;
             }
-            current_offset += w_len;
+
+            // Для нормальных, чистых слов собираем токены
+            let word_tokens: Vec<u32> = bytes.iter().map(|&b| b as u32).collect();
+
+            // ИСПРАВЛЕНИЕ: Явная распаковка слайса windows(2) в кортеж (u32, u32)
+            for window in word_tokens.windows(2) {
+                let pair = (window[0], window[1]);
+                *pair_stats.entry(pair).or_insert(0) += weight;
+            }
+
+            words.push(WordEntry {
+                tokens: word_tokens,
+                weight,
+            });
         }
 
-        (corpus, pair_stats)
-    }
-
-    #[inline(always)]
-    pub fn find_word_index(&self, pos: usize) -> usize {
-        self.word_starts.binary_search(&pos).unwrap_or_else(|idx| idx - 1)
+        (Self { words }, pair_stats)
     }
 }

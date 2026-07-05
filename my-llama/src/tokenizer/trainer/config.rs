@@ -1,5 +1,3 @@
-// src/tokenizer/trainer/config.rs
-
 pub struct TrainerConfig {
     pub batch_size: usize,
     pub initial_table_size: usize,
@@ -34,5 +32,11 @@ pub struct PositionMatch {
     pub pos: usize,
     pub id1: u32,
     pub id2: u32,
+    pub new_id: u32,
+}
+
+#[derive(Copy, Clone, Debug)]
+pub struct MergeCommand {
+    pub pair: (u32, u32),
     pub new_id: u32,
 }
