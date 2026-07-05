@@ -1,13 +1,12 @@
 use memmap2::Mmap;
-use std::fs::File;
-use std::io::{BufReader, Error, ErrorKind};
-use std::path::Path;
-use std::time::Instant;
-
 use my_llama::tokenizer::factory::types::QwenJsonModel;
 use my_llama::tokenizer::trainer::bpe_trainer::BpeTrainer;
 use my_llama::tokenizer::trainer::config::TrainerConfig;
 use my_llama::tokenizer::trainer::utils::TrainerUtils;
+use std::fs::File;
+use std::io::{BufReader, Error, ErrorKind};
+use std::path::Path;
+use std::time::Instant;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("================ [СТАРТ РЕАКТИВНОЙ СБОРКИ BPE СЛОВАРЯ] ================");
@@ -25,11 +24,32 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mmap_text = unsafe { Mmap::map(&file)? };
     let text_content = std::str::from_utf8(&mmap_text).map_err(|e| Error::new(ErrorKind::InvalidData, format!("Файл не в UTF-8: {:?}", e)))?;
 
+    /*    println!("\n[ИНСПЕКЦИЯ] Проверяем исходное наличие монолитов в файле на диске...");
+
+        let target_substring = "финалаЧетвертьфинал";
+
+        if let Some(byte_pos) = text_content.find(target_substring) {
+            println!("  [!!!] КОСЯК В ТЕКСТЕ! Нашли '{}' прямо в сыром файле corpus.txt!", target_substring);
+
+            let start_ctx = if byte_pos > 40 { byte_pos - 40 } else { 0 };
+            let end_ctx = if byte_pos + target_substring.len() + 40 < text_content.len() {
+                byte_pos + target_substring.len() + 40
+            } else {
+                text_content.len()
+            };
+
+            let slice_context = &text_content[start_ctx..end_ctx];
+            println!("  [КОНТЕКСТ НА ДИСКЕ]: \"... {} ...\"", slice_context.escape_debug());
+        } else {
+            println!("  [ОК] В сыром тексте подстроки '{}' НЕТ. Файл чистый, косячит агрегатор!", target_substring);
+        }
+        println!("========================================================================\n");
+    */
     let file_size_mb = text_content.len() as f64 / 1024.0 / 1024.0;
     println!("  ├── Размер файла корпуса: {:.2} МБ", file_size_mb);
 
-    let target_vocab_size = 32000;
     let config = TrainerConfig {
+        vocab_size: 32000,
         batch_size: 256,
         initial_table_size: 524288,
         io_buffer_size: 4 * 1024 * 1024,
@@ -39,13 +59,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         delta_map_capacity: 8192,
         position_buffer_capacity: 131072,
         index_rebuild_interval: 32,
+        ..Default::default()
     };
 
-    println!("  ├── Целевой размер словаря (Vocab Size): {}", target_vocab_size);
+    println!("  ├── Целевой размер словаря (Vocab Size): {}", config.vocab_size);
     println!("  └── Количество воркеров (CPU Cores)    : {}", config.num_threads);
     println!("======================================================================");
-
-    let trainer = BpeTrainer::new(target_vocab_size, config);
+    let trainer = BpeTrainer::new(config);
 
     let start_time = Instant::now();
     trainer.train(text_content, output_json_path)?;

@@ -40,6 +40,10 @@ name = "train_tokenizer"
 path = "src/bin/train_tokenizer.rs"
 
 [[bin]]
+name = "test_trainer"
+path = "src/bin/test_trainer.rs"
+
+[[bin]]
 name = "infer_simple"
 path = "src/bin/infer_simple.rs"
 
