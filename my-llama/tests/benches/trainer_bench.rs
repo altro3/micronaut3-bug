@@ -1,5 +1,4 @@
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
-use my_llama::tokenizer::trainer::{BpeTrainer, TrainerConfig};
 use std::hint::black_box;
 use std::time::Duration;
 

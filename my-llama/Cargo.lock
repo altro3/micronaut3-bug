@@ -285,6 +285,7 @@ dependencies = [
  "cc",
  "criterion",
  "memmap2",
+ "rayon",
  "regex-automata",
  "serde",
  "serde_json",
