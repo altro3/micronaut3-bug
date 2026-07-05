@@ -43,8 +43,10 @@ impl PositionIndex {
             words.push(IsolatedWord { tokens, weight });
         }
 
-        println!("  ├── Уникальных изолированных слов в базе: {}", words.len());
-        println!("  ├── Уникальных пар в куче: {}", pair_counts.len());
+        words.sort_unstable_by_key(|w| w.tokens.len());
+
+        println!("  ├── Уникальных отсортированных слов в базе: {}", words.len());
+        println!("  ├── Уникальных пар на старте: {}", pair_counts.len());
         println!("  └── Индексация завершена за: {:?}", start_build.elapsed());
 
         (words, Self { pair_counts, pair_to_words })

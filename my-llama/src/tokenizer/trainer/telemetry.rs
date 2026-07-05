@@ -12,7 +12,7 @@ impl BpeTelemetry {
         current_id: u32,
         job: &UltraJob,
         id_to_bytes: &[Vec<u8>],
-        index: &PositionIndex, // Указываем новый PositionIndex вместо ProPairIndex
+        index: &PositionIndex,
         heap: &OctonaryHeap<UltraJob>,
         loop_start: Instant,
     ) {
