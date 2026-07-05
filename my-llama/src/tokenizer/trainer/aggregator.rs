@@ -1,6 +1,7 @@
 use rayon::prelude::*;
 use regex::Regex;
 use std::collections::HashMap;
+use crate::tokenizer::trainer::utils::TrainerUtils;
 
 pub struct CorpusAggregator {
     regex: Regex,
@@ -18,16 +19,18 @@ impl CorpusAggregator {
             return HashMap::new();
         }
 
-        let text_str = std::str::from_utf8(text_bytes).expect("Корпус содержит невалидный UTF-8");
+        // Превращаем байты корпуса в валидную строку через lossy, чтобы защититься от грязи в файле
+        let text_str = String::from_utf8_lossy(text_bytes);
 
+        // Нарезаем границы строк по символу '\n'
         let mut line_boundaries = Vec::new();
         line_boundaries.push(0);
-        for (idx, &b) in text_bytes.iter().enumerate() {
+        for (idx, b) in text_str.bytes().enumerate() {
             if b == b'\n' {
                 line_boundaries.push(idx + 1);
             }
         }
-        line_boundaries.push(text_bytes.len());
+        line_boundaries.push(text_str.len());
 
         (0..line_boundaries.len() - 1)
             .into_par_iter()
@@ -38,18 +41,16 @@ impl CorpusAggregator {
                 let end_pos = line_boundaries[chunk_idx + 1];
 
                 let line_str = &text_str[start_pos..end_pos];
-                if line_str.is_empty() {
-                    return local_map;
-                }
+                if line_str.is_empty() { return local_map; }
 
-                for mat in self.regex.find_iter(line_str) {
-                    let word_str = mat.as_str();
-                    if word_str.is_empty() {
-                        continue;
-                    }
-                    let word_bytes = word_str.as_bytes().to_vec();
+                let qwen_line_str = TrainerUtils::bytes_to_qwen_string(line_str.as_bytes());
 
-                    *local_map.entry(word_bytes).or_insert(0) += 1;
+                for mat in self.regex.find_iter(&qwen_line_str) {
+                    let word_qwen_str = mat.as_str();
+                    if word_qwen_str.is_empty() { continue; }
+                    let original_raw_bytes = TrainerUtils::qwen_string_to_bytes(word_qwen_str);
+
+                    *local_map.entry(original_raw_bytes).or_insert(0) += 1;
                 }
 
                 local_map

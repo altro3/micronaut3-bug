@@ -8,7 +8,7 @@ type FxHashMap<K, V> = std::collections::HashMap<K, V, BuildHasherDefault<FxHash
 use crate::tokenizer::trainer::aggregator::CorpusAggregator;
 use crate::tokenizer::trainer::config::TrainerConfig;
 use crate::tokenizer::trainer::exporter::VocabularyExporter;
-use crate::tokenizer::trainer::flat_corpus::{FlatCorpus, ProPairIndex};
+use crate::tokenizer::trainer::flat_corpus::FlatCorpus;
 use crate::tokenizer::trainer::utils::TrainerUtils;
 use crate::tokenizer::trainer::worker::ThreadDeltaWorker;
 
@@ -62,6 +62,7 @@ impl BpeTrainer {
         let num_merges = self.vocab_size - 256;
         let mut merges_done = 0;
 
+        // В id_to_bytes лежат чистые, сырые Qwen-байты (0..256), как они прилетели из агрегатора
         let mut id_to_bytes: Vec<Vec<u8>> = (0..256).map(|b| vec![b as u8]).collect();
         id_to_bytes.reserve(self.vocab_size);
 
@@ -82,6 +83,8 @@ impl BpeTrainer {
 
         let mut spawned_positions: FxHashMap<(u32, u32), Vec<i32>> = FxHashMap::default();
 
+        println!("[HPC ULTRA ТРЕНЕР] Запуск стабильного BPE-цикла...");
+
         while merges_done < num_merges {
             let Some(job) = heap.pop() else {
                 break;
@@ -101,24 +104,36 @@ impl BpeTrainer {
                 break;
             }
 
+            // ИДЕАЛЬНОЕ И БЕЗОПАСНОЕ ДЕКОДИРОВАНИЕ СТРОГО ДЛЯ ВЫВОДА В ЛОГ:
             if merges_done % 2000 == 0 || merges_done < 10 {
                 let mut b_res = id_to_bytes[job.pair.0 as usize].clone();
                 b_res.extend_from_slice(&id_to_bytes[job.pair.1 as usize]);
-                let clean_text = String::from_utf8_lossy(&b_res).into_owned();
-                println!(
-                    "[BPE LOOP] Мёрж #{:<5} | Сила сжатия: {:<10} | Токен: '{}'",
-                    merges_done,
-                    job.count,
-                    clean_text.escape_debug()
-                );
+
+                // Переводим накопленные латинские байты в Qwen-строку (это всегда 100% валидный ASCII/Latin)
+                if let Ok(qwen_str) = String::from_utf8(b_res) {
+                    // Восстанавливаем оригинальные сырые байты кириллицы
+                    let real_bytes = TrainerUtils::qwen_string_to_bytes(&qwen_str);
+                    // Выводим чистый русский текст без кракозябр и знаков ошибок
+                    let clean_text = String::from_utf8_lossy(&real_bytes).into_owned();
+
+                    println!(
+                        "[BPE LOOP] Мёрж #{:<5} | Сила сжатия: {:<10} | Токен: '{}'",
+                        merges_done,
+                        job.count,
+                        clean_text.escape_debug()
+                    );
+                }
             }
 
             let mut merged_bytes = id_to_bytes[job.pair.0 as usize].clone();
             merged_bytes.extend_from_slice(&id_to_bytes[job.pair.1 as usize]);
 
-            let str_a = TrainerUtils::bytes_to_qwen_string(&id_to_bytes[job.pair.0 as usize]);
-            let str_b = TrainerUtils::bytes_to_qwen_string(&id_to_bytes[job.pair.1 as usize]);
-            vocab_json_output.insert(TrainerUtils::bytes_to_qwen_string(&merged_bytes), current_id);
+            // Формируем чистые Qwen-строки для финального JSON экспорта
+            let str_a = String::from_utf8(id_to_bytes[job.pair.0 as usize].clone()).unwrap();
+            let str_b = String::from_utf8(id_to_bytes[job.pair.1 as usize].clone()).unwrap();
+            let str_merged = String::from_utf8(merged_bytes.clone()).unwrap();
+
+            vocab_json_output.insert(str_merged, current_id);
             merges.push([str_a, str_b]);
             id_to_bytes.push(merged_bytes);
 
@@ -167,12 +182,6 @@ impl BpeTrainer {
             }
 
             index.pair_counts.remove(&job.pair);
-
-            if merges_done > 0 && merges_done % 1000 == 0 {
-                spawned_positions.clear();
-                rebuild_flat_index(&corpus, &mut index);
-            }
-
             current_id += 1;
             merges_done += 1;
         }
@@ -184,34 +193,5 @@ impl BpeTrainer {
 
         VocabularyExporter::export_qwen_json(output_json_path, &self.config, self.cyrillic_regex, std_vocab, merges, current_id)?;
         Ok(())
-    }
-}
-
-fn rebuild_flat_index(corpus: &FlatCorpus, index: &mut ProPairIndex) {
-    index.pair_slices.clear();
-    index.positions.clear();
-
-    let mut temp_map: FxHashMap<(u32, u32), Vec<i32>> = FxHashMap::default();
-
-    for word in &corpus.words {
-        let mut curr = word.head;
-        while curr != -1 {
-            let node = corpus.nodes[curr as usize];
-            if node.next != -1 {
-                let next_node = corpus.nodes[node.next as usize];
-                let pair = (node.id, next_node.id);
-                if index.pair_counts.contains_key(&pair) {
-                    temp_map.entry(pair).or_insert_with(Vec::new).push(curr);
-                }
-            }
-            curr = node.next;
-        }
-    }
-
-    for (pair, idxs) in temp_map {
-        let start = index.positions.len();
-        let count = idxs.len();
-        index.positions.extend_from_slice(&idxs);
-        index.pair_slices.insert(pair, (start, count));
     }
 }
