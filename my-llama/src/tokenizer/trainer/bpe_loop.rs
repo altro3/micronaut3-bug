@@ -27,7 +27,7 @@ impl<'a> BpeLoopRunner<'a> {
         let mut current_id = self.config.start_token_id;
         let mut raw_merges = Vec::with_capacity(num_merges);
 
-        println!("\n================== [ЗАПУСК КАНОНИЧЕСКОГО BPE-ЦИКЛА С ТОТАЛЬНЫМ МОНИТОРИНГОМ] ==================");
+        println!("\n================== [ЗАПУСК КАНОНИЧЕСКОГО BPE-ЦИКЛА В СТИЛЕ HUGGING FACE] ==================");
         let loop_start = Instant::now();
 
         while merges_done < num_merges {
@@ -63,7 +63,7 @@ impl<'a> BpeLoopRunner<'a> {
             }
             id_to_bytes[current_id as usize] = merged_bytes;
 
-            self.process_word_merges(words, index, heap, job.pair, current_id, merges_done);
+            self.process_word_merges_flat(words, index, heap, job.pair, current_id, merges_done);
 
             index.pair_counts.remove(&job.pair);
             current_id += 1;
@@ -75,7 +75,7 @@ impl<'a> BpeLoopRunner<'a> {
         raw_merges
     }
 
-    fn process_word_merges(
+    fn process_word_merges_flat(
         &self,
         words: &mut Vec<IsolatedWord>,
         index: &mut PositionIndex,
@@ -87,17 +87,14 @@ impl<'a> BpeLoopRunner<'a> {
         let mut words_modified = 0;
         let mut total_lazy_pushes = 0;
 
-        if let Some(word_ids) = index.pair_to_words.remove(&target_pair) {
-            words_modified = word_ids.len();
+        for w_idx in 0..words.len() {
+            let word = &mut words[w_idx];
 
-            for w_idx in word_ids {
-                let word = &mut words[w_idx as usize];
+            let added_pairs = ThreadDeltaWorker::merge_in_word(word, w_idx as u32, target_pair, new_id, index);
 
-                let added_pairs = ThreadDeltaWorker::merge_in_word(word, w_idx, target_pair, new_id, index);
-
+            if !added_pairs.is_empty() {
+                words_modified += 1;
                 for p in added_pairs {
-                    index.pair_to_words.entry(p).or_insert_with(Vec::new).push(w_idx);
-
                     let cnt = *index.pair_counts.get(&p).unwrap_or(&0);
                     if cnt > 0 {
                         heap.push(UltraJob { count: cnt, pair: p });
@@ -109,7 +106,7 @@ impl<'a> BpeLoopRunner<'a> {
 
         if merges_done < 20 {
             println!(
-                "      ├── [ДЕТАЛИ МЁРЖА] Затронуто слов: {} | Ленивых пушей в кучу: {}",
+                "      ├── [ДЕТАЛИ МЁРЖА] Модифицировано слов: {} | Ленивых пушей в кучу: {}",
                 words_modified, total_lazy_pushes
             );
         }
