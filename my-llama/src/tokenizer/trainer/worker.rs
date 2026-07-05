@@ -1,54 +1,49 @@
 use crate::tokenizer::trainer::flat_corpus::WordEntry;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 pub struct ThreadDeltaWorker;
 
 impl ThreadDeltaWorker {
+    /// Локальный мёрж внутри ОДНОГО слова с фиксацией изменений во временный буфер дельт
     #[inline(always)]
-    pub fn process_word_locally(
+    pub fn merge_pair_with_callback<F>(
         word: &mut WordEntry,
-        targets: &[((u32, u32), u32)], // Корректно упорядоченный по частоте ТОП батча
-        local_delta: &mut HashMap<(u32, u32), i64>,
-    ) {
+        target_pair: (u32, u32),
+        new_id: u32,
+        mut on_pair_change: F,
+    ) where
+        F: FnMut((u32, u32), i64),
+    {
         if word.tokens.len() < 2 { return; }
 
         let weight = word.weight;
-        let mut mutated = false;
-
-        let mut new_tokens = Vec::with_capacity(word.tokens.len());
         let mut i = 0;
+        let mut mutated = false;
+        let mut new_tokens = Vec::with_capacity(word.tokens.len());
 
         while i < word.tokens.len() {
-            if i < word.tokens.len() - 1 {
-                let current_pair = (word.tokens[i], word.tokens[i + 1]);
+            if i < word.tokens.len() - 1 && (word.tokens[i], word.tokens[i + 1]) == target_pair {
+                // Старая пара уничтожена
+                on_pair_change(target_pair, -weight);
 
-                // Ищем, матчится ли текущее окно. Поиск идет линейно по targets.
-                // Так как targets содержит всего 256 элементов и лежит в L1-кэше ядра,
-                // этот поиск выполняется процессором Intel Ultra 9 мгновенно!
-                if let Some(&(_, new_id)) = targets.iter().find(|&&(pair, _)| pair == current_pair) {
-
-                    // 1. Старая пара уничтожается
-                    *local_delta.entry(current_pair).or_insert(0) -= weight;
-
-                    // 2. Убираем и пересчитываем левый контекст
-                    if !new_tokens.is_empty() {
-                        let left_token = new_tokens[new_tokens.len() - 1];
-                        *local_delta.entry((left_token, current_pair.0)).or_insert(0) -= weight;
-                        *local_delta.entry((left_token, new_id)).or_insert(0) += weight;
-                    }
-
-                    // 3. Убираем и пересчитываем правый контекст
-                    if i + 2 < word.tokens.len() {
-                        let right_token = word.tokens[i + 2];
-                        *local_delta.entry((current_pair.1, right_token)).or_insert(0) -= weight;
-                        *local_delta.entry((new_id, right_token)).or_insert(0) += weight;
-                    }
-
-                    new_tokens.push(new_id);
-                    i += 2; // Схлопнули 2 токена, прыгаем дальше
-                    mutated = true;
-                    continue;
+                // Корректируем левый контекст
+                if !new_tokens.is_empty() {
+                    let left_token = new_tokens[new_tokens.len() - 1];
+                    on_pair_change((left_token, target_pair.0), -weight);
+                    on_pair_change((left_token, new_id), weight);
                 }
+
+                // Корректируем правый контекст
+                if i + 2 < word.tokens.len() {
+                    let right_token = word.tokens[i + 2];
+                    on_pair_change((target_pair.1, right_token), -weight);
+                    on_pair_change((new_id, right_token), weight);
+                }
+
+                new_tokens.push(new_id);
+                i += 2;
+                mutated = true;
+                continue;
             }
             new_tokens.push(word.tokens[i]);
             i += 1;

@@ -28,7 +28,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let file_size_mb = text_content.len() as f64 / 1024.0 / 1024.0;
     println!("  ├── Размер файла корпуса: {:.2} МБ", file_size_mb);
 
-    let target_vocab_size = 128000;
+    let target_vocab_size = 32000;
     let config = TrainerConfig {
         batch_size: 256,
         initial_table_size: 524288,

@@ -9,6 +9,7 @@ serde_json = "1.0"
 regex-automata = { version = "0.4", features = ["dfa-build", "dfa-search", "syntax", "unicode"] }
 memmap2 = "0.9"
 rayon = "1.12"
+dary_heap = "0.3"
 
 [build-dependencies]
 cc = "1.2"
