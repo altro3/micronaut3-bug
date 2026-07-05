@@ -2,7 +2,6 @@ use core::cmp::Ordering;
 use dary_heap::OctonaryHeap;
 use fxhash::FxHasher;
 use std::hash::BuildHasherDefault;
-use std::time::Instant;
 
 type FxHashMap<K, V> = std::collections::HashMap<K, V, BuildHasherDefault<FxHasher>>;
 
@@ -44,15 +43,11 @@ impl BpeTrainer {
         Self {
             vocab_size,
             config,
-            // Официальный паттерн GPT-4 / Qwen2.5. На замапленном тексте работает идеально
             cyrillic_regex: r"(?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\r\n\p{L}\p{N}]?\p{L}+|\p{N}+|(?:\s)[\r\n]*|\s+[\r\n]*|[\r\n]+",
         }
     }
 
     pub fn train(&self, text_content: &str, output_json_path: &str) -> std::io::Result<()> {
-        println!("[HPC ULTRA ТРЕНЕР] Шаг 1: Агрегация корпуса на потоках...");
-        let global_timer = Instant::now();
-
         let aggregator = CorpusAggregator::new(self.cyrillic_regex, self.config.initial_table_size);
         let raw_words = aggregator.collect_unique_words(text_content.as_bytes(), self.config.num_threads, self.config.local_map_capacity);
 
@@ -61,7 +56,6 @@ impl BpeTrainer {
             unique_words.insert(k, v);
         }
 
-        println!("[HPC ULTRA ТРЕНЕР] Шаг 2: Построение плоских кэш-ориентированных индексов...");
         let (mut corpus, mut index) = FlatCorpus::build(unique_words);
 
         let mut current_id = self.config.start_token_id;
@@ -87,8 +81,6 @@ impl BpeTrainer {
         }
 
         let mut spawned_positions: FxHashMap<(u32, u32), Vec<i32>> = FxHashMap::default();
-
-        println!("[HPC ULTRA ТРЕНЕР] Шаг 3: Запуск BPE-цикла нулевого копирования...");
 
         while merges_done < num_merges {
             let Some(job) = heap.pop() else {
@@ -123,6 +115,7 @@ impl BpeTrainer {
 
             let mut merged_bytes = id_to_bytes[job.pair.0 as usize].clone();
             merged_bytes.extend_from_slice(&id_to_bytes[job.pair.1 as usize]);
+
             let str_a = TrainerUtils::bytes_to_qwen_string(&id_to_bytes[job.pair.0 as usize]);
             let str_b = TrainerUtils::bytes_to_qwen_string(&id_to_bytes[job.pair.1 as usize]);
             vocab_json_output.insert(TrainerUtils::bytes_to_qwen_string(&merged_bytes), current_id);
@@ -132,34 +125,36 @@ impl BpeTrainer {
             if let Some(&(start, count)) = index.pair_slices.get(&job.pair) {
                 let slice = &index.positions[start..start + count];
                 for &n_idx in slice {
-                    let node = corpus.nodes[n_idx as usize];
-                    if node.next != -1 && node.id == job.pair.0 && corpus.nodes[node.next as usize].id == job.pair.1 {
-                        let w_idx = index.node_to_word[n_idx as usize];
-                        let weight = corpus.words[w_idx].weight;
+                    if let Some(&node) = corpus.nodes.get(n_idx as usize) {
+                        if node.next != -1 && node.id == job.pair.0 && corpus.nodes[node.next as usize].id == job.pair.1 {
+                            let w_idx = node.word_idx as usize;
+                            let weight = corpus.words[w_idx].weight;
 
-                        ThreadDeltaWorker::merge_at_node(&mut corpus, n_idx, weight, current_id, |changed_pair, delta| {
-                            *index.pair_counts.entry(changed_pair).or_insert(0) += delta;
-                            if delta > 0 {
-                                spawned_positions.entry(changed_pair).or_insert_with(Vec::new).push(n_idx);
-                            }
-                        });
+                            ThreadDeltaWorker::merge_at_node(&mut corpus, n_idx, weight, current_id, |changed_pair, delta| {
+                                *index.pair_counts.entry(changed_pair).or_insert(0) += delta;
+                                if delta > 0 {
+                                    spawned_positions.entry(changed_pair).or_insert_with(Vec::new).push(n_idx);
+                                }
+                            });
+                        }
                     }
                 }
             }
 
             if let Some(dyn_slice) = spawned_positions.remove(&job.pair) {
                 for n_idx in dyn_slice {
-                    let node = corpus.nodes[n_idx as usize];
-                    if node.next != -1 && node.id == job.pair.0 && corpus.nodes[node.next as usize].id == job.pair.1 {
-                        let w_idx = index.node_to_word[n_idx as usize];
-                        let weight = corpus.words[w_idx].weight;
+                    if let Some(&node) = corpus.nodes.get(n_idx as usize) {
+                        if node.next != -1 && node.id == job.pair.0 && corpus.nodes[node.next as usize].id == job.pair.1 {
+                            let w_idx = node.word_idx as usize;
+                            let weight = corpus.words[w_idx].weight;
 
-                        ThreadDeltaWorker::merge_at_node(&mut corpus, n_idx, weight, current_id, |changed_pair, delta| {
-                            *index.pair_counts.entry(changed_pair).or_insert(0) += delta;
-                            if delta > 0 {
-                                spawned_positions.entry(changed_pair).or_insert_with(Vec::new).push(n_idx);
-                            }
-                        });
+                            ThreadDeltaWorker::merge_at_node(&mut corpus, n_idx, weight, current_id, |changed_pair, delta| {
+                                *index.pair_counts.entry(changed_pair).or_insert(0) += delta;
+                                if delta > 0 {
+                                    spawned_positions.entry(changed_pair).or_insert_with(Vec::new).push(n_idx);
+                                }
+                            });
+                        }
                     }
                 }
             }
@@ -182,14 +177,12 @@ impl BpeTrainer {
             merges_done += 1;
         }
 
-        println!("[HPC ULTRA ТРЕНЕР] Шаг 4: Экспорт Qwen JSON структуры...");
         let mut std_vocab = std::collections::HashMap::with_capacity(vocab_json_output.len());
         for (k, v) in vocab_json_output {
             std_vocab.insert(k, v);
         }
 
         VocabularyExporter::export_qwen_json(output_json_path, &self.config, self.cyrillic_regex, std_vocab, merges, current_id)?;
-        println!("[УСПЕХ] Пайплайн завершен. Время работы: {:?}", global_timer.elapsed());
         Ok(())
     }
 }
@@ -197,17 +190,13 @@ impl BpeTrainer {
 fn rebuild_flat_index(corpus: &FlatCorpus, index: &mut ProPairIndex) {
     index.pair_slices.clear();
     index.positions.clear();
-    index.node_to_word.clear();
-    index.node_to_word.resize(corpus.nodes.len(), 0);
 
     let mut temp_map: FxHashMap<(u32, u32), Vec<i32>> = FxHashMap::default();
 
-    for (w_idx, word) in corpus.words.iter().enumerate() {
+    for word in &corpus.words {
         let mut curr = word.head;
         while curr != -1 {
             let node = corpus.nodes[curr as usize];
-            index.node_to_word[curr as usize] = w_idx;
-
             if node.next != -1 {
                 let next_node = corpus.nodes[node.next as usize];
                 let pair = (node.id, next_node.id);

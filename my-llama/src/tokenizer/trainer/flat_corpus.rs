@@ -1,5 +1,5 @@
-use std::hash::BuildHasherDefault;
 use fxhash::FxHasher;
+use std::hash::BuildHasherDefault;
 
 type FxHashMap<K, V> = std::collections::HashMap<K, V, BuildHasherDefault<FxHasher>>;
 
@@ -8,6 +8,7 @@ pub struct TokenNode {
     pub id: u32,
     pub prev: i32,
     pub next: i32,
+    pub word_idx: u32,
 }
 
 pub struct WordSlice {
@@ -24,7 +25,6 @@ pub struct ProPairIndex {
     pub pair_counts: FxHashMap<(u32, u32), i64>,
     pub pair_slices: FxHashMap<(u32, u32), (usize, usize)>,
     pub positions: Vec<i32>,
-    pub node_to_word: Vec<usize>,
 }
 
 impl FlatCorpus {
@@ -36,16 +36,15 @@ impl FlatCorpus {
 
         let mut nodes = Vec::with_capacity(total_tokens);
         let mut words = Vec::with_capacity(unique_words.len());
-        let mut node_to_word = Vec::with_capacity(total_tokens);
         let mut pair_counts = FxHashMap::with_capacity_and_hasher(unique_words.len() * 2, Default::default());
-
-        let mut temp_pair_map: FxHashMap<(u32, u32), Vec<i32>> =
-            FxHashMap::with_capacity_and_hasher(unique_words.len() * 2, Default::default());
+        let mut temp_pair_map: FxHashMap<(u32, u32), Vec<i32>> = FxHashMap::with_capacity_and_hasher(unique_words.len() * 2, Default::default());
 
         for (bytes, count) in unique_words {
-            if bytes.is_empty() { continue; }
+            if bytes.is_empty() {
+                continue;
+            }
             let weight = count as i64;
-            let word_idx = words.len();
+            let word_idx = words.len() as u32;
             let start_node_idx = nodes.len() as i32;
 
             let len = bytes.len();
@@ -54,11 +53,14 @@ impl FlatCorpus {
                     id: bytes[i] as u32,
                     prev: if i == 0 { -1 } else { start_node_idx + i as i32 - 1 },
                     next: if i == len - 1 { -1 } else { start_node_idx + i as i32 + 1 },
+                    word_idx,
                 });
-                node_to_word.push(word_idx);
             }
 
-            words.push(WordSlice { head: start_node_idx, weight });
+            words.push(WordSlice {
+                head: start_node_idx,
+                weight,
+            });
 
             for i in 0..(len - 1) {
                 let n_idx = start_node_idx + i as i32;
@@ -81,7 +83,11 @@ impl FlatCorpus {
 
         (
             Self { nodes, words },
-            ProPairIndex { pair_counts, pair_slices, positions, node_to_word }
+            ProPairIndex {
+                pair_counts,
+                pair_slices,
+                positions,
+            },
         )
     }
 }

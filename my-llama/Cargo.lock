@@ -309,6 +309,7 @@ dependencies = [
  "fxhash",
  "memmap2",
  "rayon",
+ "regex",
  "regex-automata",
  "serde",
  "serde_json",
