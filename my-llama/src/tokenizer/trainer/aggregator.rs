@@ -1,6 +1,7 @@
 use rayon::prelude::*;
 use regex_automata::dfa::dense::DFA;
-use regex_automata::dfa::Automaton;
+use regex_automata::dfa::{dense, Automaton};
+use regex_automata::util::syntax;
 use regex_automata::Input;
 use std::collections::HashMap;
 
@@ -11,7 +12,12 @@ pub struct CorpusAggregator {
 
 impl CorpusAggregator {
     pub fn new(cyrillic_regex: &str, initial_capacity: usize) -> Self {
-        let dfa = DFA::new(cyrillic_regex).expect("Ошибка компиляции регулярного автомата BPE");
+        let syntax_config = syntax::Config::new().utf8(true).multi_line(true);
+
+        let dfa = dense::Builder::new()
+            .syntax(syntax_config)
+            .build(cyrillic_regex)
+            .expect("Ошибка компиляции регулярного автомата BPE с гарантией UTF-8");
         Self { dfa, initial_capacity }
     }
 
@@ -28,7 +34,9 @@ impl CorpusAggregator {
 
         for t_idx in 1..num_threads {
             let target_pos = t_idx * estimated_chunk;
-            if target_pos >= total_len { break; }
+            if target_pos >= total_len {
+                break;
+            }
 
             let input = Input::new(text_bytes).span(target_pos..total_len);
             let mut pos = target_pos;

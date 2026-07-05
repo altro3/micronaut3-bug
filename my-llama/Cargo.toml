@@ -6,10 +6,11 @@ edition = "2024"
 [dependencies]
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-regex-automata = { version = "0.4", features = ["dfa-build", "dfa-search", "syntax", "unicode"] }
+regex-automata = { version = "0.4", features = ["alloc", "syntax", "unicode", "dfa", "hybrid"] }
 memmap2 = "0.9"
 rayon = "1.12"
 dary_heap = "0.3"
+fxhash = "0.2.1"
 
 [build-dependencies]
 cc = "1.2"
