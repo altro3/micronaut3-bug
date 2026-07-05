@@ -1,6 +1,6 @@
 use crate::tokenizer::trainer::config::TrainerConfig;
-use crate::tokenizer::trainer::position_index::{IsolatedWord, PositionIndex};
 use crate::tokenizer::trainer::job::UltraJob;
+use crate::tokenizer::trainer::position_index::{IsolatedWord, PositionIndex};
 use crate::tokenizer::trainer::telemetry::BpeTelemetry;
 use crate::tokenizer::trainer::worker::ThreadDeltaWorker;
 use dary_heap::OctonaryHeap;
@@ -27,10 +27,12 @@ impl<'a> BpeLoopRunner<'a> {
         let mut current_id = self.config.start_token_id;
         let mut raw_merges = Vec::with_capacity(num_merges);
 
+        println!("\n================== [ЗАПУСК КАНОНИЧЕСКОГО BPE-ЦИКЛА С ТОТАЛЬНЫМ МОНИТОРИНГОМ] ==================");
         let loop_start = Instant::now();
 
         while merges_done < num_merges {
             let Some(job) = heap.pop() else {
+                println!("[КРИТИЧЕСКИЙ СБОЙ] Приоритетная очередь внезапно опустела на итерации #{}!", merges_done);
                 break;
             };
 
@@ -46,6 +48,7 @@ impl<'a> BpeLoopRunner<'a> {
             }
 
             if job.count <= 0 {
+                println!("[ИНФО] Сила сжатия упала до нуля. Словарь собран досрочно.");
                 break;
             }
 
@@ -67,6 +70,8 @@ impl<'a> BpeLoopRunner<'a> {
             merges_done += 1;
         }
 
+        println!("==============================================================================");
+        println!("[ТРЕНЕР] Основной цикл BPE завершен за: {:?}", loop_start.elapsed());
         raw_merges
     }
 
@@ -88,18 +93,11 @@ impl<'a> BpeLoopRunner<'a> {
             for w_idx in word_ids {
                 let word = &mut words[w_idx as usize];
 
-                // Вызываем воркера, он возвращает списки удаленных и добавленных пар
-                let (deleted_pairs, added_pairs) = ThreadDeltaWorker::merge_in_word(word, w_idx, target_pair, new_id, index);
-
-                // Корректируем инвертированный индекс пар на основе реальных изменений
-                for p in deleted_pairs {
-                    if let Some(words_set) = index.pair_to_words.get_mut(&p) {
-                        words_set.remove(&w_idx);
-                    }
-                }
+                let added_pairs =
+                    ThreadDeltaWorker::merge_in_word(word, w_idx, target_pair, new_id, index, self.config.bpe_dropout, self.config.dropout_prob);
 
                 for p in added_pairs {
-                    index.pair_to_words.entry(p).or_insert_with(fxhash::FxHashSet::default).insert(w_idx);
+                    index.pair_to_words.entry(p).or_insert_with(Vec::new).push(w_idx);
 
                     let cnt = *index.pair_counts.get(&p).unwrap_or(&0);
                     if cnt > 0 {

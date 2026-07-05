@@ -1,5 +1,5 @@
-use crate::tokenizer::trainer::position_index::PositionIndex;
 use crate::tokenizer::trainer::job::UltraJob;
+use crate::tokenizer::trainer::position_index::PositionIndex;
 use dary_heap::OctonaryHeap;
 use std::time::Instant;
 
