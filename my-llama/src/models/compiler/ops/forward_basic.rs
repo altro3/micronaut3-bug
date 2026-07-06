@@ -1,13 +1,17 @@
+use super::interface::Op;
+use super::sys::{launch_embeddings, launch_matmul, launch_residual, launch_rms_norm};
 use crate::cuda::sys::CUDA_MEMCPY_DEVICE_TO_DEVICE;
 use crate::cuda::{sys::cudaMemcpyAsync, CudaStream};
-use super::interface::Op;
-use super::sys::{launch_embeddings, launch_rms_norm, launch_matmul, launch_residual};
 use crate::utils::parameter::Parameter;
 use std::ffi::c_void;
 
 pub unsafe fn dispatch_forward(op: &Op, arena_ptr: *mut c_void, weights: &[Parameter], stream: &CudaStream) {
     match *op {
-        Op::Embeddings { input_id, weight_idx, output } => {
+        Op::Embeddings {
+            input_id,
+            weight_idx,
+            output,
+        } => {
             let weight = &weights[weight_idx];
 
             unsafe {
@@ -21,11 +25,16 @@ pub unsafe fn dispatch_forward(op: &Op, arena_ptr: *mut c_void, weights: &[Param
                     output.batch_size,
                     output.out_features,
                     (weight.size / output.out_features as usize) as i32,
-                    stream.as_raw()
+                    stream.as_raw(),
                 );
             }
         }
-        Op::RmsNorm { input, weight_idx, output, eps } => {
+        Op::RmsNorm {
+            input,
+            weight_idx,
+            output,
+            eps,
+        } => {
             let weight = &weights[weight_idx];
 
             unsafe {
@@ -39,7 +48,7 @@ pub unsafe fn dispatch_forward(op: &Op, arena_ptr: *mut c_void, weights: &[Param
                     input.batch_size,
                     input.out_features,
                     eps,
-                    stream.as_raw()
+                    stream.as_raw(),
                 );
             }
         }
@@ -57,7 +66,7 @@ pub unsafe fn dispatch_forward(op: &Op, arena_ptr: *mut c_void, weights: &[Param
                     input.batch_size,
                     input.out_features,
                     input.in_features,
-                    stream.as_raw()
+                    stream.as_raw(),
                 );
             }
         }

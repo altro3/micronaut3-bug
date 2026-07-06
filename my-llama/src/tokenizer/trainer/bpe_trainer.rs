@@ -10,8 +10,8 @@ use crate::tokenizer::trainer::aggregator::CorpusAggregator;
 use crate::tokenizer::trainer::bpe_loop::BpeLoopRunner;
 use crate::tokenizer::trainer::config::TrainerConfig;
 use crate::tokenizer::trainer::exporter::VocabularyExporter;
-use crate::tokenizer::trainer::position_index::PositionIndex;
 use crate::tokenizer::trainer::job::UltraJob;
+use crate::tokenizer::trainer::position_index::PositionIndex;
 use crate::tokenizer::trainer::utils::TrainerUtils;
 
 pub struct BpeTrainer {

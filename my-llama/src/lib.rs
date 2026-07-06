@@ -1,8 +1,8 @@
 pub mod cuda;
 pub mod models;
+pub mod sys;
 pub mod tokenizer;
 pub mod utils;
-pub mod sys;
 
 unsafe extern "C" {
     pub fn init_cublas_infrastructure();
