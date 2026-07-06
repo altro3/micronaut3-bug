@@ -1,4 +1,4 @@
-use crate::cuda::sys::{cudaFreeHost, cudaHostAlloc, CUDA_HOST_ALLOC_DEFAULT};
+use crate::cuda::sys::{CUDA_HOST_ALLOC_DEFAULT, cudaFreeHost, cudaHostAlloc};
 use std::ffi::c_void;
 
 pub struct PinnedHostBuffer {

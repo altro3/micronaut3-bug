@@ -55,10 +55,7 @@ impl LlamaGraphCompiler {
         let temporary_b_offset = temporary_a_offset + intermediate_bytes;
         let temporary_c_offset = temporary_b_offset + intermediate_bytes;
 
-        weight_specs.push(WeightSpec {
-            name: "model.embed_tokens.weight".to_string(),
-            shape: vec![vocab_size, hidden_size],
-        });
+        weight_specs.push(WeightSpec { name: "model.embed_tokens.weight".to_string(), shape: vec![vocab_size, hidden_size] });
 
         let residual_stream_view = TensorView {
             offset: residual_stream_offset,
@@ -124,11 +121,7 @@ impl LlamaGraphCompiler {
                 head_dim,
             });
 
-            pipeline.push(Op::Add {
-                a: residual_stream_view,
-                b: attn_out_view,
-                out: residual_stream_view,
-            });
+            pipeline.push(Op::Add { a: residual_stream_view, b: attn_out_view, out: residual_stream_view });
 
             weight_specs.push(WeightSpec {
                 name: format!("model.layers.{}.post_attention_layernorm.weight", layer_idx),
@@ -164,11 +157,7 @@ impl LlamaGraphCompiler {
                 in_features: hidden_size as i32,
             };
 
-            pipeline.push(Op::MatMul {
-                input: mlp_norm_out_view,
-                weight_idx: current_weight_idx,
-                output: gate_out_view,
-            });
+            pipeline.push(Op::MatMul { input: mlp_norm_out_view, weight_idx: current_weight_idx, output: gate_out_view });
             current_weight_idx += 1;
 
             weight_specs.push(WeightSpec {
@@ -184,11 +173,7 @@ impl LlamaGraphCompiler {
                 in_features: hidden_size as i32,
             };
 
-            pipeline.push(Op::MatMul {
-                input: mlp_norm_out_view,
-                weight_idx: current_weight_idx,
-                output: up_out_view,
-            });
+            pipeline.push(Op::MatMul { input: mlp_norm_out_view, weight_idx: current_weight_idx, output: up_out_view });
             current_weight_idx += 1;
 
             let swiglu_out_view = TensorView {
@@ -199,22 +184,12 @@ impl LlamaGraphCompiler {
                 in_features: hidden_size as i32,
             };
 
-            pipeline.push(Op::SwiGlu {
-                input: gate_out_view,
-                output: swiglu_out_view,
-            });
+            pipeline.push(Op::SwiGlu { input: gate_out_view, output: swiglu_out_view });
 
-            pipeline.push(Op::Add {
-                a: residual_stream_view,
-                b: swiglu_out_view,
-                out: residual_stream_view,
-            });
+            pipeline.push(Op::Add { a: residual_stream_view, b: swiglu_out_view, out: residual_stream_view });
         }
 
-        weight_specs.push(WeightSpec {
-            name: "model.norm.weight".to_string(),
-            shape: vec![hidden_size],
-        });
+        weight_specs.push(WeightSpec { name: "model.norm.weight".to_string(), shape: vec![hidden_size] });
 
         let (final_norm_out_offset, logits_offset) = if is_training {
             let norm_off = current_arena_offset;
@@ -240,10 +215,7 @@ impl LlamaGraphCompiler {
         });
         current_weight_idx += 1;
 
-        weight_specs.push(WeightSpec {
-            name: "lm_head.weight".to_string(),
-            shape: vec![vocab_size, hidden_size],
-        });
+        weight_specs.push(WeightSpec { name: "lm_head.weight".to_string(), shape: vec![vocab_size, hidden_size] });
 
         let logits_view = TensorView {
             offset: logits_offset,
@@ -253,11 +225,7 @@ impl LlamaGraphCompiler {
             in_features: hidden_size as i32,
         };
 
-        pipeline.push(Op::MatMul {
-            input: final_norm_out_view,
-            weight_idx: current_weight_idx,
-            output: logits_view,
-        });
+        pipeline.push(Op::MatMul { input: final_norm_out_view, weight_idx: current_weight_idx, output: logits_view });
 
         let total_arena_bytes = logits_offset + logits_bytes;
 

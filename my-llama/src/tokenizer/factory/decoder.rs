@@ -17,7 +17,7 @@ impl HfByteDecoder {
                     let utf8_str = c.encode_utf8(&mut buf);
                     raw_bytes.extend_from_slice(utf8_str.as_bytes());
                     continue;
-                }
+                },
             };
             raw_bytes.push(byte);
         }

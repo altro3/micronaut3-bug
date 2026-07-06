@@ -1,7 +1,7 @@
 use crate::cuda::stream::CudaStream;
 use crate::cuda::sys::{
-    cudaEventCreateWithFlags, cudaEventDestroy, cudaEventElapsedTime, cudaEventQuery, cudaEventRecord, cudaEventSynchronize,
-    CUDA_EVENT_DISABLE_TIMING,
+    CUDA_EVENT_DISABLE_TIMING, cudaEventCreateWithFlags, cudaEventDestroy, cudaEventElapsedTime, cudaEventQuery, cudaEventRecord,
+    cudaEventSynchronize,
 };
 use std::ffi::c_void;
 use std::ptr::null_mut;

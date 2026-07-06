@@ -29,11 +29,7 @@ impl VocabularyExporter {
         };
 
         let pre_tokenizer_fields = PreTokenizerFields {
-            pretokenizers: vec![PreTokenizerEntry {
-                pattern: Some(RegexPattern {
-                    regex: cyrillic_regex.to_string(),
-                }),
-            }],
+            pretokenizers: vec![PreTokenizerEntry { pattern: Some(RegexPattern { regex: cyrillic_regex.to_string() }) }],
         };
 
         let model_json = QwenJsonModel {

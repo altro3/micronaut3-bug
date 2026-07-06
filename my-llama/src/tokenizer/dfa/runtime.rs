@@ -1,5 +1,5 @@
-use regex_automata::dfa::dense::DFA;
 use regex_automata::dfa::Automaton;
+use regex_automata::dfa::dense::DFA;
 
 pub struct FlatDfaRuntime {
     dfa: DFA<Vec<u32>>,
@@ -49,10 +49,10 @@ impl FlatDfaRuntime {
                         token_count += 1;
 
                         last_end = end;
-                    }
+                    },
                     _ => {
                         break;
-                    }
+                    },
                 }
             }
 

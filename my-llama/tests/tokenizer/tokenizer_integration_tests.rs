@@ -1,11 +1,11 @@
 #[cfg(test)]
 mod integration_tests {
     use my_llama::cuda::PinnedHostBuffer;
+    use my_llama::tokenizer::BpeTokenizer;
     use my_llama::tokenizer::bpe::context::TokenizationContext;
     use my_llama::tokenizer::bpe::pipeline::TokenizerPipeline;
     use my_llama::tokenizer::dfa::runtime::FlatDfaRuntime;
     use my_llama::tokenizer::factory::types::FlatTrieNode;
-    use my_llama::tokenizer::BpeTokenizer;
 
     fn create_mock_tokenizer() -> BpeTokenizer {
         let mut raw_pairs = Vec::new();
@@ -36,46 +36,22 @@ mod integration_tests {
         // Добавляем 'h' -> 'e' -> 'l' -> 'l'
         // Корень для 'h' (104)
         trie_root_offsets[104] = trie_nodes.len() as u32; // Офсет 0
-        trie_nodes.resize(
-            trie_nodes.len() + 256,
-            FlatTrieNode {
-                token_id: u32::MAX,
-                children_offset: u32::MAX,
-            },
-        );
+        trie_nodes.resize(trie_nodes.len() + 256, FlatTrieNode { token_id: u32::MAX, children_offset: u32::MAX });
         trie_nodes[101].token_id = 256; // "he" валиден
 
         let he_children = trie_nodes.len() as u32; // Офсет 256
-        trie_nodes.resize(
-            trie_nodes.len() + 256,
-            FlatTrieNode {
-                token_id: u32::MAX,
-                children_offset: u32::MAX,
-            },
-        );
+        trie_nodes.resize(trie_nodes.len() + 256, FlatTrieNode { token_id: u32::MAX, children_offset: u32::MAX });
         trie_nodes[101].children_offset = he_children;
         trie_nodes[(he_children as usize) + 108].token_id = u32::MAX; // "hel" не токен
 
         let hel_children = trie_nodes.len() as u32; // Офсет 512
-        trie_nodes.resize(
-            trie_nodes.len() + 256,
-            FlatTrieNode {
-                token_id: u32::MAX,
-                children_offset: u32::MAX,
-            },
-        );
+        trie_nodes.resize(trie_nodes.len() + 256, FlatTrieNode { token_id: u32::MAX, children_offset: u32::MAX });
         trie_nodes[(he_children as usize) + 108].children_offset = hel_children;
         trie_nodes[(hel_children as usize) + 108].token_id = 259; // "hell" валиден
 
         // Добавляем 'o' -> ',' (111 -> 44)
         trie_root_offsets[111] = trie_nodes.len() as u32; // Офсет 768
-        trie_nodes.resize(
-            trie_nodes.len() + 256,
-            FlatTrieNode {
-                token_id: u32::MAX,
-                children_offset: u32::MAX,
-            },
-        );
+        trie_nodes.resize(trie_nodes.len() + 256, FlatTrieNode { token_id: u32::MAX, children_offset: u32::MAX });
         trie_nodes[768 + 44].token_id = 258; // "o," валиден
 
         // Модифицированный конструктор BpeTokenizer
@@ -149,11 +125,11 @@ mod integration_tests {
 
 #[cfg(test)]
 mod real_data_validation_tests {
+    use my_llama::tokenizer::BpeTokenizer;
     use my_llama::tokenizer::bpe::context::TokenizationContext;
     use my_llama::tokenizer::bpe::pipeline::TokenizerPipeline;
     use my_llama::tokenizer::dfa::runtime::FlatDfaRuntime;
     use my_llama::tokenizer::factory::compiler::DictCompiler;
-    use my_llama::tokenizer::BpeTokenizer;
 
     fn create_mock_dfa() -> FlatDfaRuntime {
         let trans_bytes = vec![0u8; 1 * 256 * 2];

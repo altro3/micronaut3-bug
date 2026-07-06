@@ -57,15 +57,7 @@ impl Parameter {
             (None, None, None)
         };
 
-        Parameter {
-            data,
-            grad,
-            m_buffer,
-            v_buffer,
-            shape,
-            dtype,
-            size,
-        }
+        Parameter { data, grad, m_buffer, v_buffer, shape, dtype, size }
     }
 
     pub fn zero_grad_async(&self, stream: &CudaStream) {

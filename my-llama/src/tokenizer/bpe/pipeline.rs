@@ -1,7 +1,7 @@
 use super::context::TokenizationContext;
+use crate::tokenizer::BpeTokenizer;
 use crate::tokenizer::bpe::dispatcher::BpeEngineDispatcher;
 use crate::tokenizer::dfa::runtime::FlatDfaRuntime;
-use crate::tokenizer::BpeTokenizer;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 pub struct TokenizerPipeline {
@@ -11,10 +11,7 @@ pub struct TokenizerPipeline {
 
 impl TokenizerPipeline {
     pub fn new(merge_table: BpeTokenizer, dfa_splitter: FlatDfaRuntime) -> Self {
-        Self {
-            tokenizer: merge_table,
-            dfa_splitter,
-        }
+        Self { tokenizer: merge_table, dfa_splitter }
     }
 
     #[inline(always)]

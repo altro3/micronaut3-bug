@@ -1,20 +1,12 @@
 use crate::cuda::CudaStream;
-use crate::models::compiler::ops::sys::launch_adamw;
 use crate::models::compiler::ops::Op;
+use crate::models::compiler::ops::sys::launch_adamw;
 use crate::utils::parameter::Parameter;
 
 pub unsafe fn dispatch_optimizer(op: &Op, weights: &[Parameter], stream: &CudaStream) {
     unsafe {
         match *op {
-            Op::AdamWStep {
-                weight_idx,
-                lr,
-                beta1,
-                beta2,
-                eps,
-                weight_decay,
-                step,
-            } => {
+            Op::AdamWStep { weight_idx, lr, beta1, beta2, eps, weight_decay, step } => {
                 let weight = &weights[weight_idx];
                 let w_ptr = weight.data.as_raw_ptr() as *mut f32;
                 let g_ptr = weight.grad.as_ref().expect("AdamW требует градиенты").as_raw_ptr() as *mut f32;
@@ -35,7 +27,7 @@ pub unsafe fn dispatch_optimizer(op: &Op, weights: &[Parameter], stream: &CudaSt
                     step,
                     stream.as_raw(),
                 );
-            }
+            },
             _ => unreachable!(),
         }
     }

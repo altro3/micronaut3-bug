@@ -1,10 +1,10 @@
 use memmap2::Mmap;
+use my_llama::tokenizer::BpeTokenizer;
 use my_llama::tokenizer::bpe::context::TokenizationContext;
 use my_llama::tokenizer::bpe::pipeline::TokenizerPipeline;
 use my_llama::tokenizer::dfa::compiler::DfaCompiler;
 use my_llama::tokenizer::dfa::runtime::FlatDfaRuntime;
 use my_llama::tokenizer::factory::compiler::DictCompiler;
-use my_llama::tokenizer::BpeTokenizer;
 use std::fs::File;
 use std::time::Instant;
 

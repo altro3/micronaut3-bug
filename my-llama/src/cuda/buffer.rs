@@ -1,5 +1,5 @@
 use crate::cuda::stream::CudaStream;
-use crate::cuda::sys::{cudaFree, cudaMalloc, cudaMemcpyAsync, cudaMemsetAsync, CUDA_MEMCPY_DEVICE_TO_HOST, CUDA_MEMCPY_HOST_TO_DEVICE};
+use crate::cuda::sys::{CUDA_MEMCPY_DEVICE_TO_HOST, CUDA_MEMCPY_HOST_TO_DEVICE, cudaFree, cudaMalloc, cudaMemcpyAsync, cudaMemsetAsync};
 use std::ffi::c_void;
 
 pub struct CudaBuffer {
@@ -18,12 +18,7 @@ impl CudaBuffer {
                 panic!("Недостаточно VRAM: Выделение {} байт (f32) провалено", size_in_bytes);
             }
         }
-        CudaBuffer {
-            raw_ptr,
-            size_in_bytes,
-            elements,
-            is_owner: true,
-        }
+        CudaBuffer { raw_ptr, size_in_bytes, elements, is_owner: true }
     }
 
     pub fn new_int(elements: usize) -> Self {
@@ -34,12 +29,7 @@ impl CudaBuffer {
                 panic!("Недостаточно VRAM: Выделение {} байт (i32) провалено", size_in_bytes);
             }
         }
-        CudaBuffer {
-            raw_ptr,
-            size_in_bytes,
-            elements,
-            is_owner: true,
-        }
+        CudaBuffer { raw_ptr, size_in_bytes, elements, is_owner: true }
     }
 
     pub fn slice(&self, offset_bytes: usize, num_bytes: usize) -> Self {
@@ -49,12 +39,7 @@ impl CudaBuffer {
         assert!(offset_bytes + num_bytes <= self.size_in_bytes);
         unsafe {
             let sliced_ptr = (self.raw_ptr as *mut u8).add(offset_bytes) as *mut c_void;
-            CudaBuffer {
-                raw_ptr: sliced_ptr,
-                size_in_bytes: num_bytes,
-                elements: num_bytes,
-                is_owner: false,
-            }
+            CudaBuffer { raw_ptr: sliced_ptr, size_in_bytes: num_bytes, elements: num_bytes, is_owner: false }
         }
     }
 

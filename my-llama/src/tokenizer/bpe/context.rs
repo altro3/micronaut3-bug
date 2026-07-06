@@ -35,26 +35,13 @@ impl TokenizationContext {
             short_prev: [0; 16],
             short_next: [0; 16],
 
-            bpe_direct_cache: vec![
-                BpeCacheEntry {
-                    key: u64::MAX,
-                    val: u64::MAX,
-                };
-                262144
-            ],
+            bpe_direct_cache: vec![BpeCacheEntry { key: u64::MAX, val: u64::MAX }; 262144],
 
             chunk_offsets: Vec::with_capacity(max_chunk_capacity),
             tokens_lens_buffer: Vec::with_capacity(max_chunk_capacity),
             tokens_buffer: Vec::with_capacity(max_chunk_capacity * 2),
             long_ranks: vec![u32::MAX; max_chunk_capacity + 64],
-            nodes: vec![
-                FlatBpeNode {
-                    id: 0,
-                    next: 0xFFFF,
-                    prev: 0xFFFF
-                };
-                max_chunk_capacity + 64
-            ],
+            nodes: vec![FlatBpeNode { id: 0, next: 0xFFFF, prev: 0xFFFF }; max_chunk_capacity + 64],
             vocab_size,
             max_capacity: max_chunk_capacity,
             bpe_heap: Vec::with_capacity(max_chunk_capacity),
@@ -69,14 +56,7 @@ impl TokenizationContext {
         let safe_len = required_len.min(self.max_capacity + 64);
 
         if safe_len > self.nodes.len() {
-            self.nodes.resize(
-                safe_len,
-                FlatBpeNode {
-                    id: 0,
-                    next: 0xFFFF,
-                    prev: 0xFFFF,
-                },
-            );
+            self.nodes.resize(safe_len, FlatBpeNode { id: 0, next: 0xFFFF, prev: 0xFFFF });
             self.long_ranks.resize(safe_len, u32::MAX);
         }
 

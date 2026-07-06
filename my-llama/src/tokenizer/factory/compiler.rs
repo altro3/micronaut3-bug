@@ -45,10 +45,7 @@ impl DictCompiler {
         let mut trie_nodes = Vec::with_capacity(vocab_size * 2);
 
         // Корень сырого дерева-черновика всегда под индексом 0
-        let mut builder_nodes = vec![BuilderNode {
-            token_id: u32::MAX,
-            children: [u32::MAX; 256],
-        }];
+        let mut builder_nodes = vec![BuilderNode { token_id: u32::MAX, children: [u32::MAX; 256] }];
 
         let mut inserted_tokens = 0;
         for id in 0..vocab_size {
@@ -65,10 +62,7 @@ impl DictCompiler {
 
                 if next_idx == u32::MAX {
                     let new_idx = builder_nodes.len() as u32;
-                    builder_nodes.push(BuilderNode {
-                        token_id: u32::MAX,
-                        children: [u32::MAX; 256],
-                    });
+                    builder_nodes.push(BuilderNode { token_id: u32::MAX, children: [u32::MAX; 256] });
                     builder_nodes[curr_node_idx].children[b] = new_idx;
                     curr_node_idx = new_idx as usize;
                 } else {
@@ -93,10 +87,7 @@ impl DictCompiler {
                 trie_root_offsets[b] = flat_idx;
                 active_roots += 1;
 
-                trie_nodes.push(FlatTrieNode {
-                    token_id: builder_nodes[child_builder_idx as usize].token_id,
-                    children_offset: u32::MAX,
-                });
+                trie_nodes.push(FlatTrieNode { token_id: builder_nodes[child_builder_idx as usize].token_id, children_offset: u32::MAX });
 
                 queue.push_back((child_builder_idx as usize, flat_idx as usize));
             }
@@ -117,13 +108,7 @@ impl DictCompiler {
             if has_children {
                 // Выделяем сплошной блок из 256 слотов под детей текущего узла
                 let children_offset = trie_nodes.len() as u32;
-                trie_nodes.resize(
-                    trie_nodes.len() + 256,
-                    FlatTrieNode {
-                        token_id: u32::MAX,
-                        children_offset: u32::MAX,
-                    },
-                );
+                trie_nodes.resize(trie_nodes.len() + 256, FlatTrieNode { token_id: u32::MAX, children_offset: u32::MAX });
 
                 // Привязываем смещение детей к родителю
                 trie_nodes[f_idx].children_offset = children_offset;

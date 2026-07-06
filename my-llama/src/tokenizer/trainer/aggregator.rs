@@ -59,11 +59,7 @@ impl CorpusAggregator {
                         let mut logs = broken_logs.lock().unwrap();
 
                         let ctx_start = if mat.start() > 30 { mat.start() - 30 } else { 0 };
-                        let ctx_end = if mat.end() + 30 < line_raw_bytes.len() {
-                            mat.end() + 30
-                        } else {
-                            line_raw_bytes.len()
-                        };
+                        let ctx_end = if mat.end() + 30 < line_raw_bytes.len() { mat.end() + 30 } else { line_raw_bytes.len() };
                         let context_bytes = &line_raw_bytes[ctx_start..ctx_end];
 
                         let visible_context = String::from_utf8_lossy(context_bytes).into_owned();

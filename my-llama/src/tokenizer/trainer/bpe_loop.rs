@@ -39,10 +39,7 @@ impl<'a> BpeLoopRunner<'a> {
             let current_count = *index.pair_counts.get(&job.pair).unwrap_or(&0);
             if job.count != current_count {
                 if current_count > 0 {
-                    heap.push(UltraJob {
-                        count: current_count,
-                        pair: job.pair,
-                    });
+                    heap.push(UltraJob { count: current_count, pair: job.pair });
                 }
                 continue;
             }

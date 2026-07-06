@@ -1,17 +1,13 @@
 use super::interface::Op;
 use super::sys::{launch_embeddings, launch_matmul, launch_residual, launch_rms_norm};
 use crate::cuda::sys::CUDA_MEMCPY_DEVICE_TO_DEVICE;
-use crate::cuda::{sys::cudaMemcpyAsync, CudaStream};
+use crate::cuda::{CudaStream, sys::cudaMemcpyAsync};
 use crate::utils::parameter::Parameter;
 use std::ffi::c_void;
 
 pub unsafe fn dispatch_forward(op: &Op, arena_ptr: *mut c_void, weights: &[Parameter], stream: &CudaStream) {
     match *op {
-        Op::Embeddings {
-            input_id,
-            weight_idx,
-            output,
-        } => {
+        Op::Embeddings { input_id, weight_idx, output } => {
             let weight = &weights[weight_idx];
 
             unsafe {
@@ -28,13 +24,8 @@ pub unsafe fn dispatch_forward(op: &Op, arena_ptr: *mut c_void, weights: &[Param
                     stream.as_raw(),
                 );
             }
-        }
-        Op::RmsNorm {
-            input,
-            weight_idx,
-            output,
-            eps,
-        } => {
+        },
+        Op::RmsNorm { input, weight_idx, output, eps } => {
             let weight = &weights[weight_idx];
 
             unsafe {
@@ -51,7 +42,7 @@ pub unsafe fn dispatch_forward(op: &Op, arena_ptr: *mut c_void, weights: &[Param
                     stream.as_raw(),
                 );
             }
-        }
+        },
         Op::MatMul { input, weight_idx, output } => {
             let weight = &weights[weight_idx];
 
@@ -69,7 +60,7 @@ pub unsafe fn dispatch_forward(op: &Op, arena_ptr: *mut c_void, weights: &[Param
                     stream.as_raw(),
                 );
             }
-        }
+        },
         Op::Add { a, b, out } => {
             let total_elements = a.batch_size * a.in_features;
 
@@ -83,7 +74,7 @@ pub unsafe fn dispatch_forward(op: &Op, arena_ptr: *mut c_void, weights: &[Param
                 }
                 launch_residual(out_ptr, b_ptr, total_elements, stream.as_raw());
             }
-        }
+        },
         _ => unreachable!(),
     }
 }

@@ -1,4 +1,4 @@
-use crate::cuda::sys::{cudaStreamCreateWithFlags, cudaStreamDestroy, cudaStreamSynchronize, CUDA_STREAM_NON_BLOCKING};
+use crate::cuda::sys::{CUDA_STREAM_NON_BLOCKING, cudaStreamCreateWithFlags, cudaStreamDestroy, cudaStreamSynchronize};
 use std::ffi::c_void;
 use std::ptr::null_mut;
 

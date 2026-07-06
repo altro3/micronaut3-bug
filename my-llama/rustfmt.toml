@@ -1,1 +1,37 @@
+# =============================================================================
+# СТАБИЛЬНЫЙ RUSTFMT.TOML ДЛЯ RUST 2024 EDITION (СТИЛЬ GOOGLE)
+# =============================================================================
+
+# Базовые настройки редакции 2024
+edition = "2024"
+style_edition = "2024"
+
+# Жесткий лимит длины строки от Google
 max_width = 150
+
+# Запрещаем агрессивно бить компактный код по вертикали (Max эвристика)
+# Именно она делает ваш CudaBuffer в одну строчку, как справа на прошлом скрине
+use_small_heuristics = "Max"
+
+# Окончания строк в стиле Unix (\n)
+newline_style = "Unix"
+
+# Отступы — пробелы (4 штуки)
+hard_tabs = false
+tab_spaces = 4
+
+match_block_trailing_comma = true
+
+# Схлопывание инициализации полей структур (переводит `{ x: x }` в `{ x }`)
+use_field_init_shorthand = true
+
+# Автоматическая сортировка импортов (use) по алфавиту для порядка
+reorder_imports = true
+reorder_modules = true
+
+fn_params_layout = "Tall"
+
+chain_width = 90
+fn_call_width = 90
+struct_lit_width = 90
+single_line_if_else_max_width = 90

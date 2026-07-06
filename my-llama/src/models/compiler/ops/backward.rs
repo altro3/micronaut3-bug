@@ -1,6 +1,6 @@
 use crate::cuda::CudaStream;
-use crate::models::compiler::ops::sys::{launch_fused_cross_entropy, launch_matmul_backward_input, launch_matmul_backward_weights};
 use crate::models::compiler::ops::Op;
+use crate::models::compiler::ops::sys::{launch_fused_cross_entropy, launch_matmul_backward_input, launch_matmul_backward_weights};
 use crate::utils::parameter::Parameter;
 use std::ffi::c_void;
 
@@ -8,12 +8,7 @@ pub unsafe fn dispatch_backward(op: &Op, arena_ptr: *mut c_void, weights: &[Para
     // КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ ПОД RUST 2024: изолируем арифметику указателей и лаунчеры ядер внутри unsafe
     unsafe {
         match *op {
-            Op::FusedCrossEntropy {
-                logits,
-                targets_id,
-                d_logits,
-                losses,
-            } => {
+            Op::FusedCrossEntropy { logits, targets_id, d_logits, losses } => {
                 let logits_ptr = (arena_ptr as *const u8).add(logits.offset) as *const f32;
                 let d_logits_ptr = (arena_ptr as *mut u8).add(d_logits.offset) as *mut f32;
                 let losses_ptr = (arena_ptr as *mut u8).add(losses.offset) as *mut f32;
@@ -28,13 +23,8 @@ pub unsafe fn dispatch_backward(op: &Op, arena_ptr: *mut c_void, weights: &[Para
                     logits.out_features,
                     stream.as_raw(),
                 );
-            }
-            Op::MatMulBackward {
-                d_output,
-                input,
-                weight_idx,
-                d_input,
-            } => {
+            },
+            Op::MatMulBackward { d_output, input, weight_idx, d_input } => {
                 let weight = &weights[weight_idx];
                 let d_out_ptr = (arena_ptr as *const u8).add(d_output.offset) as *const f32;
                 let in_ptr = (arena_ptr as *const u8).add(input.offset) as *const f32;
@@ -60,7 +50,7 @@ pub unsafe fn dispatch_backward(op: &Op, arena_ptr: *mut c_void, weights: &[Para
                     input.out_features,
                     stream.as_raw(),
                 );
-            }
+            },
             _ => unreachable!(),
         }
     }
