@@ -44,11 +44,10 @@ impl DictCompiler {
         let mut trie_root_offsets = [u32::MAX; 256];
         let mut trie_nodes = Vec::with_capacity(vocab_size * 2);
 
-        // Корень сырого дерева-черновика всегда под индексом 0
         let mut builder_nodes = vec![BuilderNode { token_id: u32::MAX, children: [u32::MAX; 256] }];
 
         let mut inserted_tokens = 0;
-        for id in 0..vocab_size {
+        for (id, _) in vocab_compiled_tokens.iter().enumerate().take(vocab_size) {
             let bytes = &vocab_compiled_tokens[id];
             if bytes.is_empty() {
                 continue;
@@ -74,12 +73,9 @@ impl DictCompiler {
         }
         println!("[ДИАГНОСТИКА TRIE] В дерево-черновик добавлено токенов: {}", inserted_tokens);
 
-        // --- ЛИНЕАРИЗАЦИЯ ЧЕРЕЗ BFS ОЧЕРЕДЬ (Гарантия 0 дубликатов) ---
-        // Очередь хранит пары: (индекс_в_builder_nodes, индекс_в_trie_nodes)
         let mut queue = VecDeque::new();
         let mut active_roots = 0;
 
-        // Инициализируем первый уровень дерева (корневые переходы по первому байту)
         for b in 0..256 {
             let child_builder_idx = builder_nodes[0].children[b];
             if child_builder_idx != u32::MAX {
@@ -93,7 +89,6 @@ impl DictCompiler {
             }
         }
 
-        // Обходим граф по слоям
         while let Some((b_idx, f_idx)) = queue.pop_front() {
             let b_node = &builder_nodes[b_idx];
 
@@ -106,29 +101,22 @@ impl DictCompiler {
             }
 
             if has_children {
-                // Выделяем сплошной блок из 256 слотов под детей текущего узла
                 let children_offset = trie_nodes.len() as u32;
                 trie_nodes.resize(trie_nodes.len() + 256, FlatTrieNode { token_id: u32::MAX, children_offset: u32::MAX });
 
-                // Привязываем смещение детей к родителю
                 trie_nodes[f_idx].children_offset = children_offset;
 
                 for b in 0..256 {
                     let child_builder_idx = b_node.children[b];
                     if child_builder_idx != u32::MAX {
                         let target_flat_slot = (children_offset as usize) + b;
-
-                        // Записываем точные данные ребенка
                         trie_nodes[target_flat_slot].token_id = builder_nodes[child_builder_idx as usize].token_id;
-
-                        // Пушим ребенка в очередь для обработки его поддеревьев на следующем слое
                         queue.push_back((child_builder_idx as usize, target_flat_slot));
                     }
                 }
             }
         }
 
-        // Финальная валидация плоского дерева
         let mut flattened_valid_tokens = 0;
         for node in trie_nodes.iter() {
             if node.token_id != u32::MAX {
@@ -175,15 +163,17 @@ impl DictCompiler {
     }
 
     fn fill_qwen_byte_fallbacks(root: &QwenJsonModel, fallback: &mut [u32; 256]) {
-        for b in 0..=255 {
-            if fallback[b] == u32::MAX {
-                let byte_token_name = format!("<|byte_{:02X}|>", b);
-                if let Some(&id) = root.model.vocab.get(&byte_token_name) {
-                    fallback[b] = id;
-                } else {
-                    fallback[b] = (root.model.vocab.len() as u32) + (b as u32);
-                }
+        for (b, slot) in fallback.iter_mut().enumerate() {
+            if *slot != u32::MAX {
+                continue;
             }
+            let byte_token_name = format!("<|byte_{:02X}|>", b);
+            let Some(&id) = root.model.vocab.get(&byte_token_name) else {
+                *slot = (root.model.vocab.len() as u32) + (b as u32);
+                continue;
+            };
+
+            *slot = id;
         }
     }
 }

@@ -12,7 +12,7 @@ fn main() {
         .expect("Критическая ошибка: Не удалось прочитать папку cuda/src")
         .filter_map(|entry| entry.ok())
         .map(|entry| entry.path())
-        .filter(|path| path.is_file() && path.extension().map_or(false, |ext| ext == "cu"));
+        .filter(|path| path.is_file() && path.extension().is_some_and(|ext| ext == "cu"));
 
     for path in paths {
         build.file(path);

@@ -35,10 +35,9 @@ impl BpeTokenizer {
         let mut keys_flat = vec![u64::MAX; table_size];
         let mut values_flat = vec![u64::MAX; table_size];
 
-        for b in 0..=255 {
-            let id = byte_fallback[b] as usize;
+        for (b, id) in byte_fallback.iter().copied().enumerate() {
             if id < 512 {
-                id_to_byte[id] = b as u8;
+                id_to_byte[id as usize] = b as u8;
             }
         }
 

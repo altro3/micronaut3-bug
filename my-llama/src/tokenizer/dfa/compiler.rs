@@ -1,5 +1,6 @@
-use regex_automata::dfa::Automaton;
 use regex_automata::dfa::dense::{Builder, Config, DFA};
+use regex_automata::dfa::Automaton;
+use regex_automata::util::primitives::StateID;
 use std::fs::File;
 use std::io::{BufWriter, Result, Write};
 
@@ -41,12 +42,11 @@ impl DfaCompiler {
         let mut accept_bytes = vec![0u8; total_states_allocated];
 
         println!("[DFA-КОМПИЛЯТОР] Сборка карты принимающих состояний...");
-        for state_idx in 0..total_states_allocated {
+        for (state_idx, slot) in accept_bytes.iter_mut().enumerate() {
             let raw_offset = state_idx * stride;
-            if let Ok(state_id) = regex_automata::util::primitives::StateID::new(raw_offset) {
-                if dfa.is_match_state(state_id) {
-                    accept_bytes[state_idx] = 1;
-                }
+            let Ok(state_id) = StateID::new(raw_offset) else { continue };
+            if dfa.is_match_state(state_id) {
+                *slot = 1;
             }
         }
 

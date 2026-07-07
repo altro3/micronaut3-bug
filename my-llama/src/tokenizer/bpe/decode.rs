@@ -75,7 +75,7 @@ impl BpeTokenizer {
                     _ => b0,
                 };
 
-                if cp >= 0x0100 && cp <= 0x01FF {
+                if (0x0100..=0x01FF).contains(&cp) {
                     *res_ptr.add(write_idx) = raw_byte;
                     write_idx += 1;
                     i += step;
