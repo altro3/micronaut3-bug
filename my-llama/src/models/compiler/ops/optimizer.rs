@@ -3,7 +3,7 @@ use crate::models::compiler::ops::Op;
 use crate::models::compiler::ops::sys::launch_adamw;
 use crate::utils::parameter::Parameter;
 
-pub unsafe fn dispatch_optimizer(op: &Op, weights: &[Parameter], stream: &CudaStream) {
+pub fn dispatch_optimizer(op: &Op, weights: &[Parameter], stream: &CudaStream) {
     unsafe {
         match *op {
             Op::AdamWStep { weight_idx, lr, beta1, beta2, eps, weight_decay, step } => {

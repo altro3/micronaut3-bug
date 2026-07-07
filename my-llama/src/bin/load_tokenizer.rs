@@ -13,7 +13,7 @@ fn main() -> std::io::Result<()> {
     std::thread::Builder::new()
         .name("ultra-runtime".to_string())
         .stack_size(stack_size)
-        .spawn(|| run_pure_tokenizer_benchmark())?
+        .spawn(run_pure_tokenizer_benchmark)?
         .join()
         .unwrap()
 }

@@ -34,12 +34,12 @@ impl Parameter {
         let size: usize = shape.iter().product();
 
         let bytes = match dtype {
-            DataType::Int4GPTQ => ((size + 7) / 8) * 4,
-            DataType::Int3AWQ => (size * 3 + 7) / 8,
+            DataType::Int4GPTQ => size.div_ceil(8) * 4,
+            DataType::Int3AWQ => (size * 3).div_ceil(8),
             _ => size * dtype.element_size(),
         };
 
-        let allocation_units = (bytes + 3) / 4;
+        let allocation_units = bytes.div_ceil(4);
 
         let data = CudaBuffer::new(allocation_units);
 

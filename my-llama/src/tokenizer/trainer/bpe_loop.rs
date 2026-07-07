@@ -17,7 +17,7 @@ impl<'a> BpeLoopRunner<'a> {
 
     pub fn run(
         &self,
-        words: &mut Vec<IsolatedWord>,
+        words: &mut [IsolatedWord],
         index: &mut PositionIndex,
         heap: &mut OctonaryHeap<UltraJob>,
         id_to_bytes: &mut Vec<Vec<u8>>,
@@ -74,7 +74,7 @@ impl<'a> BpeLoopRunner<'a> {
 
     fn process_word_merges(
         &self,
-        words: &mut Vec<IsolatedWord>,
+        words: &mut [IsolatedWord],
         index: &mut PositionIndex,
         heap: &mut OctonaryHeap<UltraJob>,
         target_pair: (u32, u32),
@@ -93,7 +93,7 @@ impl<'a> BpeLoopRunner<'a> {
                 let added_pairs = ThreadDeltaWorker::merge_in_word(word, w_idx, target_pair, new_id, index);
 
                 for p in added_pairs {
-                    let words_vec = index.pair_to_words.entry(p).or_insert_with(Vec::new);
+                    let words_vec = index.pair_to_words.entry(p).or_default();
                     if words_vec.last() != Some(&w_idx) {
                         words_vec.push(w_idx);
                     }

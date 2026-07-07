@@ -16,7 +16,7 @@ impl BpeTelemetry {
         heap: &OctonaryHeap<UltraJob>,
         loop_start: Instant,
     ) {
-        if merges_done % 1000 == 0 || merges_done < 20 {
+        if merges_done.is_multiple_of(1000) || merges_done < 20 {
             let mut real_bytes = id_to_bytes[job.pair.0 as usize].clone();
             real_bytes.extend_from_slice(&id_to_bytes[job.pair.1 as usize]);
             let clean_text = String::from_utf8_lossy(&real_bytes).into_owned();
@@ -35,7 +35,7 @@ impl BpeTelemetry {
                 clean_text.escape_debug()
             );
 
-            if merges_done % 1000 == 0 && merges_done > 0 {
+            if merges_done.is_multiple_of(1000) && merges_done > 0 {
                 println!(
                     "  [МОНИТОРИНГ ОЗУ] Активных пар: {} | Записей в индексе: {} | Размер кучи: {}",
                     index.pair_counts.len(),

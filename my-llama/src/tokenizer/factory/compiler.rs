@@ -76,15 +76,14 @@ impl DictCompiler {
         let mut queue = VecDeque::new();
         let mut active_roots = 0;
 
-        for b in 0..256 {
+        for (b, root_offset) in trie_root_offsets.iter_mut().enumerate().take(256) {
             let child_builder_idx = builder_nodes[0].children[b];
             if child_builder_idx != u32::MAX {
                 let flat_idx = trie_nodes.len() as u32;
-                trie_root_offsets[b] = flat_idx;
+                *root_offset = flat_idx;
                 active_roots += 1;
 
                 trie_nodes.push(FlatTrieNode { token_id: builder_nodes[child_builder_idx as usize].token_id, children_offset: u32::MAX });
-
                 queue.push_back((child_builder_idx as usize, flat_idx as usize));
             }
         }

@@ -4,8 +4,7 @@ use crate::models::compiler::ops::sys::{launch_fused_cross_entropy, launch_matmu
 use crate::utils::parameter::Parameter;
 use std::ffi::c_void;
 
-pub unsafe fn dispatch_backward(op: &Op, arena_ptr: *mut c_void, weights: &[Parameter], stream: &CudaStream) {
-    // КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ ПОД RUST 2024: изолируем арифметику указателей и лаунчеры ядер внутри unsafe
+pub fn dispatch_backward(op: &Op, arena_ptr: *mut c_void, weights: &[Parameter], stream: &CudaStream) {
     unsafe {
         match *op {
             Op::FusedCrossEntropy { logits, targets_id, d_logits, losses } => {

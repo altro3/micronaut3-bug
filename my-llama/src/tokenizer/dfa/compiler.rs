@@ -1,5 +1,5 @@
-use regex_automata::dfa::dense::{Builder, Config, DFA};
 use regex_automata::dfa::Automaton;
+use regex_automata::dfa::dense::{Builder, Config, DFA};
 use regex_automata::util::primitives::StateID;
 use std::fs::File;
 use std::io::{BufWriter, Result, Write};

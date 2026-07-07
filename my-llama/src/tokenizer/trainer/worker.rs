@@ -48,7 +48,7 @@ impl ThreadDeltaWorker {
             *index.pair_counts.entry(p).or_insert(0) += weight;
         }
 
-        if word_idx % 200000 == 0 {
+        if word_idx.is_multiple_of(200000) {
             println!(
                 "        [ВОРКЕР ТРАССИРОВКА] Слово Id: {:<7} | Стало токенов: {}",
                 word_idx,

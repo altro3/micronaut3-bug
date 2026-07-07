@@ -30,9 +30,16 @@ impl CudaStream {
     }
 }
 
+impl Default for CudaStream {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Drop for CudaStream {
     fn drop(&mut self) {
         if !self.raw.is_null() {
+            self.synchronize();
             unsafe {
                 let _ = cudaStreamDestroy(self.raw);
             }

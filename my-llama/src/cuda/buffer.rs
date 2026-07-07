@@ -52,12 +52,17 @@ impl CudaBuffer {
     pub fn len(&self) -> usize {
         self.elements
     }
+
+    pub fn is_empty(&self) -> bool {
+        self.elements == 0
+    }
+
     pub fn as_raw_ptr(&self) -> *mut c_void {
         self.raw_ptr
     }
 
     pub fn copy_from_host_slice<T: Copy>(&self, host_data: &[T], stream: &CudaStream) {
-        let host_bytes = host_data.len() * size_of::<T>();
+        let host_bytes = size_of_val(host_data);
         assert!(host_bytes <= self.size_in_bytes);
         unsafe {
             let _ = cudaMemcpyAsync(
@@ -71,7 +76,7 @@ impl CudaBuffer {
     }
 
     pub fn copy_to_host_slice<T: Copy>(&self, host_dst: &mut [T], stream: &CudaStream) {
-        let host_bytes = host_dst.len() * size_of::<T>();
+        let host_bytes = size_of_val(host_dst);
         assert!(host_bytes <= self.size_in_bytes);
         unsafe {
             let _ = cudaMemcpyAsync(

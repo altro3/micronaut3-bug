@@ -5,7 +5,7 @@ use crate::cuda::{CudaStream, sys::cudaMemcpyAsync};
 use crate::utils::parameter::Parameter;
 use std::ffi::c_void;
 
-pub unsafe fn dispatch_forward(op: &Op, arena_ptr: *mut c_void, weights: &[Parameter], stream: &CudaStream) {
+pub fn dispatch_forward(op: &Op, arena_ptr: *mut c_void, weights: &[Parameter], stream: &CudaStream) {
     match *op {
         Op::Embeddings { input_id, weight_idx, output } => {
             let weight = &weights[weight_idx];

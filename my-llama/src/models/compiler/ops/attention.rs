@@ -3,7 +3,7 @@ use crate::cuda::CudaStream;
 use crate::models::types::TensorView;
 use std::ffi::c_void;
 
-pub unsafe fn dispatch_attention(
+pub fn dispatch_attention(
     arena_ptr: *mut c_void,
     input: TensorView,
     output: TensorView,

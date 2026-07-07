@@ -19,25 +19,23 @@ pub enum Op {
 
 impl Op {
     #[inline(always)]
-    pub unsafe fn execute(&self, arena_ptr: *mut c_void, weights: &[Parameter], stream: &CudaStream) {
+    pub fn execute(&self, arena_ptr: *mut c_void, weights: &[Parameter], stream: &CudaStream) {
         use super::{attention, backward, forward_basic, optimizer, swiglu};
 
         match *self {
-            Op::Embeddings { .. } | Op::RmsNorm { .. } | Op::MatMul { .. } | Op::Add { .. } => unsafe {
-                forward_basic::dispatch_forward(self, arena_ptr, weights, stream);
+            Op::Embeddings { .. } | Op::RmsNorm { .. } | Op::MatMul { .. } | Op::Add { .. } => {
+                forward_basic::dispatch_forward(self, arena_ptr, weights, stream)
             },
-            Op::SwiGlu { input, output } => unsafe {
+            Op::SwiGlu { input, output } => {
                 swiglu::dispatch_swiglu(arena_ptr, input, output, stream);
             },
-            Op::RoPEAndAttention { input, output, num_heads, num_kv_heads, head_dim, .. } => unsafe {
+            Op::RoPEAndAttention { input, output, num_heads, num_kv_heads, head_dim, .. } => {
                 attention::dispatch_attention(arena_ptr, input, output, num_heads, num_kv_heads, head_dim, stream);
             },
-            Op::FusedCrossEntropy { .. } | Op::MatMulBackward { .. } => unsafe {
+            Op::FusedCrossEntropy { .. } | Op::MatMulBackward { .. } => {
                 backward::dispatch_backward(self, arena_ptr, weights, stream);
             },
-            Op::AdamWStep { .. } => unsafe {
-                optimizer::dispatch_optimizer(self, weights, stream);
-            },
+            Op::AdamWStep { .. } => optimizer::dispatch_optimizer(self, weights, stream),
             Op::MambaScan { .. } => {
                 unimplemented!("MambaSelectiveScan будет интегрирован в будущем");
             },

@@ -3,7 +3,7 @@ use crate::cuda::CudaStream;
 use crate::models::types::TensorView;
 use std::ffi::c_void;
 
-pub unsafe fn dispatch_swiglu(arena_ptr: *mut c_void, input: TensorView, output: TensorView, stream: &CudaStream) {
+pub fn dispatch_swiglu(arena_ptr: *mut c_void, input: TensorView, output: TensorView, stream: &CudaStream) {
     let half_bytes = input.bytes / 2;
     let elements_count = input.batch_size * input.out_features;
 
