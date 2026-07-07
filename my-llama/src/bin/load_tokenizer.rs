@@ -6,8 +6,10 @@ use my_llama::tokenizer::dfa::runtime::FlatDfaRuntime;
 use my_llama::tokenizer::factory::compiler::DictCompiler;
 use my_llama::tokenizer::BpeTokenizer;
 use std::fs::File;
+use std::io::{Error, ErrorKind};
 use std::iter::repeat_with;
 use std::path::Path;
+use std::str::from_utf8;
 use std::thread::Builder;
 use std::time::Instant;
 
@@ -34,7 +36,7 @@ fn run_pure_tokenizer_benchmark() -> std::io::Result<()> {
     let file = File::open(input_path)?;
     let mmap_text = unsafe { Mmap::map(&file)? };
 
-    let text_content = std::str::from_utf8(&mmap_text).map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+    let text_content = from_utf8(&mmap_text).map_err(|e| Error::new(ErrorKind::InvalidData, e))?;
 
     let total_bytes = text_content.len();
     println!(
