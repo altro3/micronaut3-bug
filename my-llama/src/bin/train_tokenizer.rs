@@ -3,6 +3,7 @@ use my_llama::tokenizer::factory::types::QwenJsonModel;
 use my_llama::tokenizer::trainer::bpe_trainer::BpeTrainer;
 use my_llama::tokenizer::trainer::config::TrainerConfig;
 use my_llama::tokenizer::trainer::utils::TrainerUtils;
+use sonic_rs::from_reader;
 use std::fs::File;
 use std::io::{BufReader, Error, ErrorKind};
 use std::path::Path;
@@ -24,27 +25,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mmap_text = unsafe { Mmap::map(&file)? };
     let text_content = std::str::from_utf8(&mmap_text).map_err(|e| Error::new(ErrorKind::InvalidData, format!("Файл не в UTF-8: {:?}", e)))?;
 
-    /*    println!("\n[ИНСПЕКЦИЯ] Проверяем исходное наличие монолитов в файле на диске...");
-
-        let target_substring = "финалаЧетвертьфинал";
-
-        if let Some(byte_pos) = text_content.find(target_substring) {
-            println!("  [!!!] КОСЯК В ТЕКСТЕ! Нашли '{}' прямо в сыром файле corpus.txt!", target_substring);
-
-            let start_ctx = if byte_pos > 40 { byte_pos - 40 } else { 0 };
-            let end_ctx = if byte_pos + target_substring.len() + 40 < text_content.len() {
-                byte_pos + target_substring.len() + 40
-            } else {
-                text_content.len()
-            };
-
-            let slice_context = &text_content[start_ctx..end_ctx];
-            println!("  [КОНТЕКСТ НА ДИСКЕ]: \"... {} ...\"", slice_context.escape_debug());
-        } else {
-            println!("  [ОК] В сыром тексте подстроки '{}' НЕТ. Файл чистый, косячит агрегатор!", target_substring);
-        }
-        println!("========================================================================\n");
-    */
     let file_size_mb = text_content.len() as f64 / 1024.0 / 1024.0;
     println!("  ├── Размер файла корпуса: {:.2} МБ", file_size_mb);
 
@@ -83,7 +63,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("\n[АНАЛИЗ] Загрузка сгенерированного JSON для верификации кириллицы...");
     let check_file = File::open(output_json_path)?;
     let reader = BufReader::new(check_file);
-    let model_data: QwenJsonModel = serde_json::from_reader(reader)?;
+    let model_data: QwenJsonModel = from_reader(reader)?;
     let vocab = &model_data.model.vocab;
 
     let mut sorted_vocab: Vec<(&String, &u32)> = vocab.iter().collect();

@@ -2,7 +2,8 @@ use crate::tokenizer::factory::types::{AddedToken, BpeModelFields, PreTokenizerE
 use crate::tokenizer::trainer::config::TrainerConfig;
 use std::collections::HashMap;
 use std::fs::File;
-use std::io::{BufWriter, Error, ErrorKind};
+use std::io::Write;
+use std::io::{Error, ErrorKind};
 
 pub struct VocabularyExporter;
 
@@ -15,9 +16,6 @@ impl VocabularyExporter {
         merges: Vec<[String; 2]>,
         last_token_id: u32,
     ) -> std::io::Result<()> {
-        let file = File::create(output_json_path)?;
-        let writer = BufWriter::with_capacity(config.io_buffer_size, file);
-
         let eos_token = AddedToken {
             id: last_token_id,
             content: "<|endoftext|>".to_string(),
@@ -39,7 +37,10 @@ impl VocabularyExporter {
             model: BpeModelFields { vocab, merges },
         };
 
-        serde_json::to_writer(writer, &model_json).map_err(|e| Error::new(ErrorKind::InvalidData, format!("Ошибка Serde JSON: {:?}", e)))?;
+        let mut buffer = Vec::with_capacity(config.io_buffer_size);
+        sonic_rs::to_writer(&mut buffer, &model_json).map_err(|e| Error::new(ErrorKind::InvalidData, format!("Ошибка Serde JSON: {:?}", e)))?;
+        let mut file = File::create(output_json_path)?;
+        file.write_all(&buffer)?;
 
         Ok(())
     }

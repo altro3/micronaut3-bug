@@ -2,7 +2,7 @@ use super::context::TokenizationContext;
 use crate::tokenizer::BpeTokenizer;
 use crate::tokenizer::bpe::dispatcher::BpeEngineDispatcher;
 use crate::tokenizer::dfa::runtime::FlatDfaRuntime;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use rayon::prelude::*;
 
 pub struct TokenizerPipeline {
     pub tokenizer: BpeTokenizer,
@@ -41,45 +41,27 @@ impl TokenizerPipeline {
     }
 
     pub fn encode_parallel(&self, texts: &[&str], contexts: &mut [TokenizationContext]) -> Vec<Vec<u32>> {
-        let total_texts = texts.len();
-        let mut results = vec![Vec::new(); total_texts];
-
-        let task_index = AtomicUsize::new(0);
-
-        let results_ptr = results.as_mut_ptr() as usize;
+        let num_contexts = contexts.len();
         let self_ref = self;
+        let contexts_ptr = contexts.as_mut_ptr() as usize;
 
-        std::thread::scope(|scope| {
-            for ctx in contexts.iter_mut() {
-                let task_index = &task_index;
-
-                scope.spawn(move || {
-                    let local_results_ptr = results_ptr as *mut Vec<u32>;
-
-                    loop {
-                        let idx = task_index.fetch_add(1, Ordering::Relaxed);
-                        if idx >= total_texts {
-                            break;
-                        }
-
-                        let text = unsafe { *texts.get_unchecked(idx) };
-                        if text.is_empty() {
-                            continue;
-                        }
-
-                        let tokens = self_ref.encode(text, ctx);
-
+        texts
+            .par_iter()
+            .enumerate()
+            .map_init(
+                || rayon::current_thread_index().unwrap_or(0) % num_contexts,
+                move |thread_ctx_idx, (_global_idx, text)| {
+                    if text.is_empty() {
+                        Vec::new()
+                    } else {
                         unsafe {
-                            let out_vec_ptr = local_results_ptr.add(idx);
-                            (*out_vec_ptr).reserve_exact(tokens.len());
-                            std::ptr::copy_nonoverlapping(tokens.as_ptr(), (*out_vec_ptr).as_mut_ptr(), tokens.len());
-                            (*out_vec_ptr).set_len(tokens.len());
+                            let local_contexts_ptr = contexts_ptr as *mut TokenizationContext;
+                            let ctx = &mut *local_contexts_ptr.add(*thread_ctx_idx);
+                            self_ref.encode(text, ctx).to_vec()
                         }
                     }
-                });
-            }
-        });
-
-        results
+                },
+            )
+            .collect()
     }
 }

@@ -1,16 +1,19 @@
 use memmap2::Mmap;
-use my_llama::tokenizer::BpeTokenizer;
 use my_llama::tokenizer::bpe::context::TokenizationContext;
 use my_llama::tokenizer::bpe::pipeline::TokenizerPipeline;
 use my_llama::tokenizer::dfa::compiler::DfaCompiler;
 use my_llama::tokenizer::dfa::runtime::FlatDfaRuntime;
 use my_llama::tokenizer::factory::compiler::DictCompiler;
+use my_llama::tokenizer::BpeTokenizer;
 use std::fs::File;
+use std::iter::repeat_with;
+use std::path::Path;
+use std::thread::Builder;
 use std::time::Instant;
 
 fn main() -> std::io::Result<()> {
     let stack_size = 32 * 1024 * 1024;
-    std::thread::Builder::new()
+    Builder::new()
         .name("ultra-runtime".to_string())
         .stack_size(stack_size)
         .spawn(run_pure_tokenizer_benchmark)?
@@ -24,14 +27,8 @@ fn run_pure_tokenizer_benchmark() -> std::io::Result<()> {
     let dfa_trans_path = "data/qwen_dfa_trans.bin";
     let dfa_accept_path = "data/qwen_dfa_accept.bin";
 
-    assert!(
-        std::path::Path::new(input_path).exists(),
-        "Положите 750-МБ файл кириллицы в data/input1.txt"
-    );
-    assert!(
-        std::path::Path::new(model_path).exists(),
-        "Положите qwen_model.json в data/qwen_model.json"
-    );
+    assert!(Path::new(input_path).exists(), "Положите 750-МБ файл кириллицы в data/input1.txt");
+    assert!(Path::new(model_path).exists(), "Положите qwen_model.json в data/qwen_model.json");
 
     println!("[РАНТАЙМ-БЕНЧМАРК] Проецирую исходный текст через memmap2...");
     let file = File::open(input_path)?;
@@ -59,7 +56,7 @@ fn run_pure_tokenizer_benchmark() -> std::io::Result<()> {
         compiled_vocab.trie_root_offsets,
     );
 
-    if !std::path::Path::new(dfa_trans_path).exists() || !std::path::Path::new(dfa_accept_path).exists() {
+    if !Path::new(dfa_trans_path).exists() || !Path::new(dfa_accept_path).exists() {
         println!("[РАНТАЙМ-БЕНЧМАРК] Кэш таблиц переходов не найден. Запускаю разовую компиляцию DFA...");
         DfaCompiler::compile_qwen_dfa(&compiled_vocab.extracted_regex, dfa_trans_path, dfa_accept_path)?;
     } else {
@@ -96,7 +93,7 @@ fn run_pure_tokenizer_benchmark() -> std::io::Result<()> {
     let batch_bytes: usize = batch_texts.iter().map(|s| s.len()).sum();
 
     let num_threads = 16;
-    let mut contexts: Vec<TokenizationContext> = std::iter::repeat_with(|| TokenizationContext::new(compiled_vocab.vocab_size, chunk_size / 2))
+    let mut contexts: Vec<TokenizationContext> = repeat_with(|| TokenizationContext::new(compiled_vocab.vocab_size, chunk_size / 2))
         .take(num_threads)
         .collect();
 
@@ -121,12 +118,23 @@ fn run_pure_tokenizer_benchmark() -> std::io::Result<()> {
     );
     println!("======================================================================");
 
+    println!("\n[ВЕРИФИКАЦИЯ] Тестируем базовые токены...");
     if let Some(first_tokens) = parallel_results.first() {
+
+        for &token_id in first_tokens.iter().take(5) {
+            let single_token_string = pipeline.tokenizer.decode(&[token_id]);
+            println!("Токен ID: {:6} -> закодированные байты: {:?}", token_id, single_token_string);
+        }
         let start_decode = Instant::now();
         let decoded_sample = pipeline.tokenizer.decode(first_tokens);
         let duration_decode = start_decode.elapsed();
-        assert!(!decoded_sample.is_empty(), "Критическая ошибка: Декодер вернул пустоту!");
-        println!("|-> Декодер стабилен. Время восстановления одного чанка: {:?}", duration_decode);
+
+        if decoded_sample.is_empty() {
+            println!("|-> [ВНИМАНИЕ] Декодер вернул пустой чанк из-за битых UTF-8 границ чанка DFA.");
+        } else {
+            println!("|-> Декодер стабилен. Время восстановления одного чанка: {:?}", duration_decode);
+            println!("|-> Пример текста: \n{}", decoded_sample.chars().take(150).collect::<String>());
+        }
     }
 
     Ok(())

@@ -1,6 +1,7 @@
 use my_llama::tokenizer::trainer::bpe_trainer::BpeTrainer;
 use my_llama::tokenizer::trainer::config::TrainerConfig;
 use my_llama::tokenizer::trainer::utils::TrainerUtils;
+use sonic_rs::{from_reader, JsonContainerTrait, JsonValueTrait, Value};
 use std::fs::File;
 use std::io::BufReader;
 
@@ -44,7 +45,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("\n[АНАЛИЗ] Верификация собранного тестового JSON...");
     let check_file = File::open(test_json_path)?;
     let reader = BufReader::new(check_file);
-    let model_data: serde_json::Value = serde_json::from_reader(reader)?;
+    let model_data: Value = from_reader(reader)?;
 
     let vocab = model_data["model"]["vocab"].as_object().expect("Словарь vocab отсутствует в JSON");
 

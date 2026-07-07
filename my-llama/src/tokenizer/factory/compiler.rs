@@ -1,5 +1,6 @@
 use super::decoder::HfByteDecoder;
 use super::types::{CompiledVocabulary, FlatTrieNode, QwenJsonModel};
+use sonic_rs::from_reader;
 use std::collections::VecDeque;
 use std::fs::File;
 use std::io::{BufReader, Error, ErrorKind, Result};
@@ -16,7 +17,7 @@ impl DictCompiler {
         let file = File::open(file_path)?;
         let reader = BufReader::new(file);
 
-        let root: QwenJsonModel = serde_json::from_reader(reader).map_err(|e| Error::new(ErrorKind::InvalidData, e))?;
+        let root: QwenJsonModel = from_reader(reader).map_err(|e| Error::new(ErrorKind::InvalidData, e))?;
 
         let eos_token_id = Self::extract_eos(&root);
         let vocab_size = root.model.vocab.len();
