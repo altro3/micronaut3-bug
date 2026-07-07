@@ -23,7 +23,7 @@ fn main() -> std::io::Result<()> {
 
 fn run_pure_tokenizer_benchmark() -> std::io::Result<()> {
     let input_path = "data/input1_x4.txt";
-    let model_path = "data/my_qwen_model.json";
+    let model_path = "data/qwen_model.json";
     let dfa_trans_path = "data/qwen_dfa_trans.bin";
     let dfa_accept_path = "data/qwen_dfa_accept.bin";
 
@@ -120,11 +120,12 @@ fn run_pure_tokenizer_benchmark() -> std::io::Result<()> {
 
     println!("\n[ВЕРИФИКАЦИЯ] Тестируем базовые токены...");
     if let Some(first_tokens) = parallel_results.first() {
-
         for &token_id in first_tokens.iter().take(5) {
             let single_token_string = pipeline.tokenizer.decode(&[token_id]);
-            println!("Токен ID: {:6} -> закодированные байты: {:?}", token_id, single_token_string);
+            let safe_bytes = single_token_string.as_bytes();
+            println!("Токен ID: {:6} -> Сырые байты: {:X?}", token_id, safe_bytes);
         }
+
         let start_decode = Instant::now();
         let decoded_sample = pipeline.tokenizer.decode(first_tokens);
         let duration_decode = start_decode.elapsed();
