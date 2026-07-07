@@ -1,5 +1,5 @@
-use super::decoder::HfByteDecoder;
 use super::types::{CompiledVocabulary, FlatTrieNode, QwenJsonModel};
+use crate::tokenizer::factory::decoder::HfByteDecoder;
 use sonic_rs::from_reader;
 use std::collections::VecDeque;
 use std::fs::File;
@@ -138,6 +138,19 @@ impl DictCompiler {
             .and_then(|entry| entry.pattern.as_ref())
             .map(|p| p.regex.clone())
             .unwrap_or_else(|| r"(?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\r\n\p{L}\p{N}]+|\p{L}+|\p{N}{1,3}".to_string());
+
+        println!("\n[ДИАГНОСТИКА СЛОВАРЯ - КОМПИЛЯЦИЯ]");
+        for &test_id in &[32, 220, 248252] {
+            if test_id < vocab_compiled_tokens.len() {
+                let bytes = &vocab_compiled_tokens[test_id];
+                println!(
+                    "  ID: {:6} -> Байт-вектор в словаре: {:X?} (Символы: {:?})",
+                    test_id,
+                    bytes,
+                    String::from_utf8_lossy(bytes)
+                );
+            }
+        }
 
         Ok(CompiledVocabulary {
             byte_fallback,

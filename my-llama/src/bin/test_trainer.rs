@@ -1,7 +1,7 @@
 use my_llama::tokenizer::trainer::bpe_trainer::BpeTrainer;
 use my_llama::tokenizer::trainer::config::TrainerConfig;
 use my_llama::tokenizer::trainer::utils::TrainerUtils;
-use sonic_rs::{from_reader, JsonContainerTrait, JsonValueTrait, Value};
+use sonic_rs::{JsonContainerTrait, JsonValueTrait, Value, from_reader};
 use std::fs::File;
 use std::io::BufReader;
 

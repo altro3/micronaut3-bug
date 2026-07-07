@@ -7,10 +7,10 @@ pub struct BpeTokenizer {
     pub hash_mask: u64,
     pub(crate) byte_pair_ranks: [u64; 65536],
     pub byte_fallback: [u32; 256],
-    pub(crate) id_to_byte: [u8; 512],
+    pub id_to_byte: [u8; 512],
     pub eos_token_id: u32,
-    pub(crate) vocab_bytes_flat: Vec<u8>,
-    pub(crate) vocab_offsets_flat: Vec<u64>,
+    pub vocab_bytes_flat: Vec<u8>,
+    pub vocab_offsets_flat: Vec<u64>,
     pub trie_nodes: Vec<FlatTrieNode>,
     pub trie_root_offsets: [u32; 256],
 }

@@ -1,10 +1,10 @@
 use memmap2::Mmap;
+use my_llama::tokenizer::BpeTokenizer;
 use my_llama::tokenizer::bpe::context::TokenizationContext;
 use my_llama::tokenizer::bpe::pipeline::TokenizerPipeline;
 use my_llama::tokenizer::dfa::compiler::DfaCompiler;
 use my_llama::tokenizer::dfa::runtime::FlatDfaRuntime;
 use my_llama::tokenizer::factory::compiler::DictCompiler;
-use my_llama::tokenizer::BpeTokenizer;
 use std::fs::File;
 use std::io::{Error, ErrorKind};
 use std::iter::repeat_with;
@@ -139,6 +139,49 @@ fn run_pure_tokenizer_benchmark() -> std::io::Result<()> {
             println!("|-> Пример текста: \n{}", decoded_sample.chars().take(150).collect::<String>());
         }
     }
+
+    println!("\n[ДИАГНОСТИКА ТОКЕНИЗАЦИИ - ЕДИНИЧНЫЙ ТЕСТ]");
+    let test_sentence = "Яндекс — российская компания";
+    println!("  Входной текст: {:?}", test_sentence);
+
+    let single_ctx = TokenizationContext::new(compiled_vocab.vocab_size, 1024);
+    let test_batch = vec![test_sentence];
+    let test_encoded = pipeline.encode_parallel(&test_batch, &mut [single_ctx]);
+
+    if let Some(tokens) = test_encoded.first() {
+        println!("  Полученные токены (ID): {:?}", tokens);
+        println!("  Потокеновый разбор декодером:");
+
+        for &t_id in tokens {
+            let id = t_id as usize;
+            let mut raw_token_bytes = Vec::new();
+
+            if id < pipeline.tokenizer.vocab_offsets_flat.len() {
+                let packed = pipeline.tokenizer.vocab_offsets_flat[id];
+                if packed != 0 {
+                    let offset = (packed >> 32) as usize;
+                    let length = (packed & 0xFFFFFFFF) as usize;
+                    raw_token_bytes = pipeline.tokenizer.vocab_bytes_flat[offset..offset + length].to_vec();
+                } else if id < 512 {
+                    let b = pipeline.tokenizer.id_to_byte[id];
+                    if b != 0xFF {
+                        raw_token_bytes.push(b);
+                    }
+                }
+            }
+
+            let lossy_string = String::from_utf8_lossy(&raw_token_bytes).into_owned();
+
+            println!(
+                "    ID: {:6} -> Реальные байты в словаре: {:X?} -> Попытка отображения: {:?}",
+                t_id, raw_token_bytes, lossy_string
+            );
+        }
+
+        let final_decoded = pipeline.tokenizer.decode(tokens);
+        println!("  Финальная сборка строки декодером: {:?}", final_decoded);
+    }
+    println!("==================================================\n");
 
     Ok(())
 }

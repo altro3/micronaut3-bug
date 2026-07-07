@@ -7,7 +7,6 @@ impl BpeTokenizer {
             return String::new();
         }
 
-        // Выделяем память под байты
         let mut raw_buffer: Vec<u8> = Vec::with_capacity(tokens.len() * 8);
         let mut w = 0;
 
@@ -32,6 +31,16 @@ impl BpeTokenizer {
                         w += length;
                     }
                 }
+            }
+            if id == 248076 {
+                if w + 1 > raw_buffer.capacity() {
+                    raw_buffer.reserve(tokens.len() * 4 + 1);
+                }
+                unsafe {
+                    *raw_buffer.as_mut_ptr().add(w) = b' ';
+                }
+                w += 1;
+                continue;
             }
         }
 
