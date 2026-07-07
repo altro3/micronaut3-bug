@@ -20,7 +20,7 @@ fn main() -> std::io::Result<()> {
 
 fn run_pure_tokenizer_benchmark() -> std::io::Result<()> {
     let input_path = "data/input1_x4.txt";
-    let model_path = "data/qwen_model.json";
+    let model_path = "data/my_qwen_model.json";
     let dfa_trans_path = "data/qwen_dfa_trans.bin";
     let dfa_accept_path = "data/qwen_dfa_accept.bin";
 
