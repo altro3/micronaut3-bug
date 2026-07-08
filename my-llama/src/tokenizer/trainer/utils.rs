@@ -1,35 +1,42 @@
-use std::collections::HashMap;
+use fxhash::FxHashMap;
 
 pub struct TrainerUtils;
 
-fn bytes_to_unicode_mapping() -> Vec<char> {
-    let mut bs: Vec<u8> = (b'!'..=b'~').collect();
-    bs.extend(0xA1..=0xAC);
-    bs.extend(0xAE..=0xFF);
-
-    let mut cs: Vec<char> = bs.iter().map(|&b| b as char).collect();
-    let mut n = 0;
+fn bytes_to_unicode_mapping() -> Vec<(u8, char)> {
+    let mut pairs = Vec::with_capacity(256);
 
     for b in 0..=255 {
-        if !bs.contains(&b) {
-            bs.push(b);
-            cs.push(char::from_u32(256 + n).unwrap());
-            n += 1;
-        }
+        let b_u32 = b as u32;
+        let cp = match b {
+            0..=31 => b_u32 + 0x0100,
+            32..=126 => b_u32,
+            127..=158 => b_u32 - 127 + 0x0120,
+            159..=255 => b_u32,
+        };
+        let final_cp = if b == 173 { 0x0140 } else { cp };
+        pairs.push((b, char::from_u32(final_cp).unwrap()));
     }
 
-    let mut mapping = vec![' '; 256];
-    for i in 0..bs.len() {
-        mapping[bs[i] as usize] = cs[i];
-    }
-    mapping
+    pairs
 }
 
 thread_local! {
-    static ENCODE_MAP: Vec<char> = bytes_to_unicode_mapping();
-    static DECODE_MAP: HashMap<char, u8> = {
-        let map = bytes_to_unicode_mapping();
-        map.into_iter().enumerate().map(|(b, c)| (c, b as u8)).collect()
+    static ENCODE_MAP: Vec<char> = {
+        let pairs = bytes_to_unicode_mapping();
+        let mut map = vec!['\0'; 256];
+        for (b, c) in pairs {
+            map[b as usize] = c;
+        }
+        map
+    };
+
+    static DECODE_MAP: FxHashMap<char, u8> = {
+        let pairs = bytes_to_unicode_mapping();
+        let mut map = FxHashMap::with_capacity_and_hasher(256, Default::default());
+        for (b, c) in pairs {
+            map.insert(c, b);
+        }
+        map
     };
 }
 

@@ -23,7 +23,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     create_dir_all("data/train")?;
 
-    let config = TrainerConfig { vocab_size: 268, start_token_id: 256, num_threads: 1, ..Default::default() };
+    let config = TrainerConfig { vocab_size: 262, start_token_id: 256, num_threads: 1, ..Default::default() };
 
     let total_merges = config.vocab_size - 256;
     println!("  ├── Текст для обучения  : \"{}\"", test_corpus);
@@ -104,6 +104,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let single_ctx = TokenizationContext::new(compiled_vocab.vocab_size, 1024);
     let test_batch = vec![test_sentence];
     let test_encoded = pipeline.encode_parallel(&test_batch, &mut [single_ctx]);
+
+    println!("\n================== [ПРОГНОЗ СЛОВАРЯ: ТОКЕНЫ 256..262] ==================");
+    let mut sorted_vocab: Vec<(&u32, &Vec<u8>)> = reverse_vocab.iter().collect();
+    sorted_vocab.sort_unstable_by_key(|&(id, _)| id);
+
+    for (id, bytes) in sorted_vocab {
+        if *id >= 256 && *id < 262 {
+            let decoded_text = String::from_utf8_lossy(bytes).into_owned();
+            println!(
+                "  ID: {} | Hex-байты: {:X?} | Как текст: '{}'",
+                id, bytes, decoded_text.escape_debug()
+            );
+        }
+    }
+    println!("========================================================================\n");
 
     if let Some(tokens) = test_encoded.first() {
         println!("  Полученные токены (ID): {:?}", tokens);
