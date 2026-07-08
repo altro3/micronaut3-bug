@@ -53,24 +53,28 @@ impl<'a> BpeLoopRunner<'a> {
                 break;
             }
 
+            let len_a = id_to_bytes[job.pair.0 as usize].len();
+            let len_b = id_to_bytes[job.pair.1 as usize].len();
+
+            if len_a + len_b > self.config.max_token_length {
+                if let Some(cnt) = index.pair_counts.get_mut(&job.pair) {
+                    *cnt = 0;
+                }
+                continue;
+            }
+
             BpeTelemetry::log_progress(merges_done, num_merges, current_id, &job, id_to_bytes, index, heap, loop_start);
 
-            let bytes_a = &id_to_bytes[job.pair.0 as usize];
-            let bytes_b = &id_to_bytes[job.pair.1 as usize];
-
-            let mut merged_bytes = Vec::with_capacity(bytes_a.len() + bytes_b.len());
-            merged_bytes.extend_from_slice(bytes_a);
-            merged_bytes.extend_from_slice(bytes_b);
+            let mut merged_bytes = Vec::with_capacity(len_a + len_b);
+            merged_bytes.extend_from_slice(&id_to_bytes[job.pair.0 as usize]);
+            merged_bytes.extend_from_slice(&id_to_bytes[job.pair.1 as usize]);
 
             raw_merges.push((job.pair.0, job.pair.1));
             id_to_bytes[current_id as usize] = merged_bytes;
 
             self.process_word_merges(words, index, heap, job.pair, current_id, merges_done);
 
-            if let Some(cnt) = index.pair_counts.get_mut(&job.pair) {
-                *cnt = 0;
-            }
-
+            index.pair_counts.remove(&job.pair);
             current_id += 1;
             merges_done += 1;
         }
@@ -95,14 +99,15 @@ impl<'a> BpeLoopRunner<'a> {
         if let Some(word_ids) = index.pair_to_words.remove(&target_pair) {
             words_modified = word_ids.len();
 
+            let mut added_pairs_scratch = Vec::with_capacity(16);
+
             for w_idx in word_ids {
                 let word = &mut words[w_idx as usize];
 
-                let added_pairs = ThreadDeltaWorker::merge_in_word(word, w_idx, target_pair, new_id, index);
+                ThreadDeltaWorker::merge_in_word(word, w_idx, target_pair, new_id, index, &mut added_pairs_scratch);
 
-                for p in added_pairs {
+                for &p in &added_pairs_scratch {
                     let words_vec = index.pair_to_words.entry(p).or_default();
-
                     if words_vec.last() != Some(&w_idx) {
                         words_vec.push(w_idx);
                     }

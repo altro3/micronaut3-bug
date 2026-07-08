@@ -9,6 +9,7 @@ pub struct TrainerConfig {
     pub delta_map_capacity: usize,
     pub position_buffer_capacity: usize,
     pub index_rebuild_interval: usize,
+    pub max_token_length: usize,
     pub regex: String,
 }
 
@@ -26,6 +27,7 @@ impl Default for TrainerConfig {
             delta_map_capacity: 4096,
             position_buffer_capacity: 65536,
             index_rebuild_interval: 16,
+            max_token_length: 16,
             regex: r"(?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\r\n\p{L}\p{N}]?\p{L}+|\p{N}+|(?:\s)[\r\n]*|\s+[\r\n]*|[\r\n]+".to_string(),
         }
     }

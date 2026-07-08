@@ -29,12 +29,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  ├── Размер файла корпуса: {:.2} МБ", file_size_mb);
 
     let config = TrainerConfig {
-        vocab_size: 128000,
+        vocab_size: 20000,
         batch_size: 256,
         initial_table_size: 524288,
         io_buffer_size: 4 * 1024 * 1024,
         start_token_id: 256,
         num_threads: 16,
+        max_token_length: 12,
         local_map_capacity: 32768,
         delta_map_capacity: 8192,
         position_buffer_capacity: 131072,

@@ -51,16 +51,14 @@ impl BpeTrainer {
 
     fn aggregate_corpus(&self, text_content: &str) -> FxHashMap<Vec<u8>, usize> {
         let aggregator = CorpusAggregator::new(&self.config.regex, self.config.initial_table_size);
-        let raw_words = aggregator.collect_unique_words(text_content.as_bytes(), self.config.num_threads, self.config.local_map_capacity);
-        let mut unique_words = FxHashMap::with_capacity_and_hasher(raw_words.len(), Default::default());
-        for (k, v) in raw_words {
-            unique_words.insert(k, v);
-        }
-        unique_words
+        aggregator.collect_unique_words(
+            text_content.as_bytes(),
+            self.config.num_threads,
+            self.config.local_map_capacity
+        )
     }
 
     fn init_base_alphabet(&self) -> Vec<Vec<u8>> {
-        // Возвращаем канонические сырые байты 0..255. ID 32 — это строго байт 0x20 (пробел).
         let mut id_to_bytes: Vec<Vec<u8>> = (0..256).map(|b| vec![b as u8]).collect();
         if (self.config.start_token_id as usize) > id_to_bytes.len() {
             id_to_bytes.resize(self.config.start_token_id as usize, vec![]);
