@@ -11,14 +11,26 @@ impl BpeTelemetry {
         num_merges: usize,
         current_id: u32,
         job: &UltraJob,
-        id_to_bytes: &[Vec<u8>],
+        vocab_bytes_flat: &[u8],
+        vocab_offsets_flat: &[u64],
         index: &PositionIndex,
         heap: &OctonaryHeap<UltraJob>,
         loop_start: Instant,
     ) {
         if merges_done.is_multiple_of(1000) || merges_done < 20 {
-            let mut real_bytes = id_to_bytes[job.pair.0 as usize].clone();
-            real_bytes.extend_from_slice(&id_to_bytes[job.pair.1 as usize]);
+            let packed_a = vocab_offsets_flat[job.pair.0 as usize];
+            let packed_b = vocab_offsets_flat[job.pair.1 as usize];
+
+            let offset_a = (packed_a >> 32) as usize;
+            let len_a = (packed_a & 0xFFFFFFFF) as usize;
+
+            let offset_b = (packed_b >> 32) as usize;
+            let len_b = (packed_b & 0xFFFFFFFF) as usize;
+
+            let mut real_bytes = Vec::with_capacity(len_a + len_b);
+            real_bytes.extend_from_slice(&vocab_bytes_flat[offset_a..offset_a + len_a]);
+            real_bytes.extend_from_slice(&vocab_bytes_flat[offset_b..offset_b + len_b]);
+
             let clean_text = String::from_utf8_lossy(&real_bytes).into_owned();
             let pct = (merges_done as f64 / num_merges as f64) * 100.0;
 
