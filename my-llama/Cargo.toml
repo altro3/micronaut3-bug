@@ -18,6 +18,8 @@ cc = "1.2"
 
 [dev-dependencies]
 criterion = { version = "0.8", features = ["html_reports"] }
+tiktoken-rs = "0.12"
+tokenizers = "0.23"
 
 [lib]
 name = "my_llama"
@@ -47,10 +49,10 @@ path = "src/bin/test_trainer.rs"
 name = "infer_simple"
 path = "src/bin/infer_simple.rs"
 
-#[[bench]]
-#name = "tokenizer_benchmark"
-#path = "tests/benches/tokenizer_benchmark.rs"
-#harness = false
+[[bench]]
+name = "tokenizer_benchmark"
+path = "tests/benches/tokenizer_benchmark.rs"
+harness = false
 
 [[bench]]
 name = "trainer_benchmark"
