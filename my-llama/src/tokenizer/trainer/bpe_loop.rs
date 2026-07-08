@@ -27,8 +27,12 @@ impl<'a> BpeLoopRunner<'a> {
         let mut current_id = self.config.start_token_id;
         let mut raw_merges = Vec::with_capacity(num_merges);
 
-        println!("\n================== [ЗАПУСК ЛЕНИВОГО ВЕКТОРНОГО BPE-ЦИКЛА] ==================");
+        println!("\n================== [ЗАПУСК ОПТИМИЗИРОВАННОГО ВЕКТОРНОГО BPE-ЦИКЛА] ==================");
         let loop_start = Instant::now();
+
+        if id_to_bytes.len() < self.config.vocab_size {
+            id_to_bytes.resize(self.config.vocab_size, Vec::new());
+        }
 
         while merges_done < num_merges {
             let Some(job) = heap.pop() else {
@@ -51,18 +55,22 @@ impl<'a> BpeLoopRunner<'a> {
 
             BpeTelemetry::log_progress(merges_done, num_merges, current_id, &job, id_to_bytes, index, heap, loop_start);
 
-            let mut merged_bytes = id_to_bytes[job.pair.0 as usize].clone();
-            merged_bytes.extend_from_slice(&id_to_bytes[job.pair.1 as usize]);
-            raw_merges.push((job.pair.0, job.pair.1));
+            let bytes_a = &id_to_bytes[job.pair.0 as usize];
+            let bytes_b = &id_to_bytes[job.pair.1 as usize];
 
-            if (current_id as usize) >= id_to_bytes.len() {
-                id_to_bytes.resize(current_id as usize + 1, vec![]);
-            }
+            let mut merged_bytes = Vec::with_capacity(bytes_a.len() + bytes_b.len());
+            merged_bytes.extend_from_slice(bytes_a);
+            merged_bytes.extend_from_slice(bytes_b);
+
+            raw_merges.push((job.pair.0, job.pair.1));
             id_to_bytes[current_id as usize] = merged_bytes;
 
             self.process_word_merges(words, index, heap, job.pair, current_id, merges_done);
 
-            index.pair_counts.remove(&job.pair);
+            if let Some(cnt) = index.pair_counts.get_mut(&job.pair) {
+                *cnt = 0;
+            }
+
             current_id += 1;
             merges_done += 1;
         }
@@ -94,6 +102,7 @@ impl<'a> BpeLoopRunner<'a> {
 
                 for p in added_pairs {
                     let words_vec = index.pair_to_words.entry(p).or_default();
+
                     if words_vec.last() != Some(&w_idx) {
                         words_vec.push(w_idx);
                     }

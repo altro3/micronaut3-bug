@@ -1,3 +1,5 @@
+use fxhash::FxHashMap;
+use my_llama::tokenizer::BpeTokenizer;
 use my_llama::tokenizer::bpe::context::TokenizationContext;
 use my_llama::tokenizer::bpe::pipeline::TokenizerPipeline;
 use my_llama::tokenizer::dfa::compiler::DfaCompiler;
@@ -6,10 +8,8 @@ use my_llama::tokenizer::factory::compiler::DictCompiler;
 use my_llama::tokenizer::trainer::bpe_trainer::BpeTrainer;
 use my_llama::tokenizer::trainer::config::TrainerConfig;
 use my_llama::tokenizer::trainer::utils::TrainerUtils;
-use my_llama::tokenizer::BpeTokenizer;
-use sonic_rs::{from_reader, JsonContainerTrait, JsonValueTrait, Value};
-use std::collections::HashMap;
-use std::fs::{create_dir_all, remove_file, File};
+use sonic_rs::{JsonContainerTrait, JsonValueTrait, Value, from_reader};
+use std::fs::{File, create_dir_all, remove_file};
 use std::io::{BufReader, Read};
 use std::path::Path;
 
@@ -42,7 +42,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let vocab = model_data["model"]["vocab"].as_object().expect("Словарь vocab отсутствует в JSON");
 
-    let mut reverse_vocab = HashMap::new();
+    let mut reverse_vocab = FxHashMap::default();
     for (qwen_str, id_val) in vocab {
         let id = id_val.as_u64().unwrap() as u32;
         let bytes = TrainerUtils::qwen_string_to_bytes(qwen_str);
@@ -112,10 +112,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     for (id, bytes) in sorted_vocab {
         if *id >= 256 && *id < 262 {
             let decoded_text = String::from_utf8_lossy(bytes).into_owned();
-            println!(
-                "  ID: {} | Hex-байты: {:X?} | Как текст: '{}'",
-                id, bytes, decoded_text.escape_debug()
-            );
+            println!("  ID: {} | Hex-байты: {:X?} | Как текст: '{}'", id, bytes, decoded_text.escape_debug());
         }
     }
     println!("========================================================================\n");

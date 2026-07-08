@@ -1,6 +1,6 @@
+use fxhash::FxHashMap;
 use rayon::prelude::*;
 use regex::bytes::Regex;
-use std::collections::HashMap;
 use std::sync::Mutex;
 use std::time::Instant;
 
@@ -15,12 +15,12 @@ impl CorpusAggregator {
         Self { regex, initial_capacity }
     }
 
-    pub fn collect_unique_words(&self, text_bytes: &[u8], _num_threads: usize, local_cap: usize) -> HashMap<Vec<u8>, usize> {
+    pub fn collect_unique_words(&self, text_bytes: &[u8], _num_threads: usize, local_cap: usize) -> FxHashMap<Vec<u8>, usize> {
         if text_bytes.is_empty() {
-            return HashMap::new();
+            return FxHashMap::default();
         }
 
-        println!("[АГРЕГАТОР] Тотальный многопоточный анализ СЫРЫХ БАЙТ (100% без строк)...");
+        println!("[АГРЕГАТОР] Тотальный многопоточный анализ СЫРЫХ БАЙТ (100% без строк) через FxHashMap...");
         let start_agg = Instant::now();
 
         let broken_logs = Mutex::new(Vec::new());
@@ -39,7 +39,7 @@ impl CorpusAggregator {
         let merged_map = (0..total_lines)
             .into_par_iter()
             .map(|chunk_idx| {
-                let mut local_map = HashMap::with_capacity(local_cap);
+                let mut local_map = FxHashMap::with_capacity_and_hasher(local_cap, Default::default());
                 let start_pos = line_boundaries[chunk_idx];
                 let end_pos = line_boundaries[chunk_idx + 1];
 
@@ -80,7 +80,7 @@ impl CorpusAggregator {
                 local_map
             })
             .reduce(
-                || HashMap::with_capacity(self.initial_capacity),
+                || FxHashMap::with_capacity_and_hasher(self.initial_capacity, Default::default()),
                 |mut main_map, local_map| {
                     for (word, count) in local_map {
                         *main_map.entry(word).or_insert(0) += count;
