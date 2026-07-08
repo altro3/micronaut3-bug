@@ -9,7 +9,7 @@ use my_llama::tokenizer::trainer::utils::TrainerUtils;
 use my_llama::tokenizer::BpeTokenizer;
 use sonic_rs::{from_reader, JsonContainerTrait, JsonValueTrait, Value};
 use std::collections::HashMap;
-use std::fs::{create_dir_all, File};
+use std::fs::{create_dir_all, remove_file, File};
 use std::io::{BufReader, Read};
 use std::path::Path;
 
@@ -77,12 +77,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         compiled_vocab.trie_root_offsets,
     );
 
-    if !Path::new(dfa_trans_path).exists() || !Path::new(dfa_accept_path).exists() {
-        println!("[РАНТАЙМ-БЕНЧМАРК] Кэш таблиц переходов не найден. Запускаю разовую компиляцию DFA...");
-        DfaCompiler::compile_qwen_dfa(&compiled_vocab.extracted_regex, dfa_trans_path, dfa_accept_path)?;
-    } else {
-        println!("[РАНТАЙМ-БЕНЧМАРК] Обнаружен готовый кэш DFA. Загружаю предкомпилированные таблицы...");
+    if Path::new(dfa_trans_path).exists() {
+        remove_file(dfa_trans_path)?;
     }
+    if Path::new(dfa_accept_path).exists() {
+        remove_file(dfa_accept_path)?;
+    }
+
+    println!("[РАНТАЙМ-БЕНЧМАРК] Принудительная пересборка DFA таблиц под свежесгенерированный словарь...");
+    DfaCompiler::compile_qwen_dfa(&compiled_vocab.extracted_regex, dfa_trans_path, dfa_accept_path)?;
 
     let mut trans_file = File::open(dfa_trans_path)?;
     let mut accept_file = File::open(dfa_accept_path)?;

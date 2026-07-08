@@ -1,11 +1,7 @@
-use std::collections::HashMap;
 use dary_heap::OctonaryHeap;
-use fxhash::FxHasher;
-use std::hash::BuildHasherDefault;
+use fxhash::FxHashMap;
 use std::io::{Error, ErrorKind};
 use std::time::Instant;
-
-type FxHashMap<K, V> = HashMap<K, V, BuildHasherDefault<FxHasher>>;
 
 use crate::tokenizer::trainer::aggregator::CorpusAggregator;
 use crate::tokenizer::trainer::bpe_loop::BpeLoopRunner;
@@ -30,7 +26,7 @@ impl BpeTrainer {
                 ErrorKind::InvalidInput,
                 format!(
                     "Размер словаря (vocab_size) не может быть меньше 256! У вас указано: {}. \
-                Укажите как минимум 256 + количество планируемых слияний (например, 266).",
+                Укажите как минимум 256 + количество планируемых слияний.",
                     self.config.vocab_size
                 ),
             ));
@@ -64,6 +60,7 @@ impl BpeTrainer {
     }
 
     fn init_base_alphabet(&self) -> Vec<Vec<u8>> {
+        // Возвращаем канонические сырые байты 0..255. ID 32 — это строго байт 0x20 (пробел).
         let mut id_to_bytes: Vec<Vec<u8>> = (0..256).map(|b| vec![b as u8]).collect();
         if (self.config.start_token_id as usize) > id_to_bytes.len() {
             id_to_bytes.resize(self.config.start_token_id as usize, vec![]);
@@ -111,7 +108,7 @@ impl BpeTrainer {
             vocab_json_output.insert(str_merged, token_id);
         }
 
-        let mut std_vocab = HashMap::with_capacity(vocab_json_output.len());
+        let mut std_vocab = FxHashMap::with_capacity_and_hasher(vocab_json_output.len(), Default::default());
         for (k, v) in vocab_json_output {
             std_vocab.insert(k, v);
         }

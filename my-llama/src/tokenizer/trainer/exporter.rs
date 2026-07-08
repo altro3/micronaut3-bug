@@ -1,6 +1,6 @@
 use crate::tokenizer::factory::types::{AddedToken, BpeModelFields, PreTokenizerEntry, PreTokenizerFields, QwenJsonModel, RegexPattern};
 use crate::tokenizer::trainer::config::TrainerConfig;
-use std::collections::HashMap;
+use fxhash::FxHashMap;
 use std::fs::File;
 use std::io::Write;
 use std::io::{Error, ErrorKind};
@@ -12,7 +12,7 @@ impl VocabularyExporter {
         output_json_path: &str,
         config: &TrainerConfig,
         cyrillic_regex: &str,
-        vocab: HashMap<String, u32>,
+        vocab: FxHashMap<String, u32>,
         merges: Vec<[String; 2]>,
         last_token_id: u32,
     ) -> std::io::Result<()> {

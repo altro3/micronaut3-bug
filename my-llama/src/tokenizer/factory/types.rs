@@ -1,5 +1,5 @@
+use fxhash::FxHashMap;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct AddedToken {
@@ -14,7 +14,7 @@ pub struct AddedToken {
 
 #[derive(Serialize, Deserialize)]
 pub struct BpeModelFields {
-    pub vocab: HashMap<String, u32>,
+    pub vocab: FxHashMap<String, u32>,
     pub merges: Vec<[String; 2]>,
 }
 
