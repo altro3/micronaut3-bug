@@ -23,13 +23,17 @@ __global__ void adamw_vectorized_max_speed_kernel(
 
     if (idx < size_v4) {
         Vector4 w_reg, g_reg, m_reg, v_reg;
-        w_reg.v4 = weights[idx];
-        g_reg.v4 = gradients[idx];
-        m_reg.v4 = m_buffer[idx];
-        v_reg.v4 = v_buffer[idx];
+
+        w_reg.v4 = __ldcs(&weights[idx]);
+        g_reg.v4 = __ldcs(&gradients[idx]);
+        m_reg.v4 = __ldcs(&m_buffer[idx]);
+        v_reg.v4 = __ldcs(&v_buffer[idx]);
 
         Vector4 zero_g;
         zero_g.v4 = make_float4(0.0f, 0.0f, 0.0f, 0.0f);
+
+        const float one_minus_beta1 = 1.0f - beta1;
+        const float one_minus_beta2 = 1.0f - beta2;
 
 #pragma unroll
         for (int i = 0; i < 4; ++i) {
@@ -38,17 +42,18 @@ __global__ void adamw_vectorized_max_speed_kernel(
             float m_val = m_reg.arr[i];
             float v_val = v_reg.arr[i];
 
-            m_val = g_val + beta1 * (m_val - g_val);
-            v_val = g_val * g_val + beta2 * (v_val - g_val * g_val);
+            m_val = beta1 * m_val + one_minus_beta1 * g_val;
+            v_val = beta2 * v_val + one_minus_beta2 * g_val * g_val;
 
             m_reg.arr[i] = m_val;
             v_reg.arr[i] = v_val;
 
             const float m_hat = m_val * inv_bias_correction1;
             const float v_hat = v_val * inv_bias_correction2;
-            const float denom = sqrtf(v_hat + 1e-8f) + epsilon;
+            const float rsqrt_v = rsqrtf(v_hat + 1e-8f);
+            const float denom = m_hat * rsqrt_v / (1.0f + epsilon * rsqrt_v);
 
-            w_reg.arr[i] = w_val - lr * (m_hat / denom + weight_decay * w_val);
+            w_reg.arr[i] = w_val - lr * (denom + weight_decay * w_val);
         }
 
         __stcs(&m_buffer[idx], m_reg.v4);
@@ -75,22 +80,26 @@ __global__ void adamw_scalar_max_speed_kernel(
     const int idx = blockIdx.x * blockDim.x + threadIdx.x;
 
     if (idx < size) {
-        const float g = gradients[idx];
-        const float w = weights[idx];
-        float m = m_buffer[idx];
-        float v = v_buffer[idx];
+        const float g = __ldcs(&gradients[idx]);
+        const float w = __ldcs(&weights[idx]);
+        float m = __ldcs(&m_buffer[idx]);
+        float v = __ldcs(&v_buffer[idx]);
 
-        m = g + beta1 * (m - g);
-        v = g * g + beta2 * (v - g * g);
+        const float one_minus_beta1 = 1.0f - beta1;
+        const float one_minus_beta2 = 1.0f - beta2;
+
+        m = beta1 * m + one_minus_beta1 * g;
+        v = beta2 * v + one_minus_beta2 * g * g;
 
         const float m_hat = m * inv_bias_correction1;
         const float v_hat = v * inv_bias_correction2;
 
-        const float denom = sqrtf(v_hat + 1e-8f) + epsilon;
+        const float rsqrt_v = rsqrtf(v_hat + 1e-8f);
+        const float denom = m_hat * rsqrt_v / (1.0f + epsilon * rsqrt_v);
 
         __stcs(&m_buffer[idx], m);
         __stcs(&v_buffer[idx], v);
-        __stcs(&weights[idx], w - lr * (m_hat / denom + weight_decay * w));
+        __stcs(&weights[idx], w - lr * (denom + weight_decay * w));
         __stcs(&gradients[idx], 0.0f);
     }
 }
