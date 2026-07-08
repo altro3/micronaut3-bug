@@ -84,7 +84,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("[РАНТАЙМ-БЕНЧМАРК] Обнаружен готовый кэш DFA. Загружаю предкомпилированные таблицы...");
     }
 
-    // --- ИСПРАВЛЕНИЕ: Высокопроизводительное чтение бинарных DFA таблиц ---
     let mut trans_file = File::open(dfa_trans_path)?;
     let mut accept_file = File::open(dfa_accept_path)?;
 

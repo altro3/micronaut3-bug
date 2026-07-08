@@ -1,10 +1,11 @@
+use std::collections::HashMap;
 use dary_heap::OctonaryHeap;
 use fxhash::FxHasher;
 use std::hash::BuildHasherDefault;
 use std::io::{Error, ErrorKind};
 use std::time::Instant;
 
-type FxHashMap<K, V> = std::collections::HashMap<K, V, BuildHasherDefault<FxHasher>>;
+type FxHashMap<K, V> = HashMap<K, V, BuildHasherDefault<FxHasher>>;
 
 use crate::tokenizer::trainer::aggregator::CorpusAggregator;
 use crate::tokenizer::trainer::bpe_loop::BpeLoopRunner;
@@ -39,7 +40,6 @@ impl BpeTrainer {
 
         let raw_words = self.aggregate_corpus(text_content);
 
-        // Работаем по нашему стабильному координатному индексу
         let (mut words, mut index) = PositionIndex::build(raw_words);
 
         let mut id_to_bytes = self.init_base_alphabet();
@@ -89,7 +89,7 @@ impl BpeTrainer {
         id_to_bytes: Vec<Vec<u8>>,
         raw_merges: Vec<(u32, u32)>,
         output_json_path: &str,
-        global_start: std::time::Instant,
+        global_start: Instant,
     ) -> std::io::Result<()> {
         println!("[ФИНАЛИЗАЦИЯ] Конвертация токенов в формат Qwen JSON...");
         let mut vocab_json_output = FxHashMap::with_capacity_and_hasher(id_to_bytes.len(), Default::default());
@@ -111,7 +111,7 @@ impl BpeTrainer {
             vocab_json_output.insert(str_merged, token_id);
         }
 
-        let mut std_vocab = std::collections::HashMap::with_capacity(vocab_json_output.len());
+        let mut std_vocab = HashMap::with_capacity(vocab_json_output.len());
         for (k, v) in vocab_json_output {
             std_vocab.insert(k, v);
         }

@@ -48,7 +48,6 @@ impl CorpusAggregator {
                     return local_map;
                 }
 
-                // Байтовая регулярка бежит по оригинальным байтам файла
                 for mat in self.regex.find_iter(line_raw_bytes) {
                     let word_bytes = mat.as_bytes();
                     if word_bytes.is_empty() {
