@@ -14,6 +14,7 @@ add_library(
         cuda_kernels STATIC
         cuda/include/kernels.h
         cuda/src/adamw.cu
+        cuda/src/swiglu.cu
 )
 
 target_link_libraries(cuda_kernels PRIVATE CUDA::cublas CUDA::cublasLt)

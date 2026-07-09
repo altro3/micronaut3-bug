@@ -16,6 +16,14 @@ void launch_adamw(
     float step,
     void *stream
 );
+
+void launch_swish_glu(
+    float *output,
+    const float *gate_input,
+    const float *up_input,
+    const int size,
+    void *stream_ptr
+);
 }
 
 #endif
