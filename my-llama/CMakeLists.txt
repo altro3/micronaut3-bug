@@ -1,6 +1,9 @@
 cmake_minimum_required(VERSION 4.3)
 project(my_llama_cuda LANGUAGES CXX CUDA)
 
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
 include_directories(cuda/include)
 
 find_package(CUDAToolkit REQUIRED)

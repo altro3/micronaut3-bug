@@ -3,18 +3,9 @@
 #include <cublas_v2.h>
 #include <stdio.h>
 
-static cublasHandle_t global_cublas_handle = nullptr;
+extern "C" void init_cublas_infrastructure();
 
-extern "C" void init_cublas_infrastructure() {
-    if (global_cublas_handle == nullptr) {
-        const cublasStatus_t status = cublasCreate(&global_cublas_handle);
-        if (status != CUBLAS_STATUS_SUCCESS) {
-            fprintf(stderr, "[КРИТИЧЕСКАЯ ОШИБКА]: Не удалось инициализировать cuBLAS контекст! Код: %d\n", status);
-        } else {
-            printf("[MY-LLAMA] Аппаратный контекст cuBLAS для Tensor Cores успешно создан.\n");
-        }
-    }
-}
+extern "C" cublasHandle_t get_global_cublas_handle();
 
 __global__ void update_kv_cache_kernel(float *const k_cache, float *const v_cache, const float *const new_k, const float *const new_v, const int token_index, const int hidden_size) {
     const int idx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -31,31 +22,25 @@ __global__ void residual_kernel(float *const input_output, const float *const re
 }
 
 extern "C" {
-cublasHandle_t get_global_cublas_handle() {
-    if (global_cublas_handle == nullptr) {
-        init_cublas_infrastructure();
-    }
-    return global_cublas_handle;
-}
-
 void launch_matmul(float *output_matrix,
                    const float *matrix_a,
                    const float *matrix_b,
                    const int batch_size, const int out_features, const int in_features,
                    void *stream_ptr) {
-    if (global_cublas_handle == nullptr) {
-        init_cublas_infrastructure();
+    const cublasHandle_t handle = get_global_cublas_handle();
+    if (handle == nullptr) {
+        fprintf(stderr, "Ошибка: Не удалось получить cuBLAS хендл!\n");
+        return;
     }
 
     const auto stream = static_cast<cudaStream_t>(stream_ptr);
-
-    cublasSetStream(global_cublas_handle, stream);
+    cublasSetStream(handle, stream);
 
     constexpr float alpha = 1.0f;
     constexpr float beta = 0.0f;
 
     const cublasStatus_t status = cublasGemmEx(
-        global_cublas_handle,
+        handle,
         CUBLAS_OP_N,
         CUBLAS_OP_N,
         out_features,

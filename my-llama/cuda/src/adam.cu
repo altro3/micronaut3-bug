@@ -1,4 +1,5 @@
 #include <cuda_runtime.h>
+#include <device_launch_parameters.h>
 
 union Vector4 {
     float4 v4;
@@ -29,9 +30,6 @@ __global__ void adamw_vectorized_max_speed_kernel(
         m_reg.v4 = __ldcs(&m_buffer[idx]);
         v_reg.v4 = __ldcs(&v_buffer[idx]);
 
-        Vector4 zero_g;
-        zero_g.v4 = make_float4(0.0f, 0.0f, 0.0f, 0.0f);
-
         const float one_minus_beta1 = 1.0f - beta1;
         const float one_minus_beta2 = 1.0f - beta2;
 
@@ -50,8 +48,8 @@ __global__ void adamw_vectorized_max_speed_kernel(
 
             const float m_hat = m_val * inv_bias_correction1;
             const float v_hat = v_val * inv_bias_correction2;
-            const float rsqrt_v = rsqrtf(v_hat + 1e-8f);
-            const float denom = m_hat * rsqrt_v / (1.0f + epsilon * rsqrt_v);
+
+            const float denom = m_hat / (sqrtf(v_hat) + epsilon);
 
             w_reg.arr[i] = w_val - lr * (denom + weight_decay * w_val);
         }
@@ -59,6 +57,9 @@ __global__ void adamw_vectorized_max_speed_kernel(
         __stcs(&m_buffer[idx], m_reg.v4);
         __stcs(&v_buffer[idx], v_reg.v4);
         __stcs(&weights[idx], w_reg.v4);
+
+        Vector4 zero_g;
+        zero_g.v4 = make_float4(0.0f, 0.0f, 0.0f, 0.0f);
         __stcs(&gradients[idx], zero_g.v4);
     }
 }
@@ -94,8 +95,7 @@ __global__ void adamw_scalar_max_speed_kernel(
         const float m_hat = m * inv_bias_correction1;
         const float v_hat = v * inv_bias_correction2;
 
-        const float rsqrt_v = rsqrtf(v_hat + 1e-8f);
-        const float denom = m_hat * rsqrt_v / (1.0f + epsilon * rsqrt_v);
+        const float denom = m_hat / (sqrtf(v_hat) + epsilon);
 
         __stcs(&m_buffer[idx], m);
         __stcs(&v_buffer[idx], v);
@@ -123,8 +123,9 @@ void launch_adamw(
 
     const float bias_correction1 = 1.0f - powf(beta1, step);
     const float bias_correction2 = 1.0f - powf(beta2, step);
-    const float inv_bias_correction1 = 1.0f / bias_correction1;
-    const float inv_bias_correction2 = 1.0f / bias_correction2;
+
+    const float inv_bias_correction1 = bias_correction1 > 0.0f ? 1.0f / bias_correction1 : 1.0f;
+    const float inv_bias_correction2 = bias_correction2 > 0.0f ? 1.0f / bias_correction2 : 1.0f;
 
     constexpr int threads = 256;
 
