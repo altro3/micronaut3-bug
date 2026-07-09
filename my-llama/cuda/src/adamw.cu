@@ -1,11 +1,5 @@
 #include <cuda_runtime.h>
 #include <device_launch_parameters.h>
-#include <math.h>
-
-union Vector4 {
-    float4 v4;
-    float arr[4];
-};
 
 extern "C" {
 __global__ void adamw_vectorized_max_speed_kernel(
@@ -24,42 +18,47 @@ __global__ void adamw_vectorized_max_speed_kernel(
 ) {
     const int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx < size_v4) {
-        Vector4 w_reg, g_reg, m_reg, v_reg;
-        w_reg.v4 = __ldcs(&weights[idx]);
-        g_reg.v4 = __ldcs(&gradients[idx]);
-        m_reg.v4 = __ldcs(&m_buffer[idx]);
-        v_reg.v4 = __ldcs(&v_buffer[idx]);
+        float4 w_v4 = __ldcs(&weights[idx]);
+        const float4 g_v4 = __ldcs(&gradients[idx]);
+        float4 m_v4 = __ldcs(&m_buffer[idx]);
+        float4 v_v4 = __ldcs(&v_buffer[idx]);
 
         const float one_minus_beta1 = 1.0f - beta1;
         const float one_minus_beta2 = 1.0f - beta2;
 
-#pragma unroll
-        for (int i = 0; i < 4; ++i) {
-            const float g_val = g_reg.arr[i];
-            const float w_val = w_reg.arr[i];
-            float m_val = m_reg.arr[i];
-            float v_val = v_reg.arr[i];
+        m_v4.x = beta1 * m_v4.x + one_minus_beta1 * g_v4.x;
+        v_v4.x = beta2 * v_v4.x + one_minus_beta2 * g_v4.x * g_v4.x;
+        const float sqrt_v_x = __fsqrt_rn(v_v4.x * inv_bias_correction2);
+        const float inv_denom_x = __frcp_rn(sqrt_v_x + epsilon);
+        const float denom_x = (m_v4.x * inv_bias_correction1) * inv_denom_x;
+        w_v4.x = w_v4.x - lr * (denom_x + weight_decay * w_v4.x);
 
-            m_val = beta1 * m_val + one_minus_beta1 * g_val;
-            v_val = beta2 * v_val + one_minus_beta2 * g_val * g_val;
+        m_v4.y = beta1 * m_v4.y + one_minus_beta1 * g_v4.y;
+        v_v4.y = beta2 * v_v4.y + one_minus_beta2 * g_v4.y * g_v4.y;
+        const float sqrt_v_y = __fsqrt_rn(v_v4.y * inv_bias_correction2);
+        const float inv_denom_y = __frcp_rn(sqrt_v_y + epsilon);
+        const float denom_y = (m_v4.y * inv_bias_correction1) * inv_denom_y;
+        w_v4.y = w_v4.y - lr * (denom_y + weight_decay * w_v4.y);
 
-            m_reg.arr[i] = m_val;
-            v_reg.arr[i] = v_val;
+        m_v4.z = beta1 * m_v4.z + one_minus_beta1 * g_v4.z;
+        v_v4.z = beta2 * v_v4.z + one_minus_beta2 * g_v4.z * g_v4.z;
+        const float sqrt_v_z = __fsqrt_rn(v_v4.z * inv_bias_correction2);
+        const float inv_denom_z = __frcp_rn(sqrt_v_z + epsilon);
+        const float denom_z = (m_v4.z * inv_bias_correction1) * inv_denom_z;
+        w_v4.z = w_v4.z - lr * (denom_z + weight_decay * w_v4.z);
 
-            const float m_hat = m_val * inv_bias_correction1;
-            const float v_hat = v_val * inv_bias_correction2;
-            const float denom = m_hat / (sqrtf(v_hat) + epsilon);
+        m_v4.w = beta1 * m_v4.w + one_minus_beta1 * g_v4.w;
+        v_v4.w = beta2 * v_v4.w + one_minus_beta2 * g_v4.w * g_v4.w;
+        const float sqrt_v_w = __fsqrt_rn(v_v4.w * inv_bias_correction2);
+        const float inv_denom_w = __frcp_rn(sqrt_v_w + epsilon);
+        const float denom_w = (m_v4.w * inv_bias_correction1) * inv_denom_w;
+        w_v4.w = w_v4.w - lr * (denom_w + weight_decay * w_v4.w);
 
-            w_reg.arr[i] = w_val - lr * (denom + weight_decay * w_val);
-        }
+        __stcs(&m_buffer[idx], m_v4);
+        __stcs(&v_buffer[idx], v_v4);
+        __stcs(&weights[idx], w_v4);
 
-        __stcs(&m_buffer[idx], m_reg.v4);
-        __stcs(&v_buffer[idx], v_reg.v4);
-        __stcs(&weights[idx], w_reg.v4);
-
-        Vector4 zero_g;
-        zero_g.v4 = make_float4(0.0f, 0.0f, 0.0f, 0.0f);
-        __stcs(&gradients[idx], zero_g.v4);
+        __stcs(&gradients[idx], make_float4(0.0f, 0.0f, 0.0f, 0.0f));
     }
 }
 
@@ -84,15 +83,12 @@ __global__ void adamw_scalar_max_speed_kernel(
         float m = __ldcs(&m_buffer[idx]);
         float v = __ldcs(&v_buffer[idx]);
 
-        const float one_minus_beta1 = 1.0f - beta1;
-        const float one_minus_beta2 = 1.0f - beta2;
+        m = beta1 * m + (1.0f - beta1) * g;
+        v = beta2 * v + (1.0f - beta2) * g * g;
 
-        m = beta1 * m + one_minus_beta1 * g;
-        v = beta2 * v + one_minus_beta2 * g * g;
-
-        const float m_hat = m * inv_bias_correction1;
-        const float v_hat = v * inv_bias_correction2;
-        const float denom = m_hat / (sqrtf(v_hat) + epsilon);
+        const float sqrt_v = __fsqrt_rn(v * inv_bias_correction2);
+        const float inv_denom = __frcp_rn(sqrt_v + epsilon);
+        const float denom = (m * inv_bias_correction1) * inv_denom;
 
         __stcs(&m_buffer[idx], m);
         __stcs(&v_buffer[idx], v);
@@ -100,20 +96,11 @@ __global__ void adamw_scalar_max_speed_kernel(
         __stcs(&gradients[idx], 0.0f);
     }
 }
-}
 
 extern "C" void launch_adamw(
-    float *weights,
-    float *gradients,
-    float *m_buffer,
-    float *v_buffer,
-    const int size,
-    const float lr,
-    const float beta1,
-    const float beta2,
-    const float epsilon,
-    const float weight_decay,
-    const float step,
+    float *weights, float *gradients, float *m_buffer, float *v_buffer,
+    const int size, const float lr, const float beta1, const float beta2,
+    const float epsilon, const float weight_decay, const float step,
     void *stream_ptr
 ) {
     const auto stream = static_cast<cudaStream_t>(stream_ptr);
@@ -149,4 +136,5 @@ extern "C" void launch_adamw(
             inv_bias_correction1, inv_bias_correction2
         );
     }
+}
 }

@@ -46,8 +46,8 @@ name = "test_trainer"
 path = "src/bin/test_trainer.rs"
 
 [[bin]]
-name = "cuda_adam"
-path = "src/bin/cuda_adam.rs"
+name = "cuda_adamw"
+path = "src/bin/cuda_adamw.rs"
 
 [[bin]]
 name = "infer_simple"

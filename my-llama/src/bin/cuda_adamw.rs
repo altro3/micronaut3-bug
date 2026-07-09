@@ -84,7 +84,7 @@ impl Drop for CudaBuffer {
 fn main() {
     println!("=== ТЕСТИРОВАНИЕ СКОРОСТИ И ТОЧНОСТИ ЯДРА ADAMW НА RTX 5090 ===");
 
-    let size = 26_255_376;
+    let size = 262_553_760;
     let mem_bytes = size * 4 * 4;
     println!(
         "Размер тестового тензора: {} элементов (~{:.2} МБ общая аллокация)",
@@ -142,26 +142,46 @@ fn main() {
         assert_eq!(cudaEventCreate(&mut start_event), 0);
         assert_eq!(cudaEventCreate(&mut end_event), 0);
 
-        println!("Запуск боевого бенчмарка ядра...");
+        println!("Запуск боевого бенчмарка ядра в бесконечном цикле на 20 секунд...");
+        println!("==> ОТКРЫВАЙ ДИСПЕТЧЕР ЗАДАЧ (Вкладка GPU -> Производительность) <==");
+
         cudaEventRecord(start_event, ptr::null_mut());
 
-        launch_adamw(
-            d_w.ptr,
-            d_g.ptr,
-            d_m.ptr,
-            d_v.ptr,
-            size as i32,
-            lr,
-            beta1,
-            beta2,
-            epsilon,
-            weight_decay,
-            step,
-            ptr::null_mut(),
-        );
+        let num_iterations = 1;
+        for _i in 0..num_iterations {
+            launch_adamw(
+                d_w.ptr,
+                d_g.ptr,
+                d_m.ptr,
+                d_v.ptr,
+                size as i32,
+                lr,
+                beta1,
+                beta2,
+                epsilon,
+                weight_decay,
+                step,
+                ptr::null_mut(),
+            );
+        }
 
         cudaEventRecord(end_event, ptr::null_mut());
         cudaEventSynchronize(end_event);
+
+        let mut milliseconds = 0.0f32;
+        cudaEventElapsedTime(&mut milliseconds, start_event, end_event);
+
+        let avg_milliseconds = milliseconds / num_iterations as f32;
+        let seconds = (avg_milliseconds / 1000.0) as f64;
+
+        let bytes_processed = size * 32;
+        let bandwidth_gbps = (bytes_processed as f64 / 1e9) / seconds;
+
+        println!("\n=== ФИНАЛЬНЫЕ ЗАМЕРЫ ПОСЛЕ ДЛИТЕЛЬНОГО ТЕСТА ===");
+        println!("Всего проходов ядра: {}", num_iterations);
+        println!("Total время выполнения серии: {:.2} сек", milliseconds / 1000.0);
+        println!("Среднее время выполнения одного ядра: {:.3} мс", avg_milliseconds);
+        println!("Стабильная пропускная способность VRAM: {:.2} ГБ/сек", bandwidth_gbps);
 
         let err = cudaGetLastError();
         if err != 0 {
@@ -170,16 +190,6 @@ fn main() {
             println!("\n[КРИТИЧЕСКИЙ СБОЙ CUDA]: Ядро упало с кодом {}: {}", err, rust_str);
             return;
         }
-
-        let mut milliseconds = 0.0f32;
-        cudaEventElapsedTime(&mut milliseconds, start_event, end_event);
-        let seconds = (milliseconds / 1000.0) as f64;
-
-        let bytes_processed = size * 32;
-        let bandwidth_gbps = (bytes_processed as f64 / 1e9) / seconds;
-
-        println!("Время выполнения на RTX 5090: {:.3} мс", milliseconds);
-        println!("Эффективная пропускная способность VRAM: {:.2} ГБ/сек", bandwidth_gbps);
 
         cudaEventDestroy(start_event);
         cudaEventDestroy(end_event);
