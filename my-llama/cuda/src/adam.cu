@@ -1,11 +1,13 @@
 #include <cuda_runtime.h>
 #include <device_launch_parameters.h>
+#include <math.h>
 
 union Vector4 {
     float4 v4;
     float arr[4];
 };
 
+extern "C" {
 __global__ void adamw_vectorized_max_speed_kernel(
     float4 * __restrict__ weights,
     float4 * __restrict__ gradients,
@@ -21,10 +23,8 @@ __global__ void adamw_vectorized_max_speed_kernel(
     const float inv_bias_correction2
 ) {
     const int idx = blockIdx.x * blockDim.x + threadIdx.x;
-
     if (idx < size_v4) {
         Vector4 w_reg, g_reg, m_reg, v_reg;
-
         w_reg.v4 = __ldcs(&weights[idx]);
         g_reg.v4 = __ldcs(&gradients[idx]);
         m_reg.v4 = __ldcs(&m_buffer[idx]);
@@ -48,7 +48,6 @@ __global__ void adamw_vectorized_max_speed_kernel(
 
             const float m_hat = m_val * inv_bias_correction1;
             const float v_hat = v_val * inv_bias_correction2;
-
             const float denom = m_hat / (sqrtf(v_hat) + epsilon);
 
             w_reg.arr[i] = w_val - lr * (denom + weight_decay * w_val);
@@ -79,7 +78,6 @@ __global__ void adamw_scalar_max_speed_kernel(
     const float inv_bias_correction2
 ) {
     const int idx = blockIdx.x * blockDim.x + threadIdx.x;
-
     if (idx < size) {
         const float g = __ldcs(&gradients[idx]);
         const float w = __ldcs(&weights[idx]);
@@ -94,7 +92,6 @@ __global__ void adamw_scalar_max_speed_kernel(
 
         const float m_hat = m * inv_bias_correction1;
         const float v_hat = v * inv_bias_correction2;
-
         const float denom = m_hat / (sqrtf(v_hat) + epsilon);
 
         __stcs(&m_buffer[idx], m);
@@ -103,9 +100,9 @@ __global__ void adamw_scalar_max_speed_kernel(
         __stcs(&gradients[idx], 0.0f);
     }
 }
+}
 
-extern "C" {
-void launch_adamw(
+extern "C" void launch_adamw(
     float *weights,
     float *gradients,
     float *m_buffer,
@@ -123,7 +120,6 @@ void launch_adamw(
 
     const float bias_correction1 = 1.0f - powf(beta1, step);
     const float bias_correction2 = 1.0f - powf(beta2, step);
-
     const float inv_bias_correction1 = bias_correction1 > 0.0f ? 1.0f / bias_correction1 : 1.0f;
     const float inv_bias_correction2 = bias_correction2 > 0.0f ? 1.0f / bias_correction2 : 1.0f;
 
@@ -137,7 +133,6 @@ void launch_adamw(
     if (size % 4 == 0 && is_aligned) {
         const int size_v4 = size / 4;
         const int blocks = (size_v4 + threads - 1) / threads;
-
         adamw_vectorized_max_speed_kernel<<<blocks, threads, 0, stream>>>(
             reinterpret_cast<float4 *>(weights),
             reinterpret_cast<float4 *>(gradients),
@@ -154,5 +149,4 @@ void launch_adamw(
             inv_bias_correction1, inv_bias_correction2
         );
     }
-}
 }
