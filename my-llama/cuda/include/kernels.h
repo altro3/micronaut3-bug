@@ -21,8 +21,18 @@ void launch_swish_glu(
     float *output,
     const float *gate_input,
     const float *up_input,
-    const int size,
+    int size,
     void *stream_ptr
+);
+
+void launch_rms_norm(
+    float *output,
+    const float *input,
+    const float *weight,
+    int batch_size,
+    int hidden_size,
+    float epsilon,
+    void *stream
 );
 }
 

@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.24) # 4.3 — это опечатка, актуальные версии сейчас 3.x
+cmake_minimum_required(VERSION 4.3)
 project(my_llama_cuda LANGUAGES CXX CUDA)
 
 set(CMAKE_CXX_STANDARD 17)
@@ -15,6 +15,7 @@ add_library(
         cuda/include/kernels.h
         cuda/src/adamw.cu
         cuda/src/swiglu.cu
+        cuda/src/rmsnorm.cu
 )
 
 target_link_libraries(cuda_kernels PRIVATE CUDA::cublas CUDA::cublasLt)
