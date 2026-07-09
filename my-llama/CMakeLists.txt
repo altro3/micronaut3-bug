@@ -14,6 +14,8 @@ add_library(
         cuda_kernels STATIC
         cuda/include/kernels.h
         cuda/src/adamw.cu
+        cuda/src/matmul.cu
+        cuda/src/matmul_gguf_q4_k.cu
         cuda/src/swiglu.cu
         cuda/src/rmsnorm.cu
 )

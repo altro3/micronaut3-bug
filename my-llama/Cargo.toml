@@ -50,6 +50,14 @@ name = "cuda_adamw"
 path = "src/bin/cuda_adamw.rs"
 
 [[bin]]
+name = "cuda_matmul"
+path = "src/bin/cuda_matmul.rs"
+
+[[bin]]
+name = "cuda_matmul_gguf_q4_k"
+path = "src/bin/cuda_matmul_gguf_q4_k.rs"
+
+[[bin]]
 name = "cuda_rmsnorm"
 path = "src/bin/cuda_rmsnorm.rs"
 

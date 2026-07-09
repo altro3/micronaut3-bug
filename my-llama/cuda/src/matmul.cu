@@ -3,33 +3,46 @@
 #include <cublas_v2.h>
 #include <stdio.h>
 
-extern "C" void init_cublas_infrastructure();
+static cublasHandle_t global_cublas_handle = nullptr;
 
-extern "C" cublasHandle_t get_global_cublas_handle();
-
-__global__ void update_kv_cache_kernel(float *const k_cache, float *const v_cache, const float *const new_k, const float *const new_v, const int token_index, const int hidden_size) {
-    const int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    if (idx < hidden_size) {
-        const int cache_offset = token_index * hidden_size + idx;
-        k_cache[cache_offset] = new_k[idx];
-        v_cache[cache_offset] = new_v[idx];
+extern "C" {
+void init_cublas_infrastructure() {
+    if (global_cublas_handle == nullptr) {
+        const cublasStatus_t status = cublasCreate(&global_cublas_handle);
+        if (status != CUBLAS_STATUS_SUCCESS) {
+            fprintf(stderr, "[CUBLAS CRITICAL ERROR]: Failed to create handle! Code: %d\n", status);
+        } else {
+            //cublasSetMathMode(global_cublas_handle, CUBLAS_DEFAULT_MATH);
+            cublasSetMathMode(global_cublas_handle, CUBLAS_TF32_TENSOR_OP_MATH);
+            printf("[CUDA]: Global cuBLAS infrastructure (TF32 Tensor Cores mode) successfully initialized.\n");
+        }
     }
 }
 
-__global__ void residual_kernel(float *const input_output, const float *const residual_data, const int size) {
-    const int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    if (idx < size) { input_output[idx] += residual_data[idx]; }
+void destroy_cublas_infrastructure() {
+    if (global_cublas_handle != nullptr) {
+        cublasDestroy(global_cublas_handle);
+        global_cublas_handle = nullptr;
+        printf("[CUDA]: cuBLAS infrastructure successfully released.\n");
+    }
 }
 
-extern "C" {
-void launch_matmul(float *output_matrix,
-                   const float *matrix_a,
-                   const float *matrix_b,
-                   const int batch_size, const int out_features, const int in_features,
-                   void *stream_ptr) {
+cublasHandle_t get_global_cublas_handle() {
+    return global_cublas_handle;
+}
+
+void launch_matmul(
+    float *output_matrix,
+    const float *matrix_a,
+    const float *matrix_b,
+    const int batch_size,
+    const int out_features,
+    const int in_features,
+    void *stream_ptr
+) {
     const cublasHandle_t handle = get_global_cublas_handle();
     if (handle == nullptr) {
-        fprintf(stderr, "Ошибка: Не удалось получить cuBLAS хендл!\n");
+        fprintf(stderr, "[CUDA ERROR]: Attempted to call launch_matmul before cuBLAS initialization!\n");
         return;
     }
 
@@ -47,33 +60,23 @@ void launch_matmul(float *output_matrix,
         batch_size,
         in_features,
         &alpha,
-        matrix_b, CUDA_R_32F, out_features,
-        matrix_a, CUDA_R_32F, in_features,
+        matrix_b,
+        CUDA_R_32F,
+        out_features,
+        matrix_a,
+        CUDA_R_32F,
+        in_features,
         &beta,
-        output_matrix, CUDA_R_32F, out_features,
-        CUBLAS_COMPUTE_32F,
+        output_matrix,
+        CUDA_R_32F,
+        out_features,
+        //        CUBLAS_COMPUTE_32F,
+        CUBLAS_COMPUTE_32F_FAST_TF32,
         CUBLAS_GEMM_DEFAULT
     );
 
     if (status != CUBLAS_STATUS_SUCCESS) {
-        fprintf(stderr, "Ошибка асинхронного cuBLAS GemmEx! Код статуса: %d\n", status);
+        fprintf(stderr, "[CUDA ERROR]: Asynchronous failure in cuBLAS GemmEx! Status code: %d\n", status);
     }
-}
-
-void launch_update_kv_cache(float *k_cache, float *v_cache, const float *new_k, const float *new_v,
-                            const int token_index, const int hidden_size, void *stream_ptr) {
-    constexpr int threads = 256;
-    const int blocks = (hidden_size + threads - 1) / threads;
-    auto stream = static_cast<cudaStream_t>(stream_ptr);
-
-    update_kv_cache_kernel<<<blocks, threads, 0, stream>>>(k_cache, v_cache, new_k, new_v, token_index, hidden_size);
-}
-
-void launch_residual(float *input_output, const float *residual_data, const int size, void *stream_ptr) {
-    constexpr int threads = 256;
-    const int blocks = (size + threads - 1) / threads;
-    auto stream = static_cast<cudaStream_t>(stream_ptr);
-
-    residual_kernel<<<blocks, threads, 0, stream>>>(input_output, residual_data, size);
 }
 }

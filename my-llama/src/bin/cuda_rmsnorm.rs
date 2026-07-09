@@ -1,8 +1,11 @@
 use std::ffi::c_void;
 use std::ptr;
 
+#[allow(clippy::duplicated_attributes)]
 #[link(name = "cuda_kernels", kind = "static")]
 #[link(name = "cudart", kind = "dylib")]
+#[link(name = "cublas", kind = "dylib")]
+#[link(name = "cublasLt", kind = "dylib")]
 unsafe extern "C" {
     pub fn launch_rms_norm(output: *mut f32, input: *const f32, weight: *const f32, batch_size: i32, hidden_size: i32, epsilon: f32, s: *mut c_void);
     fn cudaMalloc(dev_ptr: *mut *mut c_void, size: usize) -> i32;

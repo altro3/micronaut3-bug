@@ -1,8 +1,11 @@
 use std::ffi::{CStr, c_char, c_void};
 use std::ptr;
 
+#[allow(clippy::duplicated_attributes)]
 #[link(name = "cuda_kernels", kind = "static")]
 #[link(name = "cudart", kind = "dylib")]
+#[link(name = "cublas", kind = "dylib")]
+#[link(name = "cublasLt", kind = "dylib")]
 unsafe extern "C" {
     pub fn launch_adamw(
         w: *mut f32,
