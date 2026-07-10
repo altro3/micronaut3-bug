@@ -112,10 +112,10 @@ extern "C" void launch_adamw(
 
     constexpr int threads = 256;
 
-    const bool is_aligned = reinterpret_cast<uintptr_t>(weights) % 16 == 0 &&
-                            reinterpret_cast<uintptr_t>(gradients) % 16 == 0 &&
-                            reinterpret_cast<uintptr_t>(m_buffer) % 16 == 0 &&
-                            reinterpret_cast<uintptr_t>(v_buffer) % 16 == 0;
+    const bool is_aligned = reinterpret_cast<uintptr_t>(weights) % 16 == 0
+                            && reinterpret_cast<uintptr_t>(gradients) % 16 == 0
+                            && reinterpret_cast<uintptr_t>(m_buffer) % 16 == 0
+                            && reinterpret_cast<uintptr_t>(v_buffer) % 16 == 0;
 
     if (size % 4 == 0 && is_aligned) {
         const int size_v4 = size / 4;
