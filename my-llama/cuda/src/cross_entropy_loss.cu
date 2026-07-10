@@ -43,50 +43,43 @@ __global__ void __launch_bounds__(1024, 2) fused_cross_entropy_online_kernel(
     const int token_idx = blockIdx.x;
     if (token_idx >= total_tokens) return;
 
-    const int target_label = targets[token_idx];
-    const int target_v4_idx = target_label / 4;
-    const int target_v4_off = target_label % 4;
-
-    const auto token_logits_v4 = reinterpret_cast<const float4 *>(logits + static_cast<long long>(token_idx) * vocab_size);
-    auto out_grads_v4 = reinterpret_cast<float4 *>(grads + static_cast<long long>(token_idx) * vocab_size);
-
     const int tid = threadIdx.x;
     const int lane_id = tid % 32;
     const int warp_id = tid / 32;
     const int num_warps = blockDim.x / 32;
 
-    __shared__ float s_max_pool[32];
-    __shared__ float s_sum_pool[32];
+    const long long token_offset = static_cast<long long>(token_idx) * vocab_size;
+    const auto token_logits_v4 = reinterpret_cast<const float4 *>(logits + token_offset);
+    auto out_grads_v4 = reinterpret_cast<float4 *>(grads + token_offset);
+
+    extern __shared__ char shared_mem[];
+    const auto s_max_pool = reinterpret_cast<float *>(shared_mem);
+    const auto s_sum_pool = s_max_pool + num_warps;
+
     __shared__ float s_target_logit;
     __shared__ float s_final_max;
     __shared__ float s_final_sum;
 
+    const int target_label = targets[token_idx];
+
+    if (tid == 0) {
+        if (target_label >= 0 && target_label < vocab_size) {
+            s_target_logit = logits[token_offset + target_label];
+        } else {
+            s_target_logit = 0.0f;
+        }
+    }
+    __syncthreads();
+
     SoftmaxPair local = {-1e20f, 0.0f};
-    float local_target_logit = 0.0f;
 
     for (int v_f4 = tid; v_f4 < vocab_size_v4; v_f4 += blockDim.x) {
         const float4 log_v4 = __ldcs(&token_logits_v4[v_f4]);
-
         online_softmax_update(local, log_v4.x);
         online_softmax_update(local, log_v4.y);
         online_softmax_update(local, log_v4.z);
         online_softmax_update(local, log_v4.w);
-
-        if (v_f4 == target_v4_idx) [[unlikely]] {
-            if (target_v4_off == 0) local_target_logit = log_v4.x;
-            else if (target_v4_off == 1) local_target_logit = log_v4.y;
-            else if (target_v4_off == 2) local_target_logit = log_v4.z;
-            else if (target_v4_off == 3) local_target_logit = log_v4.w;
-        }
     }
-
-    if (vocab_size_v4 > 0) {
-        const int target_thread = target_v4_idx % blockDim.x;
-        if (tid == target_thread) {
-            s_target_logit = local_target_logit;
-        }
-    }
-    __syncthreads();
 
     warp_reduce_online(local);
 
@@ -102,9 +95,7 @@ __global__ void __launch_bounds__(1024, 2) fused_cross_entropy_online_kernel(
             block_res.max_val = s_max_pool[tid];
             block_res.sum_exp = s_sum_pool[tid];
         }
-
         warp_reduce_online(block_res);
-
         if (tid == 0) {
             s_final_max = block_res.max_val;
             s_final_sum = block_res.sum_exp;
@@ -117,9 +108,11 @@ __global__ void __launch_bounds__(1024, 2) fused_cross_entropy_online_kernel(
     const float inv_block_sum = __frcp_rn(final_sum);
 
     if (tid == 0) {
-        const float target_logit = (target_label >= 0 && target_label < vocab_size) ? s_target_logit : 0.0f;
-        losses[token_idx] = __logf(final_sum) + final_max - target_logit;
+        losses[token_idx] = __logf(final_sum) + final_max - s_target_logit;
     }
+
+    const int target_v4_idx = target_label / 4;
+    const int target_v4_off = target_label % 4;
 
     for (int v_f4 = tid; v_f4 < vocab_size_v4; v_f4 += blockDim.x) {
         const float4 log_v4 = __ldcs(&token_logits_v4[v_f4]);
@@ -161,10 +154,12 @@ void launch_cross_entropy_loss(
     }
 
     const int blocks = total_tokens;
+    const int num_warps = threads / 32;
+    const size_t shared_mem_size = num_warps * sizeof(float) * 2;
     const auto stream = static_cast<cudaStream_t>(stream_ptr);
 
     if (vocab_size % 4 == 0) [[likely]] {
-        fused_cross_entropy_online_kernel<<<blocks, threads, 0, stream>>>(
+        fused_cross_entropy_online_kernel<<<blocks, threads, shared_mem_size, stream>>>(
             logits, grads, targets, losses, total_tokens, vocab_size / 4, vocab_size
         );
     }

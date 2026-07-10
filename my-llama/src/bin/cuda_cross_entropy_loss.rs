@@ -90,13 +90,19 @@ fn main() {
 
     const NUM_BUFFERS: usize = 4;
     let mut d_logits_pool = Vec::with_capacity(NUM_BUFFERS);
+    let mut d_grads_pool = Vec::with_capacity(NUM_BUFFERS);
+
     for _ in 0..NUM_BUFFERS {
-        let buf = CudaBuffer::alloc(logits_size * 4);
-        buf.copy_to_device(h_logits.as_ptr() as *const c_void, logits_size * 4);
-        d_logits_pool.push(buf);
+        let l_buf = CudaBuffer::alloc(logits_size * 4);
+        l_buf.copy_to_device(h_logits.as_ptr() as *const c_void, logits_size * 4);
+        d_logits_pool.push(l_buf);
+
+        let g_buf = CudaBuffer::alloc(logits_size * 4);
+        d_grads_pool.push(g_buf);
     }
 
     let d_logits_val = CudaBuffer::alloc(logits_size * 4);
+    let d_grads_val = CudaBuffer::alloc(logits_size * 4);
     let d_targets = CudaBuffer::alloc(targets_size * 4);
     let d_losses = CudaBuffer::alloc(losses_size * 4);
 
@@ -114,7 +120,7 @@ fn main() {
             let buf_idx = i % NUM_BUFFERS;
             launch_cross_entropy_loss(
                 d_logits_pool[buf_idx].ptr as *const f32,
-                d_logits_pool[buf_idx].ptr as *mut f32,
+                d_grads_pool[buf_idx].ptr as *mut f32,
                 d_targets.ptr as *const i32,
                 d_losses.ptr as *mut f32,
                 total_tokens,
@@ -138,7 +144,7 @@ fn main() {
             let buf_idx = i % NUM_BUFFERS;
             launch_cross_entropy_loss(
                 d_logits_pool[buf_idx].ptr as *const f32,
-                d_logits_pool[buf_idx].ptr as *mut f32,
+                d_grads_pool[buf_idx].ptr as *mut f32,
                 d_targets.ptr as *const i32,
                 d_losses.ptr as *mut f32,
                 total_tokens,
@@ -156,7 +162,7 @@ fn main() {
         let mut total_gpu_ms = 0.0_f32;
         cudaEventElapsedTime(&mut total_gpu_ms, start_event, end_event);
 
-        let single_iter_bytes = (logits_size * 4 * 3 + targets_size * 4 + losses_size * 4) as u64;
+        let single_iter_bytes = ((logits_size * 4 * 2) + (logits_size * 4) + (targets_size * 4) + (losses_size * 4)) as u64;
 
         let avg_gpu_seconds = (total_gpu_ms as f64 / 1000.0) / NUM_ITERATIONS as f64;
         let avg_bw = (single_iter_bytes as f64 / 1e9) / avg_gpu_seconds;
@@ -180,7 +186,7 @@ fn main() {
 
         launch_cross_entropy_loss(
             d_logits_val.ptr as *const f32,
-            d_logits_val.ptr as *mut f32,
+            d_grads_val.ptr as *mut f32,
             d_targets.ptr as *const i32,
             d_losses.ptr as *mut f32,
             total_tokens,
@@ -190,7 +196,7 @@ fn main() {
         cudaDeviceSynchronize();
 
         d_losses.copy_to_host(h_losses.as_mut_ptr() as *mut c_void, losses_size * 4);
-        d_logits_val.copy_to_host(h_output_gradients.as_mut_ptr() as *mut c_void, logits_size * 4);
+        d_grads_val.copy_to_host(h_output_gradients.as_mut_ptr() as *mut c_void, logits_size * 4);
 
         let expected_loss = (vocab_size as f32).ln();
         let loss_error = h_losses
