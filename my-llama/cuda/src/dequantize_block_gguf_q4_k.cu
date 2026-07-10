@@ -8,7 +8,7 @@ struct __align__(4) BlockQ4K {
     uint8_t qs[128];
 };
 
-__global__ void dequantize_q4_k_kernel_v2(
+__global__ void dequantize_q4_k_kernel_v3(
     float4 * __restrict__ output,
     const BlockQ4K * __restrict__ input,
     const int num_blocks
@@ -20,29 +20,28 @@ __global__ void dequantize_q4_k_kernel_v2(
         const float dmin_val = __half2float(block.dmin);
 
         const int tid = threadIdx.x;
-
         const int j = tid / 4;
         const int il = tid % 4;
 
-        uint8_t sc, min_sc;
-        if (j < 4) {
-            sc = block.scales[j] & 63;
-            min_sc = block.scales[j + 6] & 63;
-        } else {
-            sc = block.scales[j - 4] >> 6 | (block.scales[j + 2] & 0x0F) << 2;
-            min_sc = block.scales[j + 2] >> 6 | (block.scales[j - 2] & 0xF0) >> 2;
-        }
+        const int is_high = j >> 2;
+        const int j_mod = j & 3;
 
-        const float d_super = d_val * sc;
-        const float m_super = dmin_val * min_sc;
+        const uint8_t s_low = block.scales[j_mod + is_high * 6];
+        const uint8_t s_high = block.scales[j_mod + 4 + is_high * 2];
+
+        const uint8_t sc = (s_low & 63 + is_high * 192) >> (is_high * 6) | (s_high & 63 - is_high * 47) << (2 + is_high * 2);
+        const uint8_t min_sc = (block.scales[j_mod + 6 - is_high * 6] & 63 + is_high * 192) >> (is_high * 6) | (s_high & 12 + is_high * 228) >> (2 - is_high * 4);
+
+        const float d_super = d_val * static_cast<float>(sc);
+        const float m_super = dmin_val * static_cast<float>(min_sc);
 
         const int qs_offset = j * 16 + il * 4;
         const uint32_t bytes = *reinterpret_cast<const uint32_t *>(&block.qs[qs_offset]);
 
-        const uint8_t b0 = bytes & 0xFF;
-        const uint8_t b1 = bytes >> 8 & 0xFF;
-        const uint8_t b2 = bytes >> 16 & 0xFF;
-        const uint8_t b3 = bytes >> 24 & 0xFF;
+        const uint32_t b0 = bytes & 0xFF;
+        const uint32_t b1 = bytes >> 8 & 0xFF;
+        const uint32_t b2 = bytes >> 16 & 0xFF;
+        const uint32_t b3 = bytes >> 24;
 
         float4 out_val1;
         float4 out_val2;
@@ -76,9 +75,9 @@ void launch_dequantize_q4_k(
 
     if (num_blocks > 0) {
         constexpr int threads = 32;
-        const int blocks = min(1024, num_blocks);
+        const int blocks = min(2048, num_blocks);
 
-        dequantize_q4_k_kernel_v2<<<blocks, threads, 0, stream>>>(
+        dequantize_q4_k_kernel_v3<<<blocks, threads, 0, stream>>>(
             reinterpret_cast<float4 *>(output),
             static_cast<const BlockQ4K *>(input),
             num_blocks
