@@ -4,22 +4,14 @@
 #[link(name = "cublas", kind = "dylib")]
 #[link(name = "cublasLt", kind = "dylib")]
 unsafe extern "C" {
-    pub fn launch_rms_norm(
-        output: *mut f32,
-        input: *const f32,
-        weight: *const f32,
-        batch_size: i32,
-        hidden_size: i32,
-        epsilon: f32,
-        stream_ptr: *mut std::ffi::c_void,
-    );
-
+    pub fn launch_dequantize_q4_k(output: *mut f32, input: *const std::ffi::c_void, num_elements: i32, stream_ptr: *mut std::ffi::c_void);
     fn cudaMalloc(dev_ptr: *mut *mut std::ffi::c_void, size: usize) -> i32;
     fn cudaFree(dev_ptr: *mut std::ffi::c_void) -> i32;
     fn cudaMemcpy(dst: *mut std::ffi::c_void, src: *const std::ffi::c_void, count: usize, kind: i32) -> i32;
     fn cudaDeviceSynchronize() -> i32;
-
-    fn cudaStreamCreateWithFlags(pStream: *mut *mut std::ffi::c_void, flags: u32) -> i32;
+    fn cudaGetLastError() -> i32;
+    fn cudaGetErrorString(error: i32) -> *const std::ffi::c_char;
+    fn cudaStreamCreateWithFlags(p_stream: *mut *mut std::ffi::c_void, flags: u32) -> i32;
     fn cudaStreamDestroy(stream: *mut std::ffi::c_void) -> i32;
     fn cudaEventCreate(event: *mut *mut std::ffi::c_void) -> i32;
     fn cudaEventDestroy(event: *mut std::ffi::c_void) -> i32;
@@ -28,41 +20,41 @@ unsafe extern "C" {
     fn cudaEventElapsedTime(ms: *mut f32, start: *mut std::ffi::c_void, end: *mut std::ffi::c_void) -> i32;
 }
 
+#[repr(C, packed)]
+struct RustBlockQ4K {
+    d: u16,
+    dmin: u16,
+    scales: [u8; 12],
+    qs: [u8; 128],
+}
+
 struct CudaBuffer {
-    ptr: *mut f32,
-    size: usize,
+    ptr: *mut std::ffi::c_void,
+    size_bytes: usize,
 }
 
 impl CudaBuffer {
-    fn alloc(size: usize) -> Self {
+    fn alloc(size_bytes: usize) -> Self {
         let mut raw_ptr: *mut std::ffi::c_void = std::ptr::null_mut();
         unsafe {
-            let res = cudaMalloc(&mut raw_ptr, size * size_of::<f32>());
-            assert_eq!(res, 0, "cudaMalloc failed");
-            assert_eq!(raw_ptr as usize % 16, 0, "Memory alignment failed!");
+            let res = cudaMalloc(&mut raw_ptr, size_bytes);
+            assert_eq!(res, 0);
+            assert_eq!(raw_ptr as usize % 16, 0);
         }
-        CudaBuffer { ptr: raw_ptr as *mut f32, size }
+        CudaBuffer { ptr: raw_ptr, size_bytes }
     }
 
-    fn copy_to_device(&self, host_data: &[f32]) {
+    fn copy_to_device(&self, host_data: &[u8]) {
+        assert!(host_data.len() >= self.size_bytes);
         unsafe {
-            cudaMemcpy(
-                self.ptr as *mut std::ffi::c_void,
-                host_data.as_ptr() as *const std::ffi::c_void,
-                self.size * size_of::<f32>(),
-                1,
-            );
+            cudaMemcpy(self.ptr, host_data.as_ptr() as *const std::ffi::c_void, self.size_bytes, 1);
         }
     }
 
     fn copy_to_host(&self, host_data: &mut [f32]) {
+        assert!(host_data.len() * 4 >= self.size_bytes);
         unsafe {
-            cudaMemcpy(
-                host_data.as_mut_ptr() as *mut std::ffi::c_void,
-                self.ptr as *const std::ffi::c_void,
-                self.size * size_of::<f32>(),
-                2,
-            );
+            cudaMemcpy(host_data.as_mut_ptr() as *mut std::ffi::c_void, self.ptr, self.size_bytes, 2);
         }
     }
 }
@@ -70,40 +62,43 @@ impl CudaBuffer {
 impl Drop for CudaBuffer {
     fn drop(&mut self) {
         unsafe {
-            cudaFree(self.ptr as *mut std::ffi::c_void);
+            cudaFree(self.ptr);
         }
     }
 }
 
 fn main() {
-    println!("=== РАСШИРЕННЫЙ АСИНХРОННЫЙ БЕНЧМАРК И ВАЛИДАЦИЯ RMSNORM НА BLACKWELL ===");
+    println!("=== РАСШИРЕННЫЙ АСИНХРОННЫЙ БЕНЧМАРК ДЕКВАНТОВАНИЯ GGUF Q4_K_M НА BLACKWELL ===");
 
-    // Конфигурация под реальный инференс Qwen-35B
-    let batch_size = 32_768; // Огромный батч контекста (длинный промпт)
-    let hidden_size = 8192; // Нативная скрытая размерность топовых слоев
-    let size = batch_size * hidden_size;
+    let num_blocks = 1_025_600;
+    let num_elements = num_blocks * 256;
 
-    let bytes_per_element: u64 = 12; // 2 чтения (input, weight) + 1 запись (output) = 12 байт
-    let iter_bytes = size as u64 * bytes_per_element;
+    let bytes_read = num_blocks as u64 * 144;
+    let bytes_written = num_elements as u64 * 4;
+    let iter_bytes = bytes_read + bytes_written;
 
     println!(
-        "Профиль матрицы: {} x {} элементов (~{:.2} ГБ выделено в VRAM)",
-        batch_size,
-        hidden_size,
-        (size * 4 * 3) as f64 / 1e9
+        "Конфигурация: {} супер-блоков GGUF (~{:.2} МБ упаковано -> {:.2} МБ FP32 тензор)",
+        num_blocks,
+        bytes_read as f64 / 1e6,
+        bytes_written as f64 / 1e6
     );
 
-    let epsilon = 1e-6_f32;
+    let mut h_input = Vec::with_capacity(num_blocks * size_of::<RustBlockQ4K>());
+    for i in 0..num_blocks {
+        let mut scales = [0u8; 12];
+        scales[0] = 0x2A;
+        scales[6] = 0x03;
 
-    let h_input = vec![0.015f32; size];
-    let h_weight = vec![0.98f32; hidden_size];
+        let block = RustBlockQ4K { d: 0x3800, dmin: 0x2E00, scales, qs: [0x42; 128] };
+        let bytes: &[u8] = unsafe { std::slice::from_raw_parts(&block as *const RustBlockQ4K as *const u8, size_of::<RustBlockQ4K>()) };
+        h_input.extend_from_slice(bytes);
+    }
 
-    let d_out = CudaBuffer::alloc(size);
-    let d_input = CudaBuffer::alloc(size);
-    let d_weight = CudaBuffer::alloc(hidden_size);
+    let d_input = CudaBuffer::alloc(num_blocks * size_of::<RustBlockQ4K>());
+    let d_output = CudaBuffer::alloc(num_elements * size_of::<f32>());
 
     d_input.copy_to_device(&h_input);
-    d_weight.copy_to_device(&h_weight);
 
     const NUM_ITERATIONS: usize = 1000;
 
@@ -111,16 +106,7 @@ fn main() {
         let mut stream: *mut std::ffi::c_void = std::ptr::null_mut();
         assert_eq!(cudaStreamCreateWithFlags(&mut stream, 0x01), 0);
 
-        // Warmup
-        launch_rms_norm(
-            d_out.ptr,
-            d_input.ptr,
-            d_weight.ptr,
-            batch_size as i32,
-            hidden_size as i32,
-            epsilon,
-            stream,
-        );
+        launch_dequantize_q4_k(d_output.ptr as *mut f32, d_input.ptr, num_elements as i32, stream);
         cudaDeviceSynchronize();
 
         let mut start_events = vec![std::ptr::null_mut(); NUM_ITERATIONS];
@@ -130,20 +116,12 @@ fn main() {
             assert_eq!(cudaEventCreate(&mut end_events[i]), 0);
         }
 
-        println!("Запуск телеметрии RMSNorm... Очередь асинхронно заполняется.");
+        println!("Запуск телеметрии... Очередь асинхронно заполняется.");
         let start_host = std::time::Instant::now();
 
         for i in 0..NUM_ITERATIONS {
             cudaEventRecord(start_events[i], stream);
-            launch_rms_norm(
-                d_out.ptr,
-                d_input.ptr,
-                d_weight.ptr,
-                batch_size as i32,
-                hidden_size as i32,
-                epsilon,
-                stream,
-            );
+            launch_dequantize_q4_k(d_output.ptr as *mut f32, d_input.ptr, num_elements as i32, stream);
             cudaEventRecord(end_events[i], stream);
         }
 
@@ -164,7 +142,6 @@ fn main() {
             bandwidths.push(gbps);
         }
 
-        // Сортируем скорости от меньшей к большей
         bandwidths.sort_by(|a, b| a.partial_cmp(b).unwrap());
 
         let min_bw = bandwidths[0];
@@ -174,7 +151,7 @@ fn main() {
         let p99_worst = bandwidths[(NUM_ITERATIONS as f64 * 0.01) as usize];
         let avg_bw = (iter_bytes as f64 * NUM_ITERATIONS as f64 / 1e9) / (total_gpu_ms as f64 / 1000.0);
 
-        println!("\n📊 === РЕЗУЛЬТАТЫ ГЛУБОКОГО СТАТИСТИЧЕСКОГО АНАЛИЗА RMSNORM ===");
+        println!("\n📊 === РЕЗУЛЬТАТЫ ГЛУБОКОГО СТАТИСТИЧЕСКОГО АНАЛИЗА ДЕКВАНТОВАНИЯ ===");
         println!("Время отправки очереди (Launch Overhead): {:.6} сек", host_launch_time.as_secs_f32());
         println!("Полное время теста на GPU (по событиям):  {:.2} сек", total_gpu_ms / 1000.0);
         println!("Полное время ожидания хостом (Wall Time):  {:.2} сек", total_host_time.as_secs_f32());
@@ -189,38 +166,37 @@ fn main() {
         println!("-------------------------------------------------------");
         println!("Колебания скорости (Jitter):              {:.2} ГБ/сек", max_bw - min_bw);
 
-        // --- ВАЛИДАЦИЯ МАТЕМАТИКИ ДЛЯ ПЕРВОЙ СТРОКИ ---
-        let mut final_out = vec![0.0f32; size];
-        d_out.copy_to_host(&mut final_out);
+        let mut final_out = vec![0.0f32; num_elements];
+        d_output.copy_to_host(&mut final_out);
 
-        // Расчет эталона на CPU для первой строки (индексы от 0 до hidden_size)
-        let mut cpu_sum = 0.0_f64;
-        for i in 0..hidden_size {
-            cpu_sum += (h_input[i] * h_input[i]) as f64;
-        }
-        let cpu_rms_inv = 1.0 / ((cpu_sum * (1.0 / hidden_size as f64) + epsilon as f64).sqrt());
+        let d_val = 0.5_f32;
+        let dmin_val = 0.09375_f32;
 
-        let mut max_err = 0.0_f32;
-        for i in 0..hidden_size {
-            let expected = (h_input[i] as f64 * cpu_rms_inv * h_weight[i] as f64) as f32;
-            let err = (final_out[i] - expected).abs();
-            if err > max_err {
-                max_err = err;
-            }
-        }
+        let expected_sc = (0x2A & 63) as f32;
+        let expected_min_sc = (0x03 & 63) as f32;
 
-        println!("\n--- РЕЗУЛЬТАТЫ МАТЕМАТИЧЕСКОЙ ВАЛИДАЦИИ RMSNORM ---");
-        println!(
-            "Ожидалось на CPU (Первый элемент): {:.7}",
-            (h_input[0] as f64 * cpu_rms_inv * h_weight[0] as f64) as f32
-        );
-        println!("Получено на GPU (Первый элемент):  {:.7}", final_out[0]);
-        println!("Максимальная абсолютная погрешность по строке: {:e}", max_err);
+        let expected_w1 = d_val * expected_sc * 2.0 - dmin_val * expected_min_sc;
+        let expected_w2 = d_val * expected_sc * 4.0 - dmin_val * expected_min_sc;
 
-        if max_err < 1e-4 {
-            println!("\n🚀 ВАЛИДАЦИЯ УСПЕШНА: Ультимативное ядро RMSNorm считает идеально!");
+        let err1 = (final_out[0] - expected_w1).abs();
+        let err2 = (final_out[16] - expected_w2).abs();
+
+        println!("\n--- ЧЕСТНАЯ МАТЕМАТИЧЕСКАЯ ВАЛИДАЦИЯ GGUF Q4_K_M ---");
+        println!("Индекс 0 (Младший ниббл) -> Ожидалось: {:.4}, Получено: {:.4}", expected_w1, final_out[0]);
+        println!("Индекс 16 (Старший ниббл) -> Ожидалось: {:.4}, Получено: {:.4}", expected_w2, final_out[16]);
+        println!("Абсолютная погрешность для младшего ниббла: {:e}", err1);
+        println!("Абсолютная погрешность для старшего ниббла: {:e}", err2);
+
+        if err1 < 1e-4 && err2 < 1e-4 {
+            println!("\n🚀 ПОБЕДА! Квантование совпало до бита!");
         } else {
-            println!("\n❌ КРИТИЧЕСКАЯ ОШИБКА: Математика нормализации сломалась!");
+            println!("\n❌ МАТЕМАТИЧЕСКИЙ ФАКАП: Вычисления на GPU расходятся с референсом.");
+        }
+
+        let err = cudaGetLastError();
+        if err != 0 {
+            let c_str = cudaGetErrorString(err);
+            println!("[CUDA ERROR]: {}", std::ffi::CStr::from_ptr(c_str).to_string_lossy());
         }
 
         for i in 0..NUM_ITERATIONS {

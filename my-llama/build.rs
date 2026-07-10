@@ -30,6 +30,7 @@ fn main() {
         .flag("-gencode=arch=compute_90,code=sm_90")
         .flag("-gencode=arch=compute_89,code=sm_89")
         .flag("-O3")
+        .flag("-std=c++20")
         .flag("--use_fast_math")
         .include("cuda/include");
 
