@@ -85,10 +85,7 @@ fn main() {
 
     let h_weight = vec![42.0f32; weight_size];
 
-    let mut h_tokens = vec![0u32; tokens_size];
-    for i in 0..tokens_size {
-        h_tokens[i] = (i % vocab_size as usize) as u32;
-    }
+    let h_tokens: Vec<u32> = (0..tokens_size).map(|i| (i % vocab_size as usize) as u32).collect();
 
     let mut h_output = vec![0.0f32; out_size];
 
@@ -189,8 +186,8 @@ fn main() {
         d_out.copy_to_host(h_output.as_mut_ptr() as *mut c_void, out_size * 4);
 
         let mut errors = 0;
-        for i in 0..out_size {
-            if (h_output[i] - 42.0f32).abs() > 1e-5 {
+        for item in h_output.iter().take(out_size) {
+            if (item - 42.0f32).abs() > 1e-5 {
                 errors += 1;
             }
         }

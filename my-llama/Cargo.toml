@@ -11,7 +11,7 @@ memmap2 = "0.9"
 rayon = "1.12"
 dary_heap = "0.3"
 fxhash = "0.2"
-regex = "1.12"
+regex = "1.13"
 
 [build-dependencies]
 cc = "1.2"
@@ -48,6 +48,10 @@ path = "src/bin/test_trainer.rs"
 [[bin]]
 name = "cuda_adamw"
 path = "src/bin/cuda_adamw.rs"
+
+[[bin]]
+name = "cuda_cross_entropy_loss"
+path = "src/bin/cuda_cross_entropy_loss.rs"
 
 [[bin]]
 name = "cuda_dequantize_block_gguf_q4_k"

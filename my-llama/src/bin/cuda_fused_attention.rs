@@ -196,6 +196,7 @@ fn main() {
 
         let scale = 1.0f32 / (head_dim as f32).sqrt();
         let raw_score = (head_dim as f32) * 1.0f32 * 0.01f32 * scale;
+        #[allow(clippy::eq_op)]
         let exp_score = (raw_score - raw_score).exp();
         let sum_exp = (current_seq_len as f32) * exp_score;
         let prob = exp_score / (sum_exp + 1e-9_f32);

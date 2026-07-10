@@ -96,15 +96,11 @@ fn main() {
     let freq_elements = (head_dim / 2) as usize;
 
     let h_vec = vec![1.0f32; total_elements];
-    let mut h_positions = vec![0i32; total_tokens as usize];
-    for i in 0..total_tokens as usize {
-        h_positions[i] = i as i32;
-    }
+    let h_positions: Vec<i32> = (0..total_tokens).collect();
 
-    let mut h_freq = vec![0.0f32; freq_elements];
-    for i in 0..freq_elements {
-        h_freq[i] = 1.0f32 / 10000.0f32.powf((2 * i) as f32 / head_dim as f32);
-    }
+    let h_freq: Vec<f32> = (0..freq_elements)
+        .map(|i| 1.0f32 / 10000.0f32.powf((2 * i) as f32 / head_dim as f32))
+        .collect();
 
     let mut h_output_forward = vec![0.0f32; total_elements];
     let mut h_output_backward = vec![0.0f32; total_elements];

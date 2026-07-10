@@ -1,110 +1,150 @@
+#include <cuda_fp16.h>
 #include <cuda_runtime.h>
-#include <device_launch_parameters.h>
-#include <math.h>
 
-__device__ __forceinline__ float warp_reduce_max_loss(float val) {
-#pragma unroll
-    for (int offset = 16; offset > 0; offset >>= 1) {
-        val = fmaxf(val, __shfl_down_sync(0xFFFFFFFF, val, offset));
+struct __align__(8) SoftmaxPair {
+    float max_val;
+    float sum_exp;
+};
+
+__device__ __forceinline__ void online_softmax_update(SoftmaxPair &curr, const float val) {
+    const float old_max = curr.max_val;
+    if (val > curr.max_val) {
+        curr.max_val = val;
+        curr.sum_exp = curr.sum_exp * __expf(old_max - val) + 1.0f;
+    } else {
+        curr.sum_exp += __expf(val - curr.max_val);
     }
-    return val;
 }
 
-__device__ __forceinline__ float warp_reduce_sum_loss(float val) {
+__device__ __forceinline__ void warp_reduce_online(SoftmaxPair &curr) {
+    const unsigned int mask = __activemask();
 #pragma unroll
     for (int offset = 16; offset > 0; offset >>= 1) {
-        val += __shfl_down_sync(0xFFFFFFFF, val, offset);
+        const float r_max = __shfl_xor_sync(mask, curr.max_val, offset);
+        const float r_sum = __shfl_xor_sync(mask, curr.sum_exp, offset);
+        if (r_max > curr.max_val) {
+            curr.sum_exp = curr.sum_exp * __expf(curr.max_val - r_max) + r_sum;
+            curr.max_val = r_max;
+        } else {
+            curr.sum_exp += r_sum * __expf(r_max - curr.max_val);
+        }
     }
-    return val;
 }
 
-__global__ void fused_cross_entropy_kernel(
-    float * __restrict__ logits,
+__global__ void __launch_bounds__(1024, 2) fused_cross_entropy_online_kernel(
+    const float * __restrict__ logits,
+    float * __restrict__ grads,
     const int * __restrict__ targets,
     float * __restrict__ losses,
     const int total_tokens,
+    const int vocab_size_v4,
     const int vocab_size
 ) {
     const int token_idx = blockIdx.x;
     if (token_idx >= total_tokens) return;
+
+    const int target_label = targets[token_idx];
+    const int target_v4_idx = target_label / 4;
+    const int target_v4_off = target_label % 4;
+
+    const auto token_logits_v4 = reinterpret_cast<const float4 *>(logits + static_cast<long long>(token_idx) * vocab_size);
+    auto out_grads_v4 = reinterpret_cast<float4 *>(grads + static_cast<long long>(token_idx) * vocab_size);
 
     const int tid = threadIdx.x;
     const int lane_id = tid % 32;
     const int warp_id = tid / 32;
     const int num_warps = blockDim.x / 32;
 
-    const int target_label = targets[token_idx];
-    float *const token_logits = logits + static_cast<long long>(token_idx) * vocab_size;
+    __shared__ float s_max_pool[32];
+    __shared__ float s_sum_pool[32];
+    __shared__ float s_target_logit;
+    __shared__ float s_final_max;
+    __shared__ float s_final_sum;
 
-    __shared__ float s_warp_max[32];
-    __shared__ float s_warp_sum[32];
+    SoftmaxPair local = {-1e20f, 0.0f};
+    float local_target_logit = 0.0f;
 
-    float local_max = -1e20f;
-    for (int v = tid; v < vocab_size; v += blockDim.x) {
-        local_max = fmaxf(local_max, token_logits[v]);
+    for (int v_f4 = tid; v_f4 < vocab_size_v4; v_f4 += blockDim.x) {
+        const float4 log_v4 = __ldcs(&token_logits_v4[v_f4]);
+
+        online_softmax_update(local, log_v4.x);
+        online_softmax_update(local, log_v4.y);
+        online_softmax_update(local, log_v4.z);
+        online_softmax_update(local, log_v4.w);
+
+        if (v_f4 == target_v4_idx) [[unlikely]] {
+            if (target_v4_off == 0) local_target_logit = log_v4.x;
+            else if (target_v4_off == 1) local_target_logit = log_v4.y;
+            else if (target_v4_off == 2) local_target_logit = log_v4.z;
+            else if (target_v4_off == 3) local_target_logit = log_v4.w;
+        }
     }
 
-    float block_max = warp_reduce_max_loss(local_max);
-    if (lane_id == 0) s_warp_max[warp_id] = block_max;
+    if (vocab_size_v4 > 0) {
+        const int target_thread = target_v4_idx % blockDim.x;
+        if (tid == target_thread) {
+            s_target_logit = local_target_logit;
+        }
+    }
+    __syncthreads();
+
+    warp_reduce_online(local);
+
+    if (lane_id == 0) {
+        s_max_pool[warp_id] = local.max_val;
+        s_sum_pool[warp_id] = local.sum_exp;
+    }
     __syncthreads();
 
     if (warp_id == 0) {
-        const float val = tid < num_warps ? s_warp_max[lane_id] : -1e20f;
-        block_max = warp_reduce_max_loss(val);
-        s_warp_max[0] = __shfl_sync(0xFFFFFFFF, block_max, 0);
-    }
-    __syncthreads();
-    block_max = s_warp_max[0];
-
-    float local_sum = 0.0f;
-    for (int v = tid; v < vocab_size; v += blockDim.x) {
-        local_sum += expf(token_logits[v] - block_max);
-    }
-
-    float block_sum = warp_reduce_sum_loss(local_sum);
-    if (lane_id == 0) s_warp_sum[warp_id] = block_sum;
-    __syncthreads();
-
-    if (warp_id == 0) {
-        const float val = tid < num_warps ? s_warp_sum[lane_id] : 0.0f;
-        block_sum = warp_reduce_sum_loss(val);
-        s_warp_sum[0] = __shfl_sync(0xFFFFFFFF, block_sum, 0);
-    }
-    __syncthreads();
-    block_sum = s_warp_sum[0];
-
-    const float target_logit = (target_label >= 0 && target_label < vocab_size) ? token_logits[target_label] : 0.0f;
-    if (tid == 0) {
-        losses[token_idx] = logf(block_sum) + block_max - target_logit;
-    }
-
-    const float inv_block_sum = 1.0f / (block_sum + 1e-9f);
-    const int vocab_size_f4 = vocab_size / 4;
-
-    for (int v_f4 = tid; v_f4 < vocab_size_f4; v_f4 += blockDim.x) {
-        const int base_v = v_f4 * 4;
-        float4 logit_val = *reinterpret_cast<const float4 *>(&token_logits[base_v]);
-
-        logit_val.x = expf(logit_val.x - block_max) * inv_block_sum;
-        logit_val.y = expf(logit_val.y - block_max) * inv_block_sum;
-        logit_val.z = expf(logit_val.z - block_max) * inv_block_sum;
-        logit_val.w = expf(logit_val.w - block_max) * inv_block_sum;
-
-        if (target_label >= base_v && target_label < base_v + 4) {
-            const int offset = target_label - base_v;
-            if (offset == 0) logit_val.x -= 1.0f;
-            else if (offset == 1) logit_val.y -= 1.0f;
-            else if (offset == 2) logit_val.z -= 1.0f;
-            else if (offset == 3) logit_val.w -= 1.0f;
+        SoftmaxPair block_res = {-1e20f, 0.0f};
+        if (tid < num_warps) {
+            block_res.max_val = s_max_pool[tid];
+            block_res.sum_exp = s_sum_pool[tid];
         }
 
-        *reinterpret_cast<float4 *>(&token_logits[base_v]) = logit_val;
+        warp_reduce_online(block_res);
+
+        if (tid == 0) {
+            s_final_max = block_res.max_val;
+            s_final_sum = block_res.sum_exp;
+        }
+    }
+    __syncthreads();
+
+    const float final_max = s_final_max;
+    const float final_sum = s_final_sum;
+    const float inv_block_sum = __frcp_rn(final_sum);
+
+    if (tid == 0) {
+        const float target_logit = (target_label >= 0 && target_label < vocab_size) ? s_target_logit : 0.0f;
+        losses[token_idx] = __logf(final_sum) + final_max - target_logit;
+    }
+
+    for (int v_f4 = tid; v_f4 < vocab_size_v4; v_f4 += blockDim.x) {
+        const float4 log_v4 = __ldcs(&token_logits_v4[v_f4]);
+        float4 grad_v4;
+
+        grad_v4.x = __expf(log_v4.x - final_max) * inv_block_sum;
+        grad_v4.y = __expf(log_v4.y - final_max) * inv_block_sum;
+        grad_v4.z = __expf(log_v4.z - final_max) * inv_block_sum;
+        grad_v4.w = __expf(log_v4.w - final_max) * inv_block_sum;
+
+        if (v_f4 == target_v4_idx) [[unlikely]] {
+            if (target_v4_off == 0) grad_v4.x -= 1.0f;
+            else if (target_v4_off == 1) grad_v4.y -= 1.0f;
+            else if (target_v4_off == 2) grad_v4.z -= 1.0f;
+            else if (target_v4_off == 3) grad_v4.w -= 1.0f;
+        }
+
+        __stcs(&out_grads_v4[v_f4], grad_v4);
     }
 }
 
 extern "C" {
 void launch_cross_entropy_loss(
-    float *logits,
+    const float *logits,
+    float *grads,
     const int *targets,
     float *losses,
     const int total_tokens,
@@ -113,12 +153,20 @@ void launch_cross_entropy_loss(
 ) {
     if (total_tokens == 0 || vocab_size == 0) return;
 
-    constexpr int threads = 256;
+    int threads = 256;
+    if (vocab_size > 65536) {
+        threads = 1024;
+    } else if (vocab_size > 32000) {
+        threads = 512;
+    }
+
     const int blocks = total_tokens;
     const auto stream = static_cast<cudaStream_t>(stream_ptr);
 
-    fused_cross_entropy_kernel<<<blocks, threads, 0, stream>>>(
-        logits, targets, losses, total_tokens, vocab_size
-    );
+    if (vocab_size % 4 == 0) [[likely]] {
+        fused_cross_entropy_online_kernel<<<blocks, threads, 0, stream>>>(
+            logits, grads, targets, losses, total_tokens, vocab_size / 4, vocab_size
+        );
+    }
 }
 }

@@ -93,6 +93,16 @@ void launch_rope_backward(
     int total_tokens,
     void *stream_ptr
 );
+
+void launch_cross_entropy_loss(
+    const float *logits,
+    float *grads,
+    const int *targets,
+    float *losses,
+    int total_tokens,
+    int vocab_size,
+    void *stream_ptr
+);
 }
 
 #endif
