@@ -51,16 +51,11 @@ __global__ void gemv_gguf_q4_k_fused_ultra_kernel(
 
         uint8_t sc, min_sc;
         if (i_group < 4) {
-            sc = block->scales[i_group] & 63;
-            min_sc = (block->scales[i_group + 8] & 0x0F) | ((block->scales[i_group + 4] >> 4) & 0x30);
+            sc = block->scales[i_group * 3] & 63;
+            min_sc = block->scales[i_group * 3 + 2] & 63;
         } else {
-            sc = (block->scales[i_group] & 63);
-            min_sc = (block->scales[i_group + 4] & 0x0F) | ((block->scales[i_group] >> 4) & 0x30);
-        }
-
-        if (i_group == 0 || i_group == 1 || i_group == 2 || i_group == 3 || i_group == 4 || i_group == 5 || i_group == 6 || i_group == 7) {
-            sc = 4;
-            min_sc = 2;
+            sc = block->scales[(i_group - 4) * 3 + 1] & 63;
+            min_sc = block->scales[(i_group - 4) * 3 + 2] & 63;
         }
 
         const float d_super = d_val * static_cast<float>(sc);
@@ -73,17 +68,21 @@ __global__ void gemv_gguf_q4_k_fused_ultra_kernel(
         const uint8_t b_high0 = block->qs[q_offset + 8];
         const uint8_t b_high1 = block->qs[q_offset + 9];
 
-        const int x_idx = i_group * 32 + i_stripe * 2;
+        const int x_idx_low = i_group * 32 + i_stripe * 4;
+        const int x_idx_high = i_group * 32 + i_stripe * 4 + 16;
 
-        thread_acc += (d_super * static_cast<float>(b_low0 & 0x0F) - m_super) * __ldcs(&block_vec_x[x_idx]);
-        thread_acc += (d_super * static_cast<float>(b_low0 >> 4) - m_super) * __ldcs(&block_vec_x[x_idx + 1]);
-        thread_acc += (d_super * static_cast<float>(b_low1 & 0x0F) - m_super) * __ldcs(&block_vec_x[x_idx + 2]);
-        thread_acc += (d_super * static_cast<float>(b_low1 >> 4) - m_super) * __ldcs(&block_vec_x[x_idx + 3]);
+        const float4 vx_low = *reinterpret_cast<const float4 *>(&block_vec_x[x_idx_low]);
+        const float4 vx_high = *reinterpret_cast<const float4 *>(&block_vec_x[x_idx_high]);
 
-        thread_acc += (d_super * static_cast<float>(b_high0 & 0x0F) - m_super) * __ldcs(&block_vec_x[x_idx + 16]);
-        thread_acc += (d_super * static_cast<float>(b_high0 >> 4) - m_super) * __ldcs(&block_vec_x[x_idx + 17]);
-        thread_acc += (d_super * static_cast<float>(b_high1 & 0x0F) - m_super) * __ldcs(&block_vec_x[x_idx + 18]);
-        thread_acc += (d_super * static_cast<float>(b_high1 >> 4) - m_super) * __ldcs(&block_vec_x[x_idx + 19]);
+        thread_acc += (d_super * static_cast<float>(b_low0 & 0x0F) - m_super) * vx_low.x;
+        thread_acc += (d_super * static_cast<float>(b_low0 >> 4) - m_super) * vx_low.y;
+        thread_acc += (d_super * static_cast<float>(b_low1 & 0x0F) - m_super) * vx_low.z;
+        thread_acc += (d_super * static_cast<float>(b_low1 >> 4) - m_super) * vx_low.w;
+
+        thread_acc += (d_super * static_cast<float>(b_high0 & 0x0F) - m_super) * vx_high.x;
+        thread_acc += (d_super * static_cast<float>(b_high0 >> 4) - m_super) * vx_high.y;
+        thread_acc += (d_super * static_cast<float>(b_high1 & 0x0F) - m_super) * vx_high.z;
+        thread_acc += (d_super * static_cast<float>(b_high1 >> 4) - m_super) * vx_high.w;
     }
 
     const float warp_sum = warp_reduce_sum_matmul(thread_acc);

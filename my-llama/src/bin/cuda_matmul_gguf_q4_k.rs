@@ -119,20 +119,24 @@ fn main() {
     d_weights.copy_to_device(h_weights.as_ptr() as *const c_void, total_blocks * 144);
     d_vec_x.copy_to_device(h_vec_x.as_ptr() as *const c_void, in_features * 4);
 
+    const NUM_WARMUP: usize = 20;
     const NUM_ITERATIONS: usize = 1000;
 
     unsafe {
         let mut stream: *mut c_void = ptr::null_mut();
         assert_eq!(cudaStreamCreateWithFlags(&mut stream, 0x01), 0);
 
-        launch_matmul_gguf_q4_k(
-            d_output.ptr as *mut f32,
-            d_weights.ptr,
-            d_vec_x.ptr as *const f32,
-            out_features as i32,
-            in_features as i32,
-            stream,
-        );
+        println!("Прогрев GPU и L2 кэша ({} итераций)...", NUM_WARMUP);
+        for _ in 0..NUM_WARMUP {
+            launch_matmul_gguf_q4_k(
+                d_output.ptr as *mut f32,
+                d_weights.ptr,
+                d_vec_x.ptr as *const f32,
+                out_features as i32,
+                in_features as i32,
+                stream,
+            );
+        }
         cudaDeviceSynchronize();
 
         let mut start_events = vec![ptr::null_mut(); NUM_ITERATIONS];
