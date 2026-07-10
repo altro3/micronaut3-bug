@@ -3,23 +3,15 @@
 
 extern "C" {
 __global__ void adamw_scalar_fallback_kernel(
-    float * __restrict__ weights,
-    const float * __restrict__ gradients,
-    float * __restrict__ m_buffer,
-    float * __restrict__ v_buffer,
-    const int size,
-    const float lr,
-    const float beta1,
-    const float beta2,
-    const float epsilon,
-    const float weight_decay,
-    const float bias_corr_ratio
+    float * __restrict__ weights, const float * __restrict__ gradients,
+    float * __restrict__ m_buffer, float * __restrict__ v_buffer,
+    const int size, const float lr, const float beta1, const float beta2,
+    const float epsilon, const float weight_decay, const float bias_corr_ratio
 ) {
     const int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx < size) {
         const float one_minus_beta1 = 1.0f - beta1;
         const float one_minus_beta2 = 1.0f - beta2;
-
         float w = weights[idx];
         const float g = gradients[idx];
         float m = m_buffer[idx];
@@ -27,7 +19,6 @@ __global__ void adamw_scalar_fallback_kernel(
 
         m = beta1 * m + one_minus_beta1 * g;
         v = beta2 * v + one_minus_beta2 * g * g;
-
         const float inv_denom = __frcp_rn(__fsqrt_rn(v) + epsilon);
         w -= lr * (m * bias_corr_ratio * inv_denom + weight_decay * w);
 
@@ -37,60 +28,62 @@ __global__ void adamw_scalar_fallback_kernel(
     }
 }
 
-__global__ void __launch_bounds__(512, 2) adamw_ultimate_blackwell_kernel(
-    float4 * __restrict__ weights,
-    const float4 * __restrict__ gradients,
-    float4 * __restrict__ m_buffer,
-    float4 * __restrict__ v_buffer,
-    const int size_v4,
-    const int total_elements,
-    const float lr,
-    const float beta1,
-    const float beta2,
-    const float epsilon,
-    const float weight_decay,
-    const float bias_corr_ratio
+__global__ void __launch_bounds__(256, 4) adamw_coarsened_blackwell_kernel(
+    float4 * __restrict__ weights, const float4 * __restrict__ gradients,
+    float4 * __restrict__ m_buffer, float4 * __restrict__ v_buffer,
+    const int size_v4, const int total_elements,
+    const float lr, const float beta1, const float beta2, const float epsilon,
+    const float weight_decay, const float bias_corr_ratio
 ) {
-    const int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    const int stride = blockDim.x * gridDim.x;
+    int idx_v4 = blockIdx.x * blockDim.x + threadIdx.x;
+
     const float one_minus_beta1 = 1.0f - beta1;
     const float one_minus_beta2 = 1.0f - beta2;
 
-    if (idx < size_v4) {
-        float4 w = __ldcs(&weights[idx]);
-        const float4 g = __ldcs(&gradients[idx]);
-        float4 m = __ldcs(&m_buffer[idx]);
-        float4 v = __ldcs(&v_buffer[idx]);
+#pragma unroll
+    for (int step = 0; step < 2; ++step) {
+        if (idx_v4 < size_v4) {
+            float4 w = __ldcs(&weights[idx_v4]);
+            const float4 g = __ldcs(&gradients[idx_v4]);
+            float4 m = __ldcs(&m_buffer[idx_v4]);
+            float4 v = __ldcs(&v_buffer[idx_v4]);
 
-        m.x = beta1 * m.x + one_minus_beta1 * g.x;
-        m.y = beta1 * m.y + one_minus_beta1 * g.y;
-        m.z = beta1 * m.z + one_minus_beta1 * g.z;
-        m.w = beta1 * m.w + one_minus_beta1 * g.w;
+            m.x = beta1 * m.x + one_minus_beta1 * g.x;
+            m.y = beta1 * m.y + one_minus_beta1 * g.y;
+            m.z = beta1 * m.z + one_minus_beta1 * g.z;
+            m.w = beta1 * m.w + one_minus_beta1 * g.w;
 
-        v.x = beta2 * v.x + one_minus_beta2 * (g.x * g.x);
-        v.y = beta2 * v.y + one_minus_beta2 * (g.y * g.y);
-        v.z = beta2 * v.z + one_minus_beta2 * (g.z * g.z);
-        v.w = beta2 * v.w + one_minus_beta2 * (g.w * g.w);
+            v.x = beta2 * v.x + one_minus_beta2 * (g.x * g.x);
+            v.y = beta2 * v.y + one_minus_beta2 * (g.y * g.y);
+            v.z = beta2 * v.z + one_minus_beta2 * (g.z * g.z);
+            v.w = beta2 * v.w + one_minus_beta2 * (g.w * g.w);
 
-        const float inv_denom_x = __frcp_rn(__fsqrt_rn(v.x) + epsilon);
-        const float inv_denom_y = __frcp_rn(__fsqrt_rn(v.y) + epsilon);
-        const float inv_denom_z = __frcp_rn(__fsqrt_rn(v.z) + epsilon);
-        const float inv_denom_w = __frcp_rn(__fsqrt_rn(v.w) + epsilon);
+            const float inv_denom_x = __frcp_rn(__fsqrt_rn(v.x) + epsilon);
+            const float inv_denom_y = __frcp_rn(__fsqrt_rn(v.y) + epsilon);
+            const float inv_denom_z = __frcp_rn(__fsqrt_rn(v.z) + epsilon);
+            const float inv_denom_w = __frcp_rn(__fsqrt_rn(v.w) + epsilon);
 
-        w.x -= lr * (m.x * bias_corr_ratio * inv_denom_x + weight_decay * w.x);
-        w.y -= lr * (m.y * bias_corr_ratio * inv_denom_y + weight_decay * w.y);
-        w.z -= lr * (m.z * bias_corr_ratio * inv_denom_z + weight_decay * w.z);
-        w.w -= lr * (m.w * bias_corr_ratio * inv_denom_w + weight_decay * w.w);
+            w.x -= lr * (m.x * bias_corr_ratio * inv_denom_x + weight_decay * w.x);
+            w.y -= lr * (m.y * bias_corr_ratio * inv_denom_y + weight_decay * w.y);
+            w.z -= lr * (m.z * bias_corr_ratio * inv_denom_z + weight_decay * w.z);
+            w.w -= lr * (m.w * bias_corr_ratio * inv_denom_w + weight_decay * w.w);
 
-        __stcs(&m_buffer[idx], m);
-        __stcs(&v_buffer[idx], v);
-        __stcs(&weights[idx], w);
-    } else {
-        const int scalar_idx = size_v4 * 4 + (idx - size_v4);
+            __stcs(&m_buffer[idx_v4], m);
+            __stcs(&v_buffer[idx_v4], v);
+            __stcs(&weights[idx_v4], w);
+        }
+        idx_v4 += stride;
+    }
+
+    if (blockIdx.x == gridDim.x - 1) {
+        const int scalar_start = size_v4 * 4;
+        const int scalar_idx = scalar_start + threadIdx.x;
         if (scalar_idx < total_elements) {
-            float *s_weights = reinterpret_cast<float *>(weights);
-            const float *s_gradients = reinterpret_cast<const float *>(gradients);
-            float *s_m_buffer = reinterpret_cast<float *>(m_buffer);
-            float *s_v_buffer = reinterpret_cast<float *>(v_buffer);
+            const auto s_weights = reinterpret_cast<float *>(weights);
+            const auto s_gradients = reinterpret_cast<const float *>(gradients);
+            const auto s_m_buffer = reinterpret_cast<float *>(m_buffer);
+            const auto s_v_buffer = reinterpret_cast<float *>(v_buffer);
 
             float w = __ldcs(&s_weights[scalar_idx]);
             const float g = __ldcs(&s_gradients[scalar_idx]);
@@ -99,7 +92,6 @@ __global__ void __launch_bounds__(512, 2) adamw_ultimate_blackwell_kernel(
 
             m = beta1 * m + one_minus_beta1 * g;
             v = beta2 * v + one_minus_beta2 * g * g;
-
             const float inv_denom = __frcp_rn(__fsqrt_rn(v) + epsilon);
             w -= lr * (m * bias_corr_ratio * inv_denom + weight_decay * w);
 
@@ -117,10 +109,8 @@ extern "C" void launch_adamw(
     void *stream_ptr
 ) {
     const auto stream = static_cast<cudaStream_t>(stream_ptr);
-
     const float bias_correction1 = 1.0f - powf(beta1, step);
     const float bias_correction2 = 1.0f - powf(beta2, step);
-
     const float inv_bias_correction1 = bias_correction1 > 0.0f ? 1.0f / bias_correction1 : 1.0f;
     const float bias_corr_ratio = inv_bias_correction1 * sqrtf(bias_correction2);
 
@@ -133,14 +123,13 @@ extern "C" void launch_adamw(
 
     if (is_aligned) [[likely]] {
         const int size_v4 = size / 4;
-        const int total_threads_needed = (size % 4 == 0) ? size_v4 : size_v4 + 1;
-        const int blocks = (total_threads_needed + threads - 1) / threads;
+        const int total_threads_needed = (size_v4 + 1) / 2;
+        int blocks = (total_threads_needed + threads - 1) / threads;
+        if (blocks < 1) blocks = 1;
 
-        adamw_ultimate_blackwell_kernel<<<blocks, threads, 0, stream>>>(
-            reinterpret_cast<float4 *>(weights),
-            reinterpret_cast<const float4 *>(gradients),
-            reinterpret_cast<float4 *>(m_buffer),
-            reinterpret_cast<float4 *>(v_buffer),
+        adamw_coarsened_blackwell_kernel<<<blocks, threads, 0, stream>>>(
+            reinterpret_cast<float4 *>(weights), reinterpret_cast<const float4 *>(gradients),
+            reinterpret_cast<float4 *>(m_buffer), reinterpret_cast<float4 *>(v_buffer),
             size_v4, size, lr, beta1, beta2, epsilon, weight_decay, bias_corr_ratio
         );
     } else [[unlikely]] {

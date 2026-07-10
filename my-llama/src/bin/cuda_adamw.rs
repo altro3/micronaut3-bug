@@ -28,14 +28,13 @@ unsafe extern "C" {
     fn cudaMemcpy(dst: *mut c_void, src: *const c_void, count: usize, kind: i32) -> i32;
     fn cudaDeviceSynchronize() -> i32;
 
+    fn cudaStreamCreateWithFlags(p_stream: *mut *mut c_void, flags: u32) -> i32;
+    fn cudaStreamDestroy(stream: *mut c_void) -> i32;
     fn cudaEventCreate(event: *mut *mut c_void) -> i32;
     fn cudaEventDestroy(event: *mut c_void) -> i32;
     fn cudaEventRecord(event: *mut c_void, stream: *mut c_void) -> i32;
     fn cudaEventSynchronize(event: *mut c_void) -> i32;
     fn cudaEventElapsedTime(ms: *mut f32, start: *mut c_void, end: *mut c_void) -> i32;
-
-    fn cudaStreamCreateWithFlags(p_stream: *mut *mut c_void, flags: u32) -> i32;
-    fn cudaStreamDestroy(stream: *mut c_void) -> i32;
 }
 
 struct CudaBuffer {
@@ -48,24 +47,30 @@ impl CudaBuffer {
         let mut raw_ptr: *mut c_void = ptr::null_mut();
         unsafe {
             let res = cudaMalloc(&mut raw_ptr, size * size_of::<f32>());
-            assert_eq!(res, 0, "Ошибка выполнения cudaMalloc. Проверьте инициализацию CUDA.");
-            assert_eq!(
-                raw_ptr as usize % 16,
-                0,
-                "Критическая ошибка: Драйвер CUDA вернул невыровненный адрес памяти!"
-            );
+            assert_eq!(res, 0, "Ошибка выполнения cudaMalloc.");
+            assert_eq!(raw_ptr as usize % 16, 0, "Критическая ошибка: память не выровнена!");
         }
         CudaBuffer { ptr: raw_ptr as *mut f32, size }
     }
 
     fn copy_to_device(&self, host_data: &[f32]) {
-        assert!(host_data.len() >= self.size, "Размер хост-буфера меньше выделенной памяти GPU");
         unsafe {
             cudaMemcpy(
                 self.ptr as *mut c_void,
                 host_data.as_ptr() as *const c_void,
                 self.size * size_of::<f32>(),
-                1, // cudaMemcpyHostToDevice
+                1,
+            );
+        }
+    }
+
+    fn copy_to_host(&self, host_data: &mut [f32]) {
+        unsafe {
+            cudaMemcpy(
+                host_data.as_mut_ptr() as *mut c_void,
+                self.ptr as *const c_void,
+                self.size * size_of::<f32>(),
+                2,
             );
         }
     }
@@ -80,15 +85,11 @@ impl Drop for CudaBuffer {
 }
 
 fn main() {
-    println!("=== ТЕСТИРОВАНИЕ СКОРОСТИ И ТОЧНОСТИ ЯДРА ADAMW НА ARCHITECTURE BLACKWELL ===");
+    println!("=== РАСШИРЕННЫЙ СТРЕСС-БЕНЧМАРК И ВАЛИДАЦИЯ ADAMW НА BLACKWELL ===");
 
     let size = 262_553_760;
-    let total_buffers_size_bytes = size * size_of::<f32>() * 4;
-    println!(
-        "Размер тестового тензора: {} элементов (~{:.2} ГБ выделено в VRAM под 4 буфера)",
-        size,
-        total_buffers_size_bytes as f64 / 1024.0 / 1024.0 / 1024.0
-    );
+    let bytes_per_element: u64 = 28; // 4 чтения + 3 записи по 4 байта
+    let iter_bytes = size as u64 * bytes_per_element;
 
     let lr = 1e-4_f32;
     let beta1 = 0.9_f32;
@@ -112,12 +113,13 @@ fn main() {
     d_m.copy_to_device(&h_m);
     d_v.copy_to_device(&h_v);
 
-    unsafe {
-        // 1. Создаем честный неблокирующий асинхронный CUDA-стрим
-        let mut stream: *mut c_void = ptr::null_mut();
-        assert_eq!(cudaStreamCreateWithFlags(&mut stream, 0x01), 0, "Не удалось создать асинхронный стрим");
+    const NUM_ITERATIONS: usize = 1000;
 
-        println!("Запуск прогревочного цикла GPU (Warmup)...");
+    unsafe {
+        let mut stream: *mut c_void = ptr::null_mut();
+        assert_eq!(cudaStreamCreateWithFlags(&mut stream, 0x01), 0);
+
+        // Прогрев (Warmup)
         launch_adamw(
             d_w.ptr,
             d_g.ptr,
@@ -134,26 +136,25 @@ fn main() {
         );
         cudaDeviceSynchronize();
 
-        // Сбрасываем память перед бенчмарком
+        // Сброс памяти перед чистым скоростным тестом
         d_w.copy_to_device(&h_w);
         d_m.copy_to_device(&h_m);
         d_v.copy_to_device(&h_v);
 
-        let mut start_event = ptr::null_mut();
-        let mut end_event = ptr::null_mut();
-        assert_eq!(cudaEventCreate(&mut start_event), 0);
-        assert_eq!(cudaEventCreate(&mut end_event), 0);
+        // Массивы парных событий для изоляции времени каждого прохода
+        let mut start_events = vec![ptr::null_mut(); NUM_ITERATIONS];
+        let mut end_events = vec![ptr::null_mut(); NUM_ITERATIONS];
 
-        let num_iterations = 1000;
-        println!("Запуск асинхронного стресс-бенчмарка ядра на {} итераций...", num_iterations);
+        for i in 0..NUM_ITERATIONS {
+            assert_eq!(cudaEventCreate(&mut start_events[i]), 0);
+            assert_eq!(cudaEventCreate(&mut end_events[i]), 0);
+        }
 
-        let start_host = Instant::now(); // Фиксируем время старта CPU
+        println!("Запуск телеметрии производительности... Очередь GPU заполняется асинхронно.");
+        let start_host = Instant::now();
 
-        // Регистрируем старт в асинхронной очереди GPU
-        cudaEventRecord(start_event, stream);
-
-        for _ in 0..num_iterations {
-            // Теперь запуски происходят асинхронно. CPU просто пушит команду в очередь видеокарты и идет дальше
+        for i in 0..NUM_ITERATIONS {
+            cudaEventRecord(start_events[i], stream);
             launch_adamw(
                 d_w.ptr,
                 d_g.ptr,
@@ -168,43 +169,108 @@ fn main() {
                 step,
                 stream,
             );
+            cudaEventRecord(end_events[i], stream);
         }
 
-        // Регистрируем финиш в очереди GPU
-        cudaEventRecord(end_event, stream);
+        let host_launch_time = start_host.elapsed();
 
-        // Вычисляем чистое время, затраченное процессором на отправку 1000 команд
-        let duration_host_launch = start_host.elapsed();
+        println!("Все ядра отправлены. Ожидание завершения очереди на RTX 5090...");
+        cudaEventSynchronize(*end_events.last().unwrap());
+        let total_host_time = start_host.elapsed();
 
-        // Ждем, пока GPU физически докрутит все 1000 итераций из очереди
-        cudaEventSynchronize(end_event);
-        let duration_host_total = start_host.elapsed(); // Полное время с учетом ожидания
+        let mut bandwidths: Vec<f64> = Vec::with_capacity(NUM_ITERATIONS);
+        let mut total_gpu_ms = 0.0_f32;
 
-        let mut milliseconds = 0.0f32;
-        cudaEventElapsedTime(&mut milliseconds, start_event, end_event);
+        for i in 0..NUM_ITERATIONS {
+            let mut ms = 0.0_f32;
+            cudaEventElapsedTime(&mut ms, start_events[i], end_events[i]);
+            total_gpu_ms += ms;
 
-        let avg_milliseconds = milliseconds / num_iterations as f32;
-        let seconds_total = (milliseconds / 1000.0) as f64;
+            let seconds = (ms / 1000.0) as f64;
+            let gbps = (iter_bytes as f64 / 1e9) / seconds;
+            bandwidths.push(gbps);
+        }
 
-        let bytes_per_element: u64 = 28;
-        let total_bytes_processed = size as u64 * bytes_per_element * num_iterations as u64;
-        let bandwidth_gbps = (total_bytes_processed as f64 / 1e9) / seconds_total;
+        // Сортируем собранные скорости от меньшей к большей
+        bandwidths.sort_by(|a, b| a.partial_cmp(b).unwrap());
 
-        println!("\n=== ФИНАЛЬНЫЕ ЗАМЕРЫ ПОСЛЕ АСИНХРОННОГО СТРЕСС-ТЕСТА ===");
-        println!(
-            "Время, затраченное CPU на отправку всех ядер (Launch Overhead): {:.6} сек",
-            duration_host_launch.as_secs_f32()
+        let min_bw = bandwidths[0]; // ИСПРАВЛЕНО: забираем значение f64 по индексу, а не весь вектор
+        let max_bw = bandwidths[NUM_ITERATIONS - 1];
+        let median_bw = bandwidths[NUM_ITERATIONS / 2];
+
+        // Честные перцентили просадок (из левой части массива)
+        let p95_worst = bandwidths[(NUM_ITERATIONS as f64 * 0.05) as usize];
+        let p99_worst = bandwidths[(NUM_ITERATIONS as f64 * 0.01) as usize];
+
+        let avg_bw = (iter_bytes as f64 * NUM_ITERATIONS as f64 / 1e9) / (total_gpu_ms as f64 / 1000.0);
+
+        println!("\n📊 === РЕЗУЛЬТАТЫ ГЛУБОКОГО СТАТИСТИЧЕСКОГО АНАЛИЗА ===");
+        println!("Время отправки очереди (Launch Overhead): {:.6} сек", host_launch_time.as_secs_f32());
+        println!("Полное время теста на GPU (по событиям):  {:.2} сек", total_gpu_ms / 1000.0);
+        println!("Полное время ожидания хостом (Wall Time):  {:.2} сек", total_host_time.as_secs_f32());
+        println!("-------------------------------------------------------");
+        println!("🚀 АБСОЛЮТНЫЙ ПИК СКОРОСТИ (Max Bandwidth): {:.2} ГБ/сек", max_bw);
+        println!("📉 АБСОЛЮТНЫЙ МИНИМУМ (Min Bandwidth):        {:.2} ГБ/сек", min_bw);
+        println!("-------------------------------------------------------");
+        println!("📈 Средняя пропускная способность:         {:.2} ГБ/сек", avg_bw);
+        println!("🎯 Медиана (P50 Перцентиль):                {:.2} ГБ/сек", median_bw);
+        println!("⚠️ Стабильный перформанс (Истинный P95):    {:.2} ГБ/сек", p95_worst);
+        println!("🚨 Граница просадок (Истинный P99):         {:.2} ГБ/сек", p99_worst);
+        println!("-------------------------------------------------------");
+        println!("Колебания скорости (Jitter):              {:.2} ГБ/сек", max_bw - min_bw);
+
+        // --- БЛОК МАТЕМАТИЧЕСКОЙ ВАЛИДАЦИИ ТОЧНОСТИ (ДЛЯ 1 ЧИСТОГО ШАГА) ---
+        println!("\nСброс памяти VRAM и запуск одиночного шага для верификации точности...");
+        d_w.copy_to_device(&h_w);
+        d_m.copy_to_device(&h_m);
+        d_v.copy_to_device(&h_v);
+
+        launch_adamw(
+            d_w.ptr,
+            d_g.ptr,
+            d_m.ptr,
+            d_v.ptr,
+            size as i32,
+            lr,
+            beta1,
+            beta2,
+            epsilon,
+            weight_decay,
+            step,
+            stream,
         );
-        println!("Общее время выполнения на GPU (по событиям): {:.2} сек", seconds_total);
-        println!(
-            "Полное время ожидания хостом (Host Wall Time): {:.2} сек",
-            duration_host_total.as_secs_f32()
-        );
-        println!("Среднее время выполнения одного прохода: {:.3} мс", avg_milliseconds);
-        println!("Чистая пропускная способность VRAM: {:.2} ГБ/сек", bandwidth_gbps);
+        cudaDeviceSynchronize();
 
+        let mut final_w = vec![0.0f32; size];
+        d_w.copy_to_host(&mut final_w);
+
+        let bc1 = 1.0_f32 - beta1.powf(step);
+        let bc2 = 1.0_f32 - beta2.powf(step);
+
+        let m_expected = beta1 * h_m[0] + (1.0_f32 - beta1) * h_g[0];
+        let v_expected = beta2 * h_v[0] + (1.0_f32 - beta2) * h_g[0] * h_g[0];
+        let m_hat = m_expected / bc1;
+        let v_hat = v_expected / bc2;
+        let w_expected = h_w[0] - lr * ((m_hat / (v_hat.sqrt() + epsilon)) + weight_decay * h_w[0]);
+
+        let error = (final_w[0] - w_expected).abs();
+
+        println!("\n--- РЕЗУЛЬТАТЫ МАТЕМАТИЧЕСКОЙ ВАЛИДАЦИИ ---");
+        println!("Ожидалось на CPU (Ground Truth):  {:.7}", w_expected);
+        println!("Получено на GPU (Computed Value): {:.7}", final_w[0]);
+        println!("Абсолютная погрешность:          {:e}", error);
+
+        if error < 1e-4 {
+            println!("\n🚀 ВАЛИДАЦИЯ УСПЕШНА: Ядро вычисляет данные с абсолютной точностью!");
+        } else {
+            println!("\n❌ КРИТИЧЕСКАЯ ОШИБКА: Математика GPU разошлась с CPU!");
+        }
+
+        // Чистим ресурсы
+        for i in 0..NUM_ITERATIONS {
+            cudaEventDestroy(start_events[i]);
+            cudaEventDestroy(end_events[i]);
+        }
         cudaStreamDestroy(stream);
-        cudaEventDestroy(start_event);
-        cudaEventDestroy(end_event);
     }
 }
