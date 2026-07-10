@@ -15,6 +15,7 @@ add_library(
         cuda/include/kernels.h
         cuda/src/adamw.cu
         cuda/src/dequantize_block_gguf_q4_k.cu
+        cuda/src/fused_attention.cu
         cuda/src/matmul.cu
         cuda/src/matmul_gguf_q4_k.cu
         cuda/src/swiglu.cu

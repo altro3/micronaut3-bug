@@ -53,6 +53,28 @@ void launch_matmul_gguf_q4_k(
     int in_features,
     void *stream_ptr
 );
+
+void launch_embeddings(
+    float *out,
+    const float *weight,
+    const unsigned int *tokens,
+    int total_tokens,
+    int out_features,
+    int vocab_size,
+    void *stream_ptr
+);
+
+void launch_fused_attention(
+    float *output,
+    const float *query,
+    const float *k_cache,
+    const float *v_cache,
+    int num_heads,
+    int num_kv_heads,
+    int head_dim,
+    int current_seq_len,
+    void *stream_ptr
+);
 }
 
 #endif
