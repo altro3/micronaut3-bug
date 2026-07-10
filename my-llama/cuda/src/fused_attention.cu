@@ -41,12 +41,9 @@ __global__ void fused_attention_kernel(
     const float scale = 1.0f / sqrtf(static_cast<float>(head_dim));
     const int head_dim_f4 = head_dim / 4;
 
-    __shared__ float s_warp_max[4];
-    __shared__ float s_warp_sum[4];
-
-    extern __shared__ char s_mem[];
-    float *s_scores = reinterpret_cast<float *>(s_mem);
-    float *s_v_shared = reinterpret_cast<float *>(s_mem + (current_seq_len + 31) / 32 * 32 * sizeof(float));
+    __shared__ float s_warp_max[32];
+    __shared__ float s_warp_sum[32];
+    extern __shared__ float s_scores[];
 
     float local_max = -1e20f;
     for (int tok = tid; tok < current_seq_len; tok += blockDim.x) {
@@ -101,32 +98,22 @@ __global__ void fused_attention_kernel(
     }
     __syncthreads();
 
-    float4 reg_acc = make_float4(0.0f, 0.0f, 0.0f, 0.0f);
-    const int d = tid;
+    float *const out_ptr = output + head_idx * head_dim;
+    for (int d = tid; d < head_dim_f4; d += blockDim.x) {
+        float4 v_acc = make_float4(0.0f, 0.0f, 0.0f, 0.0f);
 
-    for (int tok = 0; tok < current_seq_len; ++tok) {
-        const float *const v_row = v_cache + (tok * num_kv_heads + kv_head_idx) * head_dim;
-
-        for (int i = tid; i < head_dim_f4; i += blockDim.x) {
-            *reinterpret_cast<float4 *>(&s_v_shared[i * 4]) = __ldcs(reinterpret_cast<const float4 *>(&v_row[i * 4]));
-        }
-        __syncthreads();
-
-        if (d < head_dim_f4) {
+        for (int tok = 0; tok < current_seq_len; ++tok) {
             const float prob = s_scores[tok];
-            const float4 v_val = *reinterpret_cast<const float4 *>(&s_v_shared[d * 4]);
+            const float *const v_row = v_cache + (tok * num_kv_heads + kv_head_idx) * head_dim;
+            const float4 v_val = __ldcs(reinterpret_cast<const float4 *>(&v_row[d * 4]));
 
-            reg_acc.x += prob * v_val.x;
-            reg_acc.y += prob * v_val.y;
-            reg_acc.z += prob * v_val.z;
-            reg_acc.w += prob * v_val.w;
+            v_acc.x += prob * v_val.x;
+            v_acc.y += prob * v_val.y;
+            v_acc.z += prob * v_val.z;
+            v_acc.w += prob * v_val.w;
         }
-        __syncthreads();
-    }
 
-    if (d < head_dim_f4) {
-        float *const out_ptr = output + head_idx * head_dim;
-        *reinterpret_cast<float4 *>(&out_ptr[d * 4]) = reg_acc;
+        *reinterpret_cast<float4 *>(&out_ptr[d * 4]) = v_acc;
     }
 }
 
@@ -143,13 +130,10 @@ void launch_fused_attention(
     void *stream_ptr
 ) {
     constexpr int threads = 128;
-    const size_t scores_size = (current_seq_len + 31) / 32 * 32 * sizeof(float);
-    const size_t v_shared_size = head_dim * sizeof(float);
-    const size_t total_shared_mem = scores_size + v_shared_size;
-
+    const size_t shared_mem_size = current_seq_len * sizeof(float);
     const auto stream = static_cast<cudaStream_t>(stream_ptr);
 
-    fused_attention_kernel<<<num_heads, threads, total_shared_mem, stream>>>(
+    fused_attention_kernel<<<num_heads, threads, shared_mem_size, stream>>>(
         output, query, k_cache, v_cache, num_heads, num_kv_heads, head_dim, current_seq_len
     );
 }

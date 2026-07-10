@@ -1,28 +1,43 @@
 #include <cuda_runtime.h>
+#include <device_launch_parameters.h>
 
 __global__ void embeddings_kernel(
-    float *out,
-    const float *weight,
-    const unsigned int *tokens,
+    float * __restrict__ out,
+    const float * __restrict__ weight,
+    const unsigned int * __restrict__ tokens,
     const int total_tokens,
     const int out_features,
     const int vocab_size
 ) {
-    const int global_idx = blockIdx.x * blockDim.x + threadIdx.x;
-    const int total_elements = total_tokens * out_features;
+    const int token_idx = blockIdx.x;
+    if (token_idx >= total_tokens) return;
 
-    if (global_idx < total_elements) {
-        const int token_idx = global_idx / out_features;
-        const int feature_idx = global_idx % out_features;
+    __shared__ unsigned int s_token_id;
+    if (threadIdx.x == 0) {
+        s_token_id = tokens[token_idx];
+    }
+    __syncthreads();
 
-        const unsigned int token_id = tokens[token_idx];
+    const unsigned int token_id = s_token_id;
+    const int out_features_f8 = out_features / 8;
+    const int feature_idx_f8 = blockIdx.y * blockDim.x + threadIdx.x;
 
-        if (token_id < vocab_size) {
-            const long long weight_idx = static_cast<long long>(token_id) * out_features + feature_idx;
-            out[global_idx] = weight[weight_idx];
-        } else {
-            out[global_idx] = 0.0f;
-        }
+    if (feature_idx_f8 >= out_features_f8) return;
+
+    float *const out_ptr = out + static_cast<long long>(token_idx) * out_features + feature_idx_f8 * 8;
+
+    if (token_id < vocab_size) {
+        const long long weight_idx = static_cast<long long>(token_id) * out_features + feature_idx_f8 * 8;
+
+        float4 w0 = *reinterpret_cast<const float4 *>(&weight[weight_idx]);
+        float4 w1 = *reinterpret_cast<const float4 *>(&weight[weight_idx + 4]);
+
+        *reinterpret_cast<float4 *>(out_ptr) = w0;
+        *reinterpret_cast<float4 *>(out_ptr + 4) = w1;
+    } else {
+        float4 zero = make_float4(0.0f, 0.0f, 0.0f, 0.0f);
+        *reinterpret_cast<float4 *>(out_ptr) = zero;
+        *reinterpret_cast<float4 *>(out_ptr + 4) = zero;
     }
 }
 
@@ -34,15 +49,17 @@ void launch_embeddings(
     const int total_tokens,
     const int out_features,
     const int vocab_size,
-    cudaStream_t stream
+    void *stream_ptr
 ) {
-    const int total_elements = total_tokens * out_features;
-    if (total_elements == 0) return;
+    if (total_tokens == 0 || out_features == 0) return;
 
-    int threads_per_block = 256;
-    int blocks_per_grid = (total_elements + threads_per_block - 1) / threads_per_block;
+    const int out_features_f8 = out_features / 8;
+    constexpr int threads = 256;
 
-    embeddings_kernel<<<blocks_per_grid, threads_per_block, 0, stream>>>(
+    dim3 blocks(total_tokens, (out_features_f8 + threads - 1) / threads);
+    const auto stream = static_cast<cudaStream_t>(stream_ptr);
+
+    embeddings_kernel<<<blocks, threads, 0, stream>>>(
         out,
         weight,
         tokens,

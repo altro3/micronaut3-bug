@@ -54,6 +54,10 @@ name = "cuda_dequantize_block_gguf_q4_k"
 path = "src/bin/cuda_dequantize_block_gguf_q4_k.rs"
 
 [[bin]]
+name = "cuda_embeddings"
+path = "src/bin/cuda_embeddings.rs"
+
+[[bin]]
 name = "cuda_fused_attention"
 path = "src/bin/cuda_fused_attention.rs"
 
