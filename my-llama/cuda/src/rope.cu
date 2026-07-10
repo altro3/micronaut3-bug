@@ -29,8 +29,8 @@ __global__ void rope_forward_kernel_ultimate(
         const long long base_offset_v0 = (static_cast<long long>(token_idx) * num_heads + head_idx) * head_dim + feature_idx_f4 * 4;
         const long long base_offset_v1 = base_offset_v0 + half_dim;
 
-        float4 v0 = __ldcs(reinterpret_cast<const float4 *>(&vec[base_offset_v0]));
-        float4 v1 = __ldcs(reinterpret_cast<const float4 *>(&vec[base_offset_v1]));
+        const float4 v0 = __ldcs(reinterpret_cast<const float4 *>(&vec[base_offset_v0]));
+        const float4 v1 = __ldcs(reinterpret_cast<const float4 *>(&vec[base_offset_v1]));
         const float4 freq = __ldcs(reinterpret_cast<const float4 *>(&inv_freq[feature_idx_f4 * 4]));
 
         float sin_0, cos_0, sin_1, cos_1, sin_2, cos_2, sin_3, cos_3;
@@ -85,8 +85,8 @@ __global__ void rope_backward_kernel_ultimate(
         const long long base_offset_g0 = (static_cast<long long>(token_idx) * num_heads + head_idx) * head_dim + feature_idx_f4 * 4;
         const long long base_offset_g1 = base_offset_g0 + half_dim;
 
-        float4 g0 = __ldcs(reinterpret_cast<const float4 *>(&grad_in[base_offset_g0]));
-        float4 g1 = __ldcs(reinterpret_cast<const float4 *>(&grad_in[base_offset_g1]));
+        const float4 g0 = __ldcs(reinterpret_cast<const float4 *>(&grad_in[base_offset_g0]));
+        const float4 g1 = __ldcs(reinterpret_cast<const float4 *>(&grad_in[base_offset_g1]));
         const float4 freq = __ldcs(reinterpret_cast<const float4 *>(&inv_freq[feature_idx_f4 * 4]));
 
         float sin_0, cos_0, sin_1, cos_1, sin_2, cos_2, sin_3, cos_3;
