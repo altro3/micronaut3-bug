@@ -78,12 +78,11 @@ impl Drop for CudaBuffer {
 fn main() {
     println!("=== РАСШИРЕННЫЙ АСИНХРОННЫЙ БЕНЧМАРК И ВАЛИДАЦИЯ RMSNORM НА BLACKWELL ===");
 
-    // Конфигурация под реальный инференс Qwen-35B
-    let batch_size = 32_768; // Огромный батч контекста (длинный промпт)
-    let hidden_size = 8192; // Нативная скрытая размерность топовых слоев
+    let batch_size = 32_768;
+    let hidden_size = 8192;
     let size = batch_size * hidden_size;
 
-    let bytes_per_element: u64 = 12; // 2 чтения (input, weight) + 1 запись (output) = 12 байт
+    let bytes_per_element: u64 = 8;
     let iter_bytes = size as u64 * bytes_per_element;
 
     println!(
@@ -111,7 +110,6 @@ fn main() {
         let mut stream: *mut std::ffi::c_void = std::ptr::null_mut();
         assert_eq!(cudaStreamCreateWithFlags(&mut stream, 0x01), 0);
 
-        // Warmup
         launch_rms_norm(
             d_out.ptr,
             d_input.ptr,
@@ -164,7 +162,6 @@ fn main() {
             bandwidths.push(gbps);
         }
 
-        // Сортируем скорости от меньшей к большей
         bandwidths.sort_by(|a, b| a.partial_cmp(b).unwrap());
 
         let min_bw = bandwidths[0];
@@ -189,11 +186,9 @@ fn main() {
         println!("-------------------------------------------------------");
         println!("Колебания скорости (Jitter):              {:.2} ГБ/сек", max_bw - min_bw);
 
-        // --- ВАЛИДАЦИЯ МАТЕМАТИКИ ДЛЯ ПЕРВОЙ СТРОКИ ---
         let mut final_out = vec![0.0f32; size];
         d_out.copy_to_host(&mut final_out);
 
-        // Расчет эталона на CPU для первой строки (индексы от 0 до hidden_size)
         let mut cpu_sum = 0.0_f64;
         for i in 0..hidden_size {
             cpu_sum += (h_input[i] * h_input[i]) as f64;

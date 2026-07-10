@@ -42,7 +42,7 @@ __global__ void rms_norm_scalar_fallback_kernel(
 
     if (warp_id == 0) {
         const int num_warps = blockDim.x / 32;
-        const float val = tid < num_warps ? s_warp_sums[lane_id] : 0.0f;
+        const float val = tid < num_warps ? s_warp_sums[tid] : 0.0f;
         const float block_sum = warp_all_reduce_sum(val);
         if (tid == 0) {
             s_warp_sums[0] = __frsqrt_rn(block_sum * inv_hidden_size + epsilon);
@@ -53,7 +53,7 @@ __global__ void rms_norm_scalar_fallback_kernel(
     const float rms_inv = *static_cast<volatile float *>(&s_warp_sums[0]);
 
     for (int i = tid; i < hidden_size; i += blockDim.x) {
-        __stcs(&y[i], __ldcs(&x[i]) * rms_inv * __ldcs(&weight[i]));
+        __stcs(&y[i], __ldcs(&x[i]) * rms_inv * weight[i]);
     }
 }
 
@@ -109,7 +109,7 @@ __global__ void __launch_bounds__(512, 2) rms_norm_templated_blackwell_kernel(
 
     if (warp_id == 0) {
         const int num_warps = blockDim.x / 32;
-        const float val = tid < num_warps ? s_warp_sums[lane_id] : 0.0f;
+        const float val = tid < num_warps ? s_warp_sums[tid] : 0.0f;
         const float block_sum = warp_all_reduce_sum(val);
         if (tid == 0) {
             s_rms_inv = __frsqrt_rn(block_sum * inv_hidden_size + epsilon);
@@ -121,7 +121,7 @@ __global__ void __launch_bounds__(512, 2) rms_norm_templated_blackwell_kernel(
 
     int reg_idx_write = 0;
     for (int i = tid; i < hidden_size_v4; i += blockDim.x) {
-        const float4 w_val = __ldcs(&weight[i]);
+        const float4 w_val = weight[i];
         float4 out_val;
 
         if (reg_idx_write < REG_CAPACITY) {
