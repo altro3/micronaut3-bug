@@ -85,7 +85,7 @@ fn main() {
     );
 
     let mut h_input = Vec::with_capacity(num_blocks * size_of::<RustBlockQ4K>());
-    for i in 0..num_blocks {
+    for _i in 0..num_blocks {
         let mut scales = [0u8; 12];
         scales[0] = 0x2A;
         scales[6] = 0x03;
@@ -183,7 +183,10 @@ fn main() {
 
         println!("\n--- ЧЕСТНАЯ МАТЕМАТИЧЕСКАЯ ВАЛИДАЦИЯ GGUF Q4_K_M ---");
         println!("Индекс 0 (Младший ниббл) -> Ожидалось: {:.4}, Получено: {:.4}", expected_w1, final_out[0]);
-        println!("Индекс 16 (Старший ниббл) -> Ожидалось: {:.4}, Получено: {:.4}", expected_w2, final_out[16]);
+        println!(
+            "Индекс 16 (Старший ниббл) -> Ожидалось: {:.4}, Получено: {:.4}",
+            expected_w2, final_out[16]
+        );
         println!("Абсолютная погрешность для младшего ниббла: {:e}", err1);
         println!("Абсолютная погрешность для старшего ниббла: {:e}", err2);
 

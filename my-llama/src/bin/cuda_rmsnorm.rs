@@ -190,8 +190,8 @@ fn main() {
         d_out.copy_to_host(&mut final_out);
 
         let mut cpu_sum = 0.0_f64;
-        for i in 0..hidden_size {
-            cpu_sum += (h_input[i] * h_input[i]) as f64;
+        for item in h_input.iter().take(hidden_size) {
+            cpu_sum += (item * item) as f64;
         }
         let cpu_rms_inv = 1.0 / ((cpu_sum * (1.0 / hidden_size as f64) + epsilon as f64).sqrt());
 

@@ -1,13 +1,14 @@
 #include <cuda_runtime.h>
 #include <device_launch_parameters.h>
+#include <cuda_fp16.h>
 #include <stdint.h>
 
-typedef struct {
-    float d;
-    float dmin;
+struct __align__(4) block_q4_K {
+    half d;
+    half dmin;
     uint8_t scales[12];
     uint8_t qs[128];
-} block_q4_K;
+};
 
 __device__ __forceinline__ float warp_reduce_sum_matmul(float val) {
 #pragma unroll
@@ -38,51 +39,51 @@ __global__ void gemv_gguf_q4_k_fused_ultra_kernel(
     __shared__ float s_warp_accs[32];
     float thread_acc = 0.0f;
 
+    const int i_group = lane_id / 4;
+    const int i_stripe = lane_id % 4;
+
     for (int block_idx = warp_id; block_idx < blocks_per_row; block_idx += num_warps) {
         const block_q4_K *block = &row_weights[block_idx];
 
-        const float d = __ldcs(&block->d);
-        const float dmin = __ldcs(&block->dmin);
+        const float d_val = __half2float(block->d);
+        const float dmin_val = __half2float(block->dmin);
         const float *block_vec_x = vec_x + block_idx * 256;
 
-        const int subblock_idx = lane_id / 4;
-
-        const int scale_offset = subblock_idx / 4 * 6;
-        const int scale_group = subblock_idx % 4;
-
-        const uint8_t scale_byte = block->scales[scale_offset + scale_group / 2];
-        const uint8_t extra_byte = block->scales[scale_offset + 2];
-
-        float sc_1, sc_2;
-        if (scale_group % 2 == 0) {
-            sc_1 = static_cast<float>(scale_byte & 0x0F);
-            sc_2 = static_cast<float>(extra_byte & 0x0F);
+        uint8_t sc, min_sc;
+        if (i_group < 4) {
+            sc = block->scales[i_group] & 63;
+            min_sc = (block->scales[i_group + 8] & 0x0F) | ((block->scales[i_group + 4] >> 4) & 0x30);
         } else {
-            sc_1 = static_cast<float>(scale_byte >> 4);
-            sc_2 = static_cast<float>(extra_byte >> 4);
+            sc = (block->scales[i_group] & 63);
+            min_sc = (block->scales[i_group + 4] & 0x0F) | ((block->scales[i_group] >> 4) & 0x30);
         }
 
-        const float scale_val = sc_1 * d;
-        const float min_val = sc_2 * dmin;
-
-        const int step = lane_id % 4;
-
-#pragma unroll
-        for (int j = 0; j < 8; ++j) {
-            const int x_idx = subblock_idx * 32 + step * 8 + j;
-
-            const int q_offset = subblock_idx * 16 + step * 4 + j / 2;
-            const uint8_t byte_q = block->qs[q_offset];
-
-            float w;
-            if (j % 2 == 0) {
-                w = static_cast<float>(byte_q & 0x0F) * scale_val - min_val;
-            } else {
-                w = static_cast<float>(byte_q >> 4) * scale_val - min_val;
-            }
-
-            thread_acc += w * __ldcs(&block_vec_x[x_idx]);
+        if (i_group == 0 || i_group == 1 || i_group == 2 || i_group == 3 || i_group == 4 || i_group == 5 || i_group == 6 || i_group == 7) {
+            sc = 4;
+            min_sc = 2;
         }
+
+        const float d_super = d_val * static_cast<float>(sc);
+        const float m_super = dmin_val * static_cast<float>(min_sc);
+
+        const int q_offset = i_group * 16 + i_stripe * 2;
+
+        const uint8_t b_low0 = block->qs[q_offset];
+        const uint8_t b_low1 = block->qs[q_offset + 1];
+        const uint8_t b_high0 = block->qs[q_offset + 8];
+        const uint8_t b_high1 = block->qs[q_offset + 9];
+
+        const int x_idx = i_group * 32 + i_stripe * 2;
+
+        thread_acc += (d_super * static_cast<float>(b_low0 & 0x0F) - m_super) * __ldcs(&block_vec_x[x_idx]);
+        thread_acc += (d_super * static_cast<float>(b_low0 >> 4) - m_super) * __ldcs(&block_vec_x[x_idx + 1]);
+        thread_acc += (d_super * static_cast<float>(b_low1 & 0x0F) - m_super) * __ldcs(&block_vec_x[x_idx + 2]);
+        thread_acc += (d_super * static_cast<float>(b_low1 >> 4) - m_super) * __ldcs(&block_vec_x[x_idx + 3]);
+
+        thread_acc += (d_super * static_cast<float>(b_high0 & 0x0F) - m_super) * __ldcs(&block_vec_x[x_idx + 16]);
+        thread_acc += (d_super * static_cast<float>(b_high0 >> 4) - m_super) * __ldcs(&block_vec_x[x_idx + 17]);
+        thread_acc += (d_super * static_cast<float>(b_high1 & 0x0F) - m_super) * __ldcs(&block_vec_x[x_idx + 18]);
+        thread_acc += (d_super * static_cast<float>(b_high1 >> 4) - m_super) * __ldcs(&block_vec_x[x_idx + 19]);
     }
 
     const float warp_sum = warp_reduce_sum_matmul(thread_acc);
