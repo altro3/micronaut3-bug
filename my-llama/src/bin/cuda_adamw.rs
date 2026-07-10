@@ -88,7 +88,7 @@ fn main() {
     println!("=== РАСШИРЕННЫЙ СТРЕСС-БЕНЧМАРК И ВАЛИДАЦИЯ ADAMW НА BLACKWELL ===");
 
     let size = 262_553_760;
-    let bytes_per_element: u64 = 28; // 4 чтения + 3 записи по 4 байта
+    let bytes_per_element: u64 = 28;
     let iter_bytes = size as u64 * bytes_per_element;
 
     let lr = 1e-4_f32;
@@ -119,7 +119,6 @@ fn main() {
         let mut stream: *mut c_void = ptr::null_mut();
         assert_eq!(cudaStreamCreateWithFlags(&mut stream, 0x01), 0);
 
-        // Прогрев (Warmup)
         launch_adamw(
             d_w.ptr,
             d_g.ptr,
@@ -136,12 +135,10 @@ fn main() {
         );
         cudaDeviceSynchronize();
 
-        // Сброс памяти перед чистым скоростным тестом
         d_w.copy_to_device(&h_w);
         d_m.copy_to_device(&h_m);
         d_v.copy_to_device(&h_v);
 
-        // Массивы парных событий для изоляции времени каждого прохода
         let mut start_events = vec![ptr::null_mut(); NUM_ITERATIONS];
         let mut end_events = vec![ptr::null_mut(); NUM_ITERATIONS];
 
@@ -191,14 +188,12 @@ fn main() {
             bandwidths.push(gbps);
         }
 
-        // Сортируем собранные скорости от меньшей к большей
         bandwidths.sort_by(|a, b| a.partial_cmp(b).unwrap());
 
-        let min_bw = bandwidths[0]; // ИСПРАВЛЕНО: забираем значение f64 по индексу, а не весь вектор
+        let min_bw = bandwidths[0];
         let max_bw = bandwidths[NUM_ITERATIONS - 1];
         let median_bw = bandwidths[NUM_ITERATIONS / 2];
 
-        // Честные перцентили просадок (из левой части массива)
         let p95_worst = bandwidths[(NUM_ITERATIONS as f64 * 0.05) as usize];
         let p99_worst = bandwidths[(NUM_ITERATIONS as f64 * 0.01) as usize];
 
@@ -219,11 +214,12 @@ fn main() {
         println!("-------------------------------------------------------");
         println!("Колебания скорости (Jitter):              {:.2} ГБ/сек", max_bw - min_bw);
 
-        // --- БЛОК МАТЕМАТИЧЕСКОЙ ВАЛИДАЦИИ ТОЧНОСТИ (ДЛЯ 1 ЧИСТОГО ШАГА) ---
         println!("\nСброс памяти VRAM и запуск одиночного шага для верификации точности...");
         d_w.copy_to_device(&h_w);
         d_m.copy_to_device(&h_m);
         d_v.copy_to_device(&h_v);
+
+        let verification_step = 1.0_f32;
 
         launch_adamw(
             d_w.ptr,
@@ -236,7 +232,7 @@ fn main() {
             beta2,
             epsilon,
             weight_decay,
-            step,
+            verification_step,
             stream,
         );
         cudaDeviceSynchronize();
@@ -244,8 +240,8 @@ fn main() {
         let mut final_w = vec![0.0f32; size];
         d_w.copy_to_host(&mut final_w);
 
-        let bc1 = 1.0_f32 - beta1.powf(step);
-        let bc2 = 1.0_f32 - beta2.powf(step);
+        let bc1 = 1.0_f32 - beta1.powf(verification_step);
+        let bc2 = 1.0_f32 - beta2.powf(verification_step);
 
         let m_expected = beta1 * h_m[0] + (1.0_f32 - beta1) * h_g[0];
         let v_expected = beta2 * h_v[0] + (1.0_f32 - beta2) * h_g[0] * h_g[0];
@@ -266,7 +262,6 @@ fn main() {
             println!("\n❌ КРИТИЧЕСКАЯ ОШИБКА: Математика GPU разошлась с CPU!");
         }
 
-        // Чистим ресурсы
         for i in 0..NUM_ITERATIONS {
             cudaEventDestroy(start_events[i]);
             cudaEventDestroy(end_events[i]);
