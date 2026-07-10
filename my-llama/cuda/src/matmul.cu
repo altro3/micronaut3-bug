@@ -1,34 +1,56 @@
 #include "kernels.h"
 #include <cuda_runtime.h>
-#include <cublas_v2.h>
+#include <cublasLt.h>
 #include <stdio.h>
 
-static cublasHandle_t global_cublas_handle = nullptr;
+static cublasLtHandle_t global_cublaslt_handle = nullptr;
+static cublasLtMatmulDesc_t cached_operation_desc = nullptr;
+static cublasLtMatrixLayout_t cached_adesc = nullptr;
+static cublasLtMatrixLayout_t cached_bdesc = nullptr;
+static cublasLtMatrixLayout_t cached_cdesc = nullptr;
+
+static int cached_batch_size = 0;
+static int cached_out_features = 0;
+static int cached_in_features = 0;
 
 extern "C" {
 void init_cublas_infrastructure() {
-    if (global_cublas_handle == nullptr) {
-        const cublasStatus_t status = cublasCreate(&global_cublas_handle);
+    if (global_cublaslt_handle == nullptr) {
+        const cublasStatus_t status = cublasLtCreate(&global_cublaslt_handle);
         if (status != CUBLAS_STATUS_SUCCESS) {
-            fprintf(stderr, "[CUBLAS CRITICAL ERROR]: Failed to create handle! Code: %d\n", status);
+            fprintf(stderr, "[CUBLASLT CRITICAL ERROR]: Failed to create handle! Code: %d\n", status);
         } else {
-            //cublasSetMathMode(global_cublas_handle, CUBLAS_DEFAULT_MATH);
-            cublasSetMathMode(global_cublas_handle, CUBLAS_TF32_TENSOR_OP_MATH);
-            printf("[CUDA]: Global cuBLAS infrastructure (TF32 Tensor Cores mode) successfully initialized.\n");
+            cached_operation_desc = nullptr;
+            cached_adesc = nullptr;
+            cached_bdesc = nullptr;
+            cached_cdesc = nullptr;
+            cached_batch_size = 0;
+            cached_out_features = 0;
+            cached_in_features = 0;
+            printf("[CUDA]: Global cuBLASLt infrastructure (Persistent Descriptor mode) successfully initialized.\n");
         }
     }
 }
 
 void destroy_cublas_infrastructure() {
-    if (global_cublas_handle != nullptr) {
-        cublasDestroy(global_cublas_handle);
-        global_cublas_handle = nullptr;
-        printf("[CUDA]: cuBLAS infrastructure successfully released.\n");
-    }
-}
+    if (global_cublaslt_handle != nullptr) {
+        if (cached_cdesc) cublasLtMatrixLayoutDestroy(cached_cdesc);
+        if (cached_adesc) cublasLtMatrixLayoutDestroy(cached_adesc);
+        if (cached_bdesc) cublasLtMatrixLayoutDestroy(cached_bdesc);
+        if (cached_operation_desc) cublasLtMatmulDescDestroy(cached_operation_desc);
 
-cublasHandle_t get_global_cublas_handle() {
-    return global_cublas_handle;
+        cublasLtDestroy(global_cublaslt_handle);
+        global_cublaslt_handle = nullptr;
+
+        cached_operation_desc = nullptr;
+        cached_adesc = nullptr;
+        cached_bdesc = nullptr;
+        cached_cdesc = nullptr;
+        cached_batch_size = 0;
+        cached_out_features = 0;
+        cached_in_features = 0;
+        printf("[CUDA]: cuBLASLt infrastructure successfully released.\n");
+    }
 }
 
 void launch_matmul(
@@ -40,43 +62,50 @@ void launch_matmul(
     const int in_features,
     void *stream_ptr
 ) {
-    const cublasHandle_t handle = get_global_cublas_handle();
-    if (handle == nullptr) {
-        fprintf(stderr, "[CUDA ERROR]: Attempted to call launch_matmul before cuBLAS initialization!\n");
+    const cublasLtHandle_t lt_handle = global_cublaslt_handle;
+    if (lt_handle == nullptr) [[unlikely]] {
+        fprintf(stderr, "[CUDA ERROR]: Attempted to call launch_matmul before cuBLASLt initialization!\n");
         return;
     }
 
     const auto stream = static_cast<cudaStream_t>(stream_ptr);
-    cublasSetStream(handle, stream);
+
+    if (batch_size != cached_batch_size || out_features != cached_out_features || in_features != cached_in_features) [[unlikely]] {
+        if (cached_cdesc) cublasLtMatrixLayoutDestroy(cached_cdesc);
+        if (cached_adesc) cublasLtMatrixLayoutDestroy(cached_adesc);
+        if (cached_bdesc) cublasLtMatrixLayoutDestroy(cached_bdesc);
+        if (cached_operation_desc) cublasLtMatmulDescDestroy(cached_operation_desc);
+
+        cublasLtMatmulDescCreate(&cached_operation_desc, CUBLAS_COMPUTE_32F_FAST_TF32, CUDA_R_32F);
+        cublasLtMatrixLayoutCreate(&cached_bdesc, CUDA_R_32F, out_features, in_features, out_features);
+        cublasLtMatrixLayoutCreate(&cached_adesc, CUDA_R_32F, in_features, batch_size, in_features);
+        cublasLtMatrixLayoutCreate(&cached_cdesc, CUDA_R_32F, out_features, batch_size, out_features);
+
+        cached_batch_size = batch_size;
+        cached_out_features = out_features;
+        cached_in_features = in_features;
+    }
 
     constexpr float alpha = 1.0f;
     constexpr float beta = 0.0f;
 
-    const cublasStatus_t status = cublasGemmEx(
-        handle,
-        CUBLAS_OP_N,
-        CUBLAS_OP_N,
-        out_features,
-        batch_size,
-        in_features,
+    const cublasStatus_t status = cublasLtMatmul(
+        lt_handle,
+        cached_operation_desc,
         &alpha,
-        matrix_b,
-        CUDA_R_32F,
-        out_features,
-        matrix_a,
-        CUDA_R_32F,
-        in_features,
+        matrix_b, cached_bdesc,
+        matrix_a, cached_adesc,
         &beta,
-        output_matrix,
-        CUDA_R_32F,
-        out_features,
-        //        CUBLAS_COMPUTE_32F,
-        CUBLAS_COMPUTE_32F_FAST_TF32,
-        CUBLAS_GEMM_DEFAULT
+        output_matrix, cached_cdesc,
+        output_matrix, cached_cdesc,
+        nullptr,
+        nullptr,
+        0,
+        stream
     );
 
-    if (status != CUBLAS_STATUS_SUCCESS) {
-        fprintf(stderr, "[CUDA ERROR]: Asynchronous failure in cuBLAS GemmEx! Status code: %d\n", status);
+    if (status != CUBLAS_STATUS_SUCCESS) [[unlikely]] {
+        fprintf(stderr, "[CUDA ERROR]: Asynchronous failure in cuBLASLt matmul! Status code: %d\n", status);
     }
 }
 }

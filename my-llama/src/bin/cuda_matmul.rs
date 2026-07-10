@@ -1,5 +1,6 @@
 use std::ffi::c_void;
 use std::ptr;
+use std::time::Instant;
 
 #[allow(clippy::duplicated_attributes)]
 #[link(name = "cuda_kernels", kind = "static")]
@@ -9,7 +10,6 @@ use std::ptr;
 unsafe extern "C" {
     fn init_cublas_infrastructure();
     fn destroy_cublas_infrastructure();
-
     pub fn launch_matmul(
         output: *mut f32,
         matrix_a: *const f32,
@@ -19,12 +19,13 @@ unsafe extern "C" {
         in_features: i32,
         stream: *mut c_void,
     );
-
     fn cudaMalloc(dev_ptr: *mut *mut c_void, size: usize) -> i32;
     fn cudaFree(dev_ptr: *mut c_void) -> i32;
     fn cudaMemcpy(dst: *mut c_void, src: *const c_void, count: usize, kind: i32) -> i32;
     fn cudaDeviceSynchronize() -> i32;
     fn cudaGetLastError() -> i32;
+    fn cudaStreamCreateWithFlags(p_stream: *mut *mut c_void, flags: u32) -> i32;
+    fn cudaStreamDestroy(stream: *mut c_void) -> i32;
     fn cudaEventCreate(event: *mut *mut c_void) -> i32;
     fn cudaEventDestroy(event: *mut c_void) -> i32;
     fn cudaEventRecord(event: *mut c_void, stream: *mut c_void) -> i32;
@@ -42,7 +43,7 @@ impl CudaBuffer {
         let mut raw_ptr: *mut c_void = ptr::null_mut();
         unsafe {
             let res = cudaMalloc(&mut raw_ptr, size * 4);
-            assert_eq!(res, 0, "cudaMalloc failed");
+            assert_eq!(res, 0);
         }
         CudaBuffer { ptr: raw_ptr as *mut f32, size }
     }
@@ -67,34 +68,47 @@ impl Drop for CudaBuffer {
 }
 
 fn main() {
-    println!("=== БЕНЧМАРК И ВАЛИДАЦИЯ CUBLAS TF32 НА RTX 5090 ===");
+    println!("=== УЛЬТИМАТИВНЫЙ АСИНХРОННЫЙ СТРЕСС-БЕНЧМАРК CUBLAS TF32 НА BLACKWELL ===");
 
     unsafe {
         init_cublas_infrastructure();
     }
 
     let batch_size = 512;
-    let out_features = 5120;
-    let in_features = 5120;
+    let in_features = 8192;
+    let out_features = 27648;
+
+    let size_a = batch_size * in_features;
+    let size_b = in_features * out_features;
+    let size_c = batch_size * out_features;
+
+    let flops_per_iter = 2.0 * batch_size as f64 * out_features as f64 * in_features as f64;
 
     println!(
-        "Геометрия GEMM: Активации({}x{}) x Веса({}x{})",
+        "Боевая геометрия Qwen-35B: Активации({}x{}) x Веса({}x{})",
         batch_size, in_features, in_features, out_features
     );
+    println!(
+        "Выделение памяти: ~{:.2} ГБ под тензоры в VRAM",
+        ((size_a + size_b + size_c) * 4) as f64 / 1e9
+    );
 
-    // Выделяем матрицы
-    let h_a = vec![1.0f32; batch_size * in_features];
-    let h_b = vec![0.002f32; in_features * out_features];
+    let h_a = vec![1.0f32; size_a];
+    let h_b = vec![0.0002f32; size_b];
 
-    let d_a = CudaBuffer::alloc(h_a.len());
-    let d_b = CudaBuffer::alloc(h_b.len());
-    let d_c = CudaBuffer::alloc(batch_size * out_features);
+    let d_a = CudaBuffer::alloc(size_a);
+    let d_b = CudaBuffer::alloc(size_b);
+    let d_c = CudaBuffer::alloc(size_c);
 
     d_a.copy_to_device(&h_a);
     d_b.copy_to_device(&h_b);
 
+    const NUM_ITERATIONS: usize = 200;
+
     unsafe {
-        // Warmup
+        let mut stream: *mut c_void = ptr::null_mut();
+        assert_eq!(cudaStreamCreateWithFlags(&mut stream, 0x01), 0);
+
         launch_matmul(
             d_c.ptr,
             d_a.ptr,
@@ -102,20 +116,22 @@ fn main() {
             batch_size as i32,
             out_features as i32,
             in_features as i32,
-            ptr::null_mut(),
+            stream,
         );
         cudaDeviceSynchronize();
 
-        let mut start_event = ptr::null_mut();
-        let mut end_event = ptr::null_mut();
-        cudaEventCreate(&mut start_event);
-        cudaEventCreate(&mut end_event);
+        let mut start_events = vec![ptr::null_mut(); NUM_ITERATIONS];
+        let mut end_events = vec![ptr::null_mut(); NUM_ITERATIONS];
+        for i in 0..NUM_ITERATIONS {
+            assert_eq!(cudaEventCreate(&mut start_events[i]), 0);
+            assert_eq!(cudaEventCreate(&mut end_events[i]), 0);
+        }
 
-        println!("Запускаем замер скорости cuBLAS в цикле на 500 итераций...");
-        cudaEventRecord(start_event, ptr::null_mut());
+        println!("Запуск асинхронной телеметрии... Очередь cuBLAS заполняется.");
+        let start_host = Instant::now();
 
-        let num_iterations = 500;
-        for _ in 0..num_iterations {
+        for i in 0..NUM_ITERATIONS {
+            cudaEventRecord(start_events[i], stream);
             launch_matmul(
                 d_c.ptr,
                 d_a.ptr,
@@ -123,50 +139,76 @@ fn main() {
                 batch_size as i32,
                 out_features as i32,
                 in_features as i32,
-                ptr::null_mut(),
+                stream,
             );
+            cudaEventRecord(end_events[i], stream);
         }
 
-        cudaEventRecord(end_event, ptr::null_mut());
-        cudaEventSynchronize(end_event);
+        let host_launch_time = start_host.elapsed();
+        cudaEventSynchronize(*end_events.last().unwrap());
+        let total_host_time = start_host.elapsed();
 
-        let mut ms = 0.0f32;
-        cudaEventElapsedTime(&mut ms, start_event, end_event);
+        let mut tflops_v: Vec<f64> = Vec::with_capacity(NUM_ITERATIONS);
+        let mut total_gpu_ms = 0.0_f32;
 
-        let avg_ms = ms / num_iterations as f32;
-        let seconds = (avg_ms / 1000.0) as f64;
+        for i in 0..NUM_ITERATIONS {
+            let mut ms = 0.0_f32;
+            cudaEventElapsedTime(&mut ms, start_events[i], end_events[i]);
+            total_gpu_ms += ms;
 
-        let flops = 2.0 * batch_size as f64 * out_features as f64 * in_features as f64;
-        let tflops = (flops / 1e12) / seconds;
+            let seconds = (ms / 1000.0) as f64;
+            let tflops = (flops_per_iter / 1e12) / seconds;
+            tflops_v.push(tflops);
+        }
 
-        println!("\n=== РЕЗУЛЬТАТЫ ВЫЧИСЛЕНИЙ TENSOR CORES ===");
-        println!("Среднее время одного пакетного MatMul: {:.3} мс", avg_ms);
-        println!("Производительность блоков Blackwell: {:.2} TFLOPS", tflops);
+        tflops_v.sort_by(|a, b| a.partial_cmp(b).unwrap());
 
-        assert_eq!(cudaGetLastError(), 0, "CUDA Error detected!");
-        cudaEventDestroy(start_event);
-        cudaEventDestroy(end_event);
-    }
+        let min_tf = tflops_v[0];
+        let max_tf = tflops_v[NUM_ITERATIONS - 1];
+        let median_tf = tflops_v[NUM_ITERATIONS / 2];
+        let p95_worst = tflops_v[(NUM_ITERATIONS as f64 * 0.05) as usize];
+        let p99_worst = tflops_v[(NUM_ITERATIONS as f64 * 0.01) as usize];
+        let avg_tf = (flops_per_iter * NUM_ITERATIONS as f64 / 1e12) / (total_gpu_ms as f64 / 1000.0);
 
-    let mut final_c = vec![0.0f32; batch_size * out_features];
-    d_c.copy_to_host(&mut final_c);
+        println!("\n📊 === РЕЗУЛЬТАТЫ ГЛУБОКОГО СТАТИСТИЧЕСКОГО АНАЛИЗА TENSOR CORES ===");
+        println!("Время отправки очереди (Launch Overhead): {:.6} сек", host_launch_time.as_secs_f32());
+        println!("Полное время теста на GPU (по событиям):  {:.2} сек", total_gpu_ms / 1000.0);
+        println!("Полное время ожидания хостом (Wall Time):  {:.2} сек", total_host_time.as_secs_f32());
+        println!("-------------------------------------------------------");
+        println!("🚀 АБСОЛЮТНЫЙ ПИК СКОРОСТИ (Max Performance): {:.2} TFLOPS", max_tf);
+        println!("📉 АБСОЛЮТНЫЙ МИНИМУМ (Min Performance):        {:.2} TFLOPS", min_tf);
+        println!("-------------------------------------------------------");
+        println!("📈 Средняя производительность:                 {:.2} TFLOPS", avg_tf);
+        println!("🎯 Медиана (P50 Перцентиль):                {:.2} TFLOPS", median_tf);
+        println!("⚠️ Стабильный перформанс (Истинный P95):    {:.2} TFLOPS", p95_worst);
+        println!("🚨 Граница просадок (Истинный P99):         {:.2} TFLOPS", p99_worst);
+        println!("-------------------------------------------------------");
+        println!("Колебания чистой вычислительной мощности:    {:.2} TFLOPS", max_tf - min_tf);
 
-    let expected = 10.24f32;
-    let actual = final_c[0];
-    let error = (actual - expected).abs();
+        let mut final_c = vec![0.0f32; size_c];
+        d_c.copy_to_host(&mut final_c);
 
-    println!("\n--- РЕЗУЛЬТАТЫ МАТЕМАТИЧЕСКОЙ ВАЛИДАЦИИ ---");
-    println!("Ожидалось (CPU Ground Truth): {:.4}", expected);
-    println!("Получено (GPU TF32 TensorCore): {:.4}", actual);
-    println!("Абсолютная погрешность: {:e}", error);
+        let expected = 1.0_f64 * 0.0002_f64 * in_features as f64;
+        let actual = final_c[0] as f64;
+        let error = (actual - expected).abs();
 
-    if error < 1e-2 {
-        println!("🚀 УСПЕХ! cuBLAS TF32 мост работает со стопроцентной точностью слоев!");
-    } else {
-        println!("❌ ПРОВАЛ! Матрицы перемножены неверно.");
-    }
+        println!("\n--- ЧЕСТНАЯ МАТЕМАТИЧЕСКАЯ ВАЛИДАЦИЯ TF32 GEMM ---");
+        println!("Ожидалось на CPU (Ground Truth):  {:.7}", expected);
+        println!("Получено на GPU (Computed Value): {:.7}", actual);
+        println!("Абсолютная погрешность:          {:e}", error);
 
-    unsafe {
+        if error < 1e-2 {
+            println!("\n🚀 ПОБЕДА! cuBLAS TF32 полностью стабилен под боевой нагрузкой слоев!");
+        } else {
+            println!("\n❌ МАТЕМАТИЧЕСКИЙ ФАКАП: Нарушена точность ядер.");
+        }
+
+        assert_eq!(cudaGetLastError(), 0);
+        for i in 0..NUM_ITERATIONS {
+            cudaEventDestroy(start_events[i]);
+            cudaEventDestroy(end_events[i]);
+        }
+        cudaStreamDestroy(stream);
         destroy_cublas_infrastructure();
     }
 }
