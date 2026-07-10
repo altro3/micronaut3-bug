@@ -14,13 +14,15 @@ add_library(
         cuda_kernels STATIC
         cuda/include/kernels.h
         cuda/src/adamw.cu
+        cuda/src/cross_entropy_loss.cu
         cuda/src/dequantize_block_gguf_q4_k.cu
         cuda/src/embeddings.cu
         cuda/src/fused_attention.cu
         cuda/src/matmul.cu
         cuda/src/matmul_gguf_q4_k.cu
-        cuda/src/swiglu.cu
         cuda/src/rmsnorm.cu
+        cuda/src/rope.cu
+        cuda/src/swiglu.cu
 )
 
 target_link_libraries(cuda_kernels PRIVATE CUDA::cublas CUDA::cublasLt)

@@ -75,6 +75,24 @@ void launch_fused_attention(
     int current_seq_len,
     void *stream_ptr
 );
+
+void launch_rope_forward(
+    float *vec,
+    const int *positions,
+    int num_heads,
+    int head_dim,
+    int total_tokens,
+    void *stream_ptr
+);
+
+void launch_rope_backward(
+    float *grad_in,
+    const int *positions,
+    int num_heads,
+    int head_dim,
+    int total_tokens,
+    void *stream_ptr
+);
 }
 
 #endif
