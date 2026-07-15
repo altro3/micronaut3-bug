@@ -4,7 +4,6 @@
 struct MatmulContext;
 
 extern "C" {
-
 void launch_adamw(
     float *weights,
     float *gradients,
@@ -113,6 +112,22 @@ void launch_cross_entropy_loss(
     float *losses,
     int total_tokens,
     int vocab_size,
+    void *stream_ptr
+);
+
+void launch_flash_decoding(
+    float *output,
+    float *partial_out,
+    float *partial_max,
+    float *partial_sum,
+    const float *query,
+    const float *k_cache,
+    const float *v_cache,
+    int num_heads,
+    int num_kv_heads,
+    int head_dim,
+    int current_seq_len,
+    int chunk_size,
     void *stream_ptr
 );
 }

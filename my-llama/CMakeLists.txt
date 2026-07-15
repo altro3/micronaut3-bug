@@ -17,6 +17,9 @@ add_library(
         cuda/src/cross_entropy_loss.cu
         cuda/src/dequantize_block_gguf_q4_k.cu
         cuda/src/embeddings.cu
+        cuda/src/flash_decoding_combine.cu
+        cuda/src/flash_decoding_launcher.cu
+        cuda/src/flash_decoding_partial.cu
         cuda/src/fused_attention.cu
         cuda/src/matmul.cu
         cuda/src/matmul_gguf_q4_k.cu
