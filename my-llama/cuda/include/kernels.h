@@ -119,7 +119,7 @@ void launch_flash_decoding(
     float *output,
     float *partial_out,
     float *partial_max,
-    float *partial_sum, 
+    float *partial_sum,
     const float *query,
     const uint8_t *k_cache,
     const uint8_t *v_cache,
@@ -130,6 +130,17 @@ void launch_flash_decoding(
     int head_dim,
     int current_seq_len,
     int chunk_size,
+    void *stream_ptr
+);
+
+void launch_fused_sampling(
+    int* token_id,
+    float* logits,
+    float rand_val,
+    float temperature,
+    int top_k,
+    float top_p,
+    int vocab_size,
     void *stream_ptr
 );
 }

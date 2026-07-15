@@ -25,6 +25,7 @@ add_library(
         cuda/src/matmul_gguf_q4_k.cu
         cuda/src/rmsnorm.cu
         cuda/src/rope.cu
+        cuda/src/sampling.cu
         cuda/src/swiglu.cu
 )
 

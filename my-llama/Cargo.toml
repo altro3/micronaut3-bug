@@ -82,6 +82,10 @@ name = "cuda_rmsnorm"
 path = "src/bin/cuda_rmsnorm.rs"
 
 [[bin]]
+name = "cuda_sampling"
+path = "src/bin/cuda_sampling.rs"
+
+[[bin]]
 name = "cuda_swiglu"
 path = "src/bin/cuda_swiglu.rs"
 

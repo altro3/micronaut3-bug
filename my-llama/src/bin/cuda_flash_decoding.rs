@@ -49,22 +49,27 @@ unsafe extern "C" {
 }
 
 struct CudaBuffer {
-    ptr: *mut c_void,
-    size_bytes: usize,
+    ptr: *mut f32,
+    size: usize,
 }
 
 impl CudaBuffer {
-    fn alloc(size_bytes: usize) -> Self {
+    fn alloc(size: usize) -> Self {
         let mut raw_ptr: *mut c_void = ptr::null_mut();
         unsafe {
-            assert_eq!(cudaMalloc(&mut raw_ptr, size_bytes), 0);
+            let res = cudaMalloc(&mut raw_ptr, size * 4);
+            assert_eq!(res, 0);
         }
-        CudaBuffer { ptr: raw_ptr, size_bytes }
+        CudaBuffer { ptr: raw_ptr as *mut f32, size }
     }
-    fn copy_to_device(&self, host_data: *const c_void, bytes: usize) {
-        assert!(bytes <= self.size_bytes);
+    fn copy_to_device(&self, host_data: &[f32]) {
         unsafe {
-            cudaMemcpy(self.ptr, host_data, bytes, 1);
+            cudaMemcpy(self.ptr as *mut c_void, host_data.as_ptr() as *const c_void, self.size * 4, 1);
+        }
+    }
+    fn copy_to_host(&self, host_data: &mut [f32]) {
+        unsafe {
+            cudaMemcpy(host_data.as_mut_ptr() as *mut c_void, self.ptr as *const c_void, self.size * 4, 2);
         }
     }
 }
@@ -72,7 +77,7 @@ impl CudaBuffer {
 impl Drop for CudaBuffer {
     fn drop(&mut self) {
         unsafe {
-            cudaFree(self.ptr);
+            cudaFree(self.ptr as *mut c_void);
         }
     }
 }
@@ -94,23 +99,44 @@ fn simulate_decode_generation(
     let max_context = start_seq_len + gen_tokens_count;
     let max_num_chunks = (max_context + chunk_size - 1) / chunk_size;
 
+    let out_size = (num_heads * head_dim) as usize;
     let kv_cache_size = (max_context * num_kv_heads * head_dim) as usize;
     let partial_out_size = (num_heads * max_num_chunks * head_dim) as usize;
     let partial_meta_size = (num_heads * max_num_chunks) as usize;
 
-    let d_k_cache = CudaBuffer::alloc(kv_cache_size * bytes_per_elem);
-    let d_v_cache = CudaBuffer::alloc(kv_cache_size * bytes_per_elem);
+    let cache_alloc_size = (kv_cache_size * bytes_per_elem + 3) / 4;
 
-    let d_partial_out = CudaBuffer::alloc(partial_out_size * 4);
-    let d_partial_max = CudaBuffer::alloc(partial_meta_size * 4);
-    let d_partial_sum = CudaBuffer::alloc(partial_meta_size * 4);
+    let d_k_cache = CudaBuffer::alloc(cache_alloc_size);
+    let d_v_cache = CudaBuffer::alloc(cache_alloc_size);
 
-    let h_scales = vec![1.0f32; (max_context * num_kv_heads) as usize];
-    let d_k_scales = CudaBuffer::alloc(h_scales.len() * 4);
-    let d_v_scales = CudaBuffer::alloc(h_scales.len() * 4);
+    let d_partial_out = CudaBuffer::alloc(partial_out_size);
+    let d_partial_max = CudaBuffer::alloc(partial_meta_size);
+    let d_partial_sum = CudaBuffer::alloc(partial_meta_size);
+
+    let scales_size = (max_context * num_kv_heads) as usize;
+    let d_k_scales = CudaBuffer::alloc(scales_size);
+    let d_v_scales = CudaBuffer::alloc(scales_size);
+
+    let h_dummy_cache = vec![0_u8; cache_alloc_size * 4];
+    unsafe {
+        cudaMemcpy(
+            d_k_cache.ptr as *mut c_void,
+            h_dummy_cache.as_ptr() as *const c_void,
+            cache_alloc_size * 4,
+            1,
+        );
+        cudaMemcpy(
+            d_v_cache.ptr as *mut c_void,
+            h_dummy_cache.as_ptr() as *const c_void,
+            cache_alloc_size * 4,
+            1,
+        );
+    }
+
     if type_id == 2 {
-        d_k_scales.copy_to_device(h_scales.as_ptr() as *const c_void, h_scales.len() * 4);
-        d_v_scales.copy_to_device(h_scales.as_ptr() as *const c_void, h_scales.len() * 4);
+        let h_scales = vec![1.0f32; scales_size];
+        d_k_scales.copy_to_device(&h_scales);
+        d_v_scales.copy_to_device(&h_scales);
     }
 
     unsafe {
@@ -128,15 +154,15 @@ fn simulate_decode_generation(
             let current_len = start_seq_len + step;
 
             launch_flash_decoding(
-                d_output.ptr as *mut f32,
-                d_partial_out.ptr as *mut f32,
-                d_partial_max.ptr as *mut f32,
-                d_partial_sum.ptr as *mut f32,
-                d_query.ptr as *const f32,
+                d_output.ptr,
+                d_partial_out.ptr,
+                d_partial_max.ptr,
+                d_partial_sum.ptr,
+                d_query.ptr,
                 d_k_cache.ptr as *const c_void,
                 d_v_cache.ptr as *const c_void,
-                d_k_scales.ptr as *const f32,
-                d_v_scales.ptr as *const f32,
+                d_k_scales.ptr,
+                d_v_scales.ptr,
                 type_id,
                 num_heads,
                 num_kv_heads,
@@ -169,9 +195,18 @@ fn simulate_decode_generation(
     let tokens_per_second = gen_tokens_count as f64 / elapsed_seconds;
     let avg_bandwidth_gbps = (total_bytes_processed as f64 / 1e9) / elapsed_seconds;
 
+    let mut h_output = vec![0.0f32; out_size];
+    d_output.copy_to_host(&mut h_output);
+
+    let expected_val = 0.0000_f32;
+    let actual_val = h_output[0];
+    let error = (actual_val - expected_val).abs();
+
+    let validation_status = if error < 1e-4 { "OK ✅" } else { "FAIL ❌" };
+
     println!(
-        "| {:<6} | {:<20.2} | {:<22.2} | {:<14.5} |",
-        type_name, avg_bandwidth_gbps, tokens_per_second, elapsed_seconds
+        "| {:<6} | {:<20.2} | {:<22.2} | {:<14.5} | {:<10} |",
+        type_name, avg_bandwidth_gbps, tokens_per_second, elapsed_seconds, validation_status
     );
 
     unsafe {
@@ -186,8 +221,8 @@ fn main() {
     let num_heads = 40;
     let num_kv_heads = 8;
     let head_dim = 128;
-    let start_seq_len = 4096; // Стартуем с длинного промпта
-    let gen_tokens_count = 500; // Эмулируем генерацию длинного ответа в 500 токенов
+    let start_seq_len = 4096;
+    let gen_tokens_count = 500;
     let chunk_size = 256;
 
     println!("Параметры сессии:");
@@ -201,21 +236,21 @@ fn main() {
 
     let q_size = (num_heads * head_dim) as usize;
     let out_size = (num_heads * head_dim) as usize;
-    let h_query = vec![1.0f32; q_size];
 
-    let d_query = CudaBuffer::alloc(q_size * 4);
-    let d_output = CudaBuffer::alloc(out_size * 4);
-    d_query.copy_to_device(h_query.as_ptr() as *const c_void, q_size * 4);
+    let d_query = CudaBuffer::alloc(q_size);
+    let d_output = CudaBuffer::alloc(out_size);
+
+    let h_query = vec![1.0f32; q_size];
+    d_query.copy_to_device(&h_query);
 
     unsafe {
         let mut stream: *mut c_void = ptr::null_mut();
         assert_eq!(cudaStreamCreateWithFlags(&mut stream, 0x01), 0);
 
-        println!("+--------+----------------------+------------------------+----------------+");
-        println!("| Format | Real Bandwidth (GB/s)| Speed (Tokens/Second)  | Total Time (s) |");
-        println!("+--------+----------------------+------------------------+----------------+");
+        println!("+--------+----------------------+------------------------+----------------+------------+");
+        println!("| Format | Real Bandwidth (GB/s)| Speed (Tokens/Second)  | Total Time (s) | Validation |");
+        println!("+--------+----------------------+------------------------+----------------+------------+");
 
-        // 1. Симулируем генерацию 500 токенов на тяжелом FP32 кэше
         simulate_decode_generation(
             0,
             "FP32",
@@ -230,8 +265,6 @@ fn main() {
             &d_output,
             stream,
         );
-
-        // 2. Симулируем генерацию 500 токенов на стандартном FP16 кэше
         simulate_decode_generation(
             1,
             "FP16",
@@ -246,8 +279,6 @@ fn main() {
             &d_output,
             stream,
         );
-
-        // 3. Симулируем генерацию 500 токенов на квантованном FP8 кэше
         simulate_decode_generation(
             2,
             "FP8",
@@ -263,7 +294,7 @@ fn main() {
             stream,
         );
 
-        println!("+--------+----------------------+------------------------+----------------+");
+        println!("+--------+----------------------+------------------------+----------------+------------+");
 
         assert_eq!(cudaGetLastError(), 0);
         cudaStreamDestroy(stream);
