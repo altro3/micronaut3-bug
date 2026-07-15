@@ -26,10 +26,10 @@ __global__ void embeddings_kernel(
             const long long offset = weight_row_offset + idx_f16 * 16;
             const long long out_offset = idx_f16 * 16;
 
-            float4 w0 = __ldcs(reinterpret_cast<const float4 *>(&weight[offset]));
-            float4 w1 = __ldcs(reinterpret_cast<const float4 *>(&weight[offset + 4]));
-            float4 w2 = __ldcs(reinterpret_cast<const float4 *>(&weight[offset + 8]));
-            float4 w3 = __ldcs(reinterpret_cast<const float4 *>(&weight[offset + 12]));
+            const float4 w0 = __ldcs(reinterpret_cast<const float4 *>(&weight[offset]));
+            const float4 w1 = __ldcs(reinterpret_cast<const float4 *>(&weight[offset + 4]));
+            const float4 w2 = __ldcs(reinterpret_cast<const float4 *>(&weight[offset + 8]));
+            const float4 w3 = __ldcs(reinterpret_cast<const float4 *>(&weight[offset + 12]));
 
             __stcs(reinterpret_cast<float4 *>(&out_ptr[out_offset]), w0);
             __stcs(reinterpret_cast<float4 *>(&out_ptr[out_offset + 4]), w1);
@@ -37,7 +37,7 @@ __global__ void embeddings_kernel(
             __stcs(reinterpret_cast<float4 *>(&out_ptr[out_offset + 12]), w3);
         }
     } else {
-        float4 zero = make_float4(0.0f, 0.0f, 0.0f, 0.0f);
+        const float4 zero = make_float4(0.0f, 0.0f, 0.0f, 0.0f);
         for (int idx_f16 = tid; idx_f16 < out_features_f16; idx_f16 += stride) {
             const long long out_offset = idx_f16 * 16;
 

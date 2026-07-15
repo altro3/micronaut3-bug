@@ -3,6 +3,7 @@
 #include <math.h>
 #include <stdint.h>
 #include "speculative_types.h"
+#include "speculative_sampling.cuh"
 
 __device__ __forceinline__ float warp_reduce_max_spec(float val) {
 #pragma unroll
@@ -40,6 +41,8 @@ __global__ void speculative_verify_kernel(
     const int num_warps = blockDim.x / 32;
 
     __shared__ SpecSharedState s_state;
+    __shared__ int32_t s_sampled_token;
+    __shared__ float s_warp_totals[32];
 
     if (tid == 0 && blockIdx.x == 0) {
         num_accepted[seq_idx] = 0;
@@ -53,9 +56,7 @@ __global__ void speculative_verify_kernel(
 
     for (int step = 0; step < max_draft_tokens; ++step) {
         if (s_state.rejected) {
-            if (tid == 0) {
-                num_accepted[seq_idx] = s_state.accepted_count;
-            }
+            if (tid == 0) num_accepted[seq_idx] = s_state.accepted_count;
             return;
         }
 
@@ -68,17 +69,13 @@ __global__ void speculative_verify_kernel(
         }
 
         const float warp_max = warp_reduce_max_spec(local_max);
-        if (lane_id == 0 && warp_id < 32) {
-            s_state.warp_exchange[warp_id] = warp_max;
-        }
+        if (lane_id == 0 && warp_id < 32) s_state.warp_exchange[warp_id] = warp_max;
         __syncthreads();
 
         if (warp_id == 0) {
             float block_max_val = tid < num_warps ? s_state.warp_exchange[tid] : -1e20f;
             block_max_val = warp_reduce_max_spec(block_max_val);
-            if (tid == 0) {
-                s_state.max_logit = block_max_val;
-            }
+            if (tid == 0) s_state.max_logit = block_max_val;
         }
         __syncthreads();
 
@@ -90,17 +87,13 @@ __global__ void speculative_verify_kernel(
         }
 
         const float warp_sum = warp_reduce_sum_spec(local_sum);
-        if (lane_id == 0 && warp_id < 32) {
-            s_state.warp_exchange[warp_id] = warp_sum;
-        }
+        if (lane_id == 0 && warp_id < 32) s_state.warp_exchange[warp_id] = warp_sum;
         __syncthreads();
 
         if (warp_id == 0) {
             float block_sum_val = tid < num_warps ? s_state.warp_exchange[tid] : 0.0f;
             block_sum_val = warp_reduce_sum_spec(block_sum_val);
-            if (tid == 0) {
-                s_state.total_sum = block_sum_val;
-            }
+            if (tid == 0) s_state.total_sum = block_sum_val;
         }
         __syncthreads();
 
@@ -136,63 +129,47 @@ __global__ void speculative_verify_kernel(
             }
 
             const float warp_norm_sum = warp_reduce_sum_spec(local_norm_sum);
-            if (lane_id == 0 && warp_id < 32) {
-                s_state.warp_exchange[warp_id] = warp_norm_sum;
-            }
+            if (lane_id == 0 && warp_id < 32) s_state.warp_exchange[warp_id] = warp_norm_sum;
             __syncthreads();
 
             if (warp_id == 0) {
                 float block_norm_val = tid < num_warps ? s_state.warp_exchange[tid] : 0.0f;
                 block_norm_val = warp_reduce_sum_spec(block_norm_val);
-                if (tid == 0) {
-                    s_state.norm_sum = block_norm_val;
-                }
+                if (tid == 0) s_state.norm_sum = block_norm_val;
             }
             __syncthreads();
 
             if (s_state.norm_sum > 1e-6f) {
                 const float inv_norm = 1.0f / s_state.norm_sum;
-                for (int i = tid; i < vocab_size; i += blockDim.x) {
-                    s_target_probs[i] *= inv_norm;
-                }
+                for (int i = tid; i < vocab_size; i += blockDim.x) s_target_probs[i] *= inv_norm;
             } else {
-                for (int i = tid; i < vocab_size; i += blockDim.x) {
-                    s_target_probs[i] = inv_total_sum;
-                }
+                for (int i = tid; i < vocab_size; i += blockDim.x) s_target_probs[i] = inv_total_sum;
             }
             __syncthreads();
 
+            const int32_t recovery_token = sample_token_parallel(
+                s_target_probs, random_nums[seq_idx * max_draft_tokens + max_draft_tokens], vocab_size,
+                tid, lane_id, warp_id, num_warps, s_warp_totals, &s_state, &s_sampled_token
+            );
+
             if (tid == 0) {
-                const float r_sample = random_nums[seq_idx * max_draft_tokens + max_draft_tokens];
-                int32_t sampled_tok = vocab_size - 1;
-                float acc = 0.0f;
-                for (int i = 0; i < vocab_size; ++i) {
-                    acc += s_target_probs[i];
-                    if (r_sample <= acc) {
-                        sampled_tok = i;
-                        break;
-                    }
-                }
-                accepted_tokens[seq_idx * (max_draft_tokens + 1) + s_state.accepted_count] = sampled_tok;
+                accepted_tokens[seq_idx * (max_draft_tokens + 1) + s_state.accepted_count] = recovery_token;
                 num_accepted[seq_idx] = s_state.accepted_count;
             }
             return;
         }
     }
 
-    if (tid == 0 && !s_state.rejected) {
-        const float r_sample = random_nums[seq_idx * max_draft_tokens + max_draft_tokens];
-        int32_t sampled_tok = vocab_size - 1;
-        float acc = 0.0f;
-        for (int i = 0; i < vocab_size; ++i) {
-            acc += s_target_probs[i];
-            if (r_sample <= acc) {
-                sampled_tok = i;
-                break;
-            }
+    if (!s_state.rejected) {
+        const int32_t bonus_token = sample_token_parallel(
+            s_target_probs, random_nums[seq_idx * max_draft_tokens + max_draft_tokens], vocab_size,
+            tid, lane_id, warp_id, num_warps, s_warp_totals, &s_state, &s_sampled_token
+        );
+
+        if (tid == 0) {
+            accepted_tokens[seq_idx * (max_draft_tokens + 1) + max_draft_tokens] = bonus_token;
+            s_state.accepted_count++;
+            num_accepted[seq_idx] = s_state.accepted_count;
         }
-        accepted_tokens[seq_idx * (max_draft_tokens + 1) + max_draft_tokens] = sampled_tok;
-        s_state.accepted_count++;
-        num_accepted[seq_idx] = s_state.accepted_count;
     }
 }

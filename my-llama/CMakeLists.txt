@@ -29,6 +29,7 @@ add_library(
         cuda/src/sampling.cu
         cuda/src/speculative_launcher.cu
         cuda/src/speculative_verify.cu
+        cuda/src/speculative_sampling.cuh
         cuda/src/swiglu.cu
 )
 

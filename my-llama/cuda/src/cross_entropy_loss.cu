@@ -50,7 +50,7 @@ __global__ void __launch_bounds__(1024, 2) fused_cross_entropy_online_kernel(
 
     const long long token_offset = static_cast<long long>(token_idx) * vocab_size;
     const auto token_logits_v4 = reinterpret_cast<const float4 *>(logits + token_offset);
-    auto out_grads_v4 = reinterpret_cast<float4 *>(grads + token_offset);
+    const auto out_grads_v4 = reinterpret_cast<float4 *>(grads + token_offset);
 
     extern __shared__ char shared_mem[];
     const auto s_max_pool = reinterpret_cast<float *>(shared_mem);

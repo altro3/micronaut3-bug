@@ -33,15 +33,15 @@ __global__ void __launch_bounds__(256, 4) swish_glu_ultimate_blackwell_kernel(
             const float4 g = __ldcs(&gate_input[idx_v4]);
             const float4 u = __ldcs(&up_input[idx_v4]);
 
-            float ex = __expf(-g.x);
-            float ey = __expf(-g.y);
-            float ez = __expf(-g.z);
-            float ew = __expf(-g.w);
+            const float ex = __expf(-g.x);
+            const float ey = __expf(-g.y);
+            const float ez = __expf(-g.z);
+            const float ew = __expf(-g.w);
 
-            float sig_x = __frcp_rn(1.0f + ex);
-            float sig_y = __frcp_rn(1.0f + ey);
-            float sig_z = __frcp_rn(1.0f + ez);
-            float sig_w = __frcp_rn(1.0f + ew);
+            const float sig_x = __frcp_rn(1.0f + ex);
+            const float sig_y = __frcp_rn(1.0f + ey);
+            const float sig_z = __frcp_rn(1.0f + ez);
+            const float sig_w = __frcp_rn(1.0f + ew);
 
             float4 out_v4;
             out_v4.x = g.x * sig_x * u.x;

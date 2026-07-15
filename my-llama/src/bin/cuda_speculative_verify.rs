@@ -30,11 +30,19 @@ unsafe extern "C" {
     fn cudaDeviceSynchronize() -> i32;
     fn cudaStreamCreateWithFlags(p_stream: *mut *mut c_void, flags: u32) -> i32;
     fn cudaStreamDestroy(stream: *mut c_void) -> i32;
-    fn cudaEventCreate(event: *mut *mut c_void) -> i32;
-    fn cudaEventDestroy(event: *mut c_void) -> i32;
-    fn cudaEventRecord(event: *mut c_void, stream: *mut c_void) -> i32;
-    fn cudaEventSynchronize(event: *mut c_void) -> i32;
-    fn cudaEventElapsedTime(ms: *mut f32, start: *mut c_void, end: *mut c_void) -> i32;
+
+    fn cudaStreamBeginCapture(stream: *mut c_void, flags: u32) -> i32;
+    fn cudaStreamEndCapture(stream: *mut c_void, p_graph: *mut *mut c_void) -> i32;
+    fn cudaGraphInstantiate(
+        p_exec: *mut *mut c_void,
+        graph: *mut c_void,
+        p_error_node: *mut *mut c_void,
+        log_buf: *mut std::ffi::c_char,
+        log_buf_size: usize,
+    ) -> i32;
+    fn cudaGraphLaunch(exec: *mut c_void, stream: *mut c_void) -> i32;
+    fn cudaGraphExecDestroy(exec: *mut c_void) -> i32;
+    fn cudaGraphDestroy(graph: *mut c_void) -> i32;
 }
 
 struct CudaBuffer {
@@ -82,11 +90,12 @@ fn main() {
     let vocab_size = 152064;
     let max_draft_tokens = 4;
     let temperature = 0.7_f32;
+    let num_threads = 1024;
 
     println!("Боевые параметры спецификации:");
     println!(
-        "Batch (num_seqs): {}, Vocab Size: {}, Draft Window: {}, Temp: {}",
-        num_seqs, vocab_size, max_draft_tokens, temperature
+        "Batch (num_seqs): {}, Vocab Size: {}, Draft Window: {}, Temp: {}, Threads: {}",
+        num_seqs, vocab_size, max_draft_tokens, temperature, num_threads
     );
 
     let target_logits_size = (num_seqs * max_draft_tokens * vocab_size) as usize;
@@ -132,7 +141,6 @@ fn main() {
     let mut h_accepted_tokens = vec![-1_i32; out_tokens_size];
     let mut h_num_accepted = vec![0_i32; num_seqs as usize];
 
-    let num_threads = 1024;
     let d_workspace = CudaBuffer::alloc((num_seqs * vocab_size) as usize * 4);
     let d_target_logits = CudaBuffer::alloc(target_logits_size * 4);
     let d_draft_probs = CudaBuffer::alloc(draft_meta_size * 4);
@@ -172,17 +180,11 @@ fn main() {
         }
         cudaDeviceSynchronize();
 
-        let mut start_events = vec![ptr::null_mut(); NUM_ITERATIONS];
-        let mut end_events = vec![ptr::null_mut(); NUM_ITERATIONS];
-        for i in 0..NUM_ITERATIONS {
-            assert_eq!(cudaEventCreate(&mut start_events[i]), 0);
-            assert_eq!(cudaEventCreate(&mut end_events[i]), 0);
-        }
+        let mut graph: *mut c_void = ptr::null_mut();
+        let mut graph_exec: *mut c_void = ptr::null_mut();
 
-        let start_host = Instant::now();
-
-        for i in 0..NUM_ITERATIONS {
-            cudaEventRecord(start_events[i], stream);
+        assert_eq!(cudaStreamBeginCapture(stream, 0), 0);
+        for _ in 0..NUM_ITERATIONS {
             launch_speculative_verify(
                 d_accepted_tokens.ptr as *mut i32,
                 d_num_accepted.ptr as *mut i32,
@@ -198,41 +200,25 @@ fn main() {
                 num_threads,
                 stream,
             );
-            cudaEventRecord(end_events[i], stream);
         }
+        assert_eq!(cudaStreamEndCapture(stream, &mut graph), 0);
+        assert_eq!(cudaGraphInstantiate(&mut graph_exec, graph, ptr::null_mut(), ptr::null_mut(), 0), 0);
+        cudaDeviceSynchronize();
 
-        cudaEventSynchronize(*end_events.last().unwrap());
-        let total_host_time = start_host.elapsed();
+        let start_host = Instant::now();
+        assert_eq!(cudaGraphLaunch(graph_exec, stream), 0);
+        assert_eq!(cudaDeviceSynchronize(), 0);
+        let total_graph_time = start_host.elapsed();
 
-        let mut latencies_us: Vec<f64> = Vec::with_capacity(NUM_ITERATIONS);
-        for i in 0..NUM_ITERATIONS {
-            let mut ms = 0.0_f32;
-            cudaEventElapsedTime(&mut ms, start_events[i], end_events[i]);
-            latencies_us.push((ms * 1000.0) as f64);
-        }
-
-        latencies_us.sort_by(|a, b| a.partial_cmp(b).unwrap());
-
-        let min_lat = latencies_us[0];
-        let max_lat = latencies_us[NUM_ITERATIONS - 1];
-        let median_lat = latencies_us[NUM_ITERATIONS / 2];
-        let p95_lat = latencies_us[(NUM_ITERATIONS as f64 * 0.95) as usize];
-        let avg_lat: f64 = latencies_us.iter().sum::<f64>() / NUM_ITERATIONS as f64;
-
+        let avg_lat_us = (total_graph_time.as_secs_f64() * 1e6) / NUM_ITERATIONS as f64;
         let bytes_processed =
             (target_logits_size * 4 + draft_meta_size * 8 + h_random_nums.len() * 4 + out_tokens_size * 4 + (num_seqs * 4) as usize) as f64;
-        let avg_bandwidth_gbps = (bytes_processed / 1e9) / (avg_lat / 1e6);
+        let avg_bandwidth_gbps = (bytes_processed * NUM_ITERATIONS as f64 / 1e9) / total_graph_time.as_secs_f64();
 
-        println!("\n📊 === РЕЗУЛЬТАТЫ СТАТИСТИЧЕСКОГО АНАЛИЗА SPECULATIVE VERIFY ===");
-        println!("Полное время теста на хосте (Wall Time):     {:.2} сек", total_host_time.as_secs_f32());
-        println!("Средняя утилизация шины памяти:               {:.2} ГБ/сек", avg_bandwidth_gbps);
-        println!("-------------------------------------------------------");
-        println!("🚀 МИНИМАЛЬНАЯ ЗАДЕРЖКА (Быстрый проход):   {:.2} us", min_lat);
-        println!("📉 МАКСИМАЛЬНАЯ ЗАДЕРЖКА (Хвост очереди):    {:.2} us", max_lat);
-        println!("-------------------------------------------------------");
-        println!("📈 Среднее время валидации батча:            {:.2} us", avg_lat);
-        println!("🎯 Медиана (P50 Перцентиль):                {:.2} us", median_lat);
-        println!("⚠️ Стабильный перформанс (Истинный P95):    {:.2} us", p95_lat);
+        println!("\n📊 === РЕЗУЛЬТАТЫ АППАРАТНОГО ТЕСТА ЧЕРЕЗ CUDA GRAPHS ===");
+        println!("Полное время выполнения 1000 итераций на GPU: {:.4} сек", total_graph_time.as_secs_f32());
+        println!("Истинное среднее время валидации одного батча: {:.2} us", avg_lat_us);
+        println!("Реальная утилизация шины памяти Blackwell:    {:.2} ГБ/сек", avg_bandwidth_gbps);
         println!("-------------------------------------------------------");
 
         d_accepted_tokens.copy_to_host(h_accepted_tokens.as_mut_ptr() as *mut c_void, out_tokens_size * 4);
@@ -240,14 +226,14 @@ fn main() {
 
         println!("\n--- ВАЛИДАЦИЯ ТОЧНОСТИ МАТЕМАТИКИ ЯДРА ---");
 
-        println!("Запрос 0 (Ожидается полный успех): Accepted Count = 4, Tokens = [100, 101, 102, 103]");
+        println!("Запрос 0 (Ожидается полный успех): Accepted Count = 5, Tokens = [100, 101, 102, 103, 103]");
         print!("Фактически на GPU: Count = {}, Tokens = [", h_num_accepted[0]);
         for step in 0..max_draft_tokens as usize {
             print!("{}, ", h_accepted_tokens[0 * (max_draft_tokens + 1) as usize + step]);
         }
         println!("{}]", h_accepted_tokens[0 * (max_draft_tokens + 1) as usize + max_draft_tokens as usize]);
 
-        println!("\nЗапрос 1 (Ожидается обрыв на шаге 2 + сэмплинг лидером 777): Accepted Count = 2, Tokens[2] = 777");
+        println!("\nЗапрос 1 (Ожидается обрыв на шаге 2 + сэмплинг лидером 777): Accepted Count = 2, Tokens = [200, 201, 777, 0, 0]");
         print!("Фактически на GPU: Count = {}, Tokens = [", h_num_accepted[1]);
         for step in 0..max_draft_tokens as usize {
             print!("{}, ", h_accepted_tokens[1 * (max_draft_tokens + 1) as usize + step]);
@@ -262,11 +248,8 @@ fn main() {
         } else {
             println!("\n❌ МАТЕМАТИЧЕСКИЙ СБОЙ: Логика верификации или резервного сэмплирования нарушена.");
         }
-
-        for i in 0..NUM_ITERATIONS {
-            cudaEventDestroy(start_events[i]);
-            cudaEventDestroy(end_events[i]);
-        }
+        cudaGraphExecDestroy(graph_exec);
+        cudaGraphDestroy(graph);
         cudaStreamDestroy(stream);
     }
 }
