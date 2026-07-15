@@ -134,11 +134,10 @@ void launch_flash_decoding(
 );
 
 void launch_fused_sampling(
-    int* token_id,
-    float* logits,
+    int *token_id,
+    const float *logits,
     float rand_val,
     float temperature,
-    int top_k,
     float top_p,
     int vocab_size,
     void *stream_ptr

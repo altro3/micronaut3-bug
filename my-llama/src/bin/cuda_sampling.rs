@@ -13,7 +13,6 @@ unsafe extern "C" {
         logits: *mut f32,
         rand_val: f32,
         temperature: f32,
-        top_k: i32,
         top_p: f32,
         vocab_size: i32,
         stream: *mut c_void,
@@ -73,14 +72,13 @@ fn main() {
 
     let vocab_size = 152064;
     let temperature = 0.7_f32;
-    let top_k = 40;
     let top_p = 0.95_f32;
     let rand_val = 0.15_f32;
 
     println!("Боевые параметры сэмплинга:");
     println!(
-        "Vocab Size: {}, Temp: {}, Top-K: {}, Top-P: {}, Rand Val: {}",
-        vocab_size, temperature, top_k, top_p, rand_val
+        "Vocab Size: {}, Temp: {}, Top-P: {}, Rand Val: {}",
+        vocab_size, temperature, top_p, rand_val
     );
 
     let mut h_logits = vec![-2.0f32; vocab_size as usize];
@@ -111,7 +109,6 @@ fn main() {
                 d_logits.ptr as *mut f32,
                 rand_val,
                 temperature,
-                top_k,
                 top_p,
                 vocab_size,
                 stream,
@@ -138,7 +135,6 @@ fn main() {
                 d_logits.ptr as *mut f32,
                 rand_val,
                 temperature,
-                top_k,
                 top_p,
                 vocab_size,
                 stream,
