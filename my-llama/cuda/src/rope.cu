@@ -13,18 +13,16 @@ __global__ void rope_forward_kernel_ultimate(
     if (token_idx >= total_tokens) return;
 
     const int pos = positions[token_idx];
+    const float pos_f = static_cast<float>(pos);
     const int tid = threadIdx.x;
 
     const int half_dim = head_dim / 2;
     const int half_dim_f4 = half_dim / 4;
-    const int elements_per_head_v4 = head_dim / 4;
-    const int total_elements_per_token_v4 = num_heads * elements_per_head_v4;
+    const int total_valid_elements_f4 = num_heads * half_dim_f4;
 
-    for (int idx_v4 = tid; idx_v4 < total_elements_per_token_v4; idx_v4 += blockDim.x) {
-        const int head_idx = idx_v4 / elements_per_head_v4;
-        const int feature_idx_f4 = idx_v4 % elements_per_head_v4;
-
-        if (feature_idx_f4 >= half_dim_f4) continue;
+    for (int global_f4_idx = tid; global_f4_idx < total_valid_elements_f4; global_f4_idx += blockDim.x) {
+        const int head_idx = global_f4_idx / half_dim_f4;
+        const int feature_idx_f4 = global_f4_idx % half_dim_f4;
 
         const long long base_offset_v0 = (static_cast<long long>(token_idx) * num_heads + head_idx) * head_dim + feature_idx_f4 * 4;
         const long long base_offset_v1 = base_offset_v0 + half_dim;
@@ -34,10 +32,10 @@ __global__ void rope_forward_kernel_ultimate(
         const float4 freq = __ldcs(reinterpret_cast<const float4 *>(&inv_freq[feature_idx_f4 * 4]));
 
         float sin_0, cos_0, sin_1, cos_1, sin_2, cos_2, sin_3, cos_3;
-        __sincosf(static_cast<float>(pos) * freq.x, &sin_0, &cos_0);
-        __sincosf(static_cast<float>(pos) * freq.y, &sin_1, &cos_1);
-        __sincosf(static_cast<float>(pos) * freq.z, &sin_2, &cos_2);
-        __sincosf(static_cast<float>(pos) * freq.w, &sin_3, &cos_3);
+        __sincosf(pos_f * freq.x, &sin_0, &cos_0);
+        __sincosf(pos_f * freq.y, &sin_1, &cos_1);
+        __sincosf(pos_f * freq.z, &sin_2, &cos_2);
+        __sincosf(pos_f * freq.w, &sin_3, &cos_3);
 
         float4 out_v0, out_v1;
         out_v0.x = v0.x * cos_0 - v1.x * sin_0;
@@ -69,18 +67,16 @@ __global__ void rope_backward_kernel_ultimate(
     if (token_idx >= total_tokens) return;
 
     const int pos = positions[token_idx];
+    const float pos_f = static_cast<float>(pos);
     const int tid = threadIdx.x;
 
     const int half_dim = head_dim / 2;
     const int half_dim_f4 = half_dim / 4;
-    const int elements_per_head_v4 = head_dim / 4;
-    const int total_elements_per_token_v4 = num_heads * elements_per_head_v4;
+    const int total_valid_elements_f4 = num_heads * half_dim_f4;
 
-    for (int idx_v4 = tid; idx_v4 < total_elements_per_token_v4; idx_v4 += blockDim.x) {
-        const int head_idx = idx_v4 / elements_per_head_v4;
-        const int feature_idx_f4 = idx_v4 % elements_per_head_v4;
-
-        if (feature_idx_f4 >= half_dim_f4) continue;
+    for (int global_f4_idx = tid; global_f4_idx < total_valid_elements_f4; global_f4_idx += blockDim.x) {
+        const int head_idx = global_f4_idx / half_dim_f4;
+        const int feature_idx_f4 = global_f4_idx % half_dim_f4;
 
         const long long base_offset_g0 = (static_cast<long long>(token_idx) * num_heads + head_idx) * head_dim + feature_idx_f4 * 4;
         const long long base_offset_g1 = base_offset_g0 + half_dim;
@@ -90,10 +86,10 @@ __global__ void rope_backward_kernel_ultimate(
         const float4 freq = __ldcs(reinterpret_cast<const float4 *>(&inv_freq[feature_idx_f4 * 4]));
 
         float sin_0, cos_0, sin_1, cos_1, sin_2, cos_2, sin_3, cos_3;
-        __sincosf(static_cast<float>(pos) * freq.x, &sin_0, &cos_0);
-        __sincosf(static_cast<float>(pos) * freq.y, &sin_1, &cos_1);
-        __sincosf(static_cast<float>(pos) * freq.z, &sin_2, &cos_2);
-        __sincosf(static_cast<float>(pos) * freq.w, &sin_3, &cos_3);
+        __sincosf(pos_f * freq.x, &sin_0, &cos_0);
+        __sincosf(pos_f * freq.y, &sin_1, &cos_1);
+        __sincosf(pos_f * freq.z, &sin_2, &cos_2);
+        __sincosf(pos_f * freq.w, &sin_3, &cos_3);
 
         float4 out_g0, out_g1;
         out_g0.x = g0.x * cos_0 + g1.x * sin_0;
