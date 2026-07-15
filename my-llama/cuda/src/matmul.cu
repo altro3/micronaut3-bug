@@ -96,18 +96,21 @@ void launch_matmul_universal(
         if (ctx->bdesc) cublasLtMatrixLayoutDestroy(ctx->bdesc);
         if (ctx->operation_desc) cublasLtMatmulDescDestroy(ctx->operation_desc);
 
-        cublasLtMatmulDescCreate(&ctx->operation_desc, CUBLAS_COMPUTE_32F, CUDA_R_32F);
-
+        cublasComputeType_t compute_type;
+        constexpr cudaDataType_t scale_type = CUDA_R_32F;
         cudaDataType_t a_type, b_type, c_type;
 
         switch (dtype) {
             case InferenceDtype::FP32:
+                compute_type = CUBLAS_COMPUTE_32F_FAST_16BF;
                 a_type = b_type = c_type = CUDA_R_32F;
                 break;
             case InferenceDtype::BF16:
+                compute_type = CUBLAS_COMPUTE_32F;
                 a_type = b_type = c_type = CUDA_R_16BF;
                 break;
             case InferenceDtype::FP8_E4M3:
+                compute_type = CUBLAS_COMPUTE_32F;
                 a_type = CUDA_R_8F_E4M3;
                 b_type = CUDA_R_8F_E4M3;
                 c_type = CUDA_R_16BF;
@@ -116,6 +119,8 @@ void launch_matmul_universal(
                 fprintf(stderr, "[CUDA ERROR]: Unsupported dtype token!\n");
                 return;
         }
+
+        cublasLtMatmulDescCreate(&ctx->operation_desc, compute_type, scale_type);
 
         cublasLtMatrixLayoutCreate(&ctx->bdesc, b_type, out_features, in_features, out_features);
         cublasLtMatrixLayoutCreate(&ctx->adesc, a_type, in_features, batch_size, in_features);
