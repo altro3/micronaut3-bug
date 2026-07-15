@@ -13,7 +13,7 @@ __global__ void swish_glu_scalar_fallback_kernel(
     if (idx < size) {
         const float g = __ldcs(&gate_input[idx]);
         const float u = __ldcs(&up_input[idx]);
-        const float swish = g / (1.0f + __expf(-g));
+        const float swish = g * __frcp_rn(1.0f + __expf(-g));
         __stcs(&output[idx], swish * u);
     }
 }
@@ -25,23 +25,33 @@ __global__ void __launch_bounds__(256, 4) swish_glu_ultimate_blackwell_kernel(
     const int size_v4
 ) {
     const int stride = blockDim.x * gridDim.x;
+    int idx_v4 = blockIdx.x * blockDim.x + threadIdx.x;
 
-    for (int idx_v4 = blockIdx.x * blockDim.x + threadIdx.x; idx_v4 < size_v4; idx_v4 += stride) {
-        const float4 g = __ldcs(&gate_input[idx_v4]);
-        const float4 u = __ldcs(&up_input[idx_v4]);
+#pragma unroll
+    for (int step = 0; step < 2; ++step) {
+        if (idx_v4 < size_v4) {
+            const float4 g = __ldcs(&gate_input[idx_v4]);
+            const float4 u = __ldcs(&up_input[idx_v4]);
 
-        const float ex = __expf(-g.x);
-        const float ey = __expf(-g.y);
-        const float ez = __expf(-g.z);
-        const float ew = __expf(-g.w);
+            float ex = __expf(-g.x);
+            float ey = __expf(-g.y);
+            float ez = __expf(-g.z);
+            float ew = __expf(-g.w);
 
-        float4 out_v4;
-        out_v4.x = g.x / (1.0f + ex) * u.x;
-        out_v4.y = g.y / (1.0f + ey) * u.y;
-        out_v4.z = g.z / (1.0f + ez) * u.z;
-        out_v4.w = g.w / (1.0f + ew) * u.w;
+            float sig_x = __frcp_rn(1.0f + ex);
+            float sig_y = __frcp_rn(1.0f + ey);
+            float sig_z = __frcp_rn(1.0f + ez);
+            float sig_w = __frcp_rn(1.0f + ew);
 
-        __stcs(&output[idx_v4], out_v4);
+            float4 out_v4;
+            out_v4.x = g.x * sig_x * u.x;
+            out_v4.y = g.y * sig_y * u.y;
+            out_v4.z = g.z * sig_z * u.z;
+            out_v4.w = g.w * sig_w * u.w;
+
+            __stcs(&output[idx_v4], out_v4);
+        }
+        idx_v4 += stride;
     }
 }
 
@@ -61,9 +71,8 @@ extern "C" void launch_swish_glu(
 
     if (is_aligned) [[likely]] {
         const int size_v4 = size / 4;
-        int blocks = (size_v4 + threads - 1) / threads;
-
-        if (blocks > 2048) blocks = 2048;
+        const int total_threads_needed = (size_v4 + 1) / 2;
+        int blocks = (total_threads_needed + threads - 1) / threads;
         if (blocks < 1) blocks = 1;
 
         swish_glu_ultimate_blackwell_kernel<<<blocks, threads, 0, stream>>>(
