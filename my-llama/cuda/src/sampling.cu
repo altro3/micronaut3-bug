@@ -92,8 +92,7 @@ __global__ void fused_sampling_kernel_v2(
 
     float local_sum = 0.0f;
     for (int i = tid; i < vocab_size; i += blockDim.x) {
-        const float exp_val = expf(logits[i] * inv_temp - block_max);
-        local_sum += exp_val;
+        local_sum += expf(logits[i] * inv_temp - block_max);
     }
 
     float block_sum = warp_reduce_sum_sample(local_sum);
