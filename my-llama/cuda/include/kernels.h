@@ -5,10 +5,6 @@ struct MatmulContext;
 
 extern "C" {
 
-MatmulContext *create_matmul_context(size_t workspace_size);
-
-void destroy_matmul_context(const MatmulContext *ctx);
-
 void launch_adamw(
     float *weights,
     float *gradients,
@@ -42,13 +38,22 @@ void launch_rms_norm(
     void *stream_ptr
 );
 
-void launch_matmul(
-    float *output_matrix,
-    const float *matrix_a,
-    const float *matrix_b,
+MatmulContext *create_matmul_context(size_t workspace_size);
+
+void destroy_matmul_context(MatmulContext *ctx);
+
+void launch_matmul_universal(
+    MatmulContext *ctx,
+    void *output_matrix,
+    const void *matrix_a,
+    const void *matrix_b,
     int batch_size,
     int out_features,
     int in_features,
+    int dtype_int,
+    int epilogue_int,
+    const float *a_scale_ptr,
+    const float *b_scale_ptr,
     void *stream_ptr
 );
 

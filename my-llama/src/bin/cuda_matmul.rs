@@ -8,16 +8,21 @@ use std::time::Instant;
 #[link(name = "cublas", kind = "dylib")]
 #[link(name = "cublasLt", kind = "dylib")]
 unsafe extern "C" {
-    fn init_cublas_infrastructure();
-    fn destroy_cublas_infrastructure();
-    pub fn launch_matmul(
-        output: *mut f32,
-        matrix_a: *const f32,
-        matrix_b: *const f32,
+    fn create_matmul_context(workspace_size: usize) -> *mut c_void;
+    fn destroy_matmul_context(ctx: *mut c_void);
+    fn launch_matmul_universal(
+        ctx: *mut c_void,
+        output_matrix: *mut c_void,
+        matrix_a: *const c_void,
+        matrix_b: *const c_void,
         batch_size: i32,
         out_features: i32,
         in_features: i32,
-        stream: *mut c_void,
+        dtype_int: i32,
+        epilogue_int: i32,
+        a_scale_ptr: *const f32,
+        b_scale_ptr: *const f32,
+        stream_ptr: *mut c_void,
     );
     fn cudaMalloc(dev_ptr: *mut *mut c_void, size: usize) -> i32;
     fn cudaFree(dev_ptr: *mut c_void) -> i32;
@@ -70,9 +75,9 @@ impl Drop for CudaBuffer {
 fn main() {
     println!("=== УЛЬТИМАТИВНЫЙ АСИНХРОННЫЙ СТРЕСС-БЕНЧМАРК CUBLAS TF32 НА BLACKWELL ===");
 
-    unsafe {
-        init_cublas_infrastructure();
-    }
+    let workspace_size = 32 * 1024 * 1024;
+    let ctx = unsafe { create_matmul_context(workspace_size) };
+    assert!(!ctx.is_null());
 
     let batch_size = 512;
     let in_features = 8192;
@@ -104,18 +109,25 @@ fn main() {
     d_b.copy_to_device(&h_b);
 
     const NUM_ITERATIONS: usize = 200;
+    const DTYPE_FP32: i32 = 0;
+    const EPILOGUE_NONE: i32 = 0;
 
     unsafe {
         let mut stream: *mut c_void = ptr::null_mut();
         assert_eq!(cudaStreamCreateWithFlags(&mut stream, 0x01), 0);
 
-        launch_matmul(
-            d_c.ptr,
-            d_a.ptr,
-            d_b.ptr,
+        launch_matmul_universal(
+            ctx,
+            d_c.ptr as *mut c_void,
+            d_a.ptr as *const c_void,
+            d_b.ptr as *const c_void,
             batch_size as i32,
             out_features as i32,
             in_features as i32,
+            DTYPE_FP32,
+            EPILOGUE_NONE,
+            ptr::null(),
+            ptr::null(),
             stream,
         );
         cudaDeviceSynchronize();
@@ -132,13 +144,18 @@ fn main() {
 
         for i in 0..NUM_ITERATIONS {
             cudaEventRecord(start_events[i], stream);
-            launch_matmul(
-                d_c.ptr,
-                d_a.ptr,
-                d_b.ptr,
+            launch_matmul_universal(
+                ctx,
+                d_c.ptr as *mut c_void,
+                d_a.ptr as *const c_void,
+                d_b.ptr as *const c_void,
                 batch_size as i32,
                 out_features as i32,
                 in_features as i32,
+                DTYPE_FP32,
+                EPILOGUE_NONE,
+                ptr::null(),
+                ptr::null(),
                 stream,
             );
             cudaEventRecord(end_events[i], stream);
@@ -209,6 +226,6 @@ fn main() {
             cudaEventDestroy(end_events[i]);
         }
         cudaStreamDestroy(stream);
-        destroy_cublas_infrastructure();
+        destroy_matmul_context(ctx);
     }
 }
