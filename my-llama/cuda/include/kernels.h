@@ -1,7 +1,14 @@
 #ifndef KERNELS_H
 #define KERNELS_H
 
+struct MatmulContext;
+
 extern "C" {
+
+MatmulContext *create_matmul_context(size_t workspace_size);
+
+void destroy_matmul_context(const MatmulContext *ctx);
+
 void launch_adamw(
     float *weights,
     float *gradients,
