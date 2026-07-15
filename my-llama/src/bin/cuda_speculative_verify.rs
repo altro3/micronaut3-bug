@@ -15,6 +15,7 @@ unsafe extern "C" {
         draft_probs: *const f32,
         draft_tokens: *const i32,
         random_nums: *const f32,
+        workspace: *mut f32,
         num_seqs: i32,
         vocab_size: i32,
         max_draft_tokens: i32,
@@ -127,6 +128,7 @@ fn main() {
     let mut h_accepted_tokens = vec![-1_i32; out_tokens_size];
     let mut h_num_accepted = vec![0_i32; num_seqs as usize];
 
+    let d_workspace = CudaBuffer::alloc((num_seqs * vocab_size) as usize * 4);
     let d_target_logits = CudaBuffer::alloc(target_logits_size * 4);
     let d_draft_probs = CudaBuffer::alloc(draft_meta_size * 4);
     let d_draft_tokens = CudaBuffer::alloc(draft_meta_size * 4);
@@ -151,6 +153,7 @@ fn main() {
                 d_accepted_tokens.ptr as *mut i32, d_num_accepted.ptr as *mut i32,
                 d_target_logits.ptr as *const f32, d_draft_probs.ptr as *const f32,
                 d_draft_tokens.ptr as *const i32, d_random_nums.ptr as *const f32,
+                d_workspace.ptr as *mut f32,
                 num_seqs, vocab_size, max_draft_tokens, temperature, stream
             );
         }
@@ -171,6 +174,7 @@ fn main() {
                 d_accepted_tokens.ptr as *mut i32, d_num_accepted.ptr as *mut i32,
                 d_target_logits.ptr as *const f32, d_draft_probs.ptr as *const f32,
                 d_draft_tokens.ptr as *const i32, d_random_nums.ptr as *const f32,
+                d_workspace.ptr as *mut f32,
                 num_seqs, vocab_size, max_draft_tokens, temperature, stream
             );
             cudaEventRecord(end_events[i], stream);
@@ -224,7 +228,7 @@ fn main() {
         for step in 0..max_draft_tokens as usize { print!("{}, ", h_accepted_tokens[1 * (max_draft_tokens + 1) as usize + step]); }
         println!("{}]", h_accepted_tokens[1 * (max_draft_tokens + 1) as usize + max_draft_tokens as usize]);
 
-        let valid_0 = h_num_accepted[0] == 4 && h_accepted_tokens[0 * 5 + 0] == 100 && h_accepted_tokens[0 * 5 + 3] == 103;
+        let valid_0 = h_num_accepted[0] == 5 && h_accepted_tokens[0 * 5 + 0] == 100 && h_accepted_tokens[0 * 5 + 3] == 103;
         let valid_1 = h_num_accepted[1] == 2 && h_accepted_tokens[1 * 5 + 2] == 777;
 
         if valid_0 && valid_1 {

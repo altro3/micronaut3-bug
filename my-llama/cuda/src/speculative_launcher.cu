@@ -8,12 +8,14 @@ extern __global__ void speculative_verify_kernel(
     const float * __restrict__ draft_probs,
     const int32_t * __restrict__ draft_tokens,
     const float * __restrict__ random_nums,
+    float * __restrict__ workspace,
     int vocab_size,
     int max_draft_tokens,
     float temperature
 );
 
 extern "C" {
+
 void launch_speculative_verify(
     int32_t *accepted_tokens,
     int32_t *num_accepted,
@@ -21,6 +23,7 @@ void launch_speculative_verify(
     const float *draft_probs,
     const int32_t *draft_tokens,
     const float *random_nums,
+    float *workspace,
     const int num_seqs,
     const int vocab_size,
     const int max_draft_tokens,
@@ -33,11 +36,11 @@ void launch_speculative_verify(
 
     constexpr int threads = 256;
     dim3 blocks(1, num_seqs);
-    const size_t shared_mem_size = vocab_size * sizeof(float);
 
-    speculative_verify_kernel<<<blocks, threads, shared_mem_size, stream>>>(
-        accepted_tokens, num_accepted, target_logits, draft_probs, draft_tokens, random_nums,
+    speculative_verify_kernel<<<blocks, threads, 0, stream>>>(
+        accepted_tokens, num_accepted, target_logits, draft_probs, draft_tokens, random_nums, workspace,
         vocab_size, max_draft_tokens, temperature
     );
 }
+
 }

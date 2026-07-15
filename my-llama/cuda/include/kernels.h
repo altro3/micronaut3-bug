@@ -175,6 +175,7 @@ void launch_speculative_verify(
     const float *draft_probs,
     const int32_t *draft_tokens,
     const float *random_nums,
+    float *workspace,
     int num_seqs,
     int vocab_size,
     int max_draft_tokens,
