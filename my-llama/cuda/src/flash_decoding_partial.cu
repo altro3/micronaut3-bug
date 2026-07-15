@@ -1,14 +1,10 @@
+#include "cache_types.h"
 #include <cuda_runtime.h>
 #include <device_launch_parameters.h>
 #include <math.h>
 #include <cuda_fp16.h>
 #include <cuda_fp8.h>
-
-enum class CacheType {
-    FP32 = 0,
-    FP16 = 1,
-    FP8 = 2
-};
+#include <stdint.h>
 
 __device__ __forceinline__ float warp_reduce_max_fd(float val) {
 #pragma unroll
@@ -51,24 +47,28 @@ __device__ __forceinline__ float4 load_cache_x4(const void *base_ptr, int f4_idx
 }
 
 template<CacheType T>
-__global__ void flash_decoding_partial_kernel(
+__global__ void paged_flash_decoding_partial_kernel(
     float * __restrict__ partial_out,
     float * __restrict__ partial_max,
     float * __restrict__ partial_sum,
     const float * __restrict__ query,
-    const void * __restrict__ k_cache,
-    const void * __restrict__ v_cache,
+    const void * __restrict__ k_block_table,
+    const void * __restrict__ v_block_table,
+    const int32_t * __restrict__ block_mapping,
+    const int32_t * __restrict__ seq_lengths,
     const float * __restrict__ k_scales,
     const float * __restrict__ v_scales,
     int num_heads,
     int num_kv_heads,
     int head_dim,
-    int current_seq_len,
+    int max_blocks_per_seq,
+    int block_size,
     int chunk_size,
     int num_chunks
 ) {
     const int head_idx = blockIdx.x;
     const int chunk_idx = blockIdx.y;
+    const int seq_idx = blockIdx.z;
     const int tid = threadIdx.x;
 
     const int lane_id = tid % 32;
@@ -81,6 +81,7 @@ __global__ void flash_decoding_partial_kernel(
     const int head_dim_f4 = head_dim / 4;
     const float scale = 1.0f / sqrtf(static_cast<float>(head_dim));
 
+    const int current_seq_len = seq_lengths[seq_idx];
     const int start_tok = chunk_idx * chunk_size;
     const int end_tok = min(start_tok + chunk_size, current_seq_len);
 
@@ -93,7 +94,7 @@ __global__ void flash_decoding_partial_kernel(
     float *s_q_vec = s_shared_mem;
     float *s_scores = s_shared_mem + head_dim;
 
-    const float *const q_vec = query + head_idx * head_dim;
+    const float *const q_vec = query + (static_cast<long long>(seq_idx) * num_heads + head_idx) * head_dim;
     for (int i = tid; i < head_dim; i += blockDim.x) {
         s_q_vec[i] = q_vec[i];
     }
@@ -103,15 +104,28 @@ __global__ void flash_decoding_partial_kernel(
     const int total_toks_to_process = end_tok - start_tok;
 
     constexpr int bytes_per_elem = T == CacheType::FP32 ? 4 : T == CacheType::FP16 ? 2 : 1;
+    const long long block_stride = static_cast<long long>(block_size) * num_kv_heads * head_dim * bytes_per_elem;
+    const long long scale_block_stride = static_cast<long long>(block_size) * num_kv_heads;
 
     for (int local_tok = tid; local_tok < total_toks_to_process; local_tok += blockDim.x) {
         const int global_tok = start_tok + local_tok;
 
-        const long long cache_row_offset = (static_cast<long long>(global_tok) * num_kv_heads + kv_head_idx) * head_dim * bytes_per_elem;
-        const void *const k_vec_ptr = static_cast<const uint8_t *>(k_cache) + cache_row_offset;
+        const int logical_block_idx = global_tok / block_size;
+        const int offset_in_block = global_tok % block_size;
+        const int physical_block_id = block_mapping[static_cast<long long>(seq_idx) * max_blocks_per_seq + logical_block_idx];
 
-        const long long scale_offset = static_cast<long long>(global_tok) * num_kv_heads + kv_head_idx;
-        const float k_s = T == CacheType::FP8 && k_scales ? k_scales[scale_offset] : 1.0f;
+        const long long cache_row_offset = physical_block_id * block_stride +
+                                           (static_cast<long long>(offset_in_block) * num_kv_heads + kv_head_idx) * head_dim * bytes_per_elem;
+        const void *const k_vec_ptr = static_cast<const uint8_t *>(k_block_table) + cache_row_offset;
+
+        float k_s = 1.0f;
+        if constexpr (T == CacheType::FP8) {
+            if (k_scales) {
+                const long long scale_offset = physical_block_id * scale_block_stride +
+                                               static_cast<long long>(offset_in_block) * num_kv_heads + kv_head_idx;
+                k_s = k_scales[scale_offset];
+            }
+        }
 
         float score_acc = 0.0f;
 
@@ -163,7 +177,7 @@ __global__ void flash_decoding_partial_kernel(
     }
     __syncthreads();
 
-    const long long partial_offset = static_cast<long long>(head_idx) * num_chunks + chunk_idx;
+    const long long partial_offset = ((static_cast<long long>(seq_idx) * num_heads) + head_idx) * num_chunks + chunk_idx;
     float *const p_out_ptr = partial_out + partial_offset * head_dim;
 
     for (int d = tid; d < head_dim_f4; d += blockDim.x) {
@@ -173,11 +187,22 @@ __global__ void flash_decoding_partial_kernel(
             const float prob = s_scores[local_tok];
             const int global_tok = start_tok + local_tok;
 
-            const long long v_cache_row_offset = (static_cast<long long>(global_tok) * num_kv_heads + kv_head_idx) * head_dim * bytes_per_elem;
-            const void *const v_vec_ptr = static_cast<const uint8_t *>(v_cache) + v_cache_row_offset;
+            const int logical_block_idx = global_tok / block_size;
+            const int offset_in_block = global_tok % block_size;
+            const int physical_block_id = block_mapping[static_cast<long long>(seq_idx) * max_blocks_per_seq + logical_block_idx];
 
-            const long long scale_offset = static_cast<long long>(global_tok) * num_kv_heads + kv_head_idx;
-            const float v_s = T == CacheType::FP8 && v_scales ? v_scales[scale_offset] : 1.0f;
+            const long long v_cache_row_offset = physical_block_id * block_stride +
+                                                 (static_cast<long long>(offset_in_block) * num_kv_heads + kv_head_idx) * head_dim * bytes_per_elem;
+            const void *const v_vec_ptr = static_cast<const uint8_t *>(v_block_table) + v_cache_row_offset;
+
+            float v_s = 1.0f;
+            if constexpr (T == CacheType::FP8) {
+                if (v_scales) {
+                    const long long scale_offset = physical_block_id * scale_block_stride +
+                                                   static_cast<long long>(offset_in_block) * num_kv_heads + kv_head_idx;
+                    v_s = v_scales[scale_offset];
+                }
+            }
 
             const float4 v_val = load_cache_x4<T>(v_vec_ptr, d, v_s);
 
@@ -196,53 +221,14 @@ __global__ void flash_decoding_partial_kernel(
     }
 }
 
-template __global__ void flash_decoding_partial_kernel<CacheType::FP32>(
-    float * __restrict__ partial_out,
-    float * __restrict__ partial_max,
-    float * __restrict__ partial_sum,
-    const float * __restrict__ query,
-    const void * __restrict__ k_cache,
-    const void * __restrict__ v_cache,
-    const float * __restrict__ k_scales,
-    const float * __restrict__ v_scales,
-    int num_heads,
-    int num_kv_heads,
-    int head_dim,
-    int current_seq_len,
-    int chunk_size,
-    int num_chunks
-);
+template __global__ void paged_flash_decoding_partial_kernel<CacheType::FP32>(
+    float * __restrict__, float * __restrict__, float * __restrict__, const float * __restrict__, const void * __restrict__, const void * __restrict__,
+    const int32_t * __restrict__, const int32_t * __restrict__, const float * __restrict__, const float * __restrict__, int, int, int, int, int, int, int);
 
-template __global__ void flash_decoding_partial_kernel<CacheType::FP16>(
-    float * __restrict__ partial_out,
-    float * __restrict__ partial_max,
-    float * __restrict__ partial_sum,
-    const float * __restrict__ query,
-    const void * __restrict__ k_cache,
-    const void * __restrict__ v_cache,
-    const float * __restrict__ k_scales,
-    const float * __restrict__ v_scales,
-    int num_heads,
-    int num_kv_heads,
-    int head_dim,
-    int current_seq_len,
-    int chunk_size,
-    int num_chunks
-);
+template __global__ void paged_flash_decoding_partial_kernel<CacheType::FP16>(
+    float * __restrict__, float * __restrict__, float * __restrict__, const float * __restrict__, const void * __restrict__, const void * __restrict__,
+    const int32_t * __restrict__, const int32_t * __restrict__, const float * __restrict__, const float * __restrict__, int, int, int, int, int, int, int);
 
-template __global__ void flash_decoding_partial_kernel<CacheType::FP8>(
-    float * __restrict__ partial_out,
-    float * __restrict__ partial_max,
-    float * __restrict__ partial_sum,
-    const float * __restrict__ query,
-    const void * __restrict__ k_cache,
-    const void * __restrict__ v_cache,
-    const float * __restrict__ k_scales,
-    const float * __restrict__ v_scales,
-    int num_heads,
-    int num_kv_heads,
-    int head_dim,
-    int current_seq_len,
-    int chunk_size,
-    int num_chunks
-);
+template __global__ void paged_flash_decoding_partial_kernel<CacheType::FP8>(
+    float * __restrict__, float * __restrict__, float * __restrict__, const float * __restrict__, const void * __restrict__, const void * __restrict__,
+    const int32_t *restrict, const int32_t * __restrict__, const float * __restrict__, const float * __restrict__, int, int, int, int, int, int, int);

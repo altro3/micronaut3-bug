@@ -115,20 +115,45 @@ void launch_cross_entropy_loss(
     void *stream_ptr
 );
 
-void launch_flash_decoding(
+void launch_paged_flash_decoding_write(
+    void *k_block_table,
+    void *v_block_table,
+    const float *k_src,
+    const float *v_src,
+    const int32_t *block_mapping,
+    const int32_t *seq_lengths,
+    float *k_scales,
+    float *v_scales,
+    int cache_type_id,
+    int num_seqs,
+    int num_kv_heads,
+    int head_dim,
+    int max_blocks_per_seq,
+    int block_size,
+    int is_prefill,
+    void *stream_ptr
+);
+
+void launch_paged_flash_decoding(
     float *output,
     float *partial_out,
     float *partial_max,
     float *partial_sum,
     const float *query,
-    const uint8_t *k_cache,
-    const uint8_t *v_cache,
+    const void *k_block_table,
+    const void *v_block_table,
+    const int32_t *block_mapping,
+    const int32_t *seq_lengths,
     const float *k_scales,
     const float *v_scales,
+    int cache_type_id,
+    int num_seqs,
     int num_heads,
     int num_kv_heads,
     int head_dim,
-    int current_seq_len,
+    int max_seq_len,
+    int max_blocks_per_seq,
+    int block_size,
     int chunk_size,
     void *stream_ptr
 );

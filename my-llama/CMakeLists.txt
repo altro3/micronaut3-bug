@@ -20,6 +20,7 @@ add_library(
         cuda/src/flash_decoding_combine.cu
         cuda/src/flash_decoding_launcher.cu
         cuda/src/flash_decoding_partial.cu
+        cuda/src/flash_decoding_write.cu
         cuda/src/fused_attention.cu
         cuda/src/matmul.cu
         cuda/src/matmul_gguf_q4_k.cu
