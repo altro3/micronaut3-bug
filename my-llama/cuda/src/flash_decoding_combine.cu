@@ -21,7 +21,7 @@ __global__ void paged_flash_decoding_combine_kernel(
     float global_max = -1e20f;
     float global_sum = 0.0f;
 
-    const long long batch_head_offset = ((static_cast<long long>(seq_idx) * num_heads) + head_idx) * num_chunks;
+    const long long batch_head_offset = (static_cast<long long>(seq_idx) * num_heads + head_idx) * num_chunks;
 
     for (int c = 0; c < num_chunks; ++c) {
         const long long partial_offset = batch_head_offset + c;
@@ -55,7 +55,7 @@ __global__ void paged_flash_decoding_combine_kernel(
         out_acc.w += p_val.w * rescale_factor;
     }
 
-    const long long out_offset = ((static_cast<long long>(seq_idx) * num_heads) + head_idx) * head_dim;
+    const long long out_offset = (static_cast<long long>(seq_idx) * num_heads + head_idx) * head_dim;
     float *const final_out_ptr = output + out_offset;
     *reinterpret_cast<float4 *>(&final_out_ptr[tid * 4]) = out_acc;
 }

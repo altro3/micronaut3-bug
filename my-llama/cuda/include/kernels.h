@@ -167,6 +167,20 @@ void launch_fused_sampling(
     int vocab_size,
     void *stream_ptr
 );
+
+void launch_speculative_verify(
+    int32_t *accepted_tokens,
+    int32_t *num_accepted,
+    const float *target_logits,
+    const float *draft_probs,
+    const int32_t *draft_tokens,
+    const float *random_nums,
+    int num_seqs,
+    int vocab_size,
+    int max_draft_tokens,
+    float temperature,
+    void *stream_ptr
+);
 }
 
 #endif

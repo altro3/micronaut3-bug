@@ -27,6 +27,8 @@ add_library(
         cuda/src/rmsnorm.cu
         cuda/src/rope.cu
         cuda/src/sampling.cu
+        cuda/src/speculative_launcher.cu
+        cuda/src/speculative_verify.cu
         cuda/src/swiglu.cu
 )
 

@@ -52,7 +52,7 @@ extern __global__ void paged_flash_decoding_combine_kernel(
 );
 
 extern "C" {
-void launch_paged_kv_cache_write(
+void launch_paged_flash_decoding_write(
     void *k_block_table,
     void *v_block_table,
     const float *k_src,
@@ -62,12 +62,12 @@ void launch_paged_kv_cache_write(
     float *k_scales,
     float *v_scales,
     const int cache_type_id,
-    int num_seqs,
-    int num_kv_heads,
-    int head_dim,
-    int max_blocks_per_seq,
-    int block_size,
-    int is_prefill,
+    const int num_seqs,
+    const int num_kv_heads,
+    const int head_dim,
+    const int max_blocks_per_seq,
+    const int block_size,
+    const int is_prefill,
     void *stream_ptr
 ) {
     if (num_seqs == 0) return;
@@ -112,8 +112,8 @@ void launch_paged_flash_decoding(
     const float *k_scales,
     const float *v_scales,
     const int cache_type_id,
-    int num_seqs,
-    int num_heads,
+    const int num_seqs,
+    const int num_heads,
     const int num_kv_heads,
     const int head_dim,
     const int max_seq_len,

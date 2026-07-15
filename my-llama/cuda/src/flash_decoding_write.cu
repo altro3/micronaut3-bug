@@ -6,7 +6,7 @@
 #include <stdint.h>
 
 template<CacheType T>
-__device__ __forceinline__ void store_cache_x4(void *base_ptr, int f4_idx, float4 vals, float scale) {
+__device__ __forceinline__ void store_cache_x4(void *base_ptr, const int f4_idx, const float4 vals, const float scale) {
     if constexpr (T == CacheType::FP32) {
         *(static_cast<float4 *>(base_ptr) + f4_idx) = vals;
     } else if constexpr (T == CacheType::FP16) {
@@ -43,12 +43,12 @@ __global__ void paged_kv_cache_write_kernel(
     const int32_t * __restrict__ seq_lengths,
     float * __restrict__ k_scales,
     float * __restrict__ v_scales,
-    int num_seqs,
-    int num_kv_heads,
-    int head_dim,
-    int max_blocks_per_seq,
-    int block_size,
-    int is_prefill
+    const int num_seqs,
+    const int num_kv_heads,
+    const int head_dim,
+    const int max_blocks_per_seq,
+    const int block_size,
+    const int is_prefill
 ) {
     const int seq_idx = blockIdx.x;
     const int kv_head_idx = blockIdx.y;

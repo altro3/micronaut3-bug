@@ -23,7 +23,7 @@ __device__ __forceinline__ float warp_reduce_sum_fd(float val) {
 }
 
 template<CacheType T>
-__device__ __forceinline__ float4 load_cache_x4(const void *base_ptr, int f4_idx, float scale) {
+__device__ __forceinline__ float4 load_cache_x4(const void *base_ptr, const int f4_idx, const float scale) {
     float4 f4 = make_float4(0.0f, 0.0f, 0.0f, 0.0f);
 
     if constexpr (T == CacheType::FP32) {
@@ -191,15 +191,15 @@ __global__ void paged_flash_decoding_partial_kernel(
             const int offset_in_block = global_tok % block_size;
             const int physical_block_id = block_mapping[static_cast<long long>(seq_idx) * max_blocks_per_seq + logical_block_idx];
 
-            const long long v_cache_row_offset = physical_block_id * block_stride +
-                                                 (static_cast<long long>(offset_in_block) * num_kv_heads + kv_head_idx) * head_dim * bytes_per_elem;
+            const long long v_cache_row_offset = physical_block_id * block_stride
+                                                 + (static_cast<long long>(offset_in_block) * num_kv_heads + kv_head_idx) * head_dim * bytes_per_elem;
             const void *const v_vec_ptr = static_cast<const uint8_t *>(v_block_table) + v_cache_row_offset;
 
             float v_s = 1.0f;
             if constexpr (T == CacheType::FP8) {
                 if (v_scales) {
-                    const long long scale_offset = physical_block_id * scale_block_stride +
-                                                   static_cast<long long>(offset_in_block) * num_kv_heads + kv_head_idx;
+                    const long long scale_offset = physical_block_id * scale_block_stride
+                                                   + static_cast<long long>(offset_in_block) * num_kv_heads + kv_head_idx;
                     v_s = v_scales[scale_offset];
                 }
             }
@@ -222,13 +222,61 @@ __global__ void paged_flash_decoding_partial_kernel(
 }
 
 template __global__ void paged_flash_decoding_partial_kernel<CacheType::FP32>(
-    float * __restrict__, float * __restrict__, float * __restrict__, const float * __restrict__, const void * __restrict__, const void * __restrict__,
-    const int32_t * __restrict__, const int32_t * __restrict__, const float * __restrict__, const float * __restrict__, int, int, int, int, int, int, int);
+    float * __restrict__ partial_out,
+    float * __restrict__ partial_max,
+    float * __restrict__ partial_sum,
+    const float * __restrict__ query,
+    const void * __restrict__ k_block_table,
+    const void * __restrict__ v_block_table,
+    const int32_t * __restrict__ block_mapping,
+    const int32_t * __restrict__ seq_lengths,
+    const float * __restrict__ k_scales,
+    const float * __restrict__ v_scales,
+    int num_heads,
+    int num_kv_heads,
+    int head_dim,
+    int max_blocks_per_seq,
+    int block_size,
+    int chunk_size,
+    int num_chunks
+);
 
 template __global__ void paged_flash_decoding_partial_kernel<CacheType::FP16>(
-    float * __restrict__, float * __restrict__, float * __restrict__, const float * __restrict__, const void * __restrict__, const void * __restrict__,
-    const int32_t * __restrict__, const int32_t * __restrict__, const float * __restrict__, const float * __restrict__, int, int, int, int, int, int, int);
+    float * __restrict__ partial_out,
+    float * __restrict__ partial_max,
+    float * __restrict__ partial_sum,
+    const float * __restrict__ query,
+    const void * __restrict__ k_block_table,
+    const void * __restrict__ v_block_table,
+    const int32_t * __restrict__ block_mapping,
+    const int32_t * __restrict__ seq_lengths,
+    const float * __restrict__ k_scales,
+    const float * __restrict__ v_scales,
+    int num_heads,
+    int num_kv_heads,
+    int head_dim,
+    int max_blocks_per_seq,
+    int block_size,
+    int chunk_size,
+    int num_chunks
+);
 
 template __global__ void paged_flash_decoding_partial_kernel<CacheType::FP8>(
-    float * __restrict__, float * __restrict__, float * __restrict__, const float * __restrict__, const void * __restrict__, const void * __restrict__,
-    const int32_t *restrict, const int32_t * __restrict__, const float * __restrict__, const float * __restrict__, int, int, int, int, int, int, int);
+    float * __restrict__ partial_out,
+    float * __restrict__ partial_max,
+    float * __restrict__ partial_sum,
+    const float * __restrict__ query,
+    const void * __restrict__ k_block_table,
+    const void * __restrict__ v_block_table,
+    const int32_t * __restrict__ block_mapping,
+    const int32_t * __restrict__ seq_lengths,
+    const float * __restrict__ k_scales,
+    const float * __restrict__ v_scales,
+    int num_heads,
+    int num_kv_heads,
+    int head_dim,
+    int max_blocks_per_seq,
+    int block_size,
+    int chunk_size,
+    int num_chunks
+);

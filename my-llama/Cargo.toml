@@ -86,6 +86,10 @@ name = "cuda_sampling"
 path = "src/bin/cuda_sampling.rs"
 
 [[bin]]
+name = "cuda_speculative_verify"
+path = "src/bin/cuda_speculative_verify.rs"
+
+[[bin]]
 name = "cuda_swiglu"
 path = "src/bin/cuda_swiglu.rs"
 
