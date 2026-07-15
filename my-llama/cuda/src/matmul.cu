@@ -1,7 +1,7 @@
 #include "kernels.h"
 #include <cuda_runtime.h>
 #include <cublasLt.h>
-#include <stdio.h>
+//#include <stdio.h>
 
 enum class InferenceDtype : int {
     FP32 = 0,
@@ -116,7 +116,7 @@ void launch_matmul_universal(
                 c_type = CUDA_R_16BF;
                 break;
             default:
-                fprintf(stderr, "[CUDA ERROR]: Unsupported dtype token!\n");
+//                fprintf(stderr, "[CUDA ERROR]: Unsupported dtype token!\n");
                 return;
         }
 
@@ -167,7 +167,7 @@ void launch_matmul_universal(
     );
 
     if (status != CUBLAS_STATUS_SUCCESS) [[unlikely]] {
-        fprintf(stderr, "[CUDA ERROR]: Universal matmul execution failed! Code: %d\n", status);
+//        fprintf(stderr, "[CUDA ERROR]: Universal matmul execution failed! Code: %d\n", status);
     }
 }
 }

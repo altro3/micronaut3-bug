@@ -180,6 +180,7 @@ void launch_speculative_verify(
     int vocab_size,
     int max_draft_tokens,
     float temperature,
+    int num_threads,
     void *stream_ptr
 );
 }

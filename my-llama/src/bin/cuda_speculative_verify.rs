@@ -20,6 +20,7 @@ unsafe extern "C" {
         vocab_size: i32,
         max_draft_tokens: i32,
         temperature: f32,
+        num_threads: i32,
         stream: *mut c_void,
     );
 
@@ -83,7 +84,10 @@ fn main() {
     let temperature = 0.7_f32;
 
     println!("Боевые параметры спецификации:");
-    println!("Batch (num_seqs): {}, Vocab Size: {}, Draft Window: {}, Temp: {}", num_seqs, vocab_size, max_draft_tokens, temperature);
+    println!(
+        "Batch (num_seqs): {}, Vocab Size: {}, Draft Window: {}, Temp: {}",
+        num_seqs, vocab_size, max_draft_tokens, temperature
+    );
 
     let target_logits_size = (num_seqs * max_draft_tokens * vocab_size) as usize;
     let mut h_target_logits = vec![-2.0f32; target_logits_size];
@@ -128,6 +132,7 @@ fn main() {
     let mut h_accepted_tokens = vec![-1_i32; out_tokens_size];
     let mut h_num_accepted = vec![0_i32; num_seqs as usize];
 
+    let num_threads = 1024;
     let d_workspace = CudaBuffer::alloc((num_seqs * vocab_size) as usize * 4);
     let d_target_logits = CudaBuffer::alloc(target_logits_size * 4);
     let d_draft_probs = CudaBuffer::alloc(draft_meta_size * 4);
@@ -150,11 +155,19 @@ fn main() {
 
         for _ in 0..NUM_WARMUP {
             launch_speculative_verify(
-                d_accepted_tokens.ptr as *mut i32, d_num_accepted.ptr as *mut i32,
-                d_target_logits.ptr as *const f32, d_draft_probs.ptr as *const f32,
-                d_draft_tokens.ptr as *const i32, d_random_nums.ptr as *const f32,
+                d_accepted_tokens.ptr as *mut i32,
+                d_num_accepted.ptr as *mut i32,
+                d_target_logits.ptr as *const f32,
+                d_draft_probs.ptr as *const f32,
+                d_draft_tokens.ptr as *const i32,
+                d_random_nums.ptr as *const f32,
                 d_workspace.ptr as *mut f32,
-                num_seqs, vocab_size, max_draft_tokens, temperature, stream
+                num_seqs,
+                vocab_size,
+                max_draft_tokens,
+                temperature,
+                num_threads,
+                stream,
             );
         }
         cudaDeviceSynchronize();
@@ -171,11 +184,19 @@ fn main() {
         for i in 0..NUM_ITERATIONS {
             cudaEventRecord(start_events[i], stream);
             launch_speculative_verify(
-                d_accepted_tokens.ptr as *mut i32, d_num_accepted.ptr as *mut i32,
-                d_target_logits.ptr as *const f32, d_draft_probs.ptr as *const f32,
-                d_draft_tokens.ptr as *const i32, d_random_nums.ptr as *const f32,
+                d_accepted_tokens.ptr as *mut i32,
+                d_num_accepted.ptr as *mut i32,
+                d_target_logits.ptr as *const f32,
+                d_draft_probs.ptr as *const f32,
+                d_draft_tokens.ptr as *const i32,
+                d_random_nums.ptr as *const f32,
                 d_workspace.ptr as *mut f32,
-                num_seqs, vocab_size, max_draft_tokens, temperature, stream
+                num_seqs,
+                vocab_size,
+                max_draft_tokens,
+                temperature,
+                num_threads,
+                stream,
             );
             cudaEventRecord(end_events[i], stream);
         }
@@ -198,7 +219,8 @@ fn main() {
         let p95_lat = latencies_us[(NUM_ITERATIONS as f64 * 0.95) as usize];
         let avg_lat: f64 = latencies_us.iter().sum::<f64>() / NUM_ITERATIONS as f64;
 
-        let bytes_processed = (target_logits_size * 4 + draft_meta_size * 8 + h_random_nums.len() * 4 + out_tokens_size * 4 + (num_seqs * 4) as usize) as f64;
+        let bytes_processed =
+            (target_logits_size * 4 + draft_meta_size * 8 + h_random_nums.len() * 4 + out_tokens_size * 4 + (num_seqs * 4) as usize) as f64;
         let avg_bandwidth_gbps = (bytes_processed / 1e9) / (avg_lat / 1e6);
 
         println!("\n📊 === РЕЗУЛЬТАТЫ СТАТИСТИЧЕСКОГО АНАЛИЗА SPECULATIVE VERIFY ===");
@@ -220,12 +242,16 @@ fn main() {
 
         println!("Запрос 0 (Ожидается полный успех): Accepted Count = 4, Tokens = [100, 101, 102, 103]");
         print!("Фактически на GPU: Count = {}, Tokens = [", h_num_accepted[0]);
-        for step in 0..max_draft_tokens as usize { print!("{}, ", h_accepted_tokens[0 * (max_draft_tokens + 1) as usize + step]); }
+        for step in 0..max_draft_tokens as usize {
+            print!("{}, ", h_accepted_tokens[0 * (max_draft_tokens + 1) as usize + step]);
+        }
         println!("{}]", h_accepted_tokens[0 * (max_draft_tokens + 1) as usize + max_draft_tokens as usize]);
 
         println!("\nЗапрос 1 (Ожидается обрыв на шаге 2 + сэмплинг лидером 777): Accepted Count = 2, Tokens[2] = 777");
         print!("Фактически на GPU: Count = {}, Tokens = [", h_num_accepted[1]);
-        for step in 0..max_draft_tokens as usize { print!("{}, ", h_accepted_tokens[1 * (max_draft_tokens + 1) as usize + step]); }
+        for step in 0..max_draft_tokens as usize {
+            print!("{}, ", h_accepted_tokens[1 * (max_draft_tokens + 1) as usize + step]);
+        }
         println!("{}]", h_accepted_tokens[1 * (max_draft_tokens + 1) as usize + max_draft_tokens as usize]);
 
         let valid_0 = h_num_accepted[0] == 5 && h_accepted_tokens[0 * 5 + 0] == 100 && h_accepted_tokens[0 * 5 + 3] == 103;

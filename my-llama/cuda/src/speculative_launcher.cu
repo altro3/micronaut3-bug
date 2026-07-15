@@ -15,7 +15,6 @@ extern __global__ void speculative_verify_kernel(
 );
 
 extern "C" {
-
 void launch_speculative_verify(
     int32_t *accepted_tokens,
     int32_t *num_accepted,
@@ -28,19 +27,17 @@ void launch_speculative_verify(
     const int vocab_size,
     const int max_draft_tokens,
     const float temperature,
+    const int num_threads,
     void *stream_ptr
 ) {
-    if (num_seqs == 0) return;
+    if (num_seqs == 0 || num_threads == 0) return;
 
     const auto stream = static_cast<cudaStream_t>(stream_ptr);
-
-    constexpr int threads = 256;
     dim3 blocks(1, num_seqs);
 
-    speculative_verify_kernel<<<blocks, threads, 0, stream>>>(
+    speculative_verify_kernel<<<blocks, num_threads, 0, stream>>>(
         accepted_tokens, num_accepted, target_logits, draft_probs, draft_tokens, random_nums, workspace,
         vocab_size, max_draft_tokens, temperature
     );
 }
-
 }
