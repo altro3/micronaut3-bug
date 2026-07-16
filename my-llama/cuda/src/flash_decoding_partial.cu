@@ -1,4 +1,4 @@
-#include "cache_types.h"
+#include "data_types.h"
 #include <cuda_runtime.h>
 #include <device_launch_parameters.h>
 #include <math.h>
@@ -22,13 +22,13 @@ __device__ __forceinline__ float warp_reduce_sum_fd(float val) {
     return val;
 }
 
-template<CacheType T>
+template<DataType T>
 __device__ __forceinline__ float4 load_cache_x4(const void *base_ptr, const int f4_idx, const float scale) {
     float4 f4 = make_float4(0.0f, 0.0f, 0.0f, 0.0f);
 
-    if constexpr (T == CacheType::FP32) {
+    if constexpr (T == DataType::FP32) {
         f4 = __ldcs(static_cast<const float4 *>(base_ptr) + f4_idx);
-    } else if constexpr (T == CacheType::FP16) {
+    } else if constexpr (T == DataType::FP16) {
         const int2 h2_pair = __ldcs(static_cast<const int2 *>(base_ptr) + f4_idx);
         const half2 h2_low = *reinterpret_cast<const half2 *>(&h2_pair.x);
         const half2 h2_high = *reinterpret_cast<const half2 *>(&h2_pair.y);
@@ -36,7 +36,7 @@ __device__ __forceinline__ float4 load_cache_x4(const void *base_ptr, const int 
         f4.y = __half2float(h2_low.y);
         f4.z = __half2float(h2_high.x);
         f4.w = __half2float(h2_high.y);
-    } else if constexpr (T == CacheType::FP8) {
+    } else if constexpr (T == DataType::FP8) {
         const uchar4 bytes = __ldcs(static_cast<const uchar4 *>(base_ptr) + f4_idx);
         f4.x = static_cast<float>(*reinterpret_cast<const __nv_fp8_e4m3 *>(&bytes.x)) * scale;
         f4.y = static_cast<float>(*reinterpret_cast<const __nv_fp8_e4m3 *>(&bytes.y)) * scale;
@@ -46,7 +46,7 @@ __device__ __forceinline__ float4 load_cache_x4(const void *base_ptr, const int 
     return f4;
 }
 
-template<CacheType T>
+template<DataType T>
 __global__ void paged_flash_decoding_partial_kernel(
     float * __restrict__ partial_out,
     float * __restrict__ partial_max,
@@ -103,7 +103,7 @@ __global__ void paged_flash_decoding_partial_kernel(
     float local_max = -1e20f;
     const int total_toks_to_process = end_tok - start_tok;
 
-    constexpr int bytes_per_elem = T == CacheType::FP32 ? 4 : T == CacheType::FP16 ? 2 : 1;
+    constexpr int bytes_per_elem = T == DataType::FP32 ? 4 : T == DataType::FP16 ? 2 : 1;
     const long long block_stride = static_cast<long long>(block_size) * num_kv_heads * head_dim * bytes_per_elem;
     const long long scale_block_stride = static_cast<long long>(block_size) * num_kv_heads;
 
@@ -119,7 +119,7 @@ __global__ void paged_flash_decoding_partial_kernel(
         const void *const k_vec_ptr = static_cast<const uint8_t *>(k_block_table) + cache_row_offset;
 
         float k_s = 1.0f;
-        if constexpr (T == CacheType::FP8) {
+        if constexpr (T == DataType::FP8) {
             if (k_scales) {
                 const long long scale_offset = physical_block_id * scale_block_stride +
                                                static_cast<long long>(offset_in_block) * num_kv_heads + kv_head_idx;
@@ -196,7 +196,7 @@ __global__ void paged_flash_decoding_partial_kernel(
             const void *const v_vec_ptr = static_cast<const uint8_t *>(v_block_table) + v_cache_row_offset;
 
             float v_s = 1.0f;
-            if constexpr (T == CacheType::FP8) {
+            if constexpr (T == DataType::FP8) {
                 if (v_scales) {
                     const long long scale_offset = physical_block_id * scale_block_stride
                                                    + static_cast<long long>(offset_in_block) * num_kv_heads + kv_head_idx;
@@ -221,7 +221,7 @@ __global__ void paged_flash_decoding_partial_kernel(
     }
 }
 
-template __global__ void paged_flash_decoding_partial_kernel<CacheType::FP32>(
+template __global__ void paged_flash_decoding_partial_kernel<DataType::FP32>(
     float * __restrict__ partial_out,
     float * __restrict__ partial_max,
     float * __restrict__ partial_sum,
@@ -241,7 +241,7 @@ template __global__ void paged_flash_decoding_partial_kernel<CacheType::FP32>(
     int num_chunks
 );
 
-template __global__ void paged_flash_decoding_partial_kernel<CacheType::FP16>(
+template __global__ void paged_flash_decoding_partial_kernel<DataType::FP16>(
     float * __restrict__ partial_out,
     float * __restrict__ partial_max,
     float * __restrict__ partial_sum,
@@ -261,7 +261,7 @@ template __global__ void paged_flash_decoding_partial_kernel<CacheType::FP16>(
     int num_chunks
 );
 
-template __global__ void paged_flash_decoding_partial_kernel<CacheType::FP8>(
+template __global__ void paged_flash_decoding_partial_kernel<DataType::FP8>(
     float * __restrict__ partial_out,
     float * __restrict__ partial_max,
     float * __restrict__ partial_sum,

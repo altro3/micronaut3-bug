@@ -183,6 +183,47 @@ void launch_speculative_verify(
     int num_threads,
     void *stream_ptr
 );
+
+void launch_prefill_kv_write(
+    void *dst_paged_key_cache,
+    void *dst_paged_value_cache,
+    const float *src_key_states,
+    const float *src_value_states,
+    const int32_t *global_slot_mapping,
+    float *k_scales,
+    float *v_scales,
+    int data_type_id,
+    int total_batch_tokens,
+    int num_kv_heads,
+    int head_dimension,
+    int block_size,
+    int threads_per_block,
+    void *stream_ptr
+);
+
+void launch_compute_slot_mapping(
+    int32_t *slot_mapping,
+    const int32_t *seq_offsets,
+    const int32_t *block_table,
+    int max_blocks_per_seq,
+    int block_size,
+    int total_batch_tokens,
+    int num_seqs,
+    int threads_per_block,
+    void *stream_ptr
+);
+
+void launch_fused_sampling(
+    int *token_id,
+    const void *logits,
+    float rand_val,
+    float temperature,
+    float top_p,
+    int vocab_size,
+    int data_type_id,
+    int threads_per_block,
+    void *stream_ptr
+);
 }
 
 #endif
