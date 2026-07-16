@@ -16,7 +16,9 @@ add_library(
         cuda/src/adamw.cu
         cuda/src/cross_entropy_loss.cu
         cuda/src/dequantize_block_gguf_q4_k.cu
-        cuda/src/flash_attention_prefill.cu
+        cuda/src/flash_attention_prefill_fp8.cu
+        cuda/src/flash_attention_prefill_fp16.cu
+        cuda/src/flash_attention_prefill_main.cu
         cuda/src/embeddings.cu
         cuda/src/flash_decoding_combine.cu
         cuda/src/flash_decoding_launcher.cu
@@ -24,12 +26,13 @@ add_library(
         cuda/src/flash_decoding_write.cu
         cuda/src/fused_attention.cu
         cuda/src/fused_sampling.cu
+        cuda/src/greedy_sampling.cu
         cuda/src/matmul.cu
         cuda/src/matmul_gguf_q4_k.cu
+        cuda/src/prefill_kv_write.cu
         cuda/src/ragged_utils.cu
         cuda/src/rmsnorm.cu
         cuda/src/rope.cu
-        cuda/src/sampling.cu
         cuda/src/speculative_launcher.cu
         cuda/src/speculative_verify.cu
         cuda/src/speculative_sampling.cuh

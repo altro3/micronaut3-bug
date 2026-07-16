@@ -223,6 +223,22 @@ void launch_fused_sampling(
     int threads_per_block,
     void *stream_ptr
 );
+
+void launch_flash_attention_prefill(
+    void *output,
+    const void *query,
+    const void *key,
+    const void *value,
+    int data_type_id,
+    int batch_size,
+    int q_seq_len,
+    int kv_seq_len,
+    int num_heads,
+    int num_kv_heads,
+    int head_dim,
+    int threads_per_block,
+    void *stream_ptr
+);
 }
 
 #endif
