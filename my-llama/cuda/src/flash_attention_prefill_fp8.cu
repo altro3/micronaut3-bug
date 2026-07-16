@@ -57,7 +57,7 @@ __global__ void flash_attention_fp8_blackwell_prefill_kernel(
     constexpr int PADDING = 16;
     const int stride_q = HEAD_DIM + PADDING;
     const int stride_k = HEAD_DIM + PADDING;
-    const int stride_v = BLOCK_N + PADDING;
+    constexpr int stride_v = BLOCK_N + PADDING;
 
     extern __shared__ uint8_t s_dynamic_buffer[];
 
