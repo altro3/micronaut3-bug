@@ -17,6 +17,7 @@ add_library(
         cuda/src/cross_entropy_loss.cu
         cuda/src/dequantize_block_gguf_q4_k.cu
         cuda/src/flash_attention_prefill_fp8.cu
+        cuda/src/flash_attention_prefill_fp8_launcher.cu
         cuda/src/flash_attention_prefill_fp16.cu
         cuda/src/flash_attention_prefill_main.cu
         cuda/src/embeddings.cu

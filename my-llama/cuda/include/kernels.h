@@ -224,6 +224,8 @@ void launch_fused_sampling(
     void *stream_ptr
 );
 
+void init_flash_attention_prefill_kernels(size_t max_shared_mem);
+
 void launch_flash_attention_prefill(
     void *output,
     const void *query,
