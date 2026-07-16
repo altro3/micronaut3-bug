@@ -43,7 +43,7 @@ __device__ __forceinline__ void fetch_logits_x4(const void * __restrict__ logits
 }
 
 template<typename T>
-__global__ void fused_sampling_kernel(
+__global__ void fused_sampling_kernel_optimized(
     int * __restrict__ token_id,
     const void * __restrict__ logits,
     const float rand_val,
@@ -54,6 +54,7 @@ __global__ void fused_sampling_kernel(
     const int tid = threadIdx.x;
     const int lane_id = tid % 32;
     const int warp_id = tid / 32;
+    const int num_warps = (blockDim.x + 31) / 32;
 
     float local_max = -INFINITY;
     const int vocab_size_v4 = vocab_size / 4;
@@ -65,23 +66,33 @@ __global__ void fused_sampling_kernel(
     }
 
     for (int offset = 16; offset > 0; offset >>= 1) {
-        const float shuffled = __shfl_down_sync(0xFFFFFFFF, local_max, offset);
-        local_max = fmaxf(local_max, shuffled);
+        local_max = fmaxf(local_max, __shfl_down_sync(0xFFFFFFFF, local_max, offset));
     }
 
-    __shared__ float s_max_logit;
-    if (tid == 0) {
-        s_max_logit = local_max;
+    extern __shared__ uint8_t s_dynamic_mem[];
+    float *s_shared_max = reinterpret_cast<float *>(s_dynamic_mem);
+
+    if (lane_id == 0) {
+        s_shared_max[warp_id] = local_max;
     }
     __syncthreads();
 
-    const float max_logit = s_max_logit;
+    if (tid == 0) {
+        float block_max = s_shared_max[0];
+        for (int w = 1; w < num_warps; ++w) {
+            block_max = fmaxf(block_max, s_shared_max[w]);
+        }
+        s_shared_max[0] = block_max;
+    }
+    __syncthreads();
+
+    const float max_logit = s_shared_max[0];
     const float inv_temp = 1.0f / (temperature + 1e-9f);
 
     float warp_topk_vals[MAX_K];
     int warp_topk_ids[MAX_K];
     for (int k = 0; k < MAX_K; ++k) {
-        warp_topk_vals[k] = -INFINITY;
+        warp_topk_vals[k] = 0.0f;
         warp_topk_ids[k] = -1;
     }
 
@@ -100,13 +111,13 @@ __global__ void fused_sampling_kernel(
 
                 for (int k = MAX_K - 1; k > 0; --k) {
                     if (warp_topk_vals[k] > warp_topk_vals[k - 1]) {
-                        const float temp_v = warp_topk_vals[k];
+                        const float tv = warp_topk_vals[k];
                         warp_topk_vals[k] = warp_topk_vals[k - 1];
-                        warp_topk_vals[k - 1] = temp_v;
+                        warp_topk_vals[k - 1] = tv;
 
-                        const int temp_id = warp_topk_ids[k];
+                        const int tidx = warp_topk_ids[k];
                         warp_topk_ids[k] = warp_topk_ids[k - 1];
-                        warp_topk_ids[k - 1] = temp_id;
+                        warp_topk_ids[k - 1] = tidx;
                     } else {
                         break;
                     }
@@ -115,127 +126,108 @@ __global__ void fused_sampling_kernel(
         }
     }
 
-    for (int offset = 16; offset > 0; offset >>= 1) {
-        for (int k = 0; k < MAX_K; ++k) {
-            const float remote_val = __shfl_down_sync(0xFFFFFFFF, warp_topk_vals[k], offset);
-            const int remote_id = __shfl_down_sync(0xFFFFFFFF, warp_topk_ids[k], offset);
-
-            if (lane_id < offset) {
-                if (remote_val > warp_topk_vals[MAX_K - 1]) {
-                    warp_topk_vals[MAX_K - 1] = remote_val;
-                    warp_topk_ids[MAX_K - 1] = remote_id;
-
-                    for (int m = MAX_K - 1; m > 0; --m) {
-                        if (warp_topk_vals[m] > warp_topk_vals[m - 1]) {
-                            const float temp_v = warp_topk_vals[m];
-                            warp_topk_vals[m] = warp_topk_vals[m - 1];
-                            warp_topk_vals[m - 1] = temp_v;
-
-                            const int temp_id = warp_topk_ids[m];
-                            warp_topk_ids[m] = warp_topk_ids[m - 1];
-                            warp_topk_ids[m - 1] = temp_id;
-                        } else {
-                            break;
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    __shared__ float s_block_topk_vals[8][MAX_K];
-    __shared__ int s_block_topk_ids[8][MAX_K];
+    float *s_block_vals = s_shared_max + num_warps;
+    const auto s_block_ids = reinterpret_cast<int *>(s_block_vals + num_warps * MAX_K);
 
     if (lane_id == 0) {
         for (int k = 0; k < MAX_K; ++k) {
-            s_block_topk_vals[warp_id][k] = warp_topk_vals[k];
-            s_block_topk_ids[warp_id][k] = warp_topk_ids[k];
+            s_block_vals[warp_id * MAX_K + k] = warp_topk_vals[k];
+            s_block_ids[warp_id * MAX_K + k] = warp_topk_ids[k];
         }
     }
     __syncthreads();
 
-    if (tid == 0) {
-        float final_topk_vals[MAX_K];
-        int final_topk_ids[MAX_K];
-        for (int k = 0; k < MAX_K; ++k) {
-            final_topk_vals[k] = -INFINITY;
-            final_topk_ids[k] = -1;
+    if (warp_id == 0 && lane_id < MAX_K) {
+        float k_val = 0.0f;
+        int k_id = -1;
+
+        for (int w = 0; w < num_warps; ++w) {
+            const float candidate_val = s_block_vals[w * MAX_K + lane_id];
+            const int candidate_id = s_block_ids[w * MAX_K + lane_id];
+            if (candidate_val > k_val) {
+                k_val = candidate_val;
+                k_id = candidate_id;
+            }
         }
 
-        const int active_warps = blockDim.x / 32;
-        for (int w = 0; w < active_warps; ++w) {
-            for (int i = 0; i < MAX_K; ++i) {
-                const float prob = s_block_topk_vals[w][i];
-                const int id = s_block_topk_ids[w][i];
+        s_block_vals[lane_id] = k_val;
+        s_block_ids[lane_id] = k_id;
+    }
+    __syncthreads();
 
-                if (prob > final_topk_vals[MAX_K - 1]) {
-                    final_topk_vals[MAX_K - 1] = prob;
-                    final_topk_ids[MAX_K - 1] = id;
+    if (warp_id == 0 && lane_id < MAX_K) {
+        for (int i = 0; i < MAX_K; ++i) {
+            for (int j = MAX_K - 1; j > i; --j) {
+                if (s_block_vals[j] > s_block_vals[j - 1]) {
+                    const float tv = s_block_vals[j];
+                    s_block_vals[j] = s_block_vals[j - 1];
+                    s_block_vals[j - 1] = tv;
 
-                    for (int k = MAX_K - 1; k > 0; --k) {
-                        if (final_topk_vals[k] > final_topk_vals[k - 1]) {
-                            const float temp_v = final_topk_vals[k];
-                            final_topk_vals[k] = final_topk_vals[k - 1];
-                            final_topk_vals[k - 1] = temp_v;
-
-                            const int temp_id = final_topk_ids[k];
-                            final_topk_ids[k] = final_topk_ids[k - 1];
-                            final_topk_ids[k - 1] = temp_id;
-                        } else {
-                            break;
-                        }
-                    }
+                    const int tidx = s_block_ids[j];
+                    s_block_ids[j] = s_block_ids[j - 1];
+                    s_block_ids[j - 1] = tidx;
                 }
             }
         }
+    }
+    __syncthreads();
 
-        float sum_probs = 0.0f;
+    if (warp_id == 0 && lane_id < MAX_K) {
+        float total_sum = 0.0f;
         for (int i = 0; i < MAX_K; ++i) {
-            if (final_topk_ids[i] != -1) {
-                sum_probs += final_topk_vals[i];
-            }
+            if (s_block_ids[i] != -1) total_sum += s_block_vals[i];
         }
 
-        const float inv_sum = 1.0f / (sum_probs + 1e-9f);
-        for (int i = 0; i < MAX_K; ++i) {
-            if (final_topk_ids[i] != -1) {
-                final_topk_vals[i] *= inv_sum;
-            }
+        const float inv_sum = 1.0f / (total_sum + 1e-9f);
+        if (s_block_ids[lane_id] != -1) {
+            s_block_vals[lane_id] *= inv_sum;
+        }
+    }
+    __syncthreads();
+
+    if (warp_id == 0 && lane_id < MAX_K) {
+        float scan_sum = s_block_vals[lane_id];
+        for (int offset = 1; offset < 32; offset <<= 1) {
+            const float remote = __shfl_up_sync(0xFFFFFFFF, scan_sum, offset);
+            if (lane_id >= offset) scan_sum += remote;
         }
 
-        float cumulative_prob = 0.0f;
+        const float v32 = __shfl_sync(0xFFFFFFFF, scan_sum, 31);
+        float scan_sum_high = (lane_id >= 32) ? s_block_vals[lane_id] : 0.0f;
+        for (int offset = 1; offset < 32; offset <<= 1) {
+            const float remote = __shfl_up_sync(0xFFFFFFFF, scan_sum_high, offset);
+            if (lane_id >= (32 + offset)) scan_sum_high += remote;
+        }
+
+        const float prefix_prob = (lane_id < 32) ? scan_sum : (v32 + scan_sum_high);
+        s_block_vals[MAX_K + lane_id] = prefix_prob;
+    }
+    __syncthreads();
+
+    if (tid == 0) {
+        const float *prefix_sums = s_block_vals + MAX_K;
         int last_valid_idx = 0;
         for (int i = 0; i < MAX_K; ++i) {
-            if (final_topk_ids[i] == -1) break;
-            cumulative_prob += final_topk_vals[i];
+            if (s_block_ids[i] == -1) break;
             last_valid_idx = i;
-            if (cumulative_prob >= top_p) {
-                break;
-            }
+            if (prefix_sums[i] >= top_p) break;
         }
 
-        float truncated_sum = 0.0f;
-        for (int i = 0; i <= last_valid_idx; ++i) {
-            truncated_sum += final_topk_vals[i];
-        }
-
+        const float truncated_sum = prefix_sums[last_valid_idx];
         const float inv_truncated_sum = 1.0f / (truncated_sum + 1e-9f);
         float current_target = rand_val;
-        int selected_token = final_topk_ids[0];
+        int selected_token = s_block_ids[0];
 
         for (int i = 0; i <= last_valid_idx; ++i) {
-            const float norm_prob = final_topk_vals[i] * inv_truncated_sum;
+            const float norm_prob = (i == 0 ? prefix_sums[0] : (prefix_sums[i] - prefix_sums[i - 1])) * inv_truncated_sum;
             if (current_target <= norm_prob) {
-                selected_token = final_topk_ids[i];
+                selected_token = s_block_ids[i];
                 break;
             }
             current_target -= norm_prob;
         }
 
-        if (selected_token == -1) {
-            selected_token = final_topk_ids[0];
-        }
-
+        if (selected_token == -1) selected_token = s_block_ids[0];
         *token_id = selected_token;
     }
 }
@@ -255,17 +247,26 @@ void launch_fused_sampling(
     if (threads_per_block <= 0) return;
 
     const auto stream = static_cast<cudaStream_t>(stream_ptr);
+    const int num_warps = (threads_per_block + 31) / 32;
+
+    const int max_size = num_warps * sizeof(float);
+    const int vals_size = num_warps * MAX_K * sizeof(float);
+    const int ids_size = num_warps * MAX_K * sizeof(int);
+    constexpr int final_sort_vals_size = MAX_K * sizeof(float) * 2;
+    constexpr int final_sort_ids_size = MAX_K * sizeof(int);
+
+    const int shared_mem_size = max_size + vals_size + ids_size + final_sort_vals_size + final_sort_ids_size;
 
     if (data_type_id == static_cast<int>(DataType::FP32)) {
-        fused_sampling_kernel<float> <<<1, threads_per_block, 0, stream>>>(
+        fused_sampling_kernel_optimized<float> <<<1, threads_per_block, shared_mem_size, stream>>>(
             token_id, logits, rand_val, temperature, top_p, vocab_size
         );
     } else if (data_type_id == static_cast<int>(DataType::FP16)) {
-        fused_sampling_kernel<__half> <<<1, threads_per_block, 0, stream>>>(
+        fused_sampling_kernel_optimized<__half> <<<1, threads_per_block, shared_mem_size, stream>>>(
             token_id, logits, rand_val, temperature, top_p, vocab_size
         );
     } else if (data_type_id == static_cast<int>(DataType::FP8)) {
-        fused_sampling_kernel<__nv_fp8_e4m3> <<<1, threads_per_block, 0, stream>>>(
+        fused_sampling_kernel_optimized<__nv_fp8_e4m3> <<<1, threads_per_block, shared_mem_size, stream>>>(
             token_id, logits, rand_val, temperature, top_p, vocab_size
         );
     }
