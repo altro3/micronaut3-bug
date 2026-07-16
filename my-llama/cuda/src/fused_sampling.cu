@@ -18,7 +18,7 @@ __device__ __forceinline__ void fetch_logits_x4(const void * __restrict__ logits
         out_vals[3] = vec.w;
     } else if constexpr (std::is_same_v<T, __half>) {
         const int2 vec = *(static_cast<const int2 *>(logits) + base_index);
-        const __half2 *h2_ptr = reinterpret_cast<const __half2 *>(&vec);
+        const auto h2_ptr = reinterpret_cast<const __half2 *>(&vec);
         const float2 low = __half22float2(h2_ptr[0]);
         const float2 high = __half22float2(h2_ptr[1]);
         out_vals[0] = low.x;
@@ -27,7 +27,7 @@ __device__ __forceinline__ void fetch_logits_x4(const void * __restrict__ logits
         out_vals[3] = high.y;
     } else if constexpr (std::is_same_v<T, __nv_fp8_e4m3>) {
         const uint32_t vec = *(static_cast<const uint32_t *>(logits) + base_index);
-        const uint8_t *bytes = reinterpret_cast<const uint8_t *>(&vec);
+        const auto bytes = reinterpret_cast<const uint8_t *>(&vec);
 
         __nv_fp8_e4m3 r0, r1, r2, r3;
         r0.__x = bytes[0];
@@ -70,7 +70,15 @@ __global__ void fused_sampling_kernel_optimized(
     }
 
     extern __shared__ uint8_t s_dynamic_mem[];
-    float *s_shared_max = reinterpret_cast<float *>(s_dynamic_mem);
+
+    const auto s_shared_max = reinterpret_cast<float *>(s_dynamic_mem);
+
+    const int num_warps_aligned = num_warps + 3 & ~3;
+    float *s_block_vals = s_shared_max + num_warps_aligned;
+    const auto s_block_ids = reinterpret_cast<int *>(s_block_vals + num_warps_aligned * MAX_K);
+
+    const auto s_final_vals = reinterpret_cast<float *>(s_block_ids + num_warps_aligned * MAX_K);
+    const auto s_final_ids = reinterpret_cast<int *>(s_final_vals + MAX_K * 2);
 
     if (lane_id == 0) {
         s_shared_max[warp_id] = local_max;
@@ -126,9 +134,6 @@ __global__ void fused_sampling_kernel_optimized(
         }
     }
 
-    float *s_block_vals = s_shared_max + num_warps;
-    const auto s_block_ids = reinterpret_cast<int *>(s_block_vals + num_warps * MAX_K);
-
     if (lane_id == 0) {
         for (int k = 0; k < MAX_K; ++k) {
             s_block_vals[warp_id * MAX_K + k] = warp_topk_vals[k];
@@ -137,78 +142,80 @@ __global__ void fused_sampling_kernel_optimized(
     }
     __syncthreads();
 
-    if (warp_id == 0 && lane_id < MAX_K) {
-        float k_val = 0.0f;
-        int k_id = -1;
-
-        for (int w = 0; w < num_warps; ++w) {
-            const float candidate_val = s_block_vals[w * MAX_K + lane_id];
-            const int candidate_id = s_block_ids[w * MAX_K + lane_id];
-            if (candidate_val > k_val) {
-                k_val = candidate_val;
-                k_id = candidate_id;
-            }
+    if (tid == 0) {
+        for (int k = 0; k < MAX_K; ++k) {
+            s_final_vals[k] = 0.0f;
+            s_final_ids[k] = -1;
         }
 
-        s_block_vals[lane_id] = k_val;
-        s_block_ids[lane_id] = k_id;
-    }
-    __syncthreads();
+        for (int w = 0; w < num_warps; ++w) {
+            for (int i = 0; i < MAX_K; ++i) {
+                const float prob = s_block_vals[w * MAX_K + i];
+                const int id = s_block_ids[w * MAX_K + i];
 
-    if (warp_id == 0 && lane_id < MAX_K) {
-        for (int i = 0; i < MAX_K; ++i) {
-            for (int j = MAX_K - 1; j > i; --j) {
-                if (s_block_vals[j] > s_block_vals[j - 1]) {
-                    const float tv = s_block_vals[j];
-                    s_block_vals[j] = s_block_vals[j - 1];
-                    s_block_vals[j - 1] = tv;
+                if (id == -1) break;
 
-                    const int tidx = s_block_ids[j];
-                    s_block_ids[j] = s_block_ids[j - 1];
-                    s_block_ids[j - 1] = tidx;
+                if (prob > s_final_vals[MAX_K - 1]) {
+                    s_final_vals[MAX_K - 1] = prob;
+                    s_final_ids[MAX_K - 1] = id;
+
+                    for (int k = MAX_K - 1; k > 0; --k) {
+                        if (s_final_vals[k] > s_final_vals[k - 1]) {
+                            const float tv = s_final_vals[k];
+                            s_final_vals[k] = s_final_vals[k - 1];
+                            s_final_vals[k - 1] = tv;
+
+                            const int ti = s_final_ids[k];
+                            s_final_ids[k] = s_final_ids[k - 1];
+                            s_final_ids[k - 1] = ti;
+                        } else {
+                            break;
+                        }
+                    }
                 }
             }
         }
     }
     __syncthreads();
 
-    if (warp_id == 0 && lane_id < MAX_K) {
+    if (tid < MAX_K) {
         float total_sum = 0.0f;
         for (int i = 0; i < MAX_K; ++i) {
-            if (s_block_ids[i] != -1) total_sum += s_block_vals[i];
+            if (s_final_ids[i] != -1) total_sum += s_final_vals[i];
         }
 
         const float inv_sum = 1.0f / (total_sum + 1e-9f);
-        if (s_block_ids[lane_id] != -1) {
-            s_block_vals[lane_id] *= inv_sum;
+        if (s_final_ids[tid] != -1) {
+            s_final_vals[tid] *= inv_sum;
         }
     }
     __syncthreads();
 
-    if (warp_id == 0 && lane_id < MAX_K) {
-        float scan_sum = s_block_vals[lane_id];
+    if (warp_id == 0) {
+        float scan_sum = s_final_vals[lane_id];
         for (int offset = 1; offset < 32; offset <<= 1) {
             const float remote = __shfl_up_sync(0xFFFFFFFF, scan_sum, offset);
             if (lane_id >= offset) scan_sum += remote;
         }
 
         const float v32 = __shfl_sync(0xFFFFFFFF, scan_sum, 31);
-        float scan_sum_high = (lane_id >= 32) ? s_block_vals[lane_id] : 0.0f;
+
+        float scan_sum_high = s_final_vals[32 + lane_id];
         for (int offset = 1; offset < 32; offset <<= 1) {
             const float remote = __shfl_up_sync(0xFFFFFFFF, scan_sum_high, offset);
-            if (lane_id >= (32 + offset)) scan_sum_high += remote;
+            if (lane_id >= offset) scan_sum_high += remote;
         }
 
-        const float prefix_prob = (lane_id < 32) ? scan_sum : (v32 + scan_sum_high);
-        s_block_vals[MAX_K + lane_id] = prefix_prob;
+        s_final_vals[MAX_K + lane_id] = scan_sum;
+        s_final_vals[MAX_K + 32 + lane_id] = v32 + scan_sum_high;
     }
     __syncthreads();
 
     if (tid == 0) {
-        const float *prefix_sums = s_block_vals + MAX_K;
+        const float *prefix_sums = s_final_vals + MAX_K;
         int last_valid_idx = 0;
         for (int i = 0; i < MAX_K; ++i) {
-            if (s_block_ids[i] == -1) break;
+            if (s_final_ids[i] == -1) break;
             last_valid_idx = i;
             if (prefix_sums[i] >= top_p) break;
         }
@@ -216,18 +223,18 @@ __global__ void fused_sampling_kernel_optimized(
         const float truncated_sum = prefix_sums[last_valid_idx];
         const float inv_truncated_sum = 1.0f / (truncated_sum + 1e-9f);
         float current_target = rand_val;
-        int selected_token = s_block_ids[0];
+        int selected_token = s_final_ids[0];
 
         for (int i = 0; i <= last_valid_idx; ++i) {
-            const float norm_prob = (i == 0 ? prefix_sums[0] : (prefix_sums[i] - prefix_sums[i - 1])) * inv_truncated_sum;
+            const float norm_prob = (i == 0 ? prefix_sums[0] : prefix_sums[i] - prefix_sums[i - 1]) * inv_truncated_sum;
             if (current_target <= norm_prob) {
-                selected_token = s_block_ids[i];
+                selected_token = s_final_ids[i];
                 break;
             }
             current_target -= norm_prob;
         }
 
-        if (selected_token == -1) selected_token = s_block_ids[0];
+        if (selected_token == -1) selected_token = s_final_ids[0];
         *token_id = selected_token;
     }
 }
@@ -248,10 +255,11 @@ void launch_fused_sampling(
 
     const auto stream = static_cast<cudaStream_t>(stream_ptr);
     const int num_warps = (threads_per_block + 31) / 32;
+    const int num_warps_aligned = num_warps + 3 & ~3;
 
-    const int max_size = num_warps * sizeof(float);
-    const int vals_size = num_warps * MAX_K * sizeof(float);
-    const int ids_size = num_warps * MAX_K * sizeof(int);
+    const int max_size = num_warps_aligned * sizeof(float);
+    const int vals_size = num_warps_aligned * MAX_K * sizeof(float);
+    const int ids_size = num_warps_aligned * MAX_K * sizeof(int);
     constexpr int final_sort_vals_size = MAX_K * sizeof(float) * 2;
     constexpr int final_sort_ids_size = MAX_K * sizeof(int);
 
