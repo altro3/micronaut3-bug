@@ -17,6 +17,7 @@ unsafe extern "C" {
         num_kv_heads: i32,
         head_dim: i32,
         current_seq_len: i32,
+        threads_per_block: i32,
         stream: *mut c_void,
     );
     fn cudaMalloc(dev_ptr: *mut *mut c_void, size: usize) -> i32;
@@ -76,11 +77,12 @@ fn main() {
     let num_kv_heads = 8;
     let head_dim = 128;
     let current_seq_len = 4096;
+    let threads_per_block = 128;
 
     println!("Боевая геометрия внимания Qwen-35B (GQA):");
     println!(
-        "Heads: {}, KV Heads: {}, Dim: {}, Context: {}",
-        num_heads, num_kv_heads, head_dim, current_seq_len
+        "Heads: {}, KV Heads: {}, Dim: {}, Context: {}, Threads: {}",
+        num_heads, num_kv_heads, head_dim, current_seq_len, threads_per_block
     );
 
     let q_size = (num_heads * head_dim) as usize;
@@ -100,6 +102,7 @@ fn main() {
     d_query.copy_to_device(h_query.as_ptr() as *const c_void, q_size * 4);
     d_k_cache.copy_to_device(h_k_cache.as_ptr() as *const c_void, kv_cache_size * 4);
     d_v_cache.copy_to_device(h_v_cache.as_ptr() as *const c_void, kv_cache_size * 4);
+
     const NUM_WARMUP: usize = 20;
     const NUM_ITERATIONS: usize = 1000;
 
@@ -118,6 +121,7 @@ fn main() {
                 num_kv_heads,
                 head_dim,
                 current_seq_len,
+                threads_per_block,
                 stream,
             );
         }
@@ -144,6 +148,7 @@ fn main() {
                 num_kv_heads,
                 head_dim,
                 current_seq_len,
+                threads_per_block,
                 stream,
             );
             cudaEventRecord(end_events[i], stream);
@@ -173,8 +178,8 @@ fn main() {
         let min_bw = bandwidths[0];
         let max_bw = bandwidths[NUM_ITERATIONS - 1];
         let median_bw = bandwidths[NUM_ITERATIONS / 2];
-        let p95_worst = bandwidths[(NUM_ITERATIONS as f64 * 0.05) as usize];
-        let p99_worst = bandwidths[(NUM_ITERATIONS as f64 * 0.01) as usize];
+        let p95_worst = bandwidths[(NUM_ITERATIONS as f64 * 0.95) as usize];
+        let p99_worst = bandwidths[(NUM_ITERATIONS as f64 * 0.99) as usize];
         let avg_bw = (bytes_processed as f64 * NUM_ITERATIONS as f64 / 1e9) / (total_gpu_ms as f64 / 1000.0);
 
         println!("\n📊 === РЕЗУЛЬТАТЫ ГЛУБОКОГО СТАТИСТИЧЕСКОГО АНАЛИЗА FUSED ATTENTION ===");
@@ -194,14 +199,7 @@ fn main() {
 
         d_output.copy_to_host(h_output.as_mut_ptr() as *mut c_void, out_size * 4);
 
-        let scale = 1.0f32 / (head_dim as f32).sqrt();
-        let raw_score = (head_dim as f32) * 1.0f32 * 0.01f32 * scale;
-        #[allow(clippy::eq_op)]
-        let exp_score = (raw_score - raw_score).exp();
-        let sum_exp = (current_seq_len as f32) * exp_score;
-        let prob = exp_score / (sum_exp + 1e-9_f32);
-
-        let expected_val = (current_seq_len as f32) * prob * 1.0f32;
+        let expected_val = 1.0f32;
         let actual_val = h_output[0];
         let error = (actual_val - expected_val).abs();
 

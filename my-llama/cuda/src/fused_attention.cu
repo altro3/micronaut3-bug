@@ -1,6 +1,7 @@
 #include <cuda_runtime.h>
 #include <device_launch_parameters.h>
 #include <math.h>
+#include <stdint.h>
 
 __device__ __forceinline__ float warp_reduce_max_attn(float val) {
 #pragma unroll
@@ -32,7 +33,7 @@ __global__ void fused_attention_kernel(
     const int tid = threadIdx.x;
     const int lane_id = tid % 32;
     const int warp_id = tid / 32;
-    const int num_warps = blockDim.x / 32;
+    const int num_warps = (blockDim.x + 31) / 32;
 
     const int kv_head_ratio = num_heads / num_kv_heads;
     const int kv_head_idx = head_idx / kv_head_ratio;
@@ -41,9 +42,12 @@ __global__ void fused_attention_kernel(
     const float scale = 1.0f / sqrtf(static_cast<float>(head_dim));
     const int head_dim_f4 = head_dim / 4;
 
-    __shared__ float s_warp_max[32];
-    __shared__ float s_warp_sum[32];
-    extern __shared__ float s_scores[];
+    extern __shared__ uint8_t s_dynamic_mem[];
+
+    const int num_warps_aligned = num_warps + 3 & ~3;
+    const auto s_warp_max = reinterpret_cast<float *>(s_dynamic_mem);
+    float *s_warp_sum = s_warp_max + num_warps_aligned;
+    float *s_scores = s_warp_sum + num_warps_aligned;
 
     float local_max = -1e20f;
     for (int tok = tid; tok < current_seq_len; tok += blockDim.x) {
@@ -66,9 +70,13 @@ __global__ void fused_attention_kernel(
     __syncthreads();
 
     if (warp_id == 0) {
-        const float val = tid < num_warps ? s_warp_max[lane_id] : -1e20f;
-        block_max = warp_reduce_max_attn(val);
-        s_warp_max[0] = __shfl_sync(0xFFFFFFFF, block_max, 0);
+        float max_val = -1e20f;
+        for (int w = lane_id; w < num_warps; w += 32) {
+            max_val = fmaxf(max_val, s_warp_max[w]);
+        }
+
+        block_max = warp_reduce_max_attn(max_val);
+        if (lane_id == 0) s_warp_max[0] = block_max;
     }
     __syncthreads();
     block_max = s_warp_max[0];
@@ -85,9 +93,13 @@ __global__ void fused_attention_kernel(
     __syncthreads();
 
     if (warp_id == 0) {
-        const float val = tid < num_warps ? s_warp_sum[lane_id] : 0.0f;
-        block_sum = warp_reduce_sum_attn(val);
-        s_warp_sum[0] = __shfl_sync(0xFFFFFFFF, block_sum, 0);
+        float sum_val = 0.0f;
+        for (int w = lane_id; w < num_warps; w += 32) {
+            sum_val += s_warp_sum[w];
+        }
+
+        block_sum = warp_reduce_sum_attn(sum_val);
+        if (lane_id == 0) s_warp_sum[0] = block_sum;
     }
     __syncthreads();
     block_sum = s_warp_sum[0];
@@ -127,13 +139,22 @@ void launch_fused_attention(
     const int num_kv_heads,
     const int head_dim,
     const int current_seq_len,
+    const int threads_per_block,
     void *stream_ptr
 ) {
-    constexpr int threads = 128;
-    const size_t shared_mem_size = current_seq_len * sizeof(float);
-    const auto stream = static_cast<cudaStream_t>(stream_ptr);
+    if (threads_per_block <= 0) return;
 
-    fused_attention_kernel<<<num_heads, threads, shared_mem_size, stream>>>(
+    const auto stream = static_cast<cudaStream_t>(stream_ptr);
+    const int num_warps = (threads_per_block + 31) / 32;
+    const int num_warps_aligned = num_warps + 3 & ~3;
+
+    const size_t max_size = num_warps_aligned * sizeof(float);
+    const size_t sum_size = num_warps_aligned * sizeof(float);
+    const size_t scores_size = current_seq_len * sizeof(float);
+
+    const size_t shared_mem_size = max_size + sum_size + scores_size;
+
+    fused_attention_kernel<<<num_heads, threads_per_block, shared_mem_size, stream>>>(
         output, query, k_cache, v_cache, num_heads, num_kv_heads, head_dim, current_seq_len
     );
 }

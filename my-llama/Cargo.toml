@@ -66,6 +66,10 @@ name = "cuda_fused_attention"
 path = "src/bin/cuda_fused_attention.rs"
 
 [[bin]]
+name = "cuda_fused_sampling"
+path = "src/bin/cuda_fused_sampling.rs"
+
+[[bin]]
 name = "cuda_matmul"
 path = "src/bin/cuda_matmul.rs"
 
@@ -82,8 +86,8 @@ name = "cuda_rmsnorm"
 path = "src/bin/cuda_rmsnorm.rs"
 
 [[bin]]
-name = "cuda_sampling"
-path = "src/bin/cuda_sampling.rs"
+name = "cuda_greedy_sampling"
+path = "src/bin/cuda_greedy_sampling.rs"
 
 [[bin]]
 name = "cuda_speculative_verify"

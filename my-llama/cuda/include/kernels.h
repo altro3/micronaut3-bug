@@ -84,6 +84,7 @@ void launch_fused_attention(
     int num_kv_heads,
     int head_dim,
     int current_seq_len,
+    int threads_per_block,
     void *stream_ptr
 );
 
@@ -158,13 +159,11 @@ void launch_paged_flash_decoding(
     void *stream_ptr
 );
 
-void launch_fused_sampling(
+void launch_greedy_sampling(
     int *token_id,
     const float *logits,
-    float rand_val,
-    float temperature,
-    float top_p,
     int vocab_size,
+    int threads_per_block,
     void *stream_ptr
 );
 

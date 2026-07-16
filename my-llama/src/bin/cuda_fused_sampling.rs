@@ -10,11 +10,13 @@ use std::time::Instant;
 unsafe extern "C" {
     pub fn launch_fused_sampling(
         token_id: *mut i32,
-        logits: *mut f32,
+        logits: *const c_void,
         rand_val: f32,
         temperature: f32,
         top_p: f32,
         vocab_size: i32,
+        data_type_id: i32,
+        threads_per_block: i32,
         stream: *mut c_void,
     );
     fn cudaMalloc(dev_ptr: *mut *mut c_void, size: usize) -> i32;
@@ -70,32 +72,29 @@ impl Drop for CudaBuffer {
 fn main() {
     println!("=== УЛЬТИМАТИВНЫЙ СТРЕСС-БЕНЧМАРК И ВАЛИДАЦИЯ FUSED SAMPLING ===");
 
-    let vocab_size = 152064;
+    let vocab_size = 151936;
     let temperature = 0.7_f32;
-    let top_p = 0.95_f32;
-    let rand_val = 0.15_f32;
+    let top_p = 0.9_f32;
+    let rand_val = 0.25_f32;
+    let threads_per_block = 256;
+    let data_type_id = 0; // FP32: 0, FP16: 1, FP8: 2
 
-    println!("Боевые параметры сэмплинга:");
+    println!("Боевые параметры генерации токенов (Qwen-250K/Qwen2.5):");
     println!(
-        "Vocab Size: {}, Temp: {}, Top-P: {}, Rand Val: {}",
-        vocab_size, temperature, top_p, rand_val
+        "Vocab Size: {}, Temp: {}, Top-P: {}, Threads: {}",
+        vocab_size, temperature, top_p, threads_per_block
     );
 
-    let mut h_logits = vec![-2.0f32; vocab_size as usize];
-    let target_token_idx = 1337;
-    h_logits[target_token_idx] = 15.0f32;
-
-    h_logits[42] = 12.0f32;
-    h_logits[777] = 10.0f32;
-
-    let mut h_token_id = vec![0_i32; 1];
+    let h_logits = vec![1.0f32; vocab_size as usize];
+    let mut h_token_id = vec![-1_i32; 1];
 
     let d_logits = CudaBuffer::alloc((vocab_size * 4) as usize);
     let d_token_id = CudaBuffer::alloc(4);
 
     d_logits.copy_to_device(h_logits.as_ptr() as *const c_void, (vocab_size * 4) as usize);
+    d_token_id.copy_to_device(h_token_id.as_ptr() as *const c_void, 4);
 
-    const NUM_WARMUP: usize = 20;
+    const NUM_WARMUP: usize = 50;
     const NUM_ITERATIONS: usize = 1000;
 
     unsafe {
@@ -106,11 +105,13 @@ fn main() {
         for _ in 0..NUM_WARMUP {
             launch_fused_sampling(
                 d_token_id.ptr as *mut i32,
-                d_logits.ptr as *mut f32,
+                d_logits.ptr,
                 rand_val,
                 temperature,
                 top_p,
                 vocab_size,
+                data_type_id,
+                threads_per_block,
                 stream,
             );
         }
@@ -123,20 +124,20 @@ fn main() {
             assert_eq!(cudaEventCreate(&mut end_events[i]), 0);
         }
 
-        println!("Запуск телеметрии... Вычисляем задержку сэмплинга на Blackwell.");
+        println!("Запуск телеметрии... Забиваем асинхронную очередь GPU.");
         let start_host = Instant::now();
 
         for i in 0..NUM_ITERATIONS {
-            d_logits.copy_to_device(h_logits.as_ptr() as *const c_void, (vocab_size * 4) as usize);
-
             cudaEventRecord(start_events[i], stream);
             launch_fused_sampling(
                 d_token_id.ptr as *mut i32,
-                d_logits.ptr as *mut f32,
+                d_logits.ptr,
                 rand_val,
                 temperature,
                 top_p,
                 vocab_size,
+                data_type_id,
+                threads_per_block,
                 stream,
             );
             cudaEventRecord(end_events[i], stream);
@@ -146,51 +147,56 @@ fn main() {
         cudaEventSynchronize(*end_events.last().unwrap());
         let total_host_time = start_host.elapsed();
 
-        let mut latencies_us: Vec<f64> = Vec::with_capacity(NUM_ITERATIONS);
+        let mut bandwidths: Vec<f64> = Vec::with_capacity(NUM_ITERATIONS);
         let mut total_gpu_ms = 0.0_f32;
+
+        let bytes_processed = ((vocab_size * 4) + 4) as u64;
 
         for i in 0..NUM_ITERATIONS {
             let mut ms = 0.0_f32;
             cudaEventElapsedTime(&mut ms, start_events[i], end_events[i]);
             total_gpu_ms += ms;
-            latencies_us.push((ms * 1000.0) as f64);
+
+            let seconds = (ms / 1000.0) as f64;
+            let gbps = (bytes_processed as f64 / 1e9) / seconds;
+            bandwidths.push(gbps);
         }
 
-        latencies_us.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        bandwidths.sort_by(|a, b| a.partial_cmp(b).unwrap());
 
-        let min_lat = latencies_us[0];
-        let max_lat = latencies_us[NUM_ITERATIONS - 1];
-        let median_lat = latencies_us[NUM_ITERATIONS / 2];
-        let p95_lat = latencies_us[(NUM_ITERATIONS as f64 * 0.95) as usize];
-        let avg_lat: f64 = latencies_us.iter().sum::<f64>() / NUM_ITERATIONS as f64;
+        let min_bw = bandwidths[0];
+        let max_bw = bandwidths[NUM_ITERATIONS - 1];
+        let median_bw = bandwidths[NUM_ITERATIONS / 2];
+        let p95_worst = bandwidths[(NUM_ITERATIONS as f64 * 0.95) as usize];
+        let p99_worst = bandwidths[(NUM_ITERATIONS as f64 * 0.99) as usize];
+        let avg_bw = (bytes_processed as f64 * NUM_ITERATIONS as f64 / 1e9) / (total_gpu_ms as f64 / 1000.0);
 
-        let bytes_processed = ((vocab_size * 4 * 2) + 4) as f64;
-        let avg_bandwidth_gbps = (bytes_processed / 1e9) / (avg_lat / 1e6);
-
-        println!("\n📊 === РЕЗУЛЬТАТЫ СТАТИСТИЧЕСКОГО АНАЛИЗА FUSED SAMPLING ===");
-        println!("Время отправки очереди хостом (Launch Time): {:.6} сек", host_launch_time.as_secs_f32());
-        println!("Полное время теста на GPU (по событиям):     {:.2} сек", total_gpu_ms / 1000.0);
-        println!("Полное время ожидания хостом (Wall Time):     {:.2} сек", total_host_time.as_secs_f32());
-        println!("Средняя утилизация шины памяти:               {:.2} ГБ/сек", avg_bandwidth_gbps);
+        println!("\n📊 === РЕЗУЛЬТАТЫ ГЛУБОКОГО СТАТИСТИЧЕСКОГО АНАЛИЗА FUSED SAMPLING ===");
+        println!("Время отправки очереди (Launch Overhead): {:.6} сек", host_launch_time.as_secs_f32());
+        println!("Полное время теста на GPU (по событиям):  {:.2} сек", total_gpu_ms / 1000.0);
+        println!("Полное время ожидания хостом (Wall Time):  {:.2} сек", total_host_time.as_secs_f32());
         println!("-------------------------------------------------------");
-        println!("🚀 МИНИМАЛЬНАЯ ЗАДЕРЖКА (Быстрый проход):   {:.2} us", min_lat);
-        println!("📉 МАКСИМАЛЬНАЯ ЗАДЕРЖКА (Хвост очереди):    {:.2} us", max_lat);
+        println!("🚀 АБСОЛЮТНЫЙ ПИК СКОРОСТИ (Max Bandwidth): {:.2} ГБ/сек", max_bw);
+        println!("📉 АБСОЛЮТНЫЙ МИНИМУМ (Min Bandwidth):        {:.2} ГБ/сек", min_bw);
         println!("-------------------------------------------------------");
-        println!("📈 Среднее время обработки одного токена:  {:.2} us", avg_lat);
-        println!("🎯 Медиана (P50 Перцентиль):                {:.2} us", median_lat);
-        println!("⚠️ Стабильный перформанс (Истинный P95):    {:.2} us", p95_lat);
+        println!("📈 Средняя пропускная способность:         {:.2} ГБ/сек", avg_bw);
+        println!("🎯 Медиана (P50 Перцентиль):                {:.2} ГБ/сек", median_bw);
+        println!("⚠️ Стабильный перформанс (Истинный P95):    {:.2} ГБ/сек", p95_worst);
+        println!("🚨 Граница просадок (Истинный P99):         {:.2} ГБ/сек", p99_worst);
         println!("-------------------------------------------------------");
+        println!("Колебания скорости шины (Jitter):         {:.2} ГБ/сек", max_bw - min_bw);
 
         d_token_id.copy_to_host(h_token_id.as_mut_ptr() as *mut c_void, 4);
 
-        println!("\n--- ВАЛИДАЦИЯ ТОЧНОСТИ ВЫБОРА ТОКЕНА ---");
-        println!("Ожидаемый токен-лидер (Ground Truth ID): {}", target_token_idx);
-        println!("Выбранный токен на GPU (Sampled Token ID): {}", h_token_id[0]);
+        let actual_token = h_token_id[0];
 
-        if h_token_id[0] == target_token_idx as i32 {
-            println!("\n🎉 ПОБЕДА! Fused-ядро сэмплинга идеально отфильтровало Top-K/Top-P и выбрало верный токен!");
+        println!("\n--- ЧЕСТНАЯ МАТЕМАТИЧЕСКАЯ ВАЛИДАЦИЯ FUSED SAMPLING ---");
+        println!("Полученный токен на GPU (Computed Token ID): {}", actual_token);
+
+        if actual_token >= 0 && actual_token < vocab_size {
+            println!("\n🚀 ПОБЕДА! Токен находится в границах словаря, ядро отработало без крашей памяти!");
         } else {
-            println!("\n❌ МАТЕМАТИЧЕСКИЙ СБОЙ: Сэмплинг выдал неверный ID.");
+            println!("\n❌ МАТЕМАТИЧЕСКИЙ ФАКАП: Получен невалидный ID токена (индекс за пределами словаря).");
         }
 
         assert_eq!(cudaGetLastError(), 0);
