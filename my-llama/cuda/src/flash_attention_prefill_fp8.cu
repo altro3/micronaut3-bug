@@ -54,10 +54,10 @@ __global__ void flash_attention_fp8_blackwell_prefill_kernel(
     auto s_acc_o = reinterpret_cast<int *>(s_row_l + BLOCK_M);
 
     const int s_acc_o_size_aligned = BLOCK_M * HEAD_DIM + 3 & ~3;
-    auto s_tile_scores = reinterpret_cast<float *>(s_acc_o + s_acc_o_size_aligned);
+    int *s_tile_scores = s_acc_o + s_acc_o_size_aligned;
 
     constexpr int s_tile_scores_size_aligned = BLOCK_M * BLOCK_N + 3 & ~3;
-    auto s_tile_scores_fp8 = reinterpret_cast<__nv_fp8_e4m3 *>(s_tile_scores + s_tile_scores_size_aligned);
+    auto s_tile_scores_uint8 = reinterpret_cast<uint8_t *>(s_tile_scores + s_tile_scores_size_aligned);
 
     for (int m = tid; m < BLOCK_M; ++m) {
         s_row_m[m] = -1e20f;
@@ -121,7 +121,7 @@ __global__ void flash_attention_fp8_blackwell_prefill_kernel(
                     mma_sync(c_frag, q_frag, k_frag, c_frag);
                 }
 
-                store_matrix_sync(reinterpret_cast<int *>(s_tile_scores) + wm * BLOCK_N + wn, c_frag, BLOCK_N, mem_row_major);
+                store_matrix_sync(s_tile_scores + wm * BLOCK_N + wn, c_frag, BLOCK_N, mem_row_major);
             }
         }
         __syncthreads();
@@ -136,7 +136,7 @@ __global__ void flash_attention_fp8_blackwell_prefill_kernel(
                 if (start_n + n >= kv_seq_len || start_m + m < start_n + n) {
                     scores[n] = -1e20f;
                 } else {
-                    scores[n] = s_tile_scores[m * BLOCK_N + n] * scale;
+                    scores[n] = static_cast<float>(s_tile_scores[m * BLOCK_N + n]) * scale;
                     local_tile_max = fmaxf(local_tile_max, scores[n]);
                 }
             }
@@ -152,7 +152,7 @@ __global__ void flash_attention_fp8_blackwell_prefill_kernel(
                 } else {
                     scores[n] = 0.0f;
                 }
-                s_tile_scores_fp8[m * BLOCK_N + n] = __nv_fp8_e4m3(__half(scores[n]));
+                s_tile_scores_uint8[m * BLOCK_N + n] = static_cast<uint8_t>(scores[n] * 255.0f);
             }
 
             const float scale_old = expf(old_m - new_m);
@@ -175,7 +175,7 @@ __global__ void flash_attention_fp8_blackwell_prefill_kernel(
                 load_matrix_sync(out_frag, s_acc_o_ptr, HEAD_DIM, mem_row_major);
 
                 for (int dk = 0; dk < BLOCK_N; dk += WMMA_K) {
-                    const auto s_tile_scores_ptr = reinterpret_cast<const unsigned char *>(s_tile_scores_fp8 + wm * BLOCK_N + dk);
+                    const auto s_tile_scores_ptr = reinterpret_cast<const unsigned char *>(s_tile_scores_uint8 + wm * BLOCK_N + dk);
                     const auto s_v_ptr = reinterpret_cast<const unsigned char *>(s_v + dk * BLOCK_N + wd);
 
                     load_matrix_sync(s_frag, s_tile_scores_ptr, BLOCK_N);
@@ -193,7 +193,7 @@ __global__ void flash_attention_fp8_blackwell_prefill_kernel(
         if (start_m + m < q_seq_len) {
             const float inv_l = 1.0f / (s_row_l[m] + 1e-9f);
             for (int d = lane_id; d < HEAD_DIM; d += 32) {
-                const float final_float_val = static_cast<float>(s_acc_o[m * HEAD_DIM + d]) * inv_l;
+                const float final_float_val = static_cast<float>(s_acc_o[m * HEAD_DIM + d]) * inv_l * (1.0f / 255.0f);
                 output[(start_m + m) * q_stride + q_head_idx * HEAD_DIM + d] = __nv_fp8_e4m3(__half(final_float_val));
             }
         }
@@ -217,18 +217,23 @@ void launch_flash_attention_prefill_fp8(
     const size_t shared_mem_size,
     cudaStream_t stream
 ) {
+    if (q_seq_len == 0 || kv_seq_len == 0) return;
+
+    const int num_m_tiles = (q_seq_len + BLOCK_M - 1) / BLOCK_M;
+    dim3 grid(num_heads * batch_size, num_m_tiles);
+
     if (head_dim == 256) {
         const auto k_kernel = flash_attention_fp8_blackwell_prefill_kernel<256>;
         cudaFuncSetAttribute(k_kernel, cudaFuncAttributeMaxDynamicSharedMemorySize, shared_mem_size);
-        k_kernel<<<num_heads * batch_size, threads_per_block, shared_mem_size, stream>>>(output, query, key, value, q_seq_len, kv_seq_len, num_heads, num_kv_heads, scale);
+        k_kernel<<<grid, threads_per_block, shared_mem_size, stream>>>(output, query, key, value, q_seq_len, kv_seq_len, num_heads, num_kv_heads, scale);
     } else if (head_dim == 128) {
         const auto k_kernel = flash_attention_fp8_blackwell_prefill_kernel<128>;
         cudaFuncSetAttribute(k_kernel, cudaFuncAttributeMaxDynamicSharedMemorySize, shared_mem_size);
-        k_kernel<<<num_heads * batch_size, threads_per_block, shared_mem_size, stream>>>(output, query, key, value, q_seq_len, kv_seq_len, num_heads, num_kv_heads, scale);
+        k_kernel<<<grid, threads_per_block, shared_mem_size, stream>>>(output, query, key, value, q_seq_len, kv_seq_len, num_heads, num_kv_heads, scale);
     } else if (head_dim == 64) {
         const auto k_kernel = flash_attention_fp8_blackwell_prefill_kernel<64>;
         cudaFuncSetAttribute(k_kernel, cudaFuncAttributeMaxDynamicSharedMemorySize, shared_mem_size);
-        k_kernel<<<num_heads * batch_size, threads_per_block, shared_mem_size, stream>>>(output, query, key, value, q_seq_len, kv_seq_len, num_heads, num_kv_heads, scale);
+        k_kernel<<<grid, threads_per_block, shared_mem_size, stream>>>(output, query, key, value, q_seq_len, kv_seq_len, num_heads, num_kv_heads, scale);
     }
 }
 }
