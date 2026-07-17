@@ -34,7 +34,7 @@ include_directories(${cutlass_SOURCE_DIR}/include)
 
 find_package(CUDAToolkit REQUIRED)
 
-file(GLOB CUDA_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cu")
+file(GLOB_RECURSE CUDA_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cu")
 
 add_library(cuda_kernels STATIC ${CUDA_SOURCES})
 target_link_libraries(cuda_kernels PRIVATE CUDA::cublas CUDA::cublasLt)

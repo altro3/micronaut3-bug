@@ -1,7 +1,7 @@
 #ifndef FLASH_ATTENTION_MMA_FP8_CUH
 #define FLASH_ATTENTION_MMA_FP8_CUH
 
-#include "flash_attention_types.cuh"
+#include "../flash_attention_types.cuh"
 
 __device__ __forceinline__ void mma_m16n8k32_fp8(
     float *d,
