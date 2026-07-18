@@ -39,6 +39,8 @@ else()
             ${GLOBAL_HEADERS}
     )
 
+    set(CMAKE_CUDA_SEPARATE_COMPILATION ON)
+
     add_library(cuda_kernels STATIC ${CUDA_SOURCES} ${FLASHINFER_OBJ})
 
     find_package(CUDAToolkit REQUIRED)
@@ -51,6 +53,7 @@ else()
 endif()
 
 set_target_properties(cuda_kernels PROPERTIES
+        CUDA_SEPARATE_COMPILATION ON
         CUDA_RESOLVE_DEVICE_SYMBOLS ON
         POSITION_INDEPENDENT_CODE ON
 )

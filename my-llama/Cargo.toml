@@ -3,6 +3,11 @@ name = "my-llama"
 version = "0.1.0"
 edition = "2024"
 
+[workspace]
+members = [
+    "crates/cuda_runtime"
+]
+
 [dependencies]
 serde = { version = "1.0", features = ["derive"] }
 sonic-rs = "0.5"
@@ -12,6 +17,7 @@ rayon = "1.12"
 dary_heap = "0.3"
 fxhash = "0.2"
 regex = "1.13"
+cuda_runtime = { path = "crates/cuda_runtime" }
 
 [dev-dependencies]
 criterion = { version = "0.8", features = ["html_reports"] }
@@ -41,57 +47,57 @@ path = "src/bin/train_tokenizer.rs"
 name = "test_trainer"
 path = "src/bin/test_trainer.rs"
 
-[[bin]]
-name = "cuda_adamw"
-path = "src/bin/cuda_adamw.rs"
-
-[[bin]]
-name = "cuda_cross_entropy_loss"
-path = "src/bin/cuda_cross_entropy_loss.rs"
-
-[[bin]]
-name = "cuda_dequantize_block_gguf_q4_k"
-path = "src/bin/cuda_dequantize_block_gguf_q4_k.rs"
-
-[[bin]]
-name = "cuda_embeddings"
-path = "src/bin/cuda_embeddings.rs"
-
-[[bin]]
-name = "cuda_fused_attention"
-path = "src/bin/cuda_fused_attention.rs"
-
-[[bin]]
-name = "cuda_fused_sampling"
-path = "src/bin/cuda_fused_sampling.rs"
-
-[[bin]]
-name = "cuda_matmul"
-path = "src/bin/cuda_matmul.rs"
-
-[[bin]]
-name = "cuda_matmul_gguf_q4_k"
-path = "src/bin/cuda_matmul_gguf_q4_k.rs"
-
-[[bin]]
-name = "cuda_rope"
-path = "src/bin/cuda_rope.rs"
-
-[[bin]]
-name = "cuda_rmsnorm"
-path = "src/bin/cuda_rmsnorm.rs"
-
-[[bin]]
-name = "cuda_greedy_sampling"
-path = "src/bin/cuda_greedy_sampling.rs"
-
-[[bin]]
-name = "cuda_speculative_verify"
-path = "src/bin/cuda_speculative_verify.rs"
-
-[[bin]]
-name = "cuda_swiglu"
-path = "src/bin/cuda_swiglu.rs"
+#[[bin]]
+#name = "cuda_adamw"
+#path = "src/bin/cuda_adamw.rs"
+#
+#[[bin]]
+#name = "cuda_cross_entropy_loss"
+#path = "src/bin/cuda_cross_entropy_loss.rs"
+#
+#[[bin]]
+#name = "cuda_dequantize_block_gguf_q4_k"
+#path = "src/bin/cuda_dequantize_block_gguf_q4_k.rs"
+#
+#[[bin]]
+#name = "cuda_embeddings"
+#path = "src/bin/cuda_embeddings.rs"
+#
+#[[bin]]
+#name = "cuda_fused_attention"
+#path = "src/bin/cuda_fused_attention.rs"
+#
+#[[bin]]
+#name = "cuda_fused_sampling"
+#path = "src/bin/cuda_fused_sampling.rs"
+#
+#[[bin]]
+#name = "cuda_matmul"
+#path = "src/bin/cuda_matmul.rs"
+#
+#[[bin]]
+#name = "cuda_matmul_gguf_q4_k"
+#path = "src/bin/cuda_matmul_gguf_q4_k.rs"
+#
+#[[bin]]
+#name = "cuda_rope"
+#path = "src/bin/cuda_rope.rs"
+#
+#[[bin]]
+#name = "cuda_rmsnorm"
+#path = "src/bin/cuda_rmsnorm.rs"
+#
+#[[bin]]
+#name = "cuda_greedy_sampling"
+#path = "src/bin/cuda_greedy_sampling.rs"
+#
+#[[bin]]
+#name = "cuda_speculative_verify"
+#path = "src/bin/cuda_speculative_verify.rs"
+#
+#[[bin]]
+#name = "cuda_swiglu"
+#path = "src/bin/cuda_swiglu.rs"
 
 [[bin]]
 name = "cuda_varlen_embeddings"

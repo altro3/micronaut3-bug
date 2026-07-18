@@ -19,7 +19,8 @@ void launch_varlen_embeddings(
     const int32_t num_seqs,
     const int32_t data_type,
     const int32_t threads_per_block,
-    void *stream_ptr
+    void *stream_ptr,
+    const bool dump_debug
 ) {
     if (total_tokens == 0 || out_features == 0 || threads_per_block <= 0) return;
 
@@ -32,19 +33,19 @@ void launch_varlen_embeddings(
         case DataType::BF16:
             varlen_embeddings_fused_kernel<__nv_bfloat16><<<blocks, threads_per_block, 0, stream>>>(
                 out_bf16, weight, weight_scales, tokens, seq_offsets, block_table, slot_mapping,
-                max_blocks_per_seq, block_size, total_tokens, out_features, vocab_size, num_seqs
+                max_blocks_per_seq, block_size, total_tokens, out_features, vocab_size, num_seqs, dump_debug
             );
             break;
         case DataType::FP8:
             varlen_embeddings_fused_kernel<__nv_fp8_e4m3><<<blocks, threads_per_block, 0, stream>>>(
                 out_bf16, weight, weight_scales, tokens, seq_offsets, block_table, slot_mapping,
-                max_blocks_per_seq, block_size, total_tokens, out_features, vocab_size, num_seqs
+                max_blocks_per_seq, block_size, total_tokens, out_features, vocab_size, num_seqs, dump_debug
             );
             break;
         case DataType::FP4:
             varlen_embeddings_fused_kernel<__nv_fp4_e2m1><<<blocks, threads_per_block, 0, stream>>>(
                 out_bf16, weight, weight_scales, tokens, seq_offsets, block_table, slot_mapping,
-                max_blocks_per_seq, block_size, total_tokens, out_features, vocab_size, num_seqs
+                max_blocks_per_seq, block_size, total_tokens, out_features, vocab_size, num_seqs, dump_debug
             );
             break;
     }

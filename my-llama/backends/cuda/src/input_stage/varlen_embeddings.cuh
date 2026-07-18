@@ -58,5 +58,6 @@ __global__ void varlen_embeddings_fused_kernel(
     int32_t total_tokens,
     int32_t out_features,
     int32_t vocab_size,
-    int32_t num_seqs
+    int32_t num_seqs,
+    bool dump_debug
 );

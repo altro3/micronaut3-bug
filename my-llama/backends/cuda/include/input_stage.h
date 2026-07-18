@@ -21,7 +21,8 @@ void launch_varlen_embeddings(
     int32_t num_seqs,
     int32_t data_type,
     int32_t threads_per_block,
-    void *stream_ptr
+    void *stream_ptr,
+    bool dump_debug
 );
 
 #ifdef __cplusplus
