@@ -2,7 +2,7 @@
 #include <cuda_runtime.h>
 #include <stdint.h>
 
-template<DataType T>
+template<DataTypeOld T>
 extern __global__ void paged_kv_cache_write_kernel(
     void * __restrict__ k_block_table,
     void * __restrict__ v_block_table,
@@ -20,7 +20,7 @@ extern __global__ void paged_kv_cache_write_kernel(
     int is_prefill
 );
 
-template<DataType T>
+template<DataTypeOld T>
 extern __global__ void paged_flash_decoding_partial_kernel(
     float * __restrict__ partial_out,
     float * __restrict__ partial_max,
@@ -79,19 +79,19 @@ void launch_paged_flash_decoding_write(
     switch (cache_type_id) {
         default:
         case 0:
-            paged_kv_cache_write_kernel<DataType::FP32><<<blocks, threads, 0, stream>>>(
+            paged_kv_cache_write_kernel<DataTypeOld::FP32><<<blocks, threads, 0, stream>>>(
                 k_block_table, v_block_table, k_src, v_src, block_mapping, seq_lengths, k_scales, v_scales,
                 num_seqs, num_kv_heads, head_dim, max_blocks_per_seq, block_size, is_prefill
             );
             break;
         case 1:
-            paged_kv_cache_write_kernel<DataType::FP16><<<blocks, threads, 0, stream>>>(
+            paged_kv_cache_write_kernel<DataTypeOld::FP16><<<blocks, threads, 0, stream>>>(
                 k_block_table, v_block_table, k_src, v_src, block_mapping, seq_lengths, k_scales, v_scales,
                 num_seqs, num_kv_heads, head_dim, max_blocks_per_seq, block_size, is_prefill
             );
             break;
         case 2:
-            paged_kv_cache_write_kernel<DataType::FP8><<<blocks, threads, 0, stream>>>(
+            paged_kv_cache_write_kernel<DataTypeOld::FP8><<<blocks, threads, 0, stream>>>(
                 k_block_table, v_block_table, k_src, v_src, block_mapping, seq_lengths, k_scales, v_scales,
                 num_seqs, num_kv_heads, head_dim, max_blocks_per_seq, block_size, is_prefill
             );
@@ -134,19 +134,19 @@ void launch_paged_flash_decoding(
     switch (cache_type_id) {
         default:
         case 0:
-            paged_flash_decoding_partial_kernel<DataType::FP32><<<blocks_p1, threads_p1, shared_mem_size, stream>>>(
+            paged_flash_decoding_partial_kernel<DataTypeOld::FP32><<<blocks_p1, threads_p1, shared_mem_size, stream>>>(
                 partial_out, partial_max, partial_sum, query, k_block_table, v_block_table, block_mapping, seq_lengths, k_scales, v_scales,
                 num_heads, num_kv_heads, head_dim, max_blocks_per_seq, block_size, chunk_size, num_chunks
             );
             break;
         case 1:
-            paged_flash_decoding_partial_kernel<DataType::FP16><<<blocks_p1, threads_p1, shared_mem_size, stream>>>(
+            paged_flash_decoding_partial_kernel<DataTypeOld::FP16><<<blocks_p1, threads_p1, shared_mem_size, stream>>>(
                 partial_out, partial_max, partial_sum, query, k_block_table, v_block_table, block_mapping, seq_lengths, k_scales, v_scales,
                 num_heads, num_kv_heads, head_dim, max_blocks_per_seq, block_size, chunk_size, num_chunks
             );
             break;
         case 2:
-            paged_flash_decoding_partial_kernel<DataType::FP8><<<blocks_p1, threads_p1, shared_mem_size, stream>>>(
+            paged_flash_decoding_partial_kernel<DataTypeOld::FP8><<<blocks_p1, threads_p1, shared_mem_size, stream>>>(
                 partial_out, partial_max, partial_sum, query, k_block_table, v_block_table, block_mapping, seq_lengths, k_scales, v_scales,
                 num_heads, num_kv_heads, head_dim, max_blocks_per_seq, block_size, chunk_size, num_chunks
             );

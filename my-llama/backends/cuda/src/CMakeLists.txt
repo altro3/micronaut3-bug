@@ -17,23 +17,26 @@ if(ISOLATED_BUILD)
     add_library(cuda_kernels STATIC "${DUMMY_FILE}" ${FLASHINFER_OBJ})
     target_link_libraries(cuda_kernels PRIVATE cudart.lib)
 else()
-    message(STATUS "[MY_LLAMA] Full Build Mode Active. Scanning folders for kernels...")
+    message(STATUS "[MY_LLAMA] Full Build Mode Active. Scanning folders with CONFIGURE_DEPENDS...")
 
-    # Собираем файлы .cu строго из наших целевых директорий бэкенда
-    file(GLOB_RECURSE ATTENTION_SRCS "${CMAKE_CURRENT_SOURCE_DIR}/attention/*.cu")
-    file(GLOB_RECURSE DECODING_SRCS "${CMAKE_CURRENT_SOURCE_DIR}/decoding/*.cu")
-    file(GLOB_RECURSE LAYERS_SRCS "${CMAKE_CURRENT_SOURCE_DIR}/layers/*.cu")
-    file(GLOB_RECURSE QUANT_SRCS "${CMAKE_CURRENT_SOURCE_DIR}/quantization/*.cu")
-    file(GLOB_RECURSE SPEC_SRCS "${CMAKE_CURRENT_SOURCE_DIR}/speculative/*.cu")
-    file(GLOB_RECURSE UTILS_SRCS "${CMAKE_CURRENT_SOURCE_DIR}/utils/*.cu")
+    file(GLOB_RECURSE ATTENTION_SRCS CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/attention/*.cu" "${CMAKE_CURRENT_SOURCE_DIR}/attention/*.cuh")
+    file(GLOB_RECURSE DECODING_SRCS CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/decoding/*.cu" "${CMAKE_CURRENT_SOURCE_DIR}/decoding/*.cuh")
+    file(GLOB_RECURSE INPUT_STAGE_SRCS CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/input_stage/*.cu" "${CMAKE_CURRENT_SOURCE_DIR}/input_stage/*.cuh")
+    file(GLOB_RECURSE LAYERS_SRCS CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/layers/*.cu"  "${CMAKE_CURRENT_SOURCE_DIR}/layers/*.cuh")
+    file(GLOB_RECURSE QUANT_SRCS CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/quantization/*.cu" "${CMAKE_CURRENT_SOURCE_DIR}/quantization/*.cuh")
+    file(GLOB_RECURSE SPEC_SRCS CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/speculative/*.cu" "${CMAKE_CURRENT_SOURCE_DIR}/speculative/*.cuh")
+    file(GLOB_RECURSE UTILS_SRCS CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/utils/*.cu" "${CMAKE_CURRENT_SOURCE_DIR}/utils/*.cuh")
+    file(GLOB GLOBAL_HEADERS CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/../include/*.h")
 
     set(CUDA_SOURCES
             ${ATTENTION_SRCS}
             ${DECODING_SRCS}
+            ${INPUT_STAGE_SRCS}
             ${LAYERS_SRCS}
             ${QUANT_SRCS}
             ${SPEC_SRCS}
             ${UTILS_SRCS}
+            ${GLOBAL_HEADERS}
     )
 
     add_library(cuda_kernels STATIC ${CUDA_SOURCES} ${FLASHINFER_OBJ})

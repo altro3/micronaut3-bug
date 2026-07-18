@@ -94,6 +94,10 @@ name = "cuda_swiglu"
 path = "src/bin/cuda_swiglu.rs"
 
 [[bin]]
+name = "cuda_varlen_embeddings"
+path = "src/bin/cuda_varlen_embeddings.rs"
+
+[[bin]]
 name = "infer_simple"
 path = "src/bin/infer_simple.rs"
 

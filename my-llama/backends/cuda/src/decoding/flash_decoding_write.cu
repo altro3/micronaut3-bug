@@ -5,11 +5,11 @@
 #include <cuda_fp8.h>
 #include <stdint.h>
 
-template<DataType T>
+template<DataTypeOld T>
 __device__ __forceinline__ void store_cache_x4(void *base_ptr, const int f4_idx, const float4 vals, const float scale) {
-    if constexpr (T == DataType::FP32) {
+    if constexpr (T == DataTypeOld::FP32) {
         *(static_cast<float4 *>(base_ptr) + f4_idx) = vals;
-    } else if constexpr (T == DataType::FP16) {
+    } else if constexpr (T == DataTypeOld::FP16) {
         int2 h2_pair;
         const auto h2_low = reinterpret_cast<half2 *>(&h2_pair.x);
         const auto h2_high = reinterpret_cast<half2 *>(&h2_pair.y);
@@ -20,7 +20,7 @@ __device__ __forceinline__ void store_cache_x4(void *base_ptr, const int f4_idx,
         h2_high->y = __float2half(vals.w);
 
         *(static_cast<int2 *>(base_ptr) + f4_idx) = h2_pair;
-    } else if constexpr (T == DataType::FP8) {
+    } else if constexpr (T == DataTypeOld::FP8) {
         uchar4 bytes;
         const float inv_scale = 1.0f / (scale + 1e-9f);
 
@@ -33,7 +33,7 @@ __device__ __forceinline__ void store_cache_x4(void *base_ptr, const int f4_idx,
     }
 }
 
-template<DataType T>
+template<DataTypeOld T>
 __global__ void paged_kv_cache_write_kernel(
     void * __restrict__ k_block_table,
     void * __restrict__ v_block_table,
@@ -61,7 +61,7 @@ __global__ void paged_kv_cache_write_kernel(
 
     const int total_toks_to_write = is_prefill ? cur_seq_len : 1;
 
-    constexpr int bytes_per_elem = T == DataType::FP32 ? 4 : T == DataType::FP16 ? 2 : 1;
+    constexpr int bytes_per_elem = T == DataTypeOld::FP32 ? 4 : T == DataTypeOld::FP16 ? 2 : 1;
     const long long block_stride = static_cast<long long>(block_size) * num_kv_heads * head_dim * bytes_per_elem;
     const long long scale_block_stride = static_cast<long long>(block_size) * num_kv_heads;
 
@@ -84,7 +84,7 @@ __global__ void paged_kv_cache_write_kernel(
         float k_s = 1.0f;
         float v_s = 1.0f;
 
-        if constexpr (T == DataType::FP8) {
+        if constexpr (T == DataTypeOld::FP8) {
             float local_max_k = 0.0f;
             float local_max_v = 0.0f;
 
@@ -127,17 +127,17 @@ __global__ void paged_kv_cache_write_kernel(
     }
 }
 
-template __global__ void paged_kv_cache_write_kernel<DataType::FP32>(
+template __global__ void paged_kv_cache_write_kernel<DataTypeOld::FP32>(
     void * __restrict__, void * __restrict__, const float * __restrict__, const float * __restrict__,
     const int32_t * __restrict__, const int32_t * __restrict__, float * __restrict__, float * __restrict__,
     int, int, int, int, int, int);
 
-template __global__ void paged_kv_cache_write_kernel<DataType::FP16>(
+template __global__ void paged_kv_cache_write_kernel<DataTypeOld::FP16>(
     void * __restrict__, void * __restrict__, const float * __restrict__, const float * __restrict__,
     const int32_t * __restrict__, const int32_t * __restrict__, float * __restrict__, float * __restrict__,
     int, int, int, int, int, int);
 
-template __global__ void paged_kv_cache_write_kernel<DataType::FP8>(
+template __global__ void paged_kv_cache_write_kernel<DataTypeOld::FP8>(
     void * __restrict__, void * __restrict__, const float * __restrict__, const float * __restrict__,
     const int32_t * __restrict__, const int32_t * __restrict__, float * __restrict__, float * __restrict__,
     int, int, int, int, int, int);

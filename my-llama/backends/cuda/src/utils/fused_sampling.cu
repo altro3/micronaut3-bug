@@ -265,15 +265,15 @@ void launch_fused_sampling(
 
     const int shared_mem_size = max_size + vals_size + ids_size + final_sort_vals_size + final_sort_ids_size;
 
-    if (data_type_id == static_cast<int>(DataType::FP32)) {
+    if (data_type_id == static_cast<int>(DataTypeOld::FP32)) {
         fused_sampling_kernel_optimized<float> <<<1, threads_per_block, shared_mem_size, stream>>>(
             token_id, logits, rand_val, temperature, top_p, vocab_size
         );
-    } else if (data_type_id == static_cast<int>(DataType::FP16)) {
+    } else if (data_type_id == static_cast<int>(DataTypeOld::FP16)) {
         fused_sampling_kernel_optimized<__half> <<<1, threads_per_block, shared_mem_size, stream>>>(
             token_id, logits, rand_val, temperature, top_p, vocab_size
         );
-    } else if (data_type_id == static_cast<int>(DataType::FP8)) {
+    } else if (data_type_id == static_cast<int>(DataTypeOld::FP8)) {
         fused_sampling_kernel_optimized<__nv_fp8_e4m3> <<<1, threads_per_block, shared_mem_size, stream>>>(
             token_id, logits, rand_val, temperature, top_p, vocab_size
         );

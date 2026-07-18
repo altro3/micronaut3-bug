@@ -5,18 +5,18 @@
 #include <cuda_fp8.h>
 #include <stdint.h>
 
-template<DataType T>
+template<DataTypeOld T>
 __device__ __forceinline__ void store_cache_x4(void *base_ptr, const int f4_idx, const float4 vals, const float scale) {
-    if constexpr (T == DataType::FP32) {
+    if constexpr (T == DataTypeOld::FP32) {
         float4 *ptr = static_cast<float4 *>(base_ptr) + f4_idx;
         *ptr = vals;
-    } else if constexpr (T == DataType::FP16) {
+    } else if constexpr (T == DataTypeOld::FP16) {
         int2 h2_pair;
         *reinterpret_cast<half2 *>(&h2_pair.x) = __floats2half2_rn(vals.x, vals.y);
         *reinterpret_cast<half2 *>(&h2_pair.y) = __floats2half2_rn(vals.z, vals.w);
         uint8_t *byte_ptr = static_cast<uint8_t *>(base_ptr) + (static_cast<size_t>(f4_idx) * sizeof(int2));
         *reinterpret_cast<int2 *>(byte_ptr) = h2_pair;
-    } else if constexpr (T == DataType::FP8) {
+    } else if constexpr (T == DataTypeOld::FP8) {
         const float inv_scale = 1.0f / (scale + 1e-9f);
 
         const half2 h2_low = __floats2half2_rn(vals.x * inv_scale, vals.y * inv_scale);
@@ -31,7 +31,7 @@ __device__ __forceinline__ void store_cache_x4(void *base_ptr, const int f4_idx,
     }
 }
 
-template<DataType T>
+template<DataTypeOld T>
 __global__ void write_kv_to_paged_cache_kernel_optimized(
     const float * __restrict__ src_key_states,
     const float * __restrict__ src_value_states,
@@ -61,7 +61,7 @@ __global__ void write_kv_to_paged_cache_kernel_optimized(
     const int32_t physical_block_id = target_physical_slot / block_size;
     const int32_t offset_in_block = target_physical_slot % block_size;
 
-    constexpr int bytes_per_element = T == DataType::FP32 ? 4 : T == DataType::FP16 ? 2 : 1;
+    constexpr int bytes_per_element = T == DataTypeOld::FP32 ? 4 : T == DataTypeOld::FP16 ? 2 : 1;
     const long long block_stride = static_cast<long long>(block_size) * num_kv_heads * head_dimension * bytes_per_element;
     const long long scale_block_stride = static_cast<long long>(block_size) * num_kv_heads;
 
@@ -81,7 +81,7 @@ __global__ void write_kv_to_paged_cache_kernel_optimized(
     float k_s = 1.0f;
     float v_s = 1.0f;
 
-    if constexpr (T == DataType::FP8) {
+    if constexpr (T == DataTypeOld::FP8) {
         float local_max_k = 0.0f;
         float local_max_v = 0.0f;
 
@@ -159,18 +159,18 @@ void launch_prefill_kv_write(
     const int num_warps = (threads_per_block + 31) / 32;
     const int shared_mem_size = num_warps * 2 * sizeof(float);
 
-    if (data_type_id == static_cast<int>(DataType::FP32)) {
-        write_kv_to_paged_cache_kernel_optimized<DataType::FP32> <<<grid, threads_per_block, shared_mem_size, stream>>>(
+    if (data_type_id == static_cast<int>(DataTypeOld::FP32)) {
+        write_kv_to_paged_cache_kernel_optimized<DataTypeOld::FP32> <<<grid, threads_per_block, shared_mem_size, stream>>>(
             src_key_states, src_value_states, global_slot_mapping, dst_paged_key_cache, dst_paged_value_cache,
             k_scales, v_scales, total_batch_tokens, num_kv_heads, head_dimension, block_size
         );
-    } else if (data_type_id == static_cast<int>(DataType::FP16)) {
-        write_kv_to_paged_cache_kernel_optimized<DataType::FP16> <<<grid, threads_per_block, shared_mem_size, stream>>>(
+    } else if (data_type_id == static_cast<int>(DataTypeOld::FP16)) {
+        write_kv_to_paged_cache_kernel_optimized<DataTypeOld::FP16> <<<grid, threads_per_block, shared_mem_size, stream>>>(
             src_key_states, src_value_states, global_slot_mapping, dst_paged_key_cache, dst_paged_value_cache,
             k_scales, v_scales, total_batch_tokens, num_kv_heads, head_dimension, block_size
         );
-    } else if (data_type_id == static_cast<int>(DataType::FP8)) {
-        write_kv_to_paged_cache_kernel_optimized<DataType::FP8> <<<grid, threads_per_block, shared_mem_size, stream>>>(
+    } else if (data_type_id == static_cast<int>(DataTypeOld::FP8)) {
+        write_kv_to_paged_cache_kernel_optimized<DataTypeOld::FP8> <<<grid, threads_per_block, shared_mem_size, stream>>>(
             src_key_states, src_value_states, global_slot_mapping, dst_paged_key_cache, dst_paged_value_cache,
             k_scales, v_scales, total_batch_tokens, num_kv_heads, head_dimension, block_size
         );
