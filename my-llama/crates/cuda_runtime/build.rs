@@ -7,7 +7,7 @@ fn main() {
 
     let bat_path = Path::new("..\\..\\build_cuda.bat");
     let status = Command::new("cmd")
-        .args(&["/C", bat_path.to_str().unwrap()])
+        .args(["/C", bat_path.to_str().unwrap()])
         .status()
         .expect("Не удалось запустить build_cuda.bat! Проверь путь к файлу.");
     if !status.success() {

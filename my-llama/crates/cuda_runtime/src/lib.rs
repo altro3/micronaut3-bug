@@ -34,14 +34,18 @@ impl CudaBuffer {
         CudaBuffer { ptr: raw_ptr, size_bytes }
     }
 
-    pub fn copy_to_device(&self, host_data: *const c_void, bytes: usize) {
+    /// # Safety
+    /// `host_data` must be a valid pointer to initialized memory of at least `bytes` size.
+    pub unsafe fn copy_to_device(&self, host_data: *const c_void, bytes: usize) {
         assert!(bytes <= self.size_bytes);
         unsafe {
             cudaMemcpy(self.ptr, host_data, bytes, 1);
         }
     }
 
-    pub fn copy_to_host(&self, host_data: *mut c_void, bytes: usize) {
+    /// # Safety
+    /// `host_data` must be a valid pointer to memory capable of holding at least `bytes` data.
+    pub unsafe fn copy_to_host(&self, host_data: *mut c_void, bytes: usize) {
         assert!(bytes <= self.size_bytes);
         unsafe {
             cudaMemcpy(host_data, self.ptr as *const c_void, bytes, 2);
@@ -60,12 +64,15 @@ impl Drop for CudaBuffer {
 pub fn device_synchronize() -> i32 {
     unsafe { cudaDeviceSynchronize() }
 }
+
 pub fn get_last_error() -> i32 {
     unsafe { cudaGetLastError() }
 }
+
 pub fn set_device_limit(limit: i32, value: usize) -> i32 {
     unsafe { cudaDeviceSetLimit(limit, value) }
 }
+
 pub fn stream_create_with_flags(flags: u32) -> *mut c_void {
     let mut stream: *mut c_void = ptr::null_mut();
     unsafe {
@@ -73,11 +80,15 @@ pub fn stream_create_with_flags(flags: u32) -> *mut c_void {
     }
     stream
 }
-pub fn stream_destroy(stream: *mut c_void) {
+
+/// # Safety
+/// `stream` must be a valid initialized CUDA stream pointer.
+pub unsafe fn stream_destroy(stream: *mut c_void) {
     unsafe {
         cudaStreamDestroy(stream);
     }
 }
+
 pub fn event_create() -> *mut c_void {
     let mut event: *mut c_void = ptr::null_mut();
     unsafe {
@@ -85,22 +96,34 @@ pub fn event_create() -> *mut c_void {
     }
     event
 }
-pub fn event_destroy(event: *mut c_void) {
+
+/// # Safety
+/// `event` must be a valid initialized CUDA event pointer.
+pub unsafe fn event_destroy(event: *mut c_void) {
     unsafe {
         cudaEventDestroy(event);
     }
 }
-pub fn event_record(event: *mut c_void, stream: *mut c_void) {
+
+/// # Safety
+/// Both `event` and `stream` must be valid initialized CUDA runtime pointers.
+pub unsafe fn event_record(event: *mut c_void, stream: *mut c_void) {
     unsafe {
         cudaEventRecord(event, stream);
     }
 }
-pub fn event_synchronize(event: *mut c_void) {
+
+/// # Safety
+/// `event` must be a valid initialized CUDA event pointer.
+pub unsafe fn event_synchronize(event: *mut c_void) {
     unsafe {
         cudaEventSynchronize(event);
     }
 }
-pub fn event_elapsed_time(start: *mut c_void, end: *mut c_void) -> f32 {
+
+/// # Safety
+/// Both `start` and `end` must be valid initialized CUDA event pointers.
+pub unsafe fn event_elapsed_time(start: *mut c_void, end: *mut c_void) -> f32 {
     let mut ms = 0.0_f32;
     unsafe {
         cudaEventElapsedTime(&mut ms, start, end);

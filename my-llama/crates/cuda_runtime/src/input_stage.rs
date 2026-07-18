@@ -18,6 +18,5 @@ unsafe extern "C" {
         data_type: i32,
         threads_per_block: i32,
         stream: *mut c_void,
-        dump_debug: bool,
     );
 }

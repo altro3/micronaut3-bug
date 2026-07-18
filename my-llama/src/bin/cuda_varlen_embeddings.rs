@@ -5,7 +5,7 @@ use std::time::Instant;
 use cuda_runtime::input_stage::launch_varlen_embeddings;
 use cuda_runtime::{
     CudaBuffer, device_synchronize, event_create, event_destroy, event_elapsed_time, event_record, event_synchronize, get_last_error,
-    set_device_limit, stream_create_with_flags, stream_destroy,
+    stream_create_with_flags, stream_destroy,
 };
 
 fn run_benchmark_for_type(data_type: i32, type_name: &str) {
@@ -13,11 +13,10 @@ fn run_benchmark_for_type(data_type: i32, type_name: &str) {
 
     let vocab_size = 152064;
     let out_features = 8192;
-    let block_size = 16;
-    let max_blocks_per_seq = 4;
     let threads_per_block = 256;
-
-    let seqlens = vec![16, 24, 8, 16];
+    let block_size = 16;
+    let max_blocks_per_seq = 64;
+    let seqlens = vec![1024, 1024, 1024, 1024];
     let num_seqs = seqlens.len() as i32;
     let total_tokens = seqlens.iter().sum::<i32>();
 
@@ -26,7 +25,10 @@ fn run_benchmark_for_type(data_type: i32, type_name: &str) {
         seq_offsets[i + 1] = seq_offsets[i] + seqlens[i];
     }
 
-    let block_table = vec![10, 11, 12, -1, 20, 21, 22, 23, 30, -1, -1, -1, 40, 41, 42, -1];
+    let mut block_table = vec![-1; (num_seqs * max_blocks_per_seq) as usize];
+    for i in 0..block_table.len() {
+        block_table[i] = (i as i32) + 10;
+    }
 
     let h_tokens: Vec<u32> = (0..total_tokens).map(|i| i as u32 % vocab_size as u32).collect();
     let mut h_slot_mapping = vec![-1; total_tokens as usize];
@@ -55,17 +57,18 @@ fn run_benchmark_for_type(data_type: i32, type_name: &str) {
     let d_block_table = CudaBuffer::alloc(block_table.len() * 4);
     let d_slot_mapping = CudaBuffer::alloc((total_tokens * 4) as usize);
 
-    d_weight.copy_to_device(h_weight.as_ptr() as *const c_void, weight_bytes);
-    d_scales.copy_to_device(h_scales.as_ptr() as *const c_void, scale_elements * 4);
-    d_tokens.copy_to_device(h_tokens.as_ptr() as *const c_void, (total_tokens * 4) as usize);
-    d_offsets.copy_to_device(seq_offsets.as_ptr() as *const c_void, seq_offsets.len() * 4);
-    d_block_table.copy_to_device(block_table.as_ptr() as *const c_void, block_table.len() * 4);
-    d_slot_mapping.copy_to_device(h_slot_mapping.as_ptr() as *const c_void, (total_tokens * 4) as usize);
+    unsafe {
+        d_weight.copy_to_device(h_weight.as_ptr() as *const c_void, weight_bytes);
+        d_scales.copy_to_device(h_scales.as_ptr() as *const c_void, scale_elements * 4);
+        d_tokens.copy_to_device(h_tokens.as_ptr() as *const c_void, (total_tokens * 4) as usize);
+        d_offsets.copy_to_device(seq_offsets.as_ptr() as *const c_void, seq_offsets.len() * 4);
+        d_block_table.copy_to_device(block_table.as_ptr() as *const c_void, block_table.len() * 4);
+        d_slot_mapping.copy_to_device(h_slot_mapping.as_ptr() as *const c_void, (total_tokens * 4) as usize);
+    }
 
     const NUM_WARMUP: usize = 20;
     const NUM_ITERATIONS: usize = 1000;
 
-//    assert_eq!(set_device_limit(0x03, 32 * 1024 * 1024), 0);
     let stream = stream_create_with_flags(0x01);
 
     println!("[RUST] Отправка одиночного отладочного ядра...");
@@ -87,15 +90,14 @@ fn run_benchmark_for_type(data_type: i32, type_name: &str) {
             data_type,
             threads_per_block,
             stream,
-            true,
         );
     }
 
     let sync_res = device_synchronize();
     let last_err = get_last_error();
-    println!("[RUST] Статус синхронизации: {}, Последняя ошибка: {}", sync_res, last_err);
+    println!("[RUST] Status sinkhronizatsii: {}, Poslednyaya oshibka: {}", sync_res, last_err);
     if sync_res != 0 || last_err != 0 {
-        println!("🚨 КРИТИЧЕСКИЙ СБОЙ GPU: Ядро аварийно завершилось! Проверь выравнивание указателей.");
+        println!("🚨 KRITICHESKIY SBOY GPU: Yadro avariyno zavershilos! Prover vyravnivaniye ukazateley.");
         return;
     }
 
@@ -118,7 +120,6 @@ fn run_benchmark_for_type(data_type: i32, type_name: &str) {
                 data_type,
                 threads_per_block,
                 stream,
-                false,
             );
         }
     }
@@ -133,8 +134,8 @@ fn run_benchmark_for_type(data_type: i32, type_name: &str) {
     let start_host = Instant::now();
 
     for i in 0..NUM_ITERATIONS {
-        event_record(start_events[i], stream);
         unsafe {
+            event_record(start_events[i], stream);
             launch_varlen_embeddings(
                 d_out.ptr,
                 d_weight.ptr,
@@ -152,14 +153,15 @@ fn run_benchmark_for_type(data_type: i32, type_name: &str) {
                 data_type,
                 threads_per_block,
                 stream,
-                false,
             );
+            event_record(end_events[i], stream);
         }
-        event_record(end_events[i], stream);
     }
 
     let host_launch_time = start_host.elapsed();
-    event_synchronize(*end_events.last().unwrap());
+    unsafe {
+        event_synchronize(*end_events.last().unwrap());
+    }
     let total_host_time = start_host.elapsed();
 
     let mut bandwidths: Vec<f64> = Vec::with_capacity(NUM_ITERATIONS);
@@ -171,7 +173,7 @@ fn run_benchmark_for_type(data_type: i32, type_name: &str) {
         + (total_tokens as u64 * (weight_bytes as u64 / vocab_size as u64));
 
     for i in 0..NUM_ITERATIONS {
-        let ms = event_elapsed_time(start_events[i], end_events[i]);
+        let ms = unsafe { event_elapsed_time(start_events[i], end_events[i]) };
         total_gpu_ms += ms;
 
         let seconds = (ms / 1000.0) as f64;
@@ -195,14 +197,16 @@ fn run_benchmark_for_type(data_type: i32, type_name: &str) {
     println!("⚠️ P95 ПСП:      {:.2} ГБ/сек", p95_worst);
     println!("Jitter Шины:     {:.2} ГБ/сек", max_bw - min_bw);
 
-    d_slot_mapping.copy_to_host(h_slot_mapping.as_mut_ptr() as *mut c_void, (total_tokens * 4) as usize);
-    d_out.copy_to_host(h_output.as_mut_ptr() as *mut c_void, (total_tokens * out_features * 2) as usize);
+    unsafe {
+        d_slot_mapping.copy_to_host(h_slot_mapping.as_mut_ptr() as *mut c_void, (total_tokens * 4) as usize);
+        d_out.copy_to_host(h_output.as_mut_ptr() as *mut c_void, (total_tokens * out_features * 2) as usize);
+    }
 
     let mut slot_errors = 0;
-    for token_global_idx in 0..total_tokens as usize {
+    for (token_global_idx, &slot) in h_slot_mapping.iter().enumerate().take(total_tokens as usize) {
         let mut seq_idx = 0;
-        for s in 0..seqlens.len() {
-            if seq_offsets[s] <= token_global_idx as i32 {
+        for (s, &offset) in seq_offsets.iter().enumerate().take(seqlens.len()) {
+            if offset <= token_global_idx as i32 {
                 seq_idx = s;
             }
         }
@@ -214,19 +218,17 @@ fn run_benchmark_for_type(data_type: i32, type_name: &str) {
 
         let expected_slot = if physical_block_id == -1 { -1 } else { physical_block_id * block_size + block_offset };
 
-        if h_slot_mapping[token_global_idx] != expected_slot {
+        if slot != expected_slot {
             slot_errors += 1;
         }
     }
-
     println!("Ошибки Slot Mapping (FlashInfer метаданные): {}", slot_errors);
     assert_eq!(slot_errors, 0, "Критическая ошибка построения карты страниц KV-кэша!");
 
     let mut math_errors = 0;
     let expected_val_bits = 0x3C3Cu16;
 
-    for i in 0..(total_tokens * out_features) as usize {
-        let val = h_output[i];
+    for &val in h_output.iter().take((total_tokens * out_features) as usize) {
         if data_type == 0 {
             if val != expected_val_bits {
                 math_errors += 1;
@@ -248,11 +250,13 @@ fn run_benchmark_for_type(data_type: i32, type_name: &str) {
     println!("🚀 ПОБЕДА! Ядро varlen_embeddings выдает стопроцентную точность на рваном батче!");
 
     assert_eq!(get_last_error(), 0);
-    for i in 0..NUM_ITERATIONS {
-        event_destroy(start_events[i]);
-        event_destroy(end_events[i]);
+    unsafe {
+        for i in 0..NUM_ITERATIONS {
+            event_destroy(start_events[i]);
+            event_destroy(end_events[i]);
+        }
+        stream_destroy(stream);
     }
-    stream_destroy(stream);
 }
 
 fn main() {

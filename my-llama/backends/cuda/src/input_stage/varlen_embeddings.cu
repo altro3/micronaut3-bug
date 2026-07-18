@@ -17,8 +17,7 @@ __global__ void varlen_embeddings_fused_kernel(
     int32_t total_tokens,
     int32_t out_features,
     int32_t vocab_size,
-    int32_t num_seqs,
-    bool dump_debug
+    int32_t num_seqs
 ) {
     const int32_t tid = threadIdx.x;
     const int32_t token_idx = blockIdx.x;
@@ -40,11 +39,6 @@ __global__ void varlen_embeddings_fused_kernel(
                 mapped_slot = physical_block_id * block_size + block_offset;
             }
             slot_mapping[token_idx] = mapped_slot;
-
-            if (dump_debug && (token_idx == 0 || token_idx == 16)) {
-                printf("[CUDA DBG] token_idx: %d | seq_idx: %d | start_tok: %d | local_idx: %d | phys_blk: %d | slot: %d\n",
-                       token_idx, seq_idx, start_tok_idx, token_local_idx, physical_block_id, mapped_slot);
-            }
         }
     }
 
@@ -65,18 +59,15 @@ __global__ void varlen_embeddings_fused_kernel(
     }
 
     if constexpr (std::is_same_v<T, __nv_fp4_e2m1>) {
-        // Читаем память через uint32_t вместо uint4, чтобы Blackwell не ругался на выравнивание 128-битных векторов
         const uint32_t *const w_u32 = static_cast<const uint32_t *>(weight);
         const int64_t weight_row_u32_offset = static_cast<int64_t>(token_id) * (out_features / 8);
         const int64_t scale_row_offset = static_cast<int64_t>(token_id) * (out_features / 32);
 
-        // Каждый шаг итерации теперь обрабатывает один uint32_t (8 элементов FP4)
         const int32_t u32_to_process = out_features / 8;
 
         for (int32_t i = tid; i < u32_to_process; i += stride) {
             const uint32_t packed_val32 = w_u32[weight_row_u32_offset + i];
 
-            // Вычисляем, к какой группе из 32 элементов относится этот uint32_t, чтобы взять правильную шкалу
             const int32_t group_idx = i / 4;
             const float scale = weight_scales[scale_row_offset + group_idx];
 
@@ -100,7 +91,6 @@ __global__ void varlen_embeddings_fused_kernel(
             __nv_bfloat162 res2 = __floats2bfloat162_rn(f2_2.x * scale, f2_2.y * scale);
             __nv_bfloat162 res3 = __floats2bfloat162_rn(f2_3.x * scale, f2_3.y * scale);
 
-            // Пишем в выходной буфер out_ptr (выходной тип по-прежнему BF16, пишем парами через uint2 = 8 байт)
             const int32_t out_base = i * 8;
             uint2 final_u2_0;
             *reinterpret_cast<__nv_bfloat162 *>(&final_u2_0.x) = res0;
@@ -164,10 +154,10 @@ __global__ void varlen_embeddings_fused_kernel(
 }
 
 template __global__ void varlen_embeddings_fused_kernel<__nv_bfloat16>(
-    __nv_bfloat16 * __restrict__, const void * __restrict__, const float * __restrict__, const uint32_t * __restrict__, const int32_t * __restrict__, const int32_t * __restrict__, int32_t * __restrict__, int32_t, int32_t, int32_t, int32_t, int32_t, int32_t, bool);
+    __nv_bfloat16 * __restrict__, const void * __restrict__, const float * __restrict__, const uint32_t * __restrict__, const int32_t * __restrict__, const int32_t * __restrict__, int32_t * __restrict__, int32_t, int32_t, int32_t, int32_t, int32_t, int32_t);
 
 template __global__ void varlen_embeddings_fused_kernel<__nv_fp8_e4m3>(
-    __nv_bfloat16 * __restrict__, const void * __restrict__, const float * __restrict__, const uint32_t * __restrict__, const int32_t * __restrict__, const int32_t * __restrict__, int32_t * __restrict__, int32_t, int32_t, int32_t, int32_t, int32_t, int32_t, bool);
+    __nv_bfloat16 * __restrict__, const void * __restrict__, const float * __restrict__, const uint32_t * __restrict__, const int32_t * __restrict__, const int32_t * __restrict__, int32_t * __restrict__, int32_t, int32_t, int32_t, int32_t, int32_t, int32_t);
 
 template __global__ void varlen_embeddings_fused_kernel<__nv_fp4_e2m1>(
-    __nv_bfloat16 * __restrict__, const void * __restrict__, const float * __restrict__, const uint32_t * __restrict__, const int32_t * __restrict__, const int32_t * __restrict__, int32_t * __restrict__, int32_t, int32_t, int32_t, int32_t, int32_t, int32_t, bool);
+    __nv_bfloat16 * __restrict__, const void * __restrict__, const float * __restrict__, const uint32_t * __restrict__, const int32_t * __restrict__, const int32_t * __restrict__, int32_t * __restrict__, int32_t, int32_t, int32_t, int32_t, int32_t, int32_t);
