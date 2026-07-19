@@ -86,7 +86,7 @@ extern "C" void launch_fused_multimodal_projection(
     >::CollectiveOp;
 
     using GemmKernel = cutlass::gemm::kernel::GemmUniversal<
-        Shape<int, int, int, int>,
+        CollectiveMainloop::Arguments,
         CollectiveMainloop,
         CollectiveEpilogue
     >;
@@ -138,31 +138,27 @@ extern "C" void launch_fused_multimodal_projection(
 
     GemmGroupedUniversal::Arguments arguments;
 
-    arguments.problem_shape = make_tuple(0, 0, 0, num_segments);
 
-    arguments.mainloop.ptr_A = reinterpret_cast<CollectiveMainloop::ElementA const *>(device_ptr_A);
-    arguments.mainloop.dA = CollectiveMainloop::StrideA{};
-    cute::get<0>(arguments.mainloop.dA) = static_cast<long long>(vision_hidden_size);
+    arguments.mode = cutlass::gemm::GemmUniversalMode::kGrouped;
+    arguments.batch_count = num_segments;
 
-    arguments.mainloop.ptr_B = reinterpret_cast<CollectiveMainloop::ElementB const *>(device_ptr_B);
-    arguments.mainloop.dB = CollectiveMainloop::StrideB{};
-    cute::get<0>(arguments.mainloop.dB) = static_cast<long long>(vision_hidden_size);
+    arguments.ptr_A = reinterpret_cast<void const *>(device_ptr_A);
+    arguments.ptr_B = reinterpret_cast<void const *>(device_ptr_B);
+    arguments.ptr_C = reinterpret_cast<void const *>(device_ptr_C);
+    arguments.ptr_D = reinterpret_cast<void *>(device_ptr_D);
+
+    arguments.lda = vision_hidden_size;
+    arguments.ldb = vision_hidden_size;
+    arguments.ldc = local_out_features;
+    arguments.ldd = local_out_features;
 
     arguments.epilogue.thread.op_0.op_0 = {};
     arguments.epilogue.thread.op_0.op_1.ptr_col = const_cast<float *>(bias) + rank_offset_out_features;
     arguments.epilogue.thread.op_1 = {};
 
-    arguments.epilogue.ptr_C = reinterpret_cast<CollectiveEpilogue::ElementC const *>(device_ptr_C);
-    arguments.epilogue.dC = CollectiveEpilogue::StrideC{};
-    cute::get<0>(arguments.epilogue.dC) = static_cast<long long>(local_out_features);
-
-    arguments.epilogue.ptr_D = reinterpret_cast<CollectiveEpilogue::ElementD *>(device_ptr_D);
-    arguments.epilogue.dD = CollectiveEpilogue::StrideD{};
-    cute::get<0>(arguments.epilogue.dD) = static_cast<long long>(local_out_features);
-
     GemmGroupedUniversal gemm_op;
 
-    size_t workspace_size = gemm_op.get_workspace_size(arguments);
+    const size_t workspace_size = gemm_op.get_workspace_size(arguments);
     void *workspace = nullptr;
     if (workspace_size > 0) {
         cudaMallocAsync(&workspace, workspace_size, stream);
