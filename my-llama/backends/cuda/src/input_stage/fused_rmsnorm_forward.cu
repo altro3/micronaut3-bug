@@ -152,7 +152,7 @@ __global__ void fused_rmsnorm_forward_kernel(
             __stcs(reinterpret_cast<uint4 *>(&row_out[i]), out_v4);
         }
     } else if constexpr (std::is_same_v<T, __nv_fp4_e2m1>) {
-        const uint32_t *const row_in = static_cast<const uint32_t *>(input) + static_cast<int64_t>(token_idx) * (hidden_size / 8);
+        const uint32_t *const row_in = static_cast<const uint32_t *>(input) + (static_cast<int64_t>(token_idx) * (hidden_size / 8));
         const auto g_ptr = static_cast<const __nv_bfloat16 *>(gamma);
         const int32_t stride = blockDim.x;
 
@@ -160,14 +160,11 @@ __global__ void fused_rmsnorm_forward_kernel(
             uint32_t packed_val32 = __ldcs(&row_in[i]);
             const int32_t out_base = i * 8;
 
-            uint4 gamma_v4_0 = __ldcs(reinterpret_cast<const uint4 *>(&g_ptr[out_base]));
-            uint4 gamma_v4_1 = __ldcs(reinterpret_cast<const uint4 *>(&g_ptr[out_base + 4]));
-            auto h2_g0 = reinterpret_cast<const __nv_bfloat162 *>(&gamma_v4_0);
-            auto h2_g1 = reinterpret_cast<const __nv_bfloat162 *>(&gamma_v4_1);
+            uint4 gamma_v4 = __ldcs(reinterpret_cast<const uint4 *>(&g_ptr[out_base]));
+            auto h2_gamma = reinterpret_cast<const __nv_bfloat162 *>(&gamma_v4);
 
-            uint4 out_v4_0, out_v4_1;
-            auto h2_out0 = reinterpret_cast<__nv_bfloat162 *>(&out_v4_0);
-            auto h2_out1 = reinterpret_cast<__nv_bfloat162 *>(&out_v4_1);
+            uint4 out_v4;
+            auto h2_out = reinterpret_cast<__nv_bfloat162 *>(&out_v4);
 
 #pragma unroll
             for (int32_t byte_idx = 0; byte_idx < 4; ++byte_idx) {
@@ -178,16 +175,15 @@ __global__ void fused_rmsnorm_forward_kernel(
                 const int32_t scale_group = (out_base + byte_idx * 2) / 32;
                 const float scale = gamma_scales[scale_group];
 
-                if (byte_idx < 2) {
-                    float2 g = __bfloat1622float2(h2_g0[byte_idx]);
-                    h2_out0[byte_idx] = __floats2bfloat162_rn(f2.x * scale * inv_rms * g.x, f2.y * scale * inv_rms * g.y);
-                } else {
-                    float2 g = __bfloat1622float2(h2_g1[byte_idx - 2]);
-                    h2_out1[byte_idx - 2] = __floats2bfloat162_rn(f2.x * scale * inv_rms * g.x, f2.y * scale * inv_rms * g.y);
-                }
+                float2 g = __bfloat1622float2(h2_gamma[byte_idx]);
+
+                h2_out[byte_idx] = __floats2bfloat162_rn(
+                    f2.x * scale * inv_rms * g.x,
+                    f2.y * scale * inv_rms * g.y
+                );
             }
-            __stcs(reinterpret_cast<uint4 *>(&row_out[out_base]), out_v4_0);
-            __stcs(reinterpret_cast<uint4 *>(&row_out[out_base + 8]), out_v4_1);
+
+            __stcs(reinterpret_cast<uint4 *>(&row_out[out_base]), out_v4);
         }
     }
 }
