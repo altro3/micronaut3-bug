@@ -81,7 +81,7 @@ extern "C" void launch_fused_multimodal_projection(
         ElementB, cutlass::gemm::TagToStrideB_t<LayoutB>, 8,
         ElementAccumulator,
         TileShape, ClusterShape,
-        cutlass::gemm::collective::StageCountAutoCarveout<static_cast<int>(sizeof(CollectiveEpilogue::SharedStorage))>,
+        cutlass::gemm::collective::StageCountAuto,
         cutlass::gemm::collective::KernelScheduleAuto
     >::CollectiveOp;
 
@@ -219,8 +219,11 @@ extern "C" void launch_fused_multimodal_projection(
     cudaFree(device_ptr_C);
     cudaFree(device_ptr_D);
     cudaFree(device_ptr_Bias);
+    cudaFree(device_stride_A);
+    cudaFree(device_stride_B);
+    cudaFree(device_stride_C);
+    cudaFree(device_stride_D);
     if (workspace) cudaFree(workspace);
-
     delete[] host_segments;
     delete[] host_problem_shapes;
     delete[] host_ptr_A;
@@ -228,4 +231,8 @@ extern "C" void launch_fused_multimodal_projection(
     delete[] host_ptr_C;
     delete[] host_ptr_D;
     delete[] host_ptr_Bias;
+    delete[] host_stride_A;
+    delete[] host_stride_B;
+    delete[] host_stride_C;
+    delete[] host_stride_D;
 }
