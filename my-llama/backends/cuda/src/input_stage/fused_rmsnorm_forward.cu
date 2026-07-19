@@ -154,36 +154,52 @@ __global__ void fused_rmsnorm_forward_kernel(
     } else if constexpr (std::is_same_v<T, __nv_fp4_e2m1>) {
         const uint32_t *const row_in = static_cast<const uint32_t *>(input) + (static_cast<int64_t>(token_idx) * (hidden_size / 8));
         const auto g_ptr = static_cast<const __nv_bfloat16 *>(gamma);
-        const int32_t stride = blockDim.x;
+        const int32_t stride = blockDim.x * 2;
 
-        for (int32_t i = tid; i < hidden_size / 8; i += stride) {
-            uint32_t packed_val32 = __ldcs(&row_in[i]);
-            const int32_t out_base = i * 8;
+        for (int32_t i = tid * 2; i < hidden_size / 8; i += stride) {
+            uint32_t packed_val_A = __ldcs(&row_in[i]);
+            uint32_t packed_val_B = __ldcs(&row_in[i + 1]);
 
-            uint4 gamma_v4 = __ldcs(reinterpret_cast<const uint4 *>(&g_ptr[out_base]));
-            auto h2_gamma = reinterpret_cast<const __nv_bfloat162 *>(&gamma_v4);
+            const int32_t out_base_A = i * 8;
+            const int32_t out_base_B = (i + 1) * 8;
 
-            uint4 out_v4;
-            auto h2_out = reinterpret_cast<__nv_bfloat162 *>(&out_v4);
+            uint4 gamma_v4_A = __ldcs(reinterpret_cast<const uint4 *>(&g_ptr[out_base_A]));
+            uint4 gamma_v4_B = __ldcs(reinterpret_cast<const uint4 *>(&g_ptr[out_base_B]));
+            auto h2_gamma_A = reinterpret_cast<const __nv_bfloat162 *>(&gamma_v4_A);
+            auto h2_gamma_B = reinterpret_cast<const __nv_bfloat162 *>(&gamma_v4_B);
+
+            uint4 out_v4_A, out_v4_1_B;
+            auto h2_out_A = reinterpret_cast<__nv_bfloat162 *>(&out_v4_A);
+            auto h2_out_B = reinterpret_cast<__nv_bfloat162 *>(&out_v4_1_B);
 
 #pragma unroll
             for (int32_t byte_idx = 0; byte_idx < 4; ++byte_idx) {
-                uint8_t byte = static_cast<uint8_t>((packed_val32 >> (byte_idx * 8)) & 0xFF);
+                uint8_t byte = static_cast<uint8_t>((packed_val_A >> (byte_idx * 8)) & 0xFF);
                 __half2_raw raw_h2 = __nv_cvt_fp4x2_to_halfraw2(byte, __NV_E2M1);
                 float2 f2 = __half22float2(*reinterpret_cast<__half2 *>(&raw_h2));
 
-                const int32_t scale_group = (out_base + byte_idx * 2) / 32;
+                const int32_t scale_group = (out_base_A + byte_idx * 2) / 32;
                 const float scale = gamma_scales[scale_group];
+                float2 g = __bfloat1622float2(h2_gamma_A[byte_idx]);
 
-                float2 g = __bfloat1622float2(h2_gamma[byte_idx]);
-
-                h2_out[byte_idx] = __floats2bfloat162_rn(
-                    f2.x * scale * inv_rms * g.x,
-                    f2.y * scale * inv_rms * g.y
-                );
+                h2_out_A[byte_idx] = __floats2bfloat162_rn(f2.x * scale * inv_rms * g.x, f2.y * scale * inv_rms * g.y);
             }
 
-            __stcs(reinterpret_cast<uint4 *>(&row_out[out_base]), out_v4);
+#pragma unroll
+            for (int32_t byte_idx = 0; byte_idx < 4; ++byte_idx) {
+                uint8_t byte = static_cast<uint8_t>((packed_val_B >> (byte_idx * 8)) & 0xFF);
+                __half2_raw raw_h2 = __nv_cvt_fp4x2_to_halfraw2(byte, __NV_E2M1);
+                float2 f2 = __half22float2(*reinterpret_cast<__half2 *>(&raw_h2));
+
+                const int32_t scale_group = (out_base_B + byte_idx * 2) / 32;
+                const float scale = gamma_scales[scale_group];
+                float2 g = __bfloat1622float2(h2_gamma_B[byte_idx]);
+
+                h2_out_B[byte_idx] = __floats2bfloat162_rn(f2.x * scale * inv_rms * g.x, f2.y * scale * inv_rms * g.y);
+            }
+
+            __stcs(reinterpret_cast<uint4 *>(&row_out[out_base_A]), out_v4_A);
+            __stcs(reinterpret_cast<uint4 *>(&row_out[out_base_B]), out_v4_1_B);
         }
     }
 }
