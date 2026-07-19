@@ -104,7 +104,6 @@ extern "C" void launch_fused_multimodal_projection(
     const auto host_ptr_B = new ElementB *[num_segments];
     const auto host_ptr_C = new ElementC *[num_segments];
     const auto host_ptr_D = new ElementC *[num_segments];
-    const auto host_ptr_Bias = new float *[num_segments];
 
     for (int32_t i = 0; i < num_segments; ++i) {
         const int32_t start_token = host_segments[i * 2];
@@ -117,7 +116,6 @@ extern "C" void launch_fused_multimodal_projection(
         host_ptr_B[i] = const_cast<ElementB *>(static_cast<const ElementB *>(weight_matrix)) + rank_offset_out_features * vision_hidden_size;
         host_ptr_C[i] = static_cast<ElementC *>(out_tokens) + start_token * local_out_features;
         host_ptr_D[i] = static_cast<ElementC *>(out_tokens) + start_token * local_out_features;
-        host_ptr_Bias[i] = const_cast<float *>(bias) + rank_offset_out_features;
     }
 
     ProblemShapeType *device_problem_shapes;
@@ -125,80 +123,40 @@ extern "C" void launch_fused_multimodal_projection(
     ElementB **device_ptr_B;
     ElementC **device_ptr_C;
     ElementC **device_ptr_D;
-    float **device_ptr_Bias;
 
-    cudaMalloc(&device_problem_shapes, num_segments * sizeof(ProblemShapeType));
-    cudaMalloc(&device_ptr_A, num_segments * sizeof(ElementA *));
-    cudaMalloc(&device_ptr_B, num_segments * sizeof(ElementB *));
-    cudaMalloc(&device_ptr_C, num_segments * sizeof(ElementC *));
-    cudaMalloc(&device_ptr_D, num_segments * sizeof(ElementC *));
-    cudaMalloc(&device_ptr_Bias, num_segments * sizeof(float *));
+    cudaMallocAsync(&device_problem_shapes, num_segments * sizeof(ProblemShapeType), stream);
+    cudaMallocAsync(&device_ptr_A, num_segments * sizeof(ElementA *), stream);
+    cudaMallocAsync(&device_ptr_B, num_segments * sizeof(ElementB *), stream);
+    cudaMallocAsync(&device_ptr_C, num_segments * sizeof(ElementC *), stream);
+    cudaMallocAsync(&device_ptr_D, num_segments * sizeof(ElementC *), stream);
 
     cudaMemcpyAsync(device_problem_shapes, host_problem_shapes, num_segments * sizeof(ProblemShapeType), cudaMemcpyHostToDevice, stream);
     cudaMemcpyAsync(device_ptr_A, host_ptr_A, num_segments * sizeof(ElementA *), cudaMemcpyHostToDevice, stream);
     cudaMemcpyAsync(device_ptr_B, host_ptr_B, num_segments * sizeof(ElementB *), cudaMemcpyHostToDevice, stream);
     cudaMemcpyAsync(device_ptr_C, host_ptr_C, num_segments * sizeof(ElementC *), cudaMemcpyHostToDevice, stream);
     cudaMemcpyAsync(device_ptr_D, host_ptr_D, num_segments * sizeof(ElementC *), cudaMemcpyHostToDevice, stream);
-    cudaMemcpyAsync(device_ptr_Bias, host_ptr_Bias, num_segments * sizeof(float *), cudaMemcpyHostToDevice, stream);
-
-    auto stride_A_host = make_stride(vision_hidden_size, _1{});
-    auto stride_B_host = make_stride(_1{}, vision_hidden_size);
-    auto stride_C_host = make_stride(local_out_features, _1{});
-    auto stride_D_host = make_stride(local_out_features, _1{});
-
-    using StrideA = decltype(stride_A_host);
-    using StrideB = decltype(stride_B_host);
-    using StrideC = decltype(stride_C_host);
-    using StrideD = decltype(stride_D_host);
-
-    StrideA *device_stride_A;
-    StrideB *device_stride_B;
-    StrideC *device_stride_C;
-    StrideD *device_stride_D;
-
-    cudaMalloc(&device_stride_A, num_segments * sizeof(StrideA));
-    cudaMalloc(&device_stride_B, num_segments * sizeof(StrideB));
-    cudaMalloc(&device_stride_C, num_segments * sizeof(StrideC));
-    cudaMalloc(&device_stride_D, num_segments * sizeof(StrideD));
-
-    const auto host_stride_A = new StrideA[num_segments];
-    const auto host_stride_B = new StrideB[num_segments];
-    const auto host_stride_C = new StrideC[num_segments];
-    const auto host_stride_D = new StrideD[num_segments];
-
-    for (int32_t i = 0; i < num_segments; ++i) {
-        host_stride_A[i] = stride_A_host;
-        host_stride_B[i] = stride_B_host;
-        host_stride_C[i] = stride_C_host;
-        host_stride_D[i] = stride_D_host;
-    }
-
-    cudaMemcpyAsync(device_stride_A, host_stride_A, num_segments * sizeof(StrideA), cudaMemcpyHostToDevice, stream);
-    cudaMemcpyAsync(device_stride_B, host_stride_B, num_segments * sizeof(StrideB), cudaMemcpyHostToDevice, stream);
-    cudaMemcpyAsync(device_stride_C, host_stride_C, num_segments * sizeof(StrideC), cudaMemcpyHostToDevice, stream);
-    cudaMemcpyAsync(device_stride_D, host_stride_D, num_segments * sizeof(StrideD), cudaMemcpyHostToDevice, stream);
 
     GemmGroupedUniversal::Arguments arguments;
 
     arguments.problem_shape = make_tuple(0, 0, 0, num_segments);
 
-    arguments.mainloop.ptr_A = nullptr;
+    arguments.mainloop.ptr_A = reinterpret_cast<CollectiveMainloop::ElementA const *>(device_ptr_A);
     arguments.mainloop.dA = CollectiveMainloop::StrideA{};
     cute::get<0>(arguments.mainloop.dA) = static_cast<long long>(vision_hidden_size);
 
-    arguments.mainloop.ptr_B = nullptr;
+    arguments.mainloop.ptr_B = reinterpret_cast<CollectiveMainloop::ElementB const *>(device_ptr_B);
     arguments.mainloop.dB = CollectiveMainloop::StrideB{};
     cute::get<0>(arguments.mainloop.dB) = static_cast<long long>(vision_hidden_size);
 
     arguments.epilogue.thread.op_0.op_0 = {};
-    arguments.epilogue.thread.op_0.op_1.ptr_col = reinterpret_cast<ElementCompute const *>(device_ptr_Bias);
+    arguments.epilogue.thread.op_0.op_1.ptr_col = bias + rank_offset_out_features;
     arguments.epilogue.thread.op_1 = {};
 
-    arguments.epilogue.ptr_C = nullptr;
+    arguments.epilogue.ptr_C = reinterpret_cast<CollectiveEpilogue::ElementC const *>(device_ptr_C);
     arguments.epilogue.dC = CollectiveEpilogue::StrideC{};
     cute::get<0>(arguments.epilogue.dC) = static_cast<long long>(local_out_features);
 
-    arguments.epilogue.ptr_D = nullptr;
+    arguments.epilogue.ptr_D = reinterpret_cast<CollectiveEpilogue::ElementD *>(device_ptr_D);
     arguments.epilogue.dD = CollectiveEpilogue::StrideD{};
     cute::get<0>(arguments.epilogue.dD) = static_cast<long long>(local_out_features);
 
@@ -207,32 +165,23 @@ extern "C" void launch_fused_multimodal_projection(
     size_t workspace_size = gemm_op.get_workspace_size(arguments);
     void *workspace = nullptr;
     if (workspace_size > 0) {
-        cudaMalloc(&workspace, workspace_size);
+        cudaMallocAsync(&workspace, workspace_size, stream);
     }
 
     gemm_op.initialize(arguments, workspace, stream);
     gemm_op.run(stream);
 
-    cudaFree(device_problem_shapes);
-    cudaFree(device_ptr_A);
-    cudaFree(device_ptr_B);
-    cudaFree(device_ptr_C);
-    cudaFree(device_ptr_D);
-    cudaFree(device_ptr_Bias);
-    cudaFree(device_stride_A);
-    cudaFree(device_stride_B);
-    cudaFree(device_stride_C);
-    cudaFree(device_stride_D);
-    if (workspace) cudaFree(workspace);
+    cudaFreeAsync(device_problem_shapes, stream);
+    cudaFreeAsync(device_ptr_A, stream);
+    cudaFreeAsync(device_ptr_B, stream);
+    cudaFreeAsync(device_ptr_C, stream);
+    cudaFreeAsync(device_ptr_D, stream);
+    if (workspace) cudaFreeAsync(workspace, stream);
+
     delete[] host_segments;
     delete[] host_problem_shapes;
     delete[] host_ptr_A;
     delete[] host_ptr_B;
     delete[] host_ptr_C;
     delete[] host_ptr_D;
-    delete[] host_ptr_Bias;
-    delete[] host_stride_A;
-    delete[] host_stride_B;
-    delete[] host_stride_C;
-    delete[] host_stride_D;
 }
