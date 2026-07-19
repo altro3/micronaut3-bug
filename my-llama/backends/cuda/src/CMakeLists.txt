@@ -21,10 +21,12 @@ else()
     message(STATUS "[MY_LLAMA] Full Build Mode Active.")
 
     set(INPUT_STAGE_SRCS
-            "${CMAKE_CURRENT_SOURCE_DIR}/input_stage/varlen_embeddings.cu"
-            "${CMAKE_CURRENT_SOURCE_DIR}/input_stage/varlen_embeddings_launcher.cu"
+            "${CMAKE_CURRENT_SOURCE_DIR}/input_stage/fused_multimodal_projection.cu"
+            "${CMAKE_CURRENT_SOURCE_DIR}/input_stage/fused_multimodal_projection_launcher.cu"
             "${CMAKE_CURRENT_SOURCE_DIR}/input_stage/fused_rmsnorm_forward.cu"
             "${CMAKE_CURRENT_SOURCE_DIR}/input_stage/fused_rmsnorm_forward_launcher.cu"
+            "${CMAKE_CURRENT_SOURCE_DIR}/input_stage/varlen_embeddings.cu"
+            "${CMAKE_CURRENT_SOURCE_DIR}/input_stage/varlen_embeddings_launcher.cu"
     )
 
     file(GLOB_RECURSE ATTENTION_SRCS CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/attention/*.cu" "${CMAKE_CURRENT_SOURCE_DIR}/attention/*.cuh")
