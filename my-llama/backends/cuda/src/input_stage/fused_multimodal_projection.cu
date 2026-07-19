@@ -15,12 +15,12 @@ extern "C" void launch_fused_multimodal_projection(
     const void * __restrict__ weight_matrix,
     const float * __restrict__ bias,
     const int32_t * __restrict__ vision_segments,
-    const int32_t num_segments,
+    int32_t num_segments,
     const int32_t vision_hidden_size,
     const int32_t text_hidden_size,
     const int32_t tp_rank,
     const int32_t tp_size,
-    const cudaStream_t stream
+    cudaStream_t stream
 ) {
     const int32_t local_out_features = text_hidden_size / tp_size;
     const int32_t rank_offset_out_features = tp_rank * local_out_features;
@@ -35,7 +35,6 @@ extern "C" void launch_fused_multimodal_projection(
     using ElementAccumulator = float;
     using ElementCompute = float;
 
-    using ArchTag = cutlass::arch::Sm120;
     using OperatorClass = cutlass::arch::OpClassTensorOp;
 
     using TileShape = Shape<_128, _128, _64>;
@@ -57,7 +56,7 @@ extern "C" void launch_fused_multimodal_projection(
     >;
 
     using CollectiveEpilogue = cutlass::epilogue::collective::CollectiveBuilder<
-        ArchTag,
+        cutlass::arch::Sm120,
         OperatorClass,
         TileShape,
         ClusterShape,
@@ -75,14 +74,14 @@ extern "C" void launch_fused_multimodal_projection(
     >::CollectiveOp;
 
     using CollectiveMainloop = cutlass::gemm::collective::CollectiveBuilder<
-        cutlass::arch::Sm120,
-        cutlass::arch::OpClassTensorOp,
+        cutlass::arch::Sm90,
+        OperatorClass,
         ElementA, cutlass::gemm::TagToStrideA_t<LayoutA>, 8,
         ElementB, cutlass::gemm::TagToStrideB_t<LayoutB>, 8,
         ElementAccumulator,
         TileShape, ClusterShape,
         cutlass::gemm::collective::StageCountAuto,
-        cutlass::gemm::collective::KernelScheduleAuto
+        cutlass::gemm::KernelTmaWarpSpecializedCooperative
     >::CollectiveOp;
 
     using GemmKernel = cutlass::gemm::kernel::GemmUniversal<
@@ -108,7 +107,7 @@ extern "C" void launch_fused_multimodal_projection(
     for (int32_t i = 0; i < num_segments; ++i) {
         const int32_t start_token = host_segments[i * 2];
         const int32_t end_token = host_segments[i * 2 + 1];
-        const int32_t segment_tokens = end_token - start_token;
+        int32_t segment_tokens = end_token - start_token;
 
         host_problem_shapes[i] = ProblemShapeType(segment_tokens, local_out_features, vision_hidden_size);
 
@@ -140,6 +139,7 @@ extern "C" void launch_fused_multimodal_projection(
 
     arguments.mode = cutlass::gemm::GemmUniversalMode::kGrouped;
     arguments.batch_count = num_segments;
+    arguments.problem_size = cutlass::gemm::GemmCoord{};
 
     arguments.ptr_A = reinterpret_cast<void const *>(device_ptr_A);
     arguments.ptr_B = reinterpret_cast<void const *>(device_ptr_B);
