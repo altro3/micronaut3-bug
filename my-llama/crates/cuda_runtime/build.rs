@@ -15,10 +15,15 @@ fn main() {
         .no_build_target(true)
         .define("CMAKE_CUDA_COMPILER", &nvcc_path)
         .define("CMAKE_MAKE_PROGRAM", &ninja_path)
+        .define("CMAKE_CUDA_STANDARD", "20")
+        .define("CMAKE_CUDA_STANDARD_REQUIRED", "ON")
+        .define("CMAKE_CUDA_FLAGS", "-Xcompiler /Zc:preprocessor")
+        .define("CMAKE_CXX_FLAGS", "/Zc:preprocessor")
         .define("CMAKE_NETRC", "OPTIONAL")
         .define("FETCH_CUTLASS", "ON")
         .define("FETCH_FLASHINFER", "ON")
         .define("ISOLATED_BUILD", "OFF")
+        .define("RUST_BACKTRACE", "full")
         .build();
 
 

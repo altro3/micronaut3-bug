@@ -149,7 +149,7 @@ extern "C" void launch_fused_multimodal_projection(
     cute::get<0>(arguments.mainloop.dB) = static_cast<long long>(vision_hidden_size);
 
     arguments.epilogue.thread.op_0.op_0 = {};
-    arguments.epilogue.thread.op_0.op_1.ptr_col = bias + rank_offset_out_features;
+    arguments.epilogue.thread.op_0.op_1.ptr_col = const_cast<float *>(bias) + rank_offset_out_features;
     arguments.epilogue.thread.op_1 = {};
 
     arguments.epilogue.ptr_C = reinterpret_cast<CollectiveEpilogue::ElementC const *>(device_ptr_C);

@@ -9,7 +9,7 @@ set(CMAKE_CUDA_STANDARD_REQUIRED ON)
 
 set(CMAKE_CUDA_ARCHITECTURES "120")
 set(CMAKE_CUDA_FLAGS_RELEASE "-O3 --use_fast_math -Xptxas -v --diag-suppress=20012 -static-global-template-stub=false")
-set(CMAKE_CXX_FLAGS_RELEASE "/O2 /LTOG")
+set(CMAKE_CXX_FLAGS_RELEASE "/O2 /GL /Zc:preprocessor")
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 include(Dependencies)
