@@ -5,11 +5,11 @@
 #include "cutlass/epilogue/thread/linear_combination_gelu.h"
 
 extern "C" void launch_fused_multimodal_projection(
-    const void ** __restrict__ device_ptr_A,
-    const void ** __restrict__ device_ptr_B,
-    void ** __restrict__ device_ptr_D,
+    const void ** __restrict__ host_ptr_A,
+    const void ** __restrict__ host_ptr_B,
+    void ** __restrict__ host_ptr_D,
     const float * __restrict__ bias,
-    const cutlass::gemm::GemmCoord * __restrict__ device_problem_shapes,
+    const cutlass::gemm::GemmCoord * __restrict__ host_problem_shapes,
     int32_t num_segments,
     const int32_t vision_hidden_size,
     const int32_t text_hidden_size,
@@ -38,7 +38,6 @@ extern "C" void launch_fused_multimodal_projection(
     using WarpShape = cutlass::gemm::GemmShape<64, 64, 64>;
     using InstructionShape = cutlass::gemm::GemmShape<16, 8, 16>;
 
-    // Эпилог слияния операций Bias + GELU
     using EpilogueOutputOp = cutlass::epilogue::thread::LinearCombinationGELU<
         ElementC,
         128 / cutlass::sizeof_bits<ElementC>::value,
@@ -59,18 +58,6 @@ extern "C" void launch_fused_multimodal_projection(
         EpilogueOutputOp
     >;
 
-    auto *host_problem_shapes = new cutlass::gemm::GemmCoord[num_segments];
-    cudaMemcpyAsync(host_problem_shapes, device_problem_shapes, num_segments * sizeof(cutlass::gemm::GemmCoord), cudaMemcpyDeviceToHost, stream);
-
-    auto *host_ptr_A = new const ElementA *[num_segments];
-    auto *host_ptr_B = new const ElementB *[num_segments];
-    auto *host_ptr_D = new ElementC *[num_segments];
-    cudaMemcpyAsync(host_ptr_A, device_ptr_A, num_segments * sizeof(ElementA *), cudaMemcpyDeviceToHost, stream);
-    cudaMemcpyAsync(host_ptr_B, device_ptr_B, num_segments * sizeof(ElementB *), cudaMemcpyDeviceToHost, stream);
-    cudaMemcpyAsync(host_ptr_D, device_ptr_D, num_segments * sizeof(ElementC *), cudaMemcpyDeviceToHost, stream);
-
-    cudaStreamSynchronize(stream);
-
     GemmUniversalOp gemm_op;
     auto current_workspace = static_cast<uint8_t *>(workspace_ptr);
 
@@ -88,10 +75,10 @@ extern "C" void launch_fused_multimodal_projection(
             problem_size,
             1,
             epilogue_args,
-            const_cast<ElementA *>(host_ptr_A[i]),
-            const_cast<ElementB *>(host_ptr_B[i]),
+            const_cast<ElementA *>(static_cast<const ElementA *>(host_ptr_A[i])),
+            const_cast<ElementB *>(static_cast<const ElementB *>(host_ptr_B[i])),
             const_cast<float *>(bias) + rank_offset_out_features,
-            host_ptr_D[i],
+            static_cast<ElementC *>(host_ptr_D[i]),
             problem_size.m() * problem_size.k(),
             problem_size.n() * problem_size.k(),
             0,
@@ -108,9 +95,4 @@ extern "C" void launch_fused_multimodal_projection(
         size_t workspace_size = gemm_op.get_workspace_size(arguments);
         current_workspace += workspace_size;
     }
-
-    delete[] host_problem_shapes;
-    delete[] host_ptr_A;
-    delete[] host_ptr_B;
-    delete[] host_ptr_D;
 }
