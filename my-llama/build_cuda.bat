@@ -63,13 +63,18 @@ if "%~1"=="deps" (
 if not exist "!BUILD_DIR!" mkdir "!BUILD_DIR!"
 cd /d "!BUILD_DIR!"
 
+if exist CMakeCache.txt del /f /q CMakeCache.txt
+if exist CMakeFiles rmdir /s /q CMakeFiles
+
 if exist CMakeCache.txt (
-    echo [INFO] Rapid compilation mode - All kernels
+    echo [INFO] Rapid compilation mode - Updating CMake layout and building kernels...
+    cmake !SRC_DIR!
+    if %errorlevel% neq 0 exit /b %errorlevel%
     goto :compile_stage
 )
 
 echo [INFO] Configuring full project - All dependencies enabled
-cmake -G "Visual Studio 18 2026" -A x64 -T "cuda=!CUDA_PATH!" -DFETCH_CUTLASS=ON -DFETCH_FLASHINFER=ON -DISOLATED_BUILD=OFF !SRC_DIR!
+cmake -G "Ninja" -DCMAKE_BUILD_TYPE=Release -DCMAKE_CUDA_COMPILER="!CUDA_PATH!\bin\nvcc.exe" -DFETCH_CUTLASS=ON -DFETCH_FLASHINFER=ON -DISOLATED_BUILD=OFF !SRC_DIR!
 if %errorlevel% neq 0 exit /b %errorlevel%
 
 :compile_stage

@@ -1,28 +1,37 @@
-use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::path::PathBuf;
 
 fn main() {
     println!("cargo:rerun-if-changed=../../backends/cuda/src");
     println!("cargo:rerun-if-changed=../../backends/cuda/include");
+    println!("cargo:rerun-if-changed=../../backends/cuda/CMakeLists.txt");
 
-    let bat_path = Path::new("..\\..\\build_cuda.bat");
-    let status = Command::new("cmd")
-        .args(["/C", bat_path.to_str().unwrap()])
-        .status()
-        .expect("Не удалось запустить build_cuda.bat! Проверь путь к файлу.");
-    if !status.success() {
-        panic!("🚨 ОШИБКА СБОРКИ CUDA: Скрипт build_cuda.bat завершился с ненулевым кодом!");
-    }
+    let cuda_path = r"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v13.3";
+    let nvcc_path = format!(r"{}\bin\nvcc.exe", cuda_path);
+    let ninja_path = r"C:\Users\alexu\scoop\apps\ninja\current\ninja.exe";
 
-    let cuda_path = PathBuf::from(r"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v13.3");
-    let cuda_lib_dir = cuda_path.join("lib").join("x64");
+    let dst = cmake::Config::new("../../backends/cuda")
+        .generator("Ninja")
+        .profile("Release")
+        .no_build_target(true)
+        .define("CMAKE_CUDA_COMPILER", &nvcc_path)
+        .define("CMAKE_MAKE_PROGRAM", &ninja_path)
+        .define("CMAKE_NETRC", "OPTIONAL")
+        .define("FETCH_CUTLASS", "ON")
+        .define("FETCH_FLASHINFER", "ON")
+        .define("ISOLATED_BUILD", "OFF")
+        .build();
+
+
+    let lib_dir = dst.join("build").join("src");
+    println!("cargo:rustc-link-search=native={}", lib_dir.display());
+
+    let cuda_lib_dir = PathBuf::from(cuda_path).join("lib").join("x64");
     println!("cargo:rustc-link-search=native={}", cuda_lib_dir.display());
 
-    let compiled_lib_dir = PathBuf::from(r"D:\.my_llama\backends\cuda\src\Release");
-    println!("cargo:rustc-link-search=native={}", compiled_lib_dir.display());
     println!("cargo:rustc-link-lib=static=cuda_kernels");
     println!("cargo:rustc-link-lib=static=cudart_static");
     println!("cargo:rustc-link-lib=dylib=cublas");
     println!("cargo:rustc-link-lib=dylib=cublasLt");
     println!("cargo:rustc-link-lib=dylib=advapi32");
+    println!("cargo:rustc-link-lib=dylib=user32");
 }

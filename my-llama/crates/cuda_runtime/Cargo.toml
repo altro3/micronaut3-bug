@@ -3,3 +3,5 @@ name = "cuda_runtime"
 version = "0.1.0"
 edition = "2024"
 
+[build-dependencies]
+cmake = "0.1"

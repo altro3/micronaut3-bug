@@ -1,6 +1,7 @@
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../include)
 include_directories(${flashinfer_SOURCE_DIR}/include)
-include_directories(${cutlass_SOURCE_DIR}/include)
+include_directories(${LOCAL_CUTLASS_DIR}/include)
+include_directories(${LOCAL_CUTLASS_DIR}/tools/util/include)
 include_directories(${CUDAToolkit_INCLUDE_DIRS})
 
 set(FLASHINFER_OBJ)
@@ -9,19 +10,25 @@ if(TARGET flashinfer_objects)
 endif()
 
 if(ISOLATED_BUILD)
-    message(STATUS "[MY_LLAMA] Isolated Mode Active. Compiling only third-party objects.")
+    message(STATUS "[MY_LLAMA] Isolated Mode Active.")
     set(DUMMY_FILE "${CMAKE_CURRENT_BINARY_DIR}/dummy_stub.cpp")
     if(NOT EXISTS "${DUMMY_FILE}")
-        file(WRITE "${DUMMY_FILE}" "// Born to satisfy MSBuild.\n")
+        file(WRITE "${DUMMY_FILE}" "// Stub.\n")
     endif()
     add_library(cuda_kernels STATIC "${DUMMY_FILE}" ${FLASHINFER_OBJ})
     target_link_libraries(cuda_kernels PRIVATE cudart.lib)
 else()
-    message(STATUS "[MY_LLAMA] Full Build Mode Active. Scanning folders with CONFIGURE_DEPENDS...")
+    message(STATUS "[MY_LLAMA] Full Build Mode Active.")
+
+    set(INPUT_STAGE_SRCS
+            "${CMAKE_CURRENT_SOURCE_DIR}/input_stage/varlen_embeddings.cu"
+            "${CMAKE_CURRENT_SOURCE_DIR}/input_stage/varlen_embeddings_launcher.cu"
+            "${CMAKE_CURRENT_SOURCE_DIR}/input_stage/fused_rmsnorm_forward.cu"
+            "${CMAKE_CURRENT_SOURCE_DIR}/input_stage/fused_rmsnorm_forward_launcher.cu"
+    )
 
     file(GLOB_RECURSE ATTENTION_SRCS CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/attention/*.cu" "${CMAKE_CURRENT_SOURCE_DIR}/attention/*.cuh")
     file(GLOB_RECURSE DECODING_SRCS CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/decoding/*.cu" "${CMAKE_CURRENT_SOURCE_DIR}/decoding/*.cuh")
-    file(GLOB_RECURSE INPUT_STAGE_SRCS CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/input_stage/*.cu" "${CMAKE_CURRENT_SOURCE_DIR}/input_stage/*.cuh")
     file(GLOB_RECURSE LAYERS_SRCS CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/layers/*.cu"  "${CMAKE_CURRENT_SOURCE_DIR}/layers/*.cuh")
     file(GLOB_RECURSE QUANT_SRCS CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/quantization/*.cu" "${CMAKE_CURRENT_SOURCE_DIR}/quantization/*.cuh")
     file(GLOB_RECURSE SPEC_SRCS CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/speculative/*.cu" "${CMAKE_CURRENT_SOURCE_DIR}/speculative/*.cuh")
