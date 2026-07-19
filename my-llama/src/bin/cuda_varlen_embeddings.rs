@@ -8,6 +8,55 @@ use cuda_runtime::{
     stream_create_with_flags, stream_destroy,
 };
 
+fn emu_fp4_e2m1_to_f32(byte: u8, idx: usize) -> f32 {
+    let nibble = if idx.is_multiple_of(2) { byte & 0x0F } else { (byte >> 4) & 0x0F };
+    let s = (nibble >> 3) & 1;
+    let e = (nibble >> 1) & 3;
+    let m = nibble & 1;
+
+    let sign = if s == 1 { -1.0 } else { 1.0 };
+    if e == 0 {
+        if m == 0 {
+            return 0.0;
+        }
+        return sign * 0.5 * (m as f32 / 2.0);
+    }
+    let exp = e as i32 - 1;
+    let mantissa = 1.0 + (m as f32 / 2.0);
+    sign * mantissa * 2.0f32.powi(exp)
+}
+
+fn emu_fp8_e4m3_to_f32(byte: u8) -> f32 {
+    let s = (byte >> 7) & 1;
+    let e = (byte >> 3) & 0x0F;
+    let m = byte & 7;
+
+    let sign = if s == 1 { -1.0 } else { 1.0 };
+    if e == 15 && m == 7 {
+        return f32::NAN;
+    }
+    if e == 0 {
+        if m == 0 {
+            return 0.0;
+        }
+        return sign * 2.0f32.powi(-6) * (m as f32 / 8.0);
+    }
+    let exp = e as i32 - 7;
+    let mantissa = 1.0 + (m as f32 / 8.0);
+    sign * mantissa * 2.0f32.powi(exp)
+}
+
+fn f32_to_bf16_bits(val: f32) -> u16 {
+    if val.is_nan() {
+        return 0x7FC0;
+    }
+    let bits = val.to_bits();
+    let lsb = (bits >> 16) & 1;
+    let rounding_bias = 0x7FFF + lsb;
+    let rounded_bits = bits.wrapping_add(rounding_bias);
+    ((rounded_bits >> 16) & 0xFFFF) as u16
+}
+
 fn run_benchmark_for_type(data_type: i32, type_name: &str) {
     println!("\n=== ТЕСТИРОВАНИЕ ФОРМАТА: {} ===", type_name);
 
@@ -16,7 +65,7 @@ fn run_benchmark_for_type(data_type: i32, type_name: &str) {
     let threads_per_block = 256;
     let block_size = 16;
     let max_blocks_per_seq = 64;
-    let seqlens = vec![1024, 1024, 1024, 1024];
+    let seqlens = [1024, 1024, 1024, 1024];
     let num_seqs = seqlens.len() as i32;
     let total_tokens = seqlens.iter().sum::<i32>();
 
@@ -26,8 +75,8 @@ fn run_benchmark_for_type(data_type: i32, type_name: &str) {
     }
 
     let mut block_table = vec![-1; (num_seqs * max_blocks_per_seq) as usize];
-    for i in 0..block_table.len() {
-        block_table[i] = (i as i32) + 10;
+    for (i, item) in block_table.iter_mut().enumerate() {
+        *item = (i as i32) + 10;
     }
 
     let h_tokens: Vec<u32> = (0..total_tokens).map(|i| i as u32 % vocab_size as u32).collect();
@@ -47,7 +96,7 @@ fn run_benchmark_for_type(data_type: i32, type_name: &str) {
     let scale_elements = ((vocab_size_u64 * out_features_u64) / 32) as usize;
 
     let h_weight = vec![0x3Cu8; weight_bytes];
-    let h_scales = vec![1.0f32; scale_elements];
+    let h_scales = vec![1.25f32; scale_elements];
 
     let d_out = CudaBuffer::alloc((total_tokens * out_features * 2) as usize);
     let d_weight = CudaBuffer::alloc(weight_bytes);
@@ -157,7 +206,6 @@ fn run_benchmark_for_type(data_type: i32, type_name: &str) {
             event_record(end_events[i], stream);
         }
     }
-
     let host_launch_time = start_host.elapsed();
     unsafe {
         event_synchronize(*end_events.last().unwrap());
@@ -225,22 +273,55 @@ fn run_benchmark_for_type(data_type: i32, type_name: &str) {
     println!("Ошибки Slot Mapping (FlashInfer метаданные): {}", slot_errors);
     assert_eq!(slot_errors, 0, "Критическая ошибка построения карты страниц KV-кэша!");
 
+    println!("--- ЧЕСТНАЯ МАТЕМАТИЧЕСКАЯ ВАЛИДАЦИЯ АКТИВАЦИЙ ---");
     let mut math_errors = 0;
-    let expected_val_bits = 0x3C3Cu16;
 
-    for &val in h_output.iter().take((total_tokens * out_features) as usize) {
-        if data_type == 0 {
-            if val != expected_val_bits {
-                math_errors += 1;
-            }
-        } else {
-            if val == 0 || val == 0x7F80 || val == 0xFF80 || val == 0x7FFF {
+    for (tok, &token_id) in h_tokens.iter().enumerate().take(total_tokens as usize) {
+        let out_row_offset = tok * out_features as usize;
+
+        for f in 0..out_features as usize {
+            let actual_bits = h_output[out_row_offset + f];
+            let expected_bits = if token_id >= vocab_size as u32 {
+                0u16
+            } else {
+                match data_type {
+                    0 => {
+                        let w_offset = (token_id as usize * out_features as usize + f) * 2;
+                        let b0 = h_weight[w_offset];
+                        let b1 = h_weight[w_offset + 1];
+                        ((b1 as u16) << 8) | (b0 as u16)
+                    },
+                    1 => {
+                        let w_offset = token_id as usize * out_features as usize + f;
+                        let byte = h_weight[w_offset];
+                        let val_f32 = emu_fp8_e4m3_to_f32(byte);
+                        f32_to_bf16_bits(val_f32)
+                    },
+                    2 => {
+                        let total_elements_per_row = out_features as usize;
+                        let w_offset = (token_id as usize * total_elements_per_row + f) / 2;
+                        let byte = h_weight[w_offset];
+                        let val_f32 = emu_fp4_e2m1_to_f32(byte, f);
+                        let scale_idx = (token_id as usize * total_elements_per_row + f) / 32;
+                        let scale = h_scales[scale_idx];
+                        f32_to_bf16_bits(val_f32 * scale)
+                    },
+                    _ => unreachable!(),
+                }
+            };
+
+            if actual_bits != expected_bits {
+                if math_errors < 5 {
+                    println!(
+                        "Ошибка в токен_idx={}, feature={}: Ожидалось биты {:04X}, Получено {:04X}",
+                        tok, f, expected_bits, actual_bits
+                    );
+                }
                 math_errors += 1;
             }
         }
     }
 
-    println!("--- ЧЕСТНАЯ МАТЕМАТИЧЕСКАЯ ВАЛИДАЦИЯ АКТИВАЦИЙ ---");
     println!("Количество неверных/испорченных элементов: {}", math_errors);
     assert_eq!(
         math_errors, 0,
