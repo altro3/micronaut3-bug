@@ -5,16 +5,17 @@
 #include "cutlass/epilogue/thread/linear_combination_gelu.h"
 
 extern "C" void launch_fused_multimodal_projection(
-    void * __restrict__ out_tokens,
-    const void * __restrict__ input_tokens,
-    const void * __restrict__ weight_matrix,
+    const void ** __restrict__ device_ptr_A,
+    const void ** __restrict__ device_ptr_B,
+    void ** __restrict__ device_ptr_D,
     const float * __restrict__ bias,
-    const int32_t * __restrict__ vision_segments,
+    const cutlass::gemm::GemmCoord * __restrict__ device_problem_shapes,
     int32_t num_segments,
     const int32_t vision_hidden_size,
     const int32_t text_hidden_size,
     const int32_t tp_rank,
     const int32_t tp_size,
+    void * __restrict__ workspace_ptr,
     cudaStream_t stream
 ) {
     const int32_t local_out_features = text_hidden_size / tp_size;
@@ -37,6 +38,7 @@ extern "C" void launch_fused_multimodal_projection(
     using WarpShape = cutlass::gemm::GemmShape<64, 64, 64>;
     using InstructionShape = cutlass::gemm::GemmShape<16, 8, 16>;
 
+    // Эпилог слияния операций Bias + GELU
     using EpilogueOutputOp = cutlass::epilogue::thread::LinearCombinationGELU<
         ElementC,
         128 / cutlass::sizeof_bits<ElementC>::value,
@@ -57,39 +59,39 @@ extern "C" void launch_fused_multimodal_projection(
         EpilogueOutputOp
     >;
 
-    const auto host_segments = new int32_t[num_segments * 2];
-    cudaMemcpyAsync(host_segments, vision_segments, num_segments * 2 * sizeof(int32_t), cudaMemcpyDeviceToHost, stream);
+    auto *host_problem_shapes = new cutlass::gemm::GemmCoord[num_segments];
+    cudaMemcpyAsync(host_problem_shapes, device_problem_shapes, num_segments * sizeof(cutlass::gemm::GemmCoord), cudaMemcpyDeviceToHost, stream);
+
+    auto *host_ptr_A = new const ElementA *[num_segments];
+    auto *host_ptr_B = new const ElementB *[num_segments];
+    auto *host_ptr_D = new ElementC *[num_segments];
+    cudaMemcpyAsync(host_ptr_A, device_ptr_A, num_segments * sizeof(ElementA *), cudaMemcpyDeviceToHost, stream);
+    cudaMemcpyAsync(host_ptr_B, device_ptr_B, num_segments * sizeof(ElementB *), cudaMemcpyDeviceToHost, stream);
+    cudaMemcpyAsync(host_ptr_D, device_ptr_D, num_segments * sizeof(ElementC *), cudaMemcpyDeviceToHost, stream);
+
     cudaStreamSynchronize(stream);
 
     GemmUniversalOp gemm_op;
+    auto current_workspace = static_cast<uint8_t *>(workspace_ptr);
+
+    const EpilogueOutputOp::Params epilogue_args(
+        1.0f,
+        1.0f
+    );
 
     for (int32_t i = 0; i < num_segments; ++i) {
-        const int32_t start_token = host_segments[i * 2];
-        const int32_t end_token = host_segments[i * 2 + 1];
-        int32_t segment_tokens = end_token - start_token;
-
-        if (segment_tokens <= 0) continue;
-
-        auto *ptr_A = const_cast<ElementA *>(static_cast<const ElementA *>(input_tokens)) + start_token * vision_hidden_size;
-        auto *ptr_B = const_cast<ElementB *>(static_cast<const ElementB *>(weight_matrix)) + rank_offset_out_features * vision_hidden_size;
-        auto *ptr_D = static_cast<ElementC *>(out_tokens) + start_token * local_out_features;
-
-        cutlass::gemm::GemmCoord problem_size(segment_tokens, local_out_features, vision_hidden_size);
-
-        EpilogueOutputOp::Params epilogue_args(
-            1.0f,
-            1.0f
-        );
+        cutlass::gemm::GemmCoord problem_size = host_problem_shapes[i];
+        if (problem_size.m() <= 0) continue;
 
         GemmUniversalOp::Arguments arguments(
             cutlass::gemm::GemmUniversalMode::kGemm,
             problem_size,
             1,
             epilogue_args,
-            ptr_A,
-            ptr_B,
+            const_cast<ElementA *>(host_ptr_A[i]),
+            const_cast<ElementB *>(host_ptr_B[i]),
             const_cast<float *>(bias) + rank_offset_out_features,
-            ptr_D,
+            host_ptr_D[i],
             problem_size.m() * problem_size.k(),
             problem_size.n() * problem_size.k(),
             0,
@@ -100,19 +102,15 @@ extern "C" void launch_fused_multimodal_projection(
             local_out_features
         );
 
-        size_t workspace_size = gemm_op.get_workspace_size(arguments);
-        void *workspace = nullptr;
-        if (workspace_size > 0) {
-            cudaMallocAsync(&workspace, workspace_size, stream);
-        }
-
-        gemm_op.initialize(arguments, workspace, stream);
+        gemm_op.initialize(arguments, current_workspace, stream);
         gemm_op.run(stream);
 
-        if (workspace) {
-            cudaFreeAsync(workspace, stream);
-        }
+        size_t workspace_size = gemm_op.get_workspace_size(arguments);
+        current_workspace += workspace_size;
     }
 
-    delete[] host_segments;
+    delete[] host_problem_shapes;
+    delete[] host_ptr_A;
+    delete[] host_ptr_B;
+    delete[] host_ptr_D;
 }
