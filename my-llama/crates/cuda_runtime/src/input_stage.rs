@@ -32,4 +32,21 @@ unsafe extern "C" {
         threads_per_block: i32,
         stream: *mut c_void,
     );
+
+    pub fn launch_fused_multimodal_projection(
+        host_ptr_a: *const *const c_void,
+        host_ptr_b: *const *const c_void,
+        host_ptr_d: *const *mut c_void,
+        bias: *const f32,
+        weight_scales: *const f32,
+        host_problem_shapes: *const c_void,
+        num_segments: i32,
+        vision_hidden_size: i32,
+        text_hidden_size: i32,
+        tp_rank: i32,
+        tp_size: i32,
+        data_type: i32,
+        workspace_ptr: *mut c_void,
+        stream: *mut c_void,
+    );
 }

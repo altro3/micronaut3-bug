@@ -7,55 +7,7 @@ use cuda_runtime::{
     CudaBuffer, device_synchronize, event_create, event_destroy, event_elapsed_time, event_record, event_synchronize, get_last_error,
     stream_create_with_flags, stream_destroy,
 };
-
-fn emu_fp4_to_f32(byte: u8, idx: usize) -> f32 {
-    let nibble = if idx % 2 == 0 { byte & 0x0F } else { (byte >> 4) & 0x0F };
-
-    let s = (nibble >> 3) & 1;
-    let e = (nibble >> 1) & 3;
-    let m = nibble & 1;
-
-    let sign = if s == 1 { -1.0 } else { 1.0 };
-
-    if e == 0 {
-        if m == 0 { return 0.0; }
-        return sign * 0.25f32;
-    }
-    let exp = e as i32 - 1;
-    let mantissa = 1.0f32 + (m as f32 / 2.0f32);
-    sign * mantissa * 2.0f32.powi(exp)
-}
-
-fn emu_fp8_to_f32(byte: u8) -> f32 {
-    let s = (byte >> 7) & 1;
-    let e = (byte >> 3) & 0x0F;
-    let m = byte & 7;
-    let sign = if s == 1 { -1.0 } else { 1.0 };
-    if e == 0 {
-        if m == 0 {
-            return 0.0;
-        }
-        return sign * 2.0f32.powi(-6) * (m as f32 / 8.0);
-    }
-    let exp = e as i32 - 7;
-    let mantissa = 1.0 + (m as f32 / 8.0);
-    sign * mantissa * 2.0f32.powi(exp)
-}
-
-fn f32_to_bf16_bits(val: f32) -> u16 {
-    if val.is_nan() {
-        return 0x7FC0;
-    }
-    let bits = val.to_bits();
-    let lsb = (bits >> 16) & 1;
-    let rounding_bias = 0x7FFF + lsb;
-    let rounded_bits = bits.wrapping_add(rounding_bias);
-    ((rounded_bits >> 16) & 0xFFFF) as u16
-}
-
-fn bf16_bits_to_f32(bits: u16) -> f32 {
-    f32::from_bits((bits as u32) << 16)
-}
+use my_llama::test_utils::{bf16_bits_to_f32, emu_fp4_e2m1_to_f32, emu_fp8_e4m3_to_f32, f32_to_bf16_bits};
 
 fn run_rmsnorm_test(data_type: i32, type_name: &str) {
     println!("\n=== RMSNORM ТЕЛЕМЕТРИЯ ФОРМАТА: {} ===", type_name);
@@ -172,7 +124,10 @@ fn run_rmsnorm_test(data_type: i32, type_name: &str) {
     let mut bandwidths: Vec<f64> = Vec::with_capacity(ITERS);
     let mut total_gpu_ms = 0.0_f32;
 
-    let bytes_processed = (input_bytes as u64) + (hidden_size as u64 * 2) + (total_elements as u64 * 2);
+    let mut bytes_processed = (input_bytes as u64) + (hidden_size as u64 * 2) + (total_elements as u64 * 2);
+    if data_type == 2 {
+        bytes_processed += (scale_elements as u64) * 4;
+    }
 
     for i in 0..ITERS {
         let ms = unsafe { event_elapsed_time(start_events[i], end_events[i]) };
@@ -206,8 +161,8 @@ fn run_rmsnorm_test(data_type: i32, type_name: &str) {
                     h_input[(row_offset_bf16 + f) * 2],
                     h_input[(row_offset_bf16 + f) * 2 + 1],
                 ])),
-                1 => emu_fp8_to_f32(h_input[row_offset_bf16 + f]),
-                2 => emu_fp4_to_f32(h_input[tok * (hidden_size as usize / 2) + f / 2], f),
+                1 => emu_fp8_e4m3_to_f32(h_input[row_offset_bf16 + f]),
+                2 => emu_fp4_e2m1_to_f32(h_input[tok * (hidden_size as usize / 2) + f / 2], f),
                 _ => unreachable!(),
             };
             sum_sq += val * val;
@@ -222,8 +177,8 @@ fn run_rmsnorm_test(data_type: i32, type_name: &str) {
                     h_input[(row_offset_bf16 + f) * 2],
                     h_input[(row_offset_bf16 + f) * 2 + 1],
                 ])),
-                1 => emu_fp8_to_f32(h_input[row_offset_bf16 + f]),
-                2 => emu_fp4_to_f32(h_input[tok * (hidden_size as usize / 2) + f / 2], f),
+                1 => emu_fp8_e4m3_to_f32(h_input[row_offset_bf16 + f]),
+                2 => emu_fp4_e2m1_to_f32(h_input[tok * (hidden_size as usize / 2) + f / 2], f),
                 _ => unreachable!(),
             };
             let g = bf16_bits_to_f32(h_gamma[f]);

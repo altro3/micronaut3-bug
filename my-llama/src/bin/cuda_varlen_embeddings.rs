@@ -7,55 +7,7 @@ use cuda_runtime::{
     CudaBuffer, device_synchronize, event_create, event_destroy, event_elapsed_time, event_record, event_synchronize, get_last_error,
     stream_create_with_flags, stream_destroy,
 };
-
-fn emu_fp4_e2m1_to_f32(byte: u8, idx: usize) -> f32 {
-    let nibble = if idx.is_multiple_of(2) { byte & 0x0F } else { (byte >> 4) & 0x0F };
-    let s = (nibble >> 3) & 1;
-    let e = (nibble >> 1) & 3;
-    let m = nibble & 1;
-
-    let sign = if s == 1 { -1.0 } else { 1.0 };
-    if e == 0 {
-        if m == 0 {
-            return 0.0;
-        }
-        return sign * 0.5 * (m as f32 / 2.0);
-    }
-    let exp = e as i32 - 1;
-    let mantissa = 1.0 + (m as f32 / 2.0);
-    sign * mantissa * 2.0f32.powi(exp)
-}
-
-fn emu_fp8_e4m3_to_f32(byte: u8) -> f32 {
-    let s = (byte >> 7) & 1;
-    let e = (byte >> 3) & 0x0F;
-    let m = byte & 7;
-
-    let sign = if s == 1 { -1.0 } else { 1.0 };
-    if e == 15 && m == 7 {
-        return f32::NAN;
-    }
-    if e == 0 {
-        if m == 0 {
-            return 0.0;
-        }
-        return sign * 2.0f32.powi(-6) * (m as f32 / 8.0);
-    }
-    let exp = e as i32 - 7;
-    let mantissa = 1.0 + (m as f32 / 8.0);
-    sign * mantissa * 2.0f32.powi(exp)
-}
-
-fn f32_to_bf16_bits(val: f32) -> u16 {
-    if val.is_nan() {
-        return 0x7FC0;
-    }
-    let bits = val.to_bits();
-    let lsb = (bits >> 16) & 1;
-    let rounding_bias = 0x7FFF + lsb;
-    let rounded_bits = bits.wrapping_add(rounding_bias);
-    ((rounded_bits >> 16) & 0xFFFF) as u16
-}
+use my_llama::test_utils::{emu_fp4_e2m1_to_f32, emu_fp8_e4m3_to_f32, f32_to_bf16_bits};
 
 fn run_benchmark_for_type(data_type: i32, type_name: &str) {
     println!("\n=== ТЕСТИРОВАНИЕ ФОРМАТА: {} ===", type_name);

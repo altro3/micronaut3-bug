@@ -3,6 +3,7 @@ pub mod models;
 pub mod sys;
 pub mod tokenizer;
 pub mod utils;
+pub mod test_utils;
 
 // unsafe extern "C" {
 //     pub fn init_cublas_infrastructure();
