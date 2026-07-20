@@ -33,15 +33,15 @@ __global__ void batched_projection_gemm_kernel(
 
     if (block_m >= batch_num_tokens) return;
 
-    const __nv_bfloat16 *input_hidden_states = static_cast<const __nv_bfloat16 *>(device_table_A[segment_id]);
+    auto input_hidden_states = static_cast<const __nv_bfloat16 *>(device_table_A[segment_id]);
     const void *projection_weights = device_table_B[segment_id];
-    __nv_bfloat16 *output_text_features = static_cast<__nv_bfloat16 *>(device_table_D[segment_id]);
+    auto output_text_features = static_cast<__nv_bfloat16 *>(device_table_D[segment_id]);
 
     const int32_t tid = threadIdx.x;
     const int32_t warp_id = tid / 32;
 
     extern __shared__ uint8_t dynamic_shmem[];
-    __nv_bfloat16 *shmem_input = reinterpret_cast<__nv_bfloat16 *>(dynamic_shmem);
+    auto shmem_input = reinterpret_cast<__nv_bfloat16 *>(dynamic_shmem);
     __nv_bfloat16 *shmem_weights = shmem_input + tile_size_m * tile_size_k;
 
     __shared__ float shared_scale;
@@ -149,7 +149,7 @@ __global__ void batched_projection_gemm_kernel(
     const int32_t warp_m = (warp_id % (tile_size_m / 16)) * 16;
     const int32_t warp_n = (warp_id / (tile_size_m / 16)) * 16;
 
-    __shared__ float shmem_out_buf[64 * 64];
+    auto shmem_out_buf = reinterpret_cast<float *>(dynamic_shmem);
 
     store_matrix_sync(shmem_out_buf + warp_m * tile_size_n + warp_n, c_frag, tile_size_n, mem_row_major);
     __syncthreads();

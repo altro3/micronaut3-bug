@@ -11,15 +11,16 @@ extern "C" void launch_fused_multimodal_projection(
     const float * __restrict__ bias,
     const float * __restrict__ weight_scales,
     const void * __restrict__ host_problem_shapes,
-    const int32_t num_segments,
-    const int32_t vision_hidden_size,
-    const int32_t text_hidden_size,
-    const int32_t tp_rank,
-    const int32_t tp_size,
+    int32_t num_segments,
+    int32_t vision_hidden_size,
+    int32_t text_hidden_size,
+    int32_t tp_rank,
+    int32_t tp_size,
     int32_t data_type,
     void * __restrict__ workspace_ptr,
-    const cudaStream_t stream
+    void *stream_ptr
 ) {
+    const auto stream = static_cast<cudaStream_t>(stream_ptr);
     const auto host_shapes = static_cast<const cutlass::gemm::GemmCoord *>(host_problem_shapes);
     const int32_t local_output_dim = text_hidden_size / tp_size;
     const int32_t rank_offset = tp_rank * local_output_dim;
@@ -42,10 +43,10 @@ extern "C" void launch_fused_multimodal_projection(
 
     uintptr_t base_addr = reinterpret_cast<uintptr_t>(workspace_ptr);
     constexpr uintptr_t align_mask = 15;
-    base_addr = (base_addr + align_mask) & ~align_mask;
+    base_addr = base_addr + align_mask & ~align_mask;
 
     const size_t raw_table_size = num_segments * sizeof(void *);
-    const size_t table_size = (raw_table_size + align_mask) & ~align_mask;
+    const size_t table_size = raw_table_size + align_mask & ~align_mask;
 
     const size_t shapes_size = num_segments * sizeof(cutlass::gemm::GemmCoord);
 
@@ -59,7 +60,9 @@ extern "C" void launch_fused_multimodal_projection(
     cudaMemcpyAsync(device_table_D, host_ptr_D, raw_table_size, cudaMemcpyHostToDevice, stream);
     cudaMemcpyAsync(device_shapes, host_shapes, shapes_size, cudaMemcpyHostToDevice, stream);
 
-    constexpr size_t shmem_size = (TILE_M * TILE_K + TILE_N * TILE_K) * sizeof(__nv_bfloat16);
+    constexpr size_t shmem_load_size = (TILE_M * TILE_K + TILE_N * TILE_K) * sizeof(__nv_bfloat16);
+    constexpr size_t shmem_store_size = TILE_M * TILE_N * sizeof(float);
+    constexpr size_t shmem_size = shmem_load_size > shmem_store_size ? shmem_load_size : shmem_store_size;
 
     dim3 block(128);
     dim3 grid(

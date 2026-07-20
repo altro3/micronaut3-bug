@@ -121,14 +121,11 @@ fn run_projection_test(data_type: i32, type_name: &str) {
 
     let d_shapes = CudaBuffer::alloc(num_segments * size_of::<GemmCoord>());
     unsafe {
-        d_shapes.copy_to_device(
-            host_problem_shapes.as_ptr() as *const c_void,
-            num_segments * size_of::<GemmCoord>(),
-        );
+        d_shapes.copy_to_device(host_problem_shapes.as_ptr() as *const c_void, num_segments * size_of::<GemmCoord>());
     }
 
-    let host_ptr_a: Vec<*const c_void> = d_inputs.iter().map(|b| b.ptr as *const c_void).collect();
-    let host_ptr_b: Vec<*const c_void> = d_weights.iter().map(|b| b.ptr as *const c_void).collect();
+    let host_ptr_a: Vec<*mut c_void> = d_inputs.iter().map(|b| b.ptr).collect();
+    let host_ptr_b: Vec<*mut c_void> = d_weights.iter().map(|b| b.ptr).collect();
     let host_ptr_d: Vec<*mut c_void> = d_outputs.iter().map(|b| b.ptr).collect();
 
     let raw_ptr_a = host_ptr_a.as_ptr();
@@ -268,16 +265,23 @@ fn run_projection_test(data_type: i32, type_name: &str) {
                             let weight_bf16 = unsafe { std::slice::from_raw_parts(h_weights[s].as_ptr() as *const u16, n * k) };
                             bf16_bits_to_f32(weight_bf16[col * k + contr])
                         },
-                        1 => emu_fp8_e4m3_to_f32(h_weights[s][col * k + contr]) * scale,
+                        1 => emu_fp8_e4m3_to_f32(h_weights[s][col * k + contr]),
                         2 => {
                             let linear_idx = col * k + contr;
                             let byte_idx = linear_idx / 2;
-                            emu_fp4_e2m1_to_f32(h_weights[s][byte_idx], linear_idx) * scale
+                            let packed_byte = h_weights[s][byte_idx];
+                            let sub_byte_offset = linear_idx % 2;
+                            let raw_fp4 = (packed_byte >> (sub_byte_offset * 4)) & 0x0F;
+                            emu_fp4_e2m1_to_f32(raw_fp4, linear_idx)
                         },
                         _ => unreachable!(),
                     };
 
                     accum += input_val * weight_val;
+                }
+
+                if data_type != 0 {
+                    accum *= scale;
                 }
 
                 let bias_val = h_bias[rank_offset as usize + col];

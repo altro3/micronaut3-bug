@@ -34,8 +34,8 @@ unsafe extern "C" {
     );
 
     pub fn launch_fused_multimodal_projection(
-        host_ptr_a: *const *const c_void,
-        host_ptr_b: *const *const c_void,
+        host_ptr_a: *const *mut c_void,
+        host_ptr_b: *const *mut c_void,
         host_ptr_d: *const *mut c_void,
         bias: *const f32,
         weight_scales: *const f32,
