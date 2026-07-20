@@ -14,12 +14,12 @@ __global__ void batched_projection_gemm_kernel(
     const cutlass::gemm::GemmCoord * __restrict__ device_shapes,
     const float * __restrict__ projection_bias,
     const float * __restrict__ quantization_scales,
-    const int32_t local_output_dim,
-    const int32_t input_feature_dim,
-    const int32_t rank_offset,
-    const int32_t tile_size_m,
-    const int32_t tile_size_n,
-    const int32_t tile_size_k
+    int32_t local_output_dim,
+    int32_t input_feature_dim,
+    int32_t rank_offset,
+    int32_t tile_size_m,
+    int32_t tile_size_n,
+    int32_t tile_size_k
 ) {
     const int32_t segment_id = blockIdx.z;
 
@@ -163,23 +163,53 @@ __global__ void batched_projection_gemm_kernel(
         if (m_global < batch_num_tokens && n_global < local_output_dim) {
             const float bias_val = projection_bias != nullptr ? projection_bias[rank_offset + n_global] : 0.0f;
             float final_val = shmem_out_buf[m_local * tile_size_n + n_local] + bias_val;
-
-            if (final_val < 0.0f) {
-                final_val = final_val * 0.1702f;
-            } else {
-                final_val = final_val / (1.0f + expf(-final_val * 1.702f));
-            }
-
+            final_val = final_val / (1.0f + expf(-final_val));
             output_text_features[m_global * local_output_dim + n_global] = __float2bfloat16(final_val);
         }
     }
 }
 
 template __global__ void batched_projection_gemm_kernel<__nv_bfloat16>(
-    const void **, const void **, void **, const cutlass::gemm::GemmCoord *, const float *, const float *, int32_t, int32_t, int32_t, int32_t, int32_t, int32_t);
+    const void ** __restrict__ device_table_A,
+    const void ** __restrict__ device_table_B,
+    void ** __restrict__ device_table_D,
+    const cutlass::gemm::GemmCoord * __restrict__ device_shapes,
+    const float * __restrict__ projection_bias,
+    const float * __restrict__ quantization_scales,
+    int32_t local_output_dim,
+    int32_t input_feature_dim,
+    int32_t rank_offset,
+    int32_t tile_size_m,
+    int32_t tile_size_n,
+    int32_t tile_size_k
+);
 
 template __global__ void batched_projection_gemm_kernel<__nv_fp8_e4m3>(
-    const void **, const void **, void **, const cutlass::gemm::GemmCoord *, const float *, const float *, int32_t, int32_t, int32_t, int32_t, int32_t, int32_t);
+    const void ** __restrict__ device_table_A,
+    const void ** __restrict__ device_table_B,
+    void ** __restrict__ device_table_D,
+    const cutlass::gemm::GemmCoord * __restrict__ device_shapes,
+    const float * __restrict__ projection_bias,
+    const float * __restrict__ quantization_scales,
+    int32_t local_output_dim,
+    int32_t input_feature_dim,
+    int32_t rank_offset,
+    int32_t tile_size_m,
+    int32_t tile_size_n,
+    int32_t tile_size_k
+);
 
 template __global__ void batched_projection_gemm_kernel<__nv_fp4_e2m1>(
-    const void **, const void **, void **, const cutlass::gemm::GemmCoord *, const float *, const float *, int32_t, int32_t, int32_t, int32_t, int32_t, int32_t);
+    const void ** __restrict__ device_table_A,
+    const void ** __restrict__ device_table_B,
+    void ** __restrict__ device_table_D,
+    const cutlass::gemm::GemmCoord * __restrict__ device_shapes,
+    const float * __restrict__ projection_bias,
+    const float * __restrict__ quantization_scales,
+    int32_t local_output_dim,
+    int32_t input_feature_dim,
+    int32_t rank_offset,
+    int32_t tile_size_m,
+    int32_t tile_size_n,
+    int32_t tile_size_k
+);

@@ -43,7 +43,7 @@ void launch_fused_multimodal_projection(
     void ** __restrict__ host_ptr_D,
     const float * __restrict__ bias,
     const float * __restrict__ weight_scales,
-    const void * __restrict__ host_problem_shapes,
+    const int32_t * __restrict__ host_problem_shapes,
     int32_t num_segments,
     int32_t vision_hidden_size,
     int32_t text_hidden_size,

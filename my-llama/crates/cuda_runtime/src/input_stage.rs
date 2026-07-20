@@ -39,7 +39,7 @@ unsafe extern "C" {
         host_ptr_d: *const *mut c_void,
         bias: *const f32,
         weight_scales: *const f32,
-        host_problem_shapes: *const c_void,
+        host_problem_shapes: *const i32,
         num_segments: i32,
         vision_hidden_size: i32,
         text_hidden_size: i32,

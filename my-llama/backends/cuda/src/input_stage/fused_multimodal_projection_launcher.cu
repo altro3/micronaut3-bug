@@ -1,6 +1,7 @@
 #include "fused_multimodal_projection.cuh"
 #include "data_types.h"
 #include <cassert>
+#include <vector>
 #include <cuda_fp8.h>
 #include <cuda_fp4.h>
 
@@ -10,7 +11,7 @@ extern "C" void launch_fused_multimodal_projection(
     void ** __restrict__ host_ptr_D,
     const float * __restrict__ bias,
     const float * __restrict__ weight_scales,
-    const void * __restrict__ host_problem_shapes,
+    const int32_t * __restrict__ host_problem_shapes,
     int32_t num_segments,
     int32_t vision_hidden_size,
     int32_t text_hidden_size,
@@ -21,7 +22,6 @@ extern "C" void launch_fused_multimodal_projection(
     void *stream_ptr
 ) {
     const auto stream = static_cast<cudaStream_t>(stream_ptr);
-    const auto host_shapes = static_cast<const cutlass::gemm::GemmCoord *>(host_problem_shapes);
     const int32_t local_output_dim = text_hidden_size / tp_size;
     const int32_t rank_offset = tp_rank * local_output_dim;
     const auto type = static_cast<DataType>(data_type);
@@ -31,11 +31,21 @@ extern "C" void launch_fused_multimodal_projection(
     constexpr int32_t TILE_K = 32;
 
     int32_t max_m = 0;
+    std::vector<cutlass::gemm::GemmCoord> ready_shapes;
+    ready_shapes.reserve(num_segments);
+
     for (int32_t i = 0; i < num_segments; ++i) {
-        if (host_shapes[i].m() > max_m) {
-            max_m = host_shapes[i].m();
+        int32_t m = host_problem_shapes[i * 3 + 0];
+        int32_t n = host_problem_shapes[i * 3 + 1];
+        int32_t k = host_problem_shapes[i * 3 + 2];
+
+        if (m > max_m) {
+            max_m = m;
         }
-        assert(host_shapes[i].k() == vision_hidden_size);
+        assert(k == vision_hidden_size);
+        assert(n == local_output_dim);
+
+        ready_shapes.emplace_back(m, n, k);
     }
     if (max_m <= 0) return;
 
@@ -43,11 +53,10 @@ extern "C" void launch_fused_multimodal_projection(
 
     uintptr_t base_addr = reinterpret_cast<uintptr_t>(workspace_ptr);
     constexpr uintptr_t align_mask = 15;
-    base_addr = base_addr + align_mask & ~align_mask;
+    base_addr = (base_addr + align_mask) & ~align_mask;
 
     const size_t raw_table_size = num_segments * sizeof(void *);
-    const size_t table_size = raw_table_size + align_mask & ~align_mask;
-
+    const size_t table_size = (raw_table_size + align_mask) & ~align_mask;
     const size_t shapes_size = num_segments * sizeof(cutlass::gemm::GemmCoord);
 
     const auto device_table_A = reinterpret_cast<const void **>(base_addr);
@@ -58,7 +67,7 @@ extern "C" void launch_fused_multimodal_projection(
     cudaMemcpyAsync(device_table_A, host_ptr_A, raw_table_size, cudaMemcpyHostToDevice, stream);
     cudaMemcpyAsync(device_table_B, host_ptr_B, raw_table_size, cudaMemcpyHostToDevice, stream);
     cudaMemcpyAsync(device_table_D, host_ptr_D, raw_table_size, cudaMemcpyHostToDevice, stream);
-    cudaMemcpyAsync(device_shapes, host_shapes, shapes_size, cudaMemcpyHostToDevice, stream);
+    cudaMemcpyAsync(device_shapes, ready_shapes.data(), shapes_size, cudaMemcpyHostToDevice, stream);
 
     constexpr size_t shmem_load_size = (TILE_M * TILE_K + TILE_N * TILE_K) * sizeof(__nv_bfloat16);
     constexpr size_t shmem_store_size = TILE_M * TILE_N * sizeof(float);
