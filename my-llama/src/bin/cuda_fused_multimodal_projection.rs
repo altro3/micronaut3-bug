@@ -9,17 +9,18 @@ use cuda_runtime::{
 };
 use my_llama::test_utils::{bf16_bits_to_f32, emu_fp4_e2m1_to_f32, emu_fp8_e4m3_to_f32, f32_to_bf16_bits};
 
-#[repr(C)]
+#[repr(C, align(16))]
 #[derive(Debug, Copy, Clone)]
 pub struct GemmCoord {
     m: i32,
     n: i32,
     k: i32,
+    _padding: i32,
 }
 
 impl GemmCoord {
     pub fn new(m: i32, n: i32, k: i32) -> Self {
-        Self { m, n, k }
+        Self { m, n, k, _padding: 0 }
     }
 }
 
@@ -118,11 +119,11 @@ fn run_projection_test(data_type: i32, type_name: &str) {
         d_scales.copy_to_device(h_scales.as_ptr() as *const c_void, num_segments * 4);
     }
 
-    let d_shapes = CudaBuffer::alloc(num_segments * std::mem::size_of::<GemmCoord>());
+    let d_shapes = CudaBuffer::alloc(num_segments * size_of::<GemmCoord>());
     unsafe {
         d_shapes.copy_to_device(
             host_problem_shapes.as_ptr() as *const c_void,
-            num_segments * std::mem::size_of::<GemmCoord>(),
+            num_segments * size_of::<GemmCoord>(),
         );
     }
 
@@ -130,13 +131,17 @@ fn run_projection_test(data_type: i32, type_name: &str) {
     let host_ptr_b: Vec<*const c_void> = d_weights.iter().map(|b| b.ptr as *const c_void).collect();
     let host_ptr_d: Vec<*mut c_void> = d_outputs.iter().map(|b| b.ptr).collect();
 
+    let raw_ptr_a = host_ptr_a.as_ptr();
+    let raw_ptr_b = host_ptr_b.as_ptr();
+    let raw_ptr_d = host_ptr_d.as_ptr();
+
     let d_workspace = CudaBuffer::alloc(1024);
     let stream = stream_create_with_flags(0x01);
     unsafe {
         launch_fused_multimodal_projection(
-            host_ptr_a.as_ptr(),
-            host_ptr_b.as_ptr(),
-            host_ptr_d.as_ptr(),
+            raw_ptr_a,
+            raw_ptr_b,
+            raw_ptr_d,
             d_bias.ptr as *const f32,
             d_scales.ptr as *const f32,
             d_shapes.ptr,
@@ -311,6 +316,13 @@ fn run_projection_test(data_type: i32, type_name: &str) {
         }
         stream_destroy(stream);
     }
+
+    drop(host_ptr_a);
+    drop(host_ptr_b);
+    drop(host_ptr_d);
+    drop(d_inputs);
+    drop(d_weights);
+    drop(d_outputs);
 }
 
 fn main() {
