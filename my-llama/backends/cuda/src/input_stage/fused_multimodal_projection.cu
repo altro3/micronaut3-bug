@@ -53,9 +53,15 @@ __global__ void batched_projection_gemm_kernel(
 
     fragment<matrix_a, 16, 16, 16, __nv_bfloat16, row_major> a_frag;
     fragment<matrix_b, 16, 16, 16, __nv_bfloat16, col_major> b_frag;
-    fragment<accumulator, 16, 16, 16, float> c_frag;
+    fragment<accumulator, 16, 16, 16, float> c_frag[2][2];
 
-    fill_fragment(c_frag, 0.0f);
+#pragma unroll
+    for (int i = 0; i < 2; ++i) {
+#pragma unroll
+        for (int j = 0; j < 2; ++j) {
+            fill_fragment(c_frag[i][j], 0.0f);
+        }
+    }
 
     for (int32_t k_offset = 0; k_offset < input_feature_dim; k_offset += tile_size_k) {
         for (int32_t i = tid; i < (tile_size_m * tile_size_k) / 8; i += blockDim.x) {
@@ -134,24 +140,41 @@ __global__ void batched_projection_gemm_kernel(
 
         __syncthreads();
 
-        const int32_t warp_m = (warp_id % (tile_size_m / 16)) * 16;
-        const int32_t warp_n = (warp_id / (tile_size_m / 16)) * 16;
+        const int32_t warp_m_base = (warp_id % 2) * 32;
+        const int32_t warp_n_base = (warp_id / 2) * 32;
 
         for (int32_t k = 0; k < tile_size_k; k += 16) {
-            load_matrix_sync(a_frag, shmem_input + warp_m * tile_size_k + k, tile_size_k);
-            load_matrix_sync(b_frag, shmem_weights + warp_n * tile_size_k + k, tile_size_k);
-            mma_sync(c_frag, a_frag, b_frag, c_frag);
+#pragma unroll
+            for (int32_t m_step = 0; m_step < 2; ++m_step) {
+                const int32_t warp_m = warp_m_base + m_step * 16;
+                load_matrix_sync(a_frag, shmem_input + warp_m * tile_size_k + k, tile_size_k);
+
+#pragma unroll
+                for (int32_t n_step = 0; n_step < 2; ++n_step) {
+                    const int32_t warp_n = warp_n_base + n_step * 16;
+                    load_matrix_sync(b_frag, shmem_weights + warp_n * tile_size_k + k, tile_size_k);
+                    mma_sync(c_frag[m_step][n_step], a_frag, b_frag, c_frag[m_step][n_step]);
+                }
+            }
         }
 
         __syncthreads();
     }
 
-    const int32_t warp_m = (warp_id % (tile_size_m / 16)) * 16;
-    const int32_t warp_n = (warp_id / (tile_size_m / 16)) * 16;
+    const int32_t warp_m_base = (warp_id % 2) * 32;
+    const int32_t warp_n_base = (warp_id / 2) * 32;
 
     auto shmem_out_buf = reinterpret_cast<float *>(dynamic_shmem);
 
-    store_matrix_sync(shmem_out_buf + warp_m * tile_size_n + warp_n, c_frag, tile_size_n, mem_row_major);
+#pragma unroll
+    for (int32_t m_step = 0; m_step < 2; ++m_step) {
+        const int32_t warp_m = warp_m_base + m_step * 16;
+#pragma unroll
+        for (int32_t n_step = 0; n_step < 2; ++n_step) {
+            const int32_t warp_n = warp_n_base + n_step * 16;
+            store_matrix_sync(shmem_out_buf + warp_m * tile_size_n + warp_n, c_frag[m_step][n_step], tile_size_n, mem_row_major);
+        }
+    }
     __syncthreads();
 
     for (int32_t i = tid; i < tile_size_m * tile_size_n; i += blockDim.x) {
@@ -163,7 +186,9 @@ __global__ void batched_projection_gemm_kernel(
         if (m_global < batch_num_tokens && n_global < local_output_dim) {
             const float bias_val = projection_bias != nullptr ? projection_bias[rank_offset + n_global] : 0.0f;
             float final_val = shmem_out_buf[m_local * tile_size_n + n_local] + bias_val;
+
             final_val = final_val / (1.0f + expf(-final_val));
+
             output_text_features[m_global * local_output_dim + n_global] = __float2bfloat16(final_val);
         }
     }
