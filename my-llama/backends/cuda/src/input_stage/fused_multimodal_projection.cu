@@ -154,10 +154,25 @@ __global__ void custom_projection_gemm_kernel(
 }
 
 template __global__ void custom_projection_gemm_kernel<__nv_bfloat16>(
-    const __nv_bfloat16 *, const void *, __nv_bfloat16 *, const float *, const float *, int32_t, int32_t, int32_t, int32_t, int32_t, int32_t, int32_t);
+    const __nv_bfloat16 * __restrict__,
+    const void * __restrict__,
+    __nv_bfloat16 * __restrict__,
+    const float * __restrict__,
+    const float * __restrict__,
+    int32_t, int32_t, int32_t, int32_t, int32_t, int32_t, int32_t);
 
 template __global__ void custom_projection_gemm_kernel<__nv_fp8_e4m3>(
-    const __nv_bfloat16 *, const void *, __nv_bfloat16 *, const float *, const float *, int32_t, int32_t, int32_t, int32_t, int32_t, int32_t, int32_t);
+    const __nv_bfloat16 * __restrict__,
+    const void * __restrict__,
+    __nv_bfloat16 * __restrict__,
+    const float * __restrict__,
+    const float * __restrict__,
+    int32_t, int32_t, int32_t, int32_t, int32_t, int32_t, int32_t);
 
 template __global__ void custom_projection_gemm_kernel<__nv_fp4_e2m1>(
-    const __nv_bfloat16 *, const void *, __nv_bfloat16 *, const float *, const float *, int32_t, int32_t, int32_t, int32_t, int32_t, int32_t, int32_t);
+    const __nv_bfloat16 * __restrict__,
+    const void * __restrict__,
+    __nv_bfloat16 * __restrict__,
+    const float * __restrict__,
+    const float * __restrict__,
+    int32_t, int32_t, int32_t, int32_t, int32_t, int32_t, int32_t);

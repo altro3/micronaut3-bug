@@ -38,17 +38,20 @@ void launch_fused_rmsnorm_forward(
 );
 
 void launch_fused_multimodal_projection(
-    void * __restrict__ out_tokens,
-    const void * __restrict__ input_tokens,
-    const void * __restrict__ weight_matrix,
+    const void ** __restrict__ host_ptr_A,
+    const void ** __restrict__ host_ptr_B,
+    void ** __restrict__ host_ptr_D,
     const float * __restrict__ bias,
-    const int32_t * __restrict__ vision_segments,
+    const float * __restrict__ weight_scales,
+    const void * __restrict__ host_problem_shapes,
     int32_t num_segments,
     int32_t vision_hidden_size,
     int32_t text_hidden_size,
     int32_t tp_rank,
     int32_t tp_size,
-    cudaStream_t stream
+    int32_t data_type,
+    void * __restrict__ workspace_ptr,
+    void *stream_ptr
 );
 
 #ifdef __cplusplus

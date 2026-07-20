@@ -43,7 +43,7 @@ extern "C" void launch_fused_multimodal_projection(
         const int32_t input_feature_dim = problem_size.k();
 
         if (workspace_ptr != nullptr) {
-            const uintptr_t align_mask = 15;
+            constexpr uintptr_t align_mask = 15;
             const auto aligned_workspace = reinterpret_cast<void *>((reinterpret_cast<uintptr_t>(workspace_ptr) + align_mask) & ~align_mask);
             const auto sync_flag = static_cast<int32_t *>(aligned_workspace);
             cudaMemsetAsync(sync_flag, 0, sizeof(int32_t), stream);
