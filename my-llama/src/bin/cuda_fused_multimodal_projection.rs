@@ -135,7 +135,7 @@ fn run_projection_test(data_type: i32, type_name: &str) {
     let raw_ptr_b = host_ptr_b.as_ptr();
     let raw_ptr_d = host_ptr_d.as_ptr();
 
-    let d_workspace = CudaBuffer::alloc(1024);
+    let d_workspace = CudaBuffer::alloc(4096);
     let stream = stream_create_with_flags(0x01);
     unsafe {
         launch_fused_multimodal_projection(
@@ -165,9 +165,9 @@ fn run_projection_test(data_type: i32, type_name: &str) {
     for _ in 0..WARMUP {
         unsafe {
             launch_fused_multimodal_projection(
-                host_ptr_a.as_ptr(),
-                host_ptr_b.as_ptr(),
-                host_ptr_d.as_ptr(),
+                raw_ptr_a,
+                raw_ptr_b,
+                raw_ptr_d,
                 d_bias.ptr as *const f32,
                 d_scales.ptr as *const f32,
                 d_shapes.ptr,
@@ -197,9 +197,9 @@ fn run_projection_test(data_type: i32, type_name: &str) {
         unsafe {
             event_record(start_events[i], stream);
             launch_fused_multimodal_projection(
-                host_ptr_a.as_ptr(),
-                host_ptr_b.as_ptr(),
-                host_ptr_d.as_ptr(),
+                raw_ptr_a,
+                raw_ptr_b,
+                raw_ptr_d,
                 d_bias.ptr as *const f32,
                 d_scales.ptr as *const f32,
                 d_shapes.ptr,
@@ -316,13 +316,6 @@ fn run_projection_test(data_type: i32, type_name: &str) {
         }
         stream_destroy(stream);
     }
-
-    drop(host_ptr_a);
-    drop(host_ptr_b);
-    drop(host_ptr_d);
-    drop(d_inputs);
-    drop(d_weights);
-    drop(d_outputs);
 }
 
 fn main() {

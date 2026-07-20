@@ -1,15 +1,15 @@
 #pragma once
-#include <cuda_bf16.h>
 #include <stdint.h>
+#include "cutlass/gemm/gemm.h"
 
 template<typename T_weight>
-__global__ void custom_projection_gemm_kernel(
-    const __nv_bfloat16 * __restrict__ input_hidden_states,
-    const void * __restrict__ projection_weights,
-    __nv_bfloat16 * __restrict__ output_text_features,
+__global__ void batched_projection_gemm_kernel(
+    const void ** __restrict__ device_table_A,
+    const void ** __restrict__ device_table_B,
+    void ** __restrict__ device_table_D,
+    const cutlass::gemm::GemmCoord * __restrict__ device_shapes,
     const float * __restrict__ projection_bias,
     const float * __restrict__ quantization_scales,
-    int32_t batch_num_tokens,
     int32_t local_output_dim,
     int32_t input_feature_dim,
     int32_t rank_offset,

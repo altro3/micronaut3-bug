@@ -47,6 +47,6 @@ unsafe extern "C" {
         tp_size: i32,
         data_type: i32,
         workspace_ptr: *mut c_void,
-        stream: *mut c_void,
+        stream_ptr: *mut c_void,
     );
 }
