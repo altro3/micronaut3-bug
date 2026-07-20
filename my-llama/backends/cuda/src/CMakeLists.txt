@@ -22,6 +22,7 @@ else()
 
     set(INPUT_STAGE_SRCS
             "${CMAKE_CURRENT_SOURCE_DIR}/input_stage/fused_multimodal_projection.cu"
+            "${CMAKE_CURRENT_SOURCE_DIR}/input_stage/fused_multimodal_projection_launcher.cu"
             "${CMAKE_CURRENT_SOURCE_DIR}/input_stage/fused_rmsnorm_forward.cu"
             "${CMAKE_CURRENT_SOURCE_DIR}/input_stage/fused_rmsnorm_forward_launcher.cu"
             "${CMAKE_CURRENT_SOURCE_DIR}/input_stage/varlen_embeddings.cu"
