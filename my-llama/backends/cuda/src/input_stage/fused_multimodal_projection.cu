@@ -167,20 +167,41 @@ __global__ void batched_projection_cutlass4_kernel(
         tC_sC_partitioned(i) = tC_rC(i);
     }
     __syncthreads();
+    __nv_bfloat162 *output_v2 = reinterpret_cast<__nv_bfloat162 *>(output_ptr);
 
-    for (int32_t i = tid; i < TILE_M * TILE_N; i += blockDim.x) {
+    // Каждый поток теперь обрабатывает пару элементов, идущих подряд по оси N
+    // Мы идем с шагом 2, гарантируя выравнивание транзакций записи
+    for (int32_t i = tid * 2; i < TILE_M * TILE_N; i += blockDim.x * 2) {
         int32_t m_local = i / TILE_N;
         int32_t n_local = i % TILE_N;
+
         int32_t global_m = block_m_coord + m_local;
         int32_t global_n = block_n_coord + n_local;
 
-        if (global_m < batch_num_tokens && global_n < local_output_dim) {
-            float bias_val = projection_bias != nullptr ? projection_bias[rank_offset + global_n] : 0.0f;
-            float final_val = smem_C_ptr[m_local * TILE_N + n_local] + bias_val;
+        // Проверяем, что оба элемента пары лежат внутри границ матрицы
+        if (global_m < batch_num_tokens && (global_n + 1) < local_output_dim) {
+            float bias0 = projection_bias != nullptr ? projection_bias[rank_offset + global_n] : 0.0f;
+            float bias1 = projection_bias != nullptr ? projection_bias[rank_offset + global_n + 1] : 0.0f;
 
-            final_val = final_val / (1.0f + __expf(-final_val));
+            float val0 = smem_C_ptr[m_local * TILE_N + n_local] + bias0;
+            float val1 = smem_C_ptr[m_local * TILE_N + n_local + 1] + bias1;
 
-            output_ptr[global_m * local_output_dim + global_n] = bfloat16_t(final_val);
+            val0 = val0 / (1.0f + __expf(-val0));
+            val1 = val1 / (1.0f + __expf(-val1));
+
+            __nv_bfloat16 out0 = __float2bfloat16(val0);
+            __nv_bfloat16 out1 = __float2bfloat16(val1);
+
+            // Пишем одной 32-битной аппаратной операцией вместо двух по 16 бит
+            int32_t target_idx = (global_m * local_output_dim + global_n) >> 1;
+            output_v2[target_idx] = __halves2bfloat162(out0, out1);
+        }
+        // Обработка пограничного случая, если остался один нечетный элемент
+        else if (global_m < batch_num_tokens && global_n < local_output_dim) {
+            float bias0 = projection_bias != nullptr ? projection_bias[rank_offset + global_n] : 0.0f;
+            float val0 = smem_C_ptr[m_local * TILE_N + n_local] + bias0;
+            val0 = val0 / (1.0f + __expf(-val0));
+            output_ptr[global_m * local_output_dim + global_n] = bfloat16_t(val0);
         }
     }
 }
