@@ -16,7 +16,6 @@ if(ISOLATED_BUILD)
         file(WRITE "${DUMMY_FILE}" "// Stub.\n")
     endif()
     add_library(cuda_kernels STATIC "${DUMMY_FILE}" ${FLASHINFER_OBJ})
-    target_link_libraries(cuda_kernels PRIVATE cudart.lib)
 else()
     message(STATUS "[MY_LLAMA] Full Build Mode Active.")
 
@@ -48,21 +47,9 @@ else()
             ${GLOBAL_HEADERS}
     )
 
-    set(CMAKE_CUDA_SEPARATE_COMPILATION ON)
-
     add_library(cuda_kernels STATIC ${CUDA_SOURCES} ${FLASHINFER_OBJ})
-
-    find_package(CUDAToolkit REQUIRED)
-    target_link_libraries(cuda_kernels
-            PRIVATE
-            CUDA::cublas
-            CUDA::cublasLt
-            CUDA::cudart
-    )
 endif()
 
 set_target_properties(cuda_kernels PROPERTIES
-        CUDA_SEPARATE_COMPILATION ON
-        CUDA_RESOLVE_DEVICE_SYMBOLS ON
         POSITION_INDEPENDENT_CODE ON
 )

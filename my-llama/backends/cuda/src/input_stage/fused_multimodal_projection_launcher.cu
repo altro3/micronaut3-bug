@@ -2,6 +2,7 @@
 #include "data_types.h"
 #include <cassert>
 #include <vector>
+#include <cutlass/numeric_types.h>
 #include <cuda_fp8.h>
 #include <cuda_fp4.h>
 
@@ -69,7 +70,7 @@ extern "C" void launch_fused_multimodal_projection(
     cudaMemcpyAsync(device_table_D, host_ptr_D, raw_table_size, cudaMemcpyHostToDevice, stream);
     cudaMemcpyAsync(device_shapes, ready_shapes.data(), shapes_size, cudaMemcpyHostToDevice, stream);
 
-    constexpr size_t shmem_load_size = (TILE_M * TILE_K + TILE_N * TILE_K) * sizeof(__nv_bfloat16);
+    constexpr size_t shmem_load_size = (TILE_M * TILE_K + TILE_N * TILE_K) * sizeof(cutlass::bfloat16_t);
     constexpr size_t shmem_store_size = TILE_M * TILE_N * sizeof(float);
     constexpr size_t shmem_size = shmem_load_size > shmem_store_size ? shmem_load_size : shmem_store_size;
 
@@ -82,21 +83,21 @@ extern "C" void launch_fused_multimodal_projection(
 
     switch (type) {
         case DataType::BF16:
-            batched_projection_gemm_kernel<__nv_bfloat16><<<grid, block, shmem_size, stream>>>(
+            batched_projection_cutlass4_kernel<TILE_M, TILE_N, TILE_K, cutlass::bfloat16_t><<<grid, block, shmem_size, stream>>>(
                 device_table_A, device_table_B, device_table_D, device_shapes,
-                bias, weight_scales, local_output_dim, vision_hidden_size, rank_offset, TILE_M, TILE_N, TILE_K
+                bias, weight_scales, local_output_dim, vision_hidden_size, rank_offset
             );
             break;
         case DataType::FP8:
-            batched_projection_gemm_kernel<__nv_fp8_e4m3><<<grid, block, shmem_size, stream>>>(
+            batched_projection_cutlass4_kernel<TILE_M, TILE_N, TILE_K, __nv_fp8_e4m3><<<grid, block, shmem_size, stream>>>(
                 device_table_A, device_table_B, device_table_D, device_shapes,
-                bias, weight_scales, local_output_dim, vision_hidden_size, rank_offset, TILE_M, TILE_N, TILE_K
+                bias, weight_scales, local_output_dim, vision_hidden_size, rank_offset
             );
             break;
         case DataType::FP4:
-            batched_projection_gemm_kernel<__nv_fp4_e2m1><<<grid, block, shmem_size, stream>>>(
+            batched_projection_cutlass4_kernel<TILE_M, TILE_N, TILE_K, __nv_fp4_e2m1><<<grid, block, shmem_size, stream>>>(
                 device_table_A, device_table_B, device_table_D, device_shapes,
-                bias, weight_scales, local_output_dim, vision_hidden_size, rank_offset, TILE_M, TILE_N, TILE_K
+                bias, weight_scales, local_output_dim, vision_hidden_size, rank_offset
             );
             break;
     }
