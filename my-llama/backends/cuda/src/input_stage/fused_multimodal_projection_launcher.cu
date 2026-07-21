@@ -45,7 +45,7 @@ extern "C" void launch_fused_multimodal_projection(
     }
     if (max_m <= 0) return;
 
-    constexpr size_t shmem_load_size = (TILE_M * TILE_K + TILE_N * TILE_K) * sizeof(cutlass::bfloat16_t);
+    constexpr size_t shmem_load_size = 2 * (TILE_M * TILE_K + TILE_N * TILE_K) * sizeof(cutlass::bfloat16_t);
     constexpr size_t shmem_store_size = TILE_M * TILE_N * sizeof(float);
     constexpr size_t shmem_size = shmem_load_size > shmem_store_size ? shmem_load_size : shmem_store_size;
 
