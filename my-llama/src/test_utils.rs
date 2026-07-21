@@ -17,21 +17,22 @@ pub fn emu_fp4_e2m1_to_f32(byte: u8, idx: usize) -> f32 {
 }
 
 pub fn emu_fp8_e4m3_to_f32(byte: u8) -> f32 {
+    if byte == 0x7F || byte == 0xFF {
+        return f32::NAN;
+    }
+
     let s = (byte >> 7) & 1;
     let e = (byte >> 3) & 0x0F;
     let m = byte & 7;
 
     let sign = if s == 1 { -1.0 } else { 1.0 };
-    if e == 15 && m == 7 {
-        return f32::NAN;
-    }
     if e == 0 {
         if m == 0 {
             return 0.0;
         }
         return sign * 2.0f32.powi(-6) * (m as f32 / 8.0);
     }
-    let exp = e as i32 - 7;
+    let exp = e as i32 - 7; // ИСПРАВЛЕНО: Строго 7!
     let mantissa = 1.0 + (m as f32 / 8.0);
     sign * mantissa * 2.0f32.powi(exp)
 }

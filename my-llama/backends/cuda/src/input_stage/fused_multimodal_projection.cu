@@ -82,6 +82,7 @@ __global__ void batched_projection_cutlass4_kernel(
     int32_t num_k_tiles = (input_feature_dim + TILE_K - 1) / TILE_K;
 
     for (int32_t k_tile = 0; k_tile < num_k_tiles; ++k_tile) {
+#pragma unroll 4
         for (int32_t i = tid; i < TILE_M * TILE_K; i += blockDim.x) {
             int32_t local_m = i / TILE_K;
             int32_t local_k = i % TILE_K;
@@ -97,9 +98,10 @@ __global__ void batched_projection_cutlass4_kernel(
 
         if constexpr (std::is_same_v<T_Weight, bfloat16_t>) {
             auto weights_bf16 = static_cast<const bfloat16_t *>(weight_ptr);
+#pragma unroll 4
             for (int32_t i = tid; i < TILE_N * TILE_K; i += blockDim.x) {
-                int32_t local_n = i / TILE_K;
-                int32_t local_k = i % TILE_K;
+                int32_t local_n = i % TILE_N;
+                int32_t local_k = i / TILE_N;
                 int32_t global_n = block_n_coord + local_n;
                 int32_t global_k_weight = k_tile * TILE_K + local_k;
 
@@ -111,9 +113,10 @@ __global__ void batched_projection_cutlass4_kernel(
             }
         } else if constexpr (std::is_same_v<T_Weight, __nv_fp8_e4m3>) {
             auto weights_fp8 = static_cast<const uint8_t *>(weight_ptr);
+#pragma unroll 4
             for (int32_t i = tid; i < TILE_N * TILE_K; i += blockDim.x) {
-                int32_t local_n = i / TILE_K;
-                int32_t local_k = i % TILE_K;
+                int32_t local_n = i % TILE_N;
+                int32_t local_k = i / TILE_N;
                 int32_t global_n = block_n_coord + local_n;
                 int32_t global_k_weight = k_tile * TILE_K + local_k;
 
@@ -129,9 +132,10 @@ __global__ void batched_projection_cutlass4_kernel(
             }
         } else if constexpr (std::is_same_v<T_Weight, __nv_fp4_e2m1>) {
             auto weights_fp4 = static_cast<const uint8_t *>(weight_ptr);
+#pragma unroll 4
             for (int32_t i = tid; i < TILE_N * TILE_K; i += blockDim.x) {
-                int32_t local_n = i / TILE_K;
-                int32_t local_k = i % TILE_K;
+                int32_t local_n = i % TILE_N;
+                int32_t local_k = i / TILE_N;
                 int32_t global_n = block_n_coord + local_n;
                 int32_t global_k_weight = k_tile * TILE_K + local_k;
 
@@ -171,6 +175,7 @@ __global__ void batched_projection_cutlass4_kernel(
     }
     __syncthreads();
 
+#pragma unroll 4
     for (int32_t i = tid; i < TILE_M * TILE_N; i += blockDim.x) {
         int32_t m_local = i / TILE_N;
         int32_t n_local = i % TILE_N;

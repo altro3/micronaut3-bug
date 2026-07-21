@@ -10,7 +10,7 @@ use cuda_runtime::{
 use my_llama::test_utils::{bf16_bits_to_f32, emu_fp4_e2m1_to_f32, emu_fp8_e4m3_to_f32, f32_to_bf16_bits};
 
 fn run_projection_test(data_type: i32, type_name: &str) {
-    println!("\n=== PROJECTION ТЕЛЕМЕТРИЯ ФОРМАТА: {} ===", type_name);
+    println!("\n=== PROJECTION TELEMETRY FORMAT: {} ===", type_name);
 
     let vision_hidden_size = 1152;
     let text_hidden_size = 4096;
@@ -40,7 +40,7 @@ fn run_projection_test(data_type: i32, type_name: &str) {
     let mut d_weights = Vec::new();
     let mut d_outputs = Vec::new();
 
-    let mut bytes_processed: u64 = 0;
+    let mut algorithmic_bytes: u64 = 0;
 
     for i in 0..num_segments {
         let m = segment_tokens[i] as usize;
@@ -79,7 +79,7 @@ fn run_projection_test(data_type: i32, type_name: &str) {
             d_weight.copy_to_device(weight_segment.as_ptr() as *const c_void, weight_bytes);
         }
 
-        bytes_processed += (input_elements * 2) as u64 + weight_bytes as u64 + (output_elements * 2) as u64;
+        algorithmic_bytes += (input_elements * 2) as u64 + weight_bytes as u64 + (output_elements * 2) as u64;
 
         d_inputs.push(d_input);
         d_weights.push(d_weight);
@@ -98,7 +98,7 @@ fn run_projection_test(data_type: i32, type_name: &str) {
     unsafe {
         d_bias.copy_to_device(h_bias.as_ptr() as *const c_void, (text_hidden_size * 4) as usize);
     }
-    bytes_processed += (total_tokens as u64) * (local_output_dim as u64) * 4;
+    algorithmic_bytes += (total_tokens as u64) * (local_output_dim as u64) * 4;
 
     let h_scales = vec![0.85f32; num_segments];
     let d_scales = CudaBuffer::alloc(num_segments * 4);
@@ -118,27 +118,9 @@ fn run_projection_test(data_type: i32, type_name: &str) {
     let table_size = (raw_table_size + 15) & !15;
     let shapes_size = num_segments * 3 * std::mem::size_of::<i32>();
     let required_workspace_bytes = 3 * table_size + shapes_size + 64;
-    let d_workspace = CudaBuffer::alloc(required_workspace_bytes);
 
+    let d_workspace = CudaBuffer::alloc(required_workspace_bytes);
     let stream = stream_create_with_flags(0x01);
-    unsafe {
-        launch_fused_multimodal_projection(
-            raw_ptr_a,
-            raw_ptr_b,
-            raw_ptr_d,
-            d_bias.ptr as *const f32,
-            d_scales.ptr as *const f32,
-            host_problem_shapes.as_ptr(),
-            num_segments as i32,
-            vision_hidden_size,
-            text_hidden_size,
-            tp_rank,
-            tp_size,
-            data_type,
-            d_workspace.ptr,
-            stream,
-        );
-    }
 
     assert_eq!(device_synchronize(), 0);
     assert_eq!(get_last_error(), 0);
@@ -166,6 +148,7 @@ fn run_projection_test(data_type: i32, type_name: &str) {
             );
         }
     }
+    assert_eq!(device_synchronize(), 0);
 
     let mut start_events = vec![ptr::null_mut(); ITERS];
     let mut end_events = vec![ptr::null_mut(); ITERS];
@@ -205,23 +188,35 @@ fn run_projection_test(data_type: i32, type_name: &str) {
     }
     let total_host_time = start_host.elapsed();
 
-    let mut bandwidths: Vec<f64> = Vec::with_capacity(ITERS);
     let mut total_gpu_ms = 0.0_f32;
-
     for i in 0..ITERS {
         let ms = unsafe { event_elapsed_time(start_events[i], end_events[i]) };
         total_gpu_ms += ms;
-        bandwidths.push((bytes_processed as f64 / 1e9) / ((ms / 1000.0) as f64));
     }
-    bandwidths.sort_by(|a, b| a.partial_cmp(b).unwrap());
 
-    println!("Wall Time:       {:.2} сек", total_host_time.as_secs_f32());
-    println!("🚀 MAX ПСП PROJ: {:.2} ГБ/сек", bandwidths[ITERS - 1]);
-    println!(
-        "📈 AVG ПСП PROJ: {:.2} ГБ/сек",
-        (bytes_processed as f64 * ITERS as f64 / 1e9) / (total_gpu_ms as f64 / 1000.0)
-    );
+    let avg_gpu_ms = total_gpu_ms / (ITERS as f32);
+    let avg_host_ms = (total_host_time.as_secs_f32() * 1000.0f32) / (ITERS as f32);
 
+    let tflops = if avg_gpu_ms > 0.0 {
+        let mut total_ops = 0.0f64;
+        for i in 0..num_segments {
+            total_ops += 2.0 * (segment_tokens[i] as f64) * (local_output_dim as f64) * (vision_hidden_size as f64);
+        }
+        (total_ops * 1e-12) / (avg_gpu_ms as f64 * 1e-3)
+    } else {
+        0.0
+    };
+
+    let bandwidth_gbps = if avg_gpu_ms > 0.0 {
+        (algorithmic_bytes as f64 * 1e-9) / (avg_gpu_ms as f64 * 1e-3)
+    } else {
+        0.0
+    };
+
+    println!("  - Avg GPU Execution Time: {:.3} ms", avg_gpu_ms);
+    println!("  - Avg Host Dispatch Time:  {:.3} ms", avg_host_ms);
+    println!("  - Algorithmic Performance: {:.2} TFLOPS", tflops);
+    println!("  - Useful Memory Bandwidth:  {:.2} GB/s", bandwidth_gbps);
     let mut mut_h_outputs = h_outputs;
     for i in 0..num_segments {
         let output_elements = (segment_tokens[i] as usize) * (local_output_dim as usize);
@@ -230,7 +225,7 @@ fn run_projection_test(data_type: i32, type_name: &str) {
         }
     }
 
-    println!("--- ЧЕСТНАЯ МАТЕМАТИЧЕСКАЯ ВАЛИДАЦИЯ MULTIMODAL PROJECTION ---");
+    println!("--- MULTIMODAL PROJECTION MATHEMATICAL VALIDATION ---");
     let mut math_errors = 0;
     let allowed_tolerance = 5e-2f32;
 
@@ -252,7 +247,12 @@ fn run_projection_test(data_type: i32, type_name: &str) {
                             let weight_bf16 = unsafe { std::slice::from_raw_parts(h_weights[s].as_ptr() as *const u16, n * k) };
                             bf16_bits_to_f32(weight_bf16[col * k + contr])
                         },
-                        1 => emu_fp8_e4m3_to_f32(h_weights[s][col * k + contr]),
+                        1 => {
+                            let raw_fp8 = h_weights[s][col * k + contr];
+                            let dequantized_weight = emu_fp8_e4m3_to_f32(raw_fp8) * scale;
+                            let bf16_bits = f32_to_bf16_bits(dequantized_weight);
+                            bf16_bits_to_f32(bf16_bits)
+                        },
                         2 => {
                             let linear_idx = col * k + contr;
                             let byte_idx = linear_idx / 2;
@@ -267,14 +267,16 @@ fn run_projection_test(data_type: i32, type_name: &str) {
                     accum += input_val * weight_val;
                 }
 
-                if data_type != 0 {
+                if data_type == 2 {
                     accum *= scale;
                 }
 
                 let bias_val = h_bias[rank_offset as usize + col];
                 let val_with_bias = accum + bias_val;
+                let expected_raw = val_with_bias / (1.0f32 + (-val_with_bias).exp());
 
-                let expected = val_with_bias / (1.0f32 + (-val_with_bias).exp());
+                let expected_bf16_bits = f32_to_bf16_bits(expected_raw);
+                let expected = bf16_bits_to_f32(expected_bf16_bits);
 
                 let actual = bf16_bits_to_f32(mut_h_outputs[s][row * n + col]);
                 let diff = (actual - expected).abs();
@@ -291,9 +293,10 @@ fn run_projection_test(data_type: i32, type_name: &str) {
             }
         }
     }
-    println!("Количество неверных элементов Projection: {}", math_errors);
-    assert_eq!(math_errors, 0, "Критическая ошибка математики в Multimodal Projection!");
-    println!("✅ ВАЛИДАЦИЯ MULTIMODAL PROJECTION ПРОЙДЕНА ДЛЯ {}", type_name);
+    println!("Projection Mismatch Count: {}", math_errors);
+    assert_eq!(math_errors, 0, "Critical math mismatch in Multimodal Projection!");
+    println!("✅ MULTIMODAL PROJECTION VALIDATION PASSED FOR {}", type_name);
+
     unsafe {
         for i in 0..ITERS {
             event_destroy(start_events[i]);
@@ -303,7 +306,7 @@ fn run_projection_test(data_type: i32, type_name: &str) {
     }
 }
 
-fn main() {
+pub fn main() {
     run_projection_test(0, "BF16");
     run_projection_test(1, "FP8");
     run_projection_test(2, "FP4");
