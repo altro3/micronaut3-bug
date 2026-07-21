@@ -6,14 +6,14 @@
 
 using namespace cute;
 
-template <
+template<
     int TILE_M, int TILE_N, int TILE_K,
     typename T_Weight
 >
 __global__ void batched_projection_cutlass4_kernel(
     ProjectionParams params,
-    const float* __restrict__ projection_bias,
-    const float* __restrict__ quantization_scales,
+    const float * __restrict__ projection_bias,
+    const float * __restrict__ quantization_scales,
     int32_t local_output_dim,
     int32_t input_feature_dim,
     int32_t rank_offset
@@ -29,9 +29,9 @@ __global__ void batched_projection_cutlass4_kernel(
 
     if (block_m_coord >= batch_num_tokens) return;
 
-    auto input_ptr = static_cast<const bfloat16_t*>(params.inputs[segment_id]);
-    const void* weight_ptr = params.weights[segment_id];
-    auto output_ptr = static_cast<bfloat16_t*>(params.outputs[segment_id]);
+    auto input_ptr = static_cast<const bfloat16_t *>(params.inputs[segment_id]);
+    const void *weight_ptr = params.weights[segment_id];
+    auto output_ptr = static_cast<bfloat16_t *>(params.outputs[segment_id]);
 
     extern __shared__ uint8_t dynamic_shmem[];
     auto smem_A_ptr = reinterpret_cast<bfloat16_t *>(dynamic_shmem);
@@ -46,11 +46,9 @@ __global__ void batched_projection_cutlass4_kernel(
     __syncthreads();
     float scale = shared_scale;
 
-    auto gmem_A_layout = make_layout(make_shape(batch_num_tokens, input_feature_dim), LayoutRight{});
     auto smem_A_layout = make_layout(make_shape(Int<TILE_M>{}, Int<TILE_K>{}), LayoutRight{});
     auto smem_B_layout = make_layout(make_shape(Int<TILE_N>{}, Int<TILE_K>{}), LayoutLeft{});
 
-    auto gmem_A_tensor = make_tensor(make_gmem_ptr(input_ptr), gmem_A_layout);
     auto smem_A_tensor = make_tensor(make_smem_ptr(smem_A_ptr), smem_A_layout);
     auto smem_B_tensor = make_tensor(make_smem_ptr(smem_B_ptr), smem_B_layout);
 
@@ -80,25 +78,25 @@ __global__ void batched_projection_cutlass4_kernel(
 
     for (int32_t k_tile = 0; k_tile < num_k_tiles; ++k_tile) {
 #pragma unroll 4
-        for (int32_t i = tid; i < TILE_M * TILE_K; i += blockDim.x) {
-            int32_t local_m = i / TILE_K;
-            int32_t local_k = i % TILE_K;
+        for (int32_t i = tid; i < (TILE_M * TILE_K) / 8; i += blockDim.x) {
+            int32_t idx = i * 8;
+            int32_t local_m = idx / TILE_K;
+            int32_t local_k = idx % TILE_K;
             int32_t global_m = block_m_coord + local_m;
             int32_t global_k = k_tile * TILE_K + local_k;
 
             if (global_m < batch_num_tokens && global_k < input_feature_dim) {
-                smem_A_ptr[local_m * TILE_K + local_k] = gmem_A_tensor(global_m, global_k);
+                *reinterpret_cast<uint4 *>(&smem_A_ptr[local_m * TILE_K + local_k]) =
+                        *reinterpret_cast<const uint4 *>(&input_ptr[global_m * input_feature_dim + global_k]);
             } else {
-                smem_A_ptr[local_m * TILE_K + local_k] = static_cast<bfloat16_t>(0.0f);
+                *reinterpret_cast<uint4 *>(&smem_A_ptr[local_m * TILE_K + local_k]) = make_uint4(0, 0, 0, 0);
             }
         }
-
         if constexpr (std::is_same_v<T_Weight, bfloat16_t>) {
             auto weights_bf16 = static_cast<const bfloat16_t *>(weight_ptr);
-#pragma unroll 4
             for (int32_t i = tid; i < TILE_N * TILE_K; i += blockDim.x) {
-                int32_t local_n = i % TILE_N;
-                int32_t local_k = i / TILE_N;
+                int32_t local_n = i / TILE_K;
+                int32_t local_k = i % TILE_K;
                 int32_t global_n = block_n_coord + local_n;
                 int32_t global_k_weight = k_tile * TILE_K + local_k;
 
@@ -110,7 +108,6 @@ __global__ void batched_projection_cutlass4_kernel(
             }
         } else if constexpr (std::is_same_v<T_Weight, __nv_fp8_e4m3>) {
             auto weights_fp8 = static_cast<const uint8_t *>(weight_ptr);
-#pragma unroll 4
             for (int32_t i = tid; i < TILE_N * TILE_K; i += blockDim.x) {
                 int32_t local_n = i % TILE_N;
                 int32_t local_k = i / TILE_N;
@@ -129,7 +126,6 @@ __global__ void batched_projection_cutlass4_kernel(
             }
         } else if constexpr (std::is_same_v<T_Weight, __nv_fp4_e2m1>) {
             auto weights_fp4 = static_cast<const uint8_t *>(weight_ptr);
-#pragma unroll 4
             for (int32_t i = tid; i < TILE_N * TILE_K; i += blockDim.x) {
                 int32_t local_n = i % TILE_N;
                 int32_t local_k = i / TILE_N;
@@ -172,7 +168,6 @@ __global__ void batched_projection_cutlass4_kernel(
     }
     __syncthreads();
 
-#pragma unroll 4
     for (int32_t i = tid; i < TILE_M * TILE_N; i += blockDim.x) {
         int32_t m_local = i / TILE_N;
         int32_t n_local = i % TILE_N;
@@ -191,16 +186,16 @@ __global__ void batched_projection_cutlass4_kernel(
 }
 
 template __global__ void batched_projection_cutlass4_kernel<64, 64, 32, bfloat16_t>(
-    ProjectionParams params, const float* __restrict__ projection_bias, const float* __restrict__ quantization_scales,
+    ProjectionParams params, const float * __restrict__ projection_bias, const float * __restrict__ quantization_scales,
     int32_t local_output_dim, int32_t input_feature_dim, int32_t rank_offset
 );
 
 template __global__ void batched_projection_cutlass4_kernel<64, 64, 32, __nv_fp8_e4m3>(
-    ProjectionParams params, const float* __restrict__ projection_bias, const float* __restrict__ quantization_scales,
+    ProjectionParams params, const float * __restrict__ projection_bias, const float * __restrict__ quantization_scales,
     int32_t local_output_dim, int32_t input_feature_dim, int32_t rank_offset
 );
 
 template __global__ void batched_projection_cutlass4_kernel<64, 64, 32, __nv_fp4_e2m1>(
-    ProjectionParams params, const float* __restrict__ projection_bias, const float* __restrict__ quantization_scales,
+    ProjectionParams params, const float * __restrict__ projection_bias, const float * __restrict__ quantization_scales,
     int32_t local_output_dim, int32_t input_feature_dim, int32_t rank_offset
 );
