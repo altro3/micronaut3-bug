@@ -6,23 +6,20 @@
 
 using namespace cute;
 
-template<
+template <
     int TILE_M, int TILE_N, int TILE_K,
     typename T_Weight
 >
 __global__ void batched_projection_cutlass4_kernel(
-    const void ** __restrict__ device_table_A,
-    const void ** __restrict__ device_table_B,
-    void ** __restrict__ device_table_D,
-    const cutlass::gemm::GemmCoord * __restrict__ device_shapes,
-    const float * __restrict__ projection_bias,
-    const float * __restrict__ quantization_scales,
+    ProjectionParams params,
+    const float* __restrict__ projection_bias,
+    const float* __restrict__ quantization_scales,
     int32_t local_output_dim,
     int32_t input_feature_dim,
     int32_t rank_offset
 ) {
     const int32_t segment_id = blockIdx.z;
-    cutlass::gemm::GemmCoord problem_size = device_shapes[segment_id];
+    cutlass::gemm::GemmCoord problem_size = params.shapes[segment_id];
     const int32_t batch_num_tokens = problem_size.m();
 
     if (batch_num_tokens <= 0) return;
@@ -32,9 +29,9 @@ __global__ void batched_projection_cutlass4_kernel(
 
     if (block_m_coord >= batch_num_tokens) return;
 
-    auto input_ptr = static_cast<const bfloat16_t *>(device_table_A[segment_id]);
-    const void *weight_ptr = device_table_B[segment_id];
-    auto output_ptr = static_cast<bfloat16_t *>(device_table_D[segment_id]);
+    auto input_ptr = static_cast<const bfloat16_t*>(params.inputs[segment_id]);
+    const void* weight_ptr = params.weights[segment_id];
+    auto output_ptr = static_cast<bfloat16_t*>(params.outputs[segment_id]);
 
     extern __shared__ uint8_t dynamic_shmem[];
     auto smem_A_ptr = reinterpret_cast<bfloat16_t *>(dynamic_shmem);
@@ -194,19 +191,16 @@ __global__ void batched_projection_cutlass4_kernel(
 }
 
 template __global__ void batched_projection_cutlass4_kernel<64, 64, 32, bfloat16_t>(
-    const void ** __restrict__ device_table_A, const void ** __restrict__ device_table_B, void ** __restrict__ device_table_D,
-    const cutlass::gemm::GemmCoord * __restrict__ device_shapes, const float * __restrict__ projection_bias, const float * __restrict__ quantization_scales,
+    ProjectionParams params, const float* __restrict__ projection_bias, const float* __restrict__ quantization_scales,
     int32_t local_output_dim, int32_t input_feature_dim, int32_t rank_offset
 );
 
 template __global__ void batched_projection_cutlass4_kernel<64, 64, 32, __nv_fp8_e4m3>(
-    const void ** __restrict__ device_table_A, const void ** __restrict__ device_table_B, void ** __restrict__ device_table_D,
-    const cutlass::gemm::GemmCoord * __restrict__ device_shapes, const float * __restrict__ projection_bias, const float * __restrict__ quantization_scales,
+    ProjectionParams params, const float* __restrict__ projection_bias, const float* __restrict__ quantization_scales,
     int32_t local_output_dim, int32_t input_feature_dim, int32_t rank_offset
 );
 
 template __global__ void batched_projection_cutlass4_kernel<64, 64, 32, __nv_fp4_e2m1>(
-    const void ** __restrict__ device_table_A, const void ** __restrict__ device_table_B, void ** __restrict__ device_table_D,
-    const cutlass::gemm::GemmCoord * __restrict__ device_shapes, const float * __restrict__ projection_bias, const float * __restrict__ quantization_scales,
+    ProjectionParams params, const float* __restrict__ projection_bias, const float* __restrict__ quantization_scales,
     int32_t local_output_dim, int32_t input_feature_dim, int32_t rank_offset
 );
