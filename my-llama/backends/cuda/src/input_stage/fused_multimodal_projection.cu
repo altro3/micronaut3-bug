@@ -6,17 +6,17 @@
 
 using namespace cute;
 
-template <
+template<
     int TILE_M, int TILE_N, int TILE_K,
     typename T_Weight
 >
 __global__ void batched_projection_cutlass4_kernel(
-    const void** __restrict__ device_table_A,
-    const void** __restrict__ device_table_B,
-    void** __restrict__ device_table_D,
-    const cutlass::gemm::GemmCoord* __restrict__ device_shapes,
-    const float* __restrict__ projection_bias,
-    const float* __restrict__ quantization_scales,
+    const void ** __restrict__ device_table_A,
+    const void ** __restrict__ device_table_B,
+    void ** __restrict__ device_table_D,
+    const cutlass::gemm::GemmCoord * __restrict__ device_shapes,
+    const float * __restrict__ projection_bias,
+    const float * __restrict__ quantization_scales,
     int32_t local_output_dim,
     int32_t input_feature_dim,
     int32_t rank_offset
@@ -32,12 +32,12 @@ __global__ void batched_projection_cutlass4_kernel(
 
     if (block_m_coord >= batch_num_tokens) return;
 
-    auto input_ptr = static_cast<const bfloat16_t*>(device_table_A[segment_id]);
-    const void* weight_ptr = device_table_B[segment_id];
-    auto output_ptr = static_cast<bfloat16_t*>(device_table_D[segment_id]);
+    auto input_ptr = static_cast<const bfloat16_t *>(device_table_A[segment_id]);
+    const void *weight_ptr = device_table_B[segment_id];
+    auto output_ptr = static_cast<bfloat16_t *>(device_table_D[segment_id]);
 
     extern __shared__ uint8_t dynamic_shmem[];
-    auto smem_A_ptr = reinterpret_cast<bfloat16_t*>(dynamic_shmem);
+    auto smem_A_ptr = reinterpret_cast<bfloat16_t *>(dynamic_shmem);
     auto smem_B_ptr = smem_A_ptr + TILE_M * TILE_K;
 
     const int32_t tid = threadIdx.x;
@@ -63,8 +63,8 @@ __global__ void batched_projection_cutlass4_kernel(
 
     auto mma_core = TiledMMA<
         MMA_Atom<SM80_16x8x16_F32BF16BF16F32_TN>,
-        Layout<Shape<Int<2>, Int<2>, Int<1>>>,
-        Tile<Int<32>, Int<16>, Int<16>>
+        Layout<Shape<Int<2>, Int<2>, Int<1> > >,
+        Tile<Int<32>, Int<16>, Int<16> >
     >{};
     auto thr_mma = mma_core.get_slice(tid);
 
@@ -80,48 +80,54 @@ __global__ void batched_projection_cutlass4_kernel(
 
     int32_t num_k_tiles = (input_feature_dim + TILE_K - 1) / TILE_K;
 
+    auto tA_gmem_flat = coalesce(tA_gmem_to_smem);
+    auto tA_smem_flat = coalesce(tA_smem);
+
     for (int32_t k_tile = 0; k_tile < num_k_tiles; ++k_tile) {
-        #pragma unroll
-        for (int i = 0; i < size<2>(tA_gmem_to_smem); ++i) {
-            auto coord = tA_gmem_to_smem.coord(make_coord(_, _, i));
-            int32_t global_m = block_m_coord + get<0>(coord);
-            int32_t global_k = k_tile * TILE_K + get<1>(coord);
+#pragma unroll
+        for (int i = 0; i < size(tA_gmem_flat); ++i) {
+            int32_t local_idx = i;
+            int32_t m_in_tile = local_idx % TILE_M;
+            int32_t k_in_tile = local_idx / TILE_M;
+
+            int32_t global_m = block_m_coord + m_in_tile;
+            int32_t global_k = k_tile * TILE_K + k_in_tile;
 
             if (global_m < batch_num_tokens && global_k < input_feature_dim) {
-                copy(UniversalCopy<uint4>{}, tA_gmem_to_smem(_, _, i, k_tile), tA_smem(_, _, i));
+                tA_smem_flat(i) = tA_gmem_flat(i);
             } else {
-                #pragma unroll
-                for (int v = 0; v < size<0>(tA_smem); ++v) {
-                    tA_smem(v, _, i) = static_cast<bfloat16_t>(0.0f);
-                }
+                tA_smem_flat(i) = static_cast<bfloat16_t>(0.0f);
             }
         }
 
         if constexpr (std::is_same_v<T_Weight, bfloat16_t>) {
-            auto weights_bf16 = static_cast<const bfloat16_t*>(weight_ptr);
+            auto weights_bf16 = static_cast<const bfloat16_t *>(weight_ptr);
             auto gmem_B_layout = make_layout(make_shape(local_output_dim, input_feature_dim), LayoutRight{});
             auto gmem_B_tensor = make_tensor(make_gmem_ptr(weights_bf16), gmem_B_layout);
             auto block_gmem_B = local_tile(gmem_B_tensor, make_shape(Int<TILE_N>{}, Int<TILE_K>{}), make_coord(blockIdx.y, _));
             auto tB_gmem_to_smem = local_partition(block_gmem_B, make_layout(make_shape(Int<128>{}), LayoutRight{}), tid);
             auto tB_smem = local_partition(smem_B_tensor, make_layout(make_shape(Int<128>{}), LayoutRight{}), tid);
 
-            #pragma unroll
-            for (int i = 0; i < size<2>(tB_gmem_to_smem); ++i) {
-                auto coord = tB_gmem_to_smem.coord(make_coord(_, _, i));
-                int32_t global_n = block_n_coord + get<0>(coord);
-                int32_t global_k = k_tile * TILE_K + get<1>(coord);
+            auto tB_gmem_flat = coalesce(tB_gmem_to_smem);
+            auto tB_smem_flat = coalesce(tB_smem);
+
+#pragma unroll
+            for (int i = 0; i < size(tB_gmem_flat); ++i) {
+                int32_t local_idx = i;
+                int32_t n_in_tile = local_idx % TILE_N;
+                int32_t k_in_tile = local_idx / TILE_N;
+
+                int32_t global_n = block_n_coord + n_in_tile;
+                int32_t global_k = k_tile * TILE_K + k_in_tile;
 
                 if (global_n < local_output_dim && global_k < input_feature_dim) {
-                    copy(UniversalCopy<uint4>{}, tB_gmem_to_smem(_, _, i, k_tile), tB_smem(_, _, i));
+                    tB_smem_flat(i) = tB_gmem_flat(i);
                 } else {
-                    #pragma unroll
-                    for (int v = 0; v < size<0>(tB_smem); ++v) {
-                        tB_smem(v, _, i) = static_cast<bfloat16_t>(0.0f);
-                    }
+                    tB_smem_flat(i) = static_cast<bfloat16_t>(0.0f);
                 }
             }
         } else if constexpr (std::is_same_v<T_Weight, __nv_fp8_e4m3>) {
-            auto weights_fp8 = static_cast<const uint8_t*>(weight_ptr);
+            auto weights_fp8 = static_cast<const uint8_t *>(weight_ptr);
             for (int i = tid; i < TILE_N * TILE_K; i += blockDim.x) {
                 int32_t n_local = i / TILE_K;
                 int32_t k_local = i % TILE_K;
@@ -132,14 +138,14 @@ __global__ void batched_projection_cutlass4_kernel(
                     uint8_t raw_fp8 = weights_fp8[n_global * input_feature_dim + k_global];
                     uint16_t packed_fp8x2 = (static_cast<uint16_t>(raw_fp8) << 8) | raw_fp8;
                     __half2_raw h2 = __nv_cvt_fp8x2_to_halfraw2(packed_fp8x2, __NV_E4M3);
-                    float2 f2 = __half22float2(*reinterpret_cast<__half2*>(&h2));
+                    float2 f2 = __half22float2(*reinterpret_cast<__half2 *>(&h2));
                     smem_B_ptr[n_local * TILE_K + k_local] = static_cast<bfloat16_t>(f2.x * scale);
                 } else {
                     smem_B_ptr[n_local * TILE_K + k_local] = static_cast<bfloat16_t>(0.0f);
                 }
             }
         } else if constexpr (std::is_same_v<T_Weight, __nv_fp4_e2m1>) {
-            auto weights_fp4 = static_cast<const uint8_t*>(weight_ptr);
+            auto weights_fp4 = static_cast<const uint8_t *>(weight_ptr);
             for (int i = tid; i < TILE_N * TILE_K; i += blockDim.x) {
                 int32_t n_local = i / TILE_K;
                 int32_t k_local = i % TILE_K;
@@ -155,7 +161,7 @@ __global__ void batched_projection_cutlass4_kernel(
                     uint8_t raw_fp4 = (packed_byte >> (sub_byte_offset * 4)) & 0x0F;
                     uint8_t aligned_fp4x2 = (raw_fp4 << 4) | raw_fp4;
                     __half2_raw h2 = __nv_cvt_fp4x2_to_halfraw2(aligned_fp4x2, __NV_E2M1);
-                    float2 f2 = __half22float2(*reinterpret_cast<__half2*>(&h2));
+                    float2 f2 = __half22float2(*reinterpret_cast<__half2 *>(&h2));
                     smem_B_ptr[n_local * TILE_K + k_local] = static_cast<bfloat16_t>(f2.x * scale);
                 } else {
                     smem_B_ptr[n_local * TILE_K + k_local] = static_cast<bfloat16_t>(0.0f);
@@ -174,11 +180,11 @@ __global__ void batched_projection_cutlass4_kernel(
         __syncthreads();
     }
 
-    auto smem_out_buf = reinterpret_cast<float*>(dynamic_shmem);
+    auto smem_out_buf = reinterpret_cast<float *>(dynamic_shmem);
     auto tC_sC_tensor = make_tensor(make_smem_ptr(smem_out_buf), make_layout(make_shape(Int<TILE_M>{}, Int<TILE_N>{}), LayoutRight{}));
     auto tC_sC = thr_mma.partition_C(tC_sC_tensor);
 
-    #pragma unroll
+#pragma unroll
     for (int i = 0; i < size(tC_rC); ++i) {
         tC_sC(i) = tC_rC(i);
     }
@@ -202,8 +208,8 @@ __global__ void batched_projection_cutlass4_kernel(
 }
 
 template __global__ void batched_projection_cutlass4_kernel<64, 64, 32, bfloat16_t>(
-    const void** __restrict__ device_table_A, const void** __restrict__ device_table_B, void** __restrict__ device_table_D,
-    const cutlass::gemm::GemmCoord* __restrict__ device_shapes, const float* __restrict__ projection_bias, const float* __restrict__ quantization_scales,
+    const void ** __restrict__ device_table_A, const void ** __restrict__ device_table_B, void ** __restrict__ device_table_D,
+    const cutlass::gemm::GemmCoord * __restrict__ device_shapes, const float * __restrict__ projection_bias, const float * __restrict__ quantization_scales,
     int32_t local_output_dim, int32_t input_feature_dim, int32_t rank_offset
 );
 
