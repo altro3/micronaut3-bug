@@ -41,7 +41,7 @@ __global__ void batched_projection_cutlass4_kernel(
 
     __shared__ float shared_scale;
     if (tid == 0) {
-        shared_scale = (quantization_scales != nullptr) ? quantization_scales[segment_id] : 1.0f;
+        shared_scale = quantization_scales != nullptr ? quantization_scales[segment_id] : 1.0f;
     }
     __syncthreads();
     float scale = shared_scale;
@@ -78,7 +78,7 @@ __global__ void batched_projection_cutlass4_kernel(
 
     for (int32_t k_tile = 0; k_tile < num_k_tiles; ++k_tile) {
 #pragma unroll 4
-        for (int32_t i = tid; i < (TILE_M * TILE_K) / 8; i += blockDim.x) {
+        for (int32_t i = tid; i < TILE_M * TILE_K / 8; i += blockDim.x) {
             int32_t idx = i * 8;
             int32_t local_m = idx / TILE_K;
             int32_t local_k = idx % TILE_K;
@@ -135,7 +135,7 @@ __global__ void batched_projection_cutlass4_kernel(
                 if (global_n < local_output_dim && global_k_weight < input_feature_dim) {
                     int32_t global_bit_idx = (global_n * input_feature_dim + global_k_weight) * 4;
                     int32_t global_byte_idx = global_bit_idx / 8;
-                    int32_t sub_byte_offset = (global_bit_idx % 8) / 4;
+                    int32_t sub_byte_offset = global_bit_idx % 8 / 4;
 
                     uint8_t packed_byte = weights_fp4[global_byte_idx];
                     uint8_t raw_fp4 = (packed_byte >> (sub_byte_offset * 4)) & 0x0F;
@@ -175,7 +175,7 @@ __global__ void batched_projection_cutlass4_kernel(
         int32_t global_n = block_n_coord + n_local;
 
         if (global_m < batch_num_tokens && global_n < local_output_dim) {
-            float bias_val = (projection_bias != nullptr) ? projection_bias[rank_offset + global_n] : 0.0f;
+            float bias_val = projection_bias != nullptr ? projection_bias[rank_offset + global_n] : 0.0f;
             float final_val = smem_C_ptr[m_local * TILE_N + n_local] + bias_val;
 
             final_val = final_val / (1.0f + __expf(-final_val));
