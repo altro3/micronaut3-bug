@@ -1,10 +1,10 @@
 #pragma once
 #include <stdint.h>
-#include <cuda_fp16.h>
+#include <cuda_bf16.h>
 
-struct __align__(4) BlockQ4K {
-    half d;
-    half dmin;
+struct __align__(16) BlockQ4K {
+    __nv_bfloat16 d;
+    __nv_bfloat16 dmin;
     uint8_t scales[12];
     uint8_t qs[128];
 };

@@ -15,17 +15,17 @@ struct DequantQ4K {
 
         const BlockQ4K &block = input_B_quant[block_idx];
 
-        float d_val = __half2float(block.d);
-        float dmin_val = __half2float(block.dmin);
+        float d_val = __bfloat162float(block.d);
+        float dmin_val = __bfloat162float(block.dmin);
 
         int32_t j = elem_in_block / 64;
-        int32_t il = elem_in_block % 64 / 16;
+        int32_t il = (elem_in_block % 64) / 16;
         int32_t pair_idx = elem_in_block % 16;
 
         int32_t j_mod = j % 2;
 
         uint8_t s_low = block.scales[j_mod * 4 + il];
-        uint8_t s_high = block.scales[8 + j_mod * 2 + il / 2];
+        uint8_t s_high = block.scales[8 + j_mod * 2 + (il / 2)];
 
         uint8_t sc = s_low & 63;
         uint8_t min_sc = s_high & 63;
@@ -35,7 +35,7 @@ struct DequantQ4K {
 
         int32_t byte_idx = j * 32 + il * 4 + pair_idx / 2;
         uint8_t packed_byte = block.qs[byte_idx];
-        uint8_t raw_q = pair_idx % 2 == 0 ? packed_byte & 0x0F : packed_byte >> 4;
+        uint8_t raw_q = (pair_idx % 2 == 0) ? (packed_byte & 0x0F) : (packed_byte >> 4);
 
         return d_super * static_cast<float>(raw_q) - m_super;
     }
@@ -55,11 +55,11 @@ __global__ void fused_gemm_gguf_q4_k_kernel(
     if (block_m_coord >= M || block_n_coord >= N) return;
 
     extern __shared__ uint8_t dynamic_shmem[];
-    bfloat16_t *smem_A_ptr = reinterpret_cast<bfloat16_t *>(dynamic_shmem);
-    bfloat16_t *smem_B_ptr = smem_A_ptr + TILE_M * TILE_K;
+    __nv_bfloat16 *smem_A_ptr = reinterpret_cast<__nv_bfloat16 *>(dynamic_shmem);
+    __nv_bfloat16 *smem_B_ptr = smem_A_ptr + TILE_M * TILE_K;
 
     auto smem_A_layout = make_layout(make_shape(Int<TILE_M>{}, Int<TILE_K>{}), LayoutRight{});
-    auto smem_B_layout = make_layout(make_shape(Int<TILE_N>{}, Int<TILE_K>{}), LayoutLeft{});
+    auto smem_B_layout = make_layout(make_shape(Int<TILE_N>{}, Int<TILE_K>{}), LayoutRight{});
 
     auto smem_A_tensor = make_tensor(make_smem_ptr(smem_A_ptr), smem_A_layout);
     auto smem_B_tensor = make_tensor(make_smem_ptr(smem_B_ptr), smem_B_layout);
@@ -87,10 +87,9 @@ __global__ void fused_gemm_gguf_q4_k_kernel(
     }
 
     const int32_t num_k_tiles = (K + TILE_K - 1) / TILE_K;
-
     for (int32_t k_tile = 0; k_tile < num_k_tiles; ++k_tile) {
 #pragma unroll 4
-        for (int32_t i = tid; i < TILE_M * TILE_K / 8; i += blockDim.x) {
+        for (int32_t i = tid; i < (TILE_M * TILE_K) / 8; i += blockDim.x) {
             int32_t idx = i * 8;
             int32_t local_m = idx / TILE_K;
             int32_t local_k = idx % TILE_K;
@@ -99,22 +98,22 @@ __global__ void fused_gemm_gguf_q4_k_kernel(
 
             uint4 *smem_ptr_u4 = reinterpret_cast<uint4 *>(&smem_A_ptr[local_m * TILE_K + local_k]);
             if (global_m < M && global_k < K) {
-                if constexpr (std::is_same_v<ElementAct, bfloat16_t>) {
+                if constexpr (std::is_same_v<ElementAct, cutlass::bfloat16_t> || std::is_same_v<ElementAct, __nv_bfloat16>) {
                     *smem_ptr_u4 = *reinterpret_cast<const uint4 *>(&input_A[global_m * K + global_k]);
                 } else if constexpr (std::is_same_v<ElementAct, __nv_fp8_e4m3>) {
                     const uint8_t *fp8_in = reinterpret_cast<const uint8_t *>(&input_A[global_m * K + global_k]);
-                    bfloat16_t local_regs[8];
+                    __nv_bfloat16 local_regs[8];
 #pragma unroll
                     for (int v = 0; v < 8; ++v) {
                         uint16_t packed = (static_cast<uint16_t>(fp8_in[v]) << 8) | fp8_in[v];
                         __half2_raw h2 = __nv_cvt_fp8x2_to_halfraw2(packed, __NV_E4M3);
                         float2 f2 = __half22float2(*reinterpret_cast<__half2 *>(&h2));
-                        local_regs[v] = static_cast<bfloat16_t>(f2.x);
+                        local_regs[v] = __float2bfloat16(f2.x);
                     }
                     *smem_ptr_u4 = *reinterpret_cast<uint4 *>(local_regs);
                 } else if constexpr (std::is_same_v<ElementAct, __nv_fp4_e2m1>) {
                     const uint8_t *fp4_in = reinterpret_cast<const uint8_t *>(&input_A[(global_m * K + global_k) / 2]);
-                    bfloat16_t local_regs[8];
+                    __nv_bfloat16 local_regs[8];
 #pragma unroll
                     for (int v = 0; v < 4; ++v) {
                         uint8_t packed_byte = fp4_in[v];
@@ -124,8 +123,8 @@ __global__ void fused_gemm_gguf_q4_k_kernel(
                         __half2_raw h2_1 = __nv_cvt_fp4x2_to_halfraw2((r1 << 4) | r1, __NV_E2M1);
                         float2 f2_0 = __half22float2(*reinterpret_cast<__half2 *>(&h2_0));
                         float2 f2_1 = __half22float2(*reinterpret_cast<__half2 *>(&h2_1));
-                        local_regs[v * 2] = static_cast<bfloat16_t>(f2_0.x);
-                        local_regs[v * 2 + 1] = static_cast<bfloat16_t>(f2_1.x);
+                        local_regs[v * 2] = __float2bfloat16(f2_0.x);
+                        local_regs[v * 2 + 1] = __float2bfloat16(f2_1.x);
                     }
                     *smem_ptr_u4 = *reinterpret_cast<uint4 *>(local_regs);
                 }
@@ -136,16 +135,16 @@ __global__ void fused_gemm_gguf_q4_k_kernel(
 
 #pragma unroll 2
         for (int32_t i = tid; i < TILE_N * TILE_K; i += blockDim.x) {
-            int32_t local_n = i % TILE_N;
-            int32_t local_k = i / TILE_N;
+            int32_t local_n = i / TILE_K;
+            int32_t local_k = i % TILE_K;
             int32_t global_n = block_n_coord + local_n;
             int32_t global_k = k_tile * TILE_K + local_k;
 
             if (global_n < N && global_k < K) {
                 float out_fp32 = DequantQ4K::dequantize_element(input_B_quant, global_n, global_k, K);
-                smem_B_ptr[local_k * TILE_N + local_n] = static_cast<bfloat16_t>(__float2bfloat16(out_fp32));
+                smem_B_ptr[local_n * TILE_K + local_k] = __float2bfloat16(out_fp32);
             } else {
-                smem_B_ptr[local_k * TILE_N + local_n] = static_cast<bfloat16_t>(__float2bfloat16(0.0f));
+                smem_B_ptr[local_n * TILE_K + local_k] = __float2bfloat16(0.0f);
             }
         }
 
@@ -168,7 +167,7 @@ __global__ void fused_gemm_gguf_q4_k_kernel(
     }
     __syncthreads();
 
-    if constexpr (std::is_same_v<ElementAct, bfloat16_t>) {
+    if constexpr (std::is_same_v<ElementAct, cutlass::bfloat16_t> || std::is_same_v<ElementAct, __nv_bfloat16>) {
         __nv_bfloat162 *output_v2 = reinterpret_cast<__nv_bfloat162 *>(output);
         for (int32_t i = tid * 2; i < TILE_M * TILE_N; i += blockDim.x * 2) {
             int32_t m_local = i / TILE_N;
@@ -176,13 +175,16 @@ __global__ void fused_gemm_gguf_q4_k_kernel(
             int32_t global_m = block_m_coord + m_local;
             int32_t global_n = block_n_coord + n_local;
 
-            if (global_m < M && global_n + 1 < N) {
-                float val0 = smem_C_ptr[m_local * TILE_N + n_local];
-                float val1 = smem_C_ptr[m_local * TILE_N + n_local + 1];
-                int32_t target_idx = (global_m * N + global_n) >> 1;
-                output_v2[target_idx] = __halves2bfloat162(__float2bfloat16(val0), __float2bfloat16(val1));
-            } else if (global_m < M && global_n < N) {
-                output[global_m * N + global_n] = static_cast<ElementAct>(__float2bfloat16(smem_C_ptr[m_local * TILE_N + n_local]));
+            if (global_m < M && global_n < N) {
+                if (n_local + 1 < TILE_N && global_n + 1 < N) {
+                    float val0 = smem_C_ptr[m_local * TILE_N + n_local];
+                    float val1 = smem_C_ptr[m_local * TILE_N + n_local + 1];
+                    int32_t target_idx = (global_m * N + global_n) >> 1;
+                    output_v2[target_idx] = __halves2bfloat162(__float2bfloat16(val0), __float2bfloat16(val1));
+                } else {
+                    float val0 = smem_C_ptr[m_local * TILE_N + n_local];
+                    output[global_m * N + global_n] = static_cast<ElementAct>(__float2bfloat16(val0));
+                }
             }
         }
     } else if constexpr (std::is_same_v<ElementAct, __nv_fp8_e4m3>) {
@@ -208,27 +210,42 @@ __global__ void fused_gemm_gguf_q4_k_kernel(
             int32_t global_m = block_m_coord + m_local;
             int32_t global_n = block_n_coord + n_local;
 
-            if (global_m < M && global_n + 1 < N) {
-                float v0 = smem_C_ptr[m_local * TILE_N + n_local];
-                float v1 = smem_C_ptr[m_local * TILE_N + n_local + 1];
+            if (global_m < M && global_n < N) {
+                if (n_local + 1 < TILE_N && global_n + 1 < N) {
+                    float v0 = smem_C_ptr[m_local * TILE_N + n_local];
+                    float v1 = smem_C_ptr[m_local * TILE_N + n_local + 1];
 
-                __half h0 = __float2half(v0);
-                __half h1 = __float2half(v1);
-                __half_raw h_raw0 = *reinterpret_cast<__half_raw *>(&h0);
-                __half_raw h_raw1 = *reinterpret_cast<__half_raw *>(&h1);
+                    __half h0 = __float2half(v0);
+                    __half h1 = __float2half(v1);
+                    __half_raw h_raw0 = *reinterpret_cast<__half_raw *>(&h0);
+                    __half_raw h_raw1 = *reinterpret_cast<__half_raw *>(&h1);
 
-                uint8_t r0 = __nv_cvt_halfraw_to_fp4(h_raw0, __NV_E2M1, cudaRoundNearest) & 0x0F;
-                uint8_t r1 = __nv_cvt_halfraw_to_fp4(h_raw1, __NV_E2M1, cudaRoundNearest) & 0x0F;
+                    uint8_t r0 = __nv_cvt_halfraw_to_fp4(h_raw0, __NV_E2M1, cudaRoundNearest) & 0x0F;
+                    uint8_t r1 = __nv_cvt_halfraw_to_fp4(h_raw1, __NV_E2M1, cudaRoundNearest) & 0x0F;
 
-                int32_t target_byte_idx = (global_m * N + global_n) / 2;
-                fp4_out[target_byte_idx] = r0 | (r1 << 4);
+                    int32_t target_byte_idx = (global_m * N + global_n) / 2;
+                    fp4_out[target_byte_idx] = r0 | (r1 << 4);
+                } else {
+                    float v0 = smem_C_ptr[m_local * TILE_N + n_local];
+                    __half h0 = __float2half(v0);
+                    __half_raw h_raw0 = *reinterpret_cast<__half_raw *>(&h0);
+                    uint8_t r0 = __nv_cvt_halfraw_to_fp4(h_raw0, __NV_E2M1, cudaRoundNearest) & 0x0F;
+                    int32_t target_byte_idx = (global_m * N + global_n) / 2;
+
+                    uint8_t current_byte = fp4_out[target_byte_idx];
+                    if ((global_m * N + global_n) % 2 == 0) {
+                        fp4_out[target_byte_idx] = (current_byte & 0xF0) | r0;
+                    } else {
+                        fp4_out[target_byte_idx] = (current_byte & 0x0F) | (r0 << 4);
+                    }
+                }
             }
         }
     }
 }
 
-template __global__ void fused_gemm_gguf_q4_k_kernel<bfloat16_t, 64, 64, 32>(bfloat16_t *, const bfloat16_t *, const BlockQ4K *, int32_t, int32_t, int32_t);
+template __global__ void fused_gemm_gguf_q4_k_kernel<cutlass::bfloat16_t, 64, 64, 32>(cutlass::bfloat16_t * __restrict__ output, const cutlass::bfloat16_t * __restrict__ input_A, const BlockQ4K * __restrict__ input_B_quant, int32_t M, int32_t N, int32_t K);
 
-template __global__ void fused_gemm_gguf_q4_k_kernel<__nv_fp8_e4m3, 64, 64, 32>(__nv_fp8_e4m3 *, const __nv_fp8_e4m3 *, const BlockQ4K *, int32_t, int32_t, int32_t);
+template __global__ void fused_gemm_gguf_q4_k_kernel<__nv_fp8_e4m3, 64, 64, 32>(__nv_fp8_e4m3 * __restrict__ output, const __nv_fp8_e4m3 * __restrict__ input_A, const BlockQ4K * __restrict__ input_B_quant, int32_t M, int32_t N, int32_t K);
 
-template __global__ void fused_gemm_gguf_q4_k_kernel<__nv_fp4_e2m1, 64, 64, 32>(__nv_fp4_e2m1 *, const __nv_fp4_e2m1 *, const BlockQ4K *, int32_t, int32_t, int32_t);
+template __global__ void fused_gemm_gguf_q4_k_kernel<__nv_fp4_e2m1, 64, 64, 32>(__nv_fp4_e2m1 * __restrict__ output, const __nv_fp4_e2m1 * __restrict__ input_A, const BlockQ4K * __restrict__ input_B_quant, int32_t M, int32_t N, int32_t K);

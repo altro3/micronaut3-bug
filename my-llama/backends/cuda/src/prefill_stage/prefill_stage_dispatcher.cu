@@ -29,13 +29,8 @@ extern "C" void launch_prefill_linear(
                 stream_ptr
             );
             break;
-        case QuantType::NONE:
-        case QuantType::GGUF_Q5_K:
-        case QuantType::AWQ_INT4:
-        case QuantType::GPTQ_INT4:
-        case QuantType::BLACKWELL_FP4:
         default:
-            printf("Error: Quantization type %d is not implemented yet in prefill linear stage.\n", quantization_type);
+            printf("Error: Quantization type %d is not implemented or unsupported in prefill linear stage.\n", quantization_type);
             break;
     }
 }

@@ -14,6 +14,13 @@ extern __global__ void fused_gemm_gguf_q4_k_kernel(
     int32_t batch_size_or_tokens, int32_t hidden_units_out, int32_t hidden_units_in
 );
 
+template<typename ElementAct, int TILE_M, int TILE_N, int TILE_K>
+ size_t get_shmem_size() {
+    size_t shmem_input = (TILE_M * TILE_K) * sizeof(ElementAct) + (TILE_N * TILE_K) * sizeof(ElementAct);
+    size_t shmem_output = (TILE_M * TILE_N) * sizeof(float);
+    return std::max(shmem_input, shmem_output);
+}
+
 extern "C" void launch_fused_gemm_gguf_q4_k(
     void *output_activations,
     const void *input_activations,
@@ -36,13 +43,10 @@ extern "C" void launch_fused_gemm_gguf_q4_k(
         1
     );
 
-    size_t shmem_input = (TILE_M * TILE_K + TILE_N * TILE_K) * sizeof(cutlass::bfloat16_t);
-    size_t shmem_output = (TILE_M * TILE_N) * sizeof(float);
-    size_t shmem_size = std::max(shmem_input, shmem_output);
-
     switch (type) {
         case DataType::BF16: {
             auto kernel_ptr = fused_gemm_gguf_q4_k_kernel<cutlass::bfloat16_t, TILE_M, TILE_N, TILE_K>;
+            size_t shmem_size = get_shmem_size<cutlass::bfloat16_t, TILE_M, TILE_N, TILE_K>();
             if (shmem_size >= 48 * 1024) {
                 cudaFuncSetAttribute(reinterpret_cast<const void *>(kernel_ptr), cudaFuncAttributeMaxDynamicSharedMemorySize, shmem_size);
             }
@@ -56,6 +60,7 @@ extern "C" void launch_fused_gemm_gguf_q4_k(
         }
         case DataType::FP8: {
             auto kernel_ptr = fused_gemm_gguf_q4_k_kernel<__nv_fp8_e4m3, TILE_M, TILE_N, TILE_K>;
+            size_t shmem_size = get_shmem_size<__nv_fp8_e4m3, TILE_M, TILE_N, TILE_K>();
             if (shmem_size >= 48 * 1024) {
                 cudaFuncSetAttribute(reinterpret_cast<const void *>(kernel_ptr), cudaFuncAttributeMaxDynamicSharedMemorySize, shmem_size);
             }
@@ -69,6 +74,7 @@ extern "C" void launch_fused_gemm_gguf_q4_k(
         }
         case DataType::FP4: {
             auto kernel_ptr = fused_gemm_gguf_q4_k_kernel<__nv_fp4_e2m1, TILE_M, TILE_N, TILE_K>;
+            size_t shmem_size = get_shmem_size<__nv_fp4_e2m1, TILE_M, TILE_N, TILE_K>();
             if (shmem_size >= 48 * 1024) {
                 cudaFuncSetAttribute(reinterpret_cast<const void *>(kernel_ptr), cudaFuncAttributeMaxDynamicSharedMemorySize, shmem_size);
             }
