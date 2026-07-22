@@ -3,13 +3,12 @@ pub fn emu_fp4_e2m1_to_f32(byte: u8, idx: usize) -> f32 {
     let s = (nibble >> 3) & 1;
     let e = (nibble >> 1) & 3;
     let m = nibble & 1;
-
     let sign = if s == 1 { -1.0 } else { 1.0 };
     if e == 0 {
         if m == 0 {
             return 0.0;
         }
-        return sign * 1.0 * (m as f32 / 2.0);
+        return sign * (m as f32 / 2.0);
     }
     let exp = e as i32 - 1;
     let mantissa = 1.0f32 + (m as f32 / 2.0f32);
@@ -43,10 +42,14 @@ pub fn f32_to_bf16_bits(val: f32) -> u16 {
         return 0x7FC0;
     }
     let bits = val.to_bits();
-    let lsb = (bits >> 16) & 1;
-    let rounding_bias = 0x7FFF + lsb;
-    let rounded_bits = bits.wrapping_add(rounding_bias);
-    ((rounded_bits >> 16) & 0xFFFF) as u16
+    let r = bits >> 16;
+    let lsb = r & 1;
+    let round_bits = bits & 0xFFFF;
+    let mut rounded_bits = bits;
+    if round_bits > 0x8000 || (round_bits == 0x8000 && lsb == 1) {
+        rounded_bits = bits.wrapping_add(0x10000);
+    }
+    (rounded_bits >> 16) as u16
 }
 
 pub fn bf16_bits_to_f32(bits: u16) -> f32 {

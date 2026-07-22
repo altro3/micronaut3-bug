@@ -14,6 +14,12 @@ extern "C" void launch_prefill_linear(
     int32_t quantization_type,
     void *stream_ptr
 ) {
+
+    printf("[DISPATCHER DEBUG] Intercepted launch_prefill_linear for FP4:\n");
+    printf("  - Target Output Ptr: %p\n", output_activations);
+    printf("  - Quantization Type: %d\n", quantization_type);
+    fflush(stdout);
+
     const auto q_type = static_cast<QuantType>(quantization_type);
 
     switch (q_type) {

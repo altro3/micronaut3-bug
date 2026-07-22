@@ -145,8 +145,22 @@ fn run_dequantize_mma_test(data_type: DataType) {
     println!("  - Среднее время отправки с хоста:  {:.3} ms", avg_host_ms);
     println!("  - Алгоритмическая мощность:        {:.2} TFLOPS", tflops);
     println!("  - Полезная ПСП ядра:                {:.2} GB/s", bandwidth_gbps);
+    println!("[CPU ДЕБАГ] Физический адрес h_output_c: {:p}", h_output_c.as_ptr());
+    println!("[CPU ДЕБАГ] Первые 8 байт из h_output_c, которые вернул GPU: {:?}", &h_output_c[0..8]);
+    println!(
+        "[CPU ДЕБАГ] Значение первого элемента по формуле теста (actual): {}",
+        match data_type {
+            DataType::FP4 => emu_fp4_e2m1_to_f32(h_output_c[0], 0),
+            _ => 0.0,
+        }
+    );
 
     unsafe {
+        let sync_res = device_synchronize();
+        if sync_res != 0 {
+            println!("[RUST ERROR] CUDA device synchronization failed with code: {}", sync_res);
+        }
+
         d_output_c.copy_to_host(h_output_c.as_mut_ptr() as *mut c_void, output_bytes_actual);
     }
     println!("--- ЧЕСТНАЯ МАТЕМАТИЧЕСКАЯ ВАЛИДАЦИЯ СЛИТОГО ЯДРА ДЕКВАНТОВАНИЯ ---");
@@ -167,7 +181,6 @@ fn run_dequantize_mma_test(data_type: DataType) {
                     DataType::FP4 => emu_fp4_e2m1_to_f32(h_input_a[(row * hidden_units_in as usize + contr) / 2], contr),
                 };
 
-                // Симулируем округление активации на входе в Tensor Cores (smem_A)
                 let input_bf16_bits = f32_to_bf16_bits(input_val_fp32);
                 let input_val = bf16_bits_to_f32(input_bf16_bits);
 

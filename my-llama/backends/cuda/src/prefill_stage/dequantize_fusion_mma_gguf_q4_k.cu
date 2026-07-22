@@ -41,8 +41,6 @@ struct DequantQ4K {
     }
 };
 
-using namespace cute;
-
 template<typename ElementAct, int TILE_M, int TILE_N, int TILE_K>
 __global__ void fused_gemm_gguf_q4_k_kernel(
     ElementAct * __restrict__ output,
@@ -98,34 +96,59 @@ __global__ void fused_gemm_gguf_q4_k_kernel(
                 if constexpr (std::is_same_v<ElementAct, bfloat16_t> || std::is_same_v<ElementAct, __nv_bfloat16>) {
                     *smem_ptr_u4 = *reinterpret_cast<const uint4 *>(&input_A[global_m * K + global_k]);
                 } else if constexpr (std::is_same_v<ElementAct, __nv_fp8_e4m3>) {
-                    auto fp8_in = reinterpret_cast<const uint8_t *>(&input_A[global_m * K + global_k]);
-                    __nv_bfloat16 local_regs[8];
+                    auto base_bytes = reinterpret_cast<const uint8_t *>(input_A);
+                    auto fp8_in = &base_bytes[global_m * K + global_k];
+                    uint32_t u32_vals[4];
 #pragma unroll
                     for (int v = 0; v < 4; ++v) {
                         uint16_t packed = (static_cast<uint16_t>(fp8_in[v * 2 + 1]) << 8) | fp8_in[v * 2];
                         __half2_raw h2 = __nv_cvt_fp8x2_to_halfraw2(packed, __NV_E4M3);
                         float2 f2 = __half22float2(*reinterpret_cast<__half2 *>(&h2));
-                        local_regs[v * 2] = __float2bfloat16(f2.x);
-                        local_regs[v * 2 + 1] = __float2bfloat16(f2.y);
+                        __nv_bfloat16 bf_x = __float2bfloat16(f2.x);
+                        __nv_bfloat16 bf_y = __float2bfloat16(f2.y);
+                        uint16_t bits_x = *reinterpret_cast<uint16_t *>(&bf_x);
+                        uint16_t bits_y = *reinterpret_cast<uint16_t *>(&bf_y);
+                        u32_vals[v] = (static_cast<uint32_t>(bits_y) << 16) | bits_x;
                     }
-                    *smem_ptr_u4 = *static_cast<const uint4 *>(static_cast<const void *>(local_regs));
+                    *smem_ptr_u4 = make_uint4(u32_vals[0], u32_vals[1], u32_vals[2], u32_vals[3]);
                 } else if constexpr (std::is_same_v<ElementAct, __nv_fp4_e2m1>) {
-                    auto fp4_in = reinterpret_cast<const uint8_t *>(&input_A[(global_m * K + global_k) >> 1]);
+                    auto base_bytes = reinterpret_cast<const uint8_t *>(input_A);
+                    int32_t global_fp4_element_idx = global_m * K + global_k;
+                    auto fp4_in = &base_bytes[global_fp4_element_idx >> 1];
+                    uint32_t u32_vals[4];
+
 #pragma unroll
                     for (int v = 0; v < 4; ++v) {
-                        __nv_bfloat16 local_regs[8];
                         uint8_t packed_byte = fp4_in[v];
                         __half2_raw h2 = __nv_cvt_fp4x2_to_halfraw2(packed_byte, __NV_E2M1);
-                        float2 f2 = __half22float2(*reinterpret_cast<__half2 *>(&h2));
-                        local_regs[v * 2] = __float2bfloat16(f2.x);
-                        local_regs[v * 2 + 1] = __float2bfloat16(f2.y);
+                        __half2 *h2_ptr = reinterpret_cast<__half2 *>(&h2);
+                        float2 f2 = __half22float2(*h2_ptr);
+
+                        __nv_bfloat16 bf16_x = __float2bfloat16(f2.x);
+                        __nv_bfloat16 bf16_y = __float2bfloat16(f2.y);
+
+                        uint16_t bits_x = *reinterpret_cast<uint16_t *>(&bf16_x);
+                        uint16_t bits_y = *reinterpret_cast<uint16_t *>(&bf16_y);
+                        u32_vals[v] = (static_cast<uint32_t>(bits_y) << 16) | bits_x;
+
+                        if (blockIdx.x == 0 && blockIdx.y == 0 && tid == 0 && k_tile == 0 && i == 0) {
+                            printf("[A_LOAD TRACE] tid=%d | v=%d | raw_byte=0x%02X | cvt_h2_bits=0x%08X | f2=(%f, %f) | bf16_to_smem=(%f, %f)\n",
+                                   tid, v, packed_byte, *reinterpret_cast<uint32_t *>(&h2), f2.x, f2.y, __bfloat162float(bf16_x), __bfloat162float(bf16_y));
+                        }
+                    }
+
+                    uint4 final_u4 = make_uint4(u32_vals[0], u32_vals[1], u32_vals[2], u32_vals[3]);
+                    *smem_ptr_u4 = final_u4;
+
+                    if (blockIdx.x == 0 && blockIdx.y == 0 && tid == 0 && k_tile == 0 && i == 0) {
+                        printf("[A_SMEM WRITE] tid=%d | written_u4=(0x%08X, 0x%08X, 0x%08X, 0x%08X)\n",
+                               tid, final_u4.x, final_u4.y, final_u4.z, final_u4.w);
                     }
                 }
             } else {
                 *smem_ptr_u4 = make_uint4(0, 0, 0, 0);
             }
         }
-
 #pragma unroll 2
         for (int32_t i = tid; i < TILE_N * TILE_K; i += blockDim.x) {
             int32_t local_n = i / TILE_K;
@@ -136,6 +159,11 @@ __global__ void fused_gemm_gguf_q4_k_kernel(
             if (global_n < N && global_k < K) {
                 float out_fp32 = DequantQ4K::dequantize_element(input_B_quant, global_n, global_k, K);
                 smem_B_ptr[local_n * TILE_K + local_k] = __float2bfloat16(out_fp32);
+
+                if (blockIdx.x == 0 && blockIdx.y == 0 && tid == 0 && k_tile == 0 && i == 0) {
+                    printf("[B_DEQUANT TRACE] FIRST ELEMENT ONLY | out_fp32=%f | bf16_bits=0x%04X\n",
+                           out_fp32, *reinterpret_cast<uint16_t *>(&smem_B_ptr[local_n * TILE_K + local_k]));
+                }
             } else {
                 smem_B_ptr[local_n * TILE_K + local_k] = __float2bfloat16(0.0f);
             }
@@ -149,7 +177,16 @@ __global__ void fused_gemm_gguf_q4_k_kernel(
         cute::copy(tA_sA_partitioned, tA_rA);
         cute::copy(tB_sB_partitioned, tB_rB);
 
+        if (blockIdx.x == 0 && blockIdx.y == 0 && tid == 0 && k_tile == 0) {
+            printf("[MMA FRAGMENT PRE_GEMM] FIRST THREAD ONLY | size(tC_rC)=%d | fragment_C(0) before GEMM = %f\n",
+                   (int) size(tC_rC), tC_rC(0));
+        }
+
         gemm(mma_core, tA_rA, tB_rB, tC_rC);
+
+        if (blockIdx.x == 0 && blockIdx.y == 0 && tid == 0 && k_tile == 0) {
+            printf("[MMA FRAGMENT POST_GEMM] FIRST THREAD ONLY | fragment_C(0) after GEMM = %f\n", tC_rC(0));
+        }
 
         __syncthreads();
     }
@@ -167,7 +204,6 @@ __global__ void fused_gemm_gguf_q4_k_kernel(
             int32_t n_local = i % TILE_N;
             int32_t global_m = block_m_coord + m_local;
             int32_t global_n = block_n_coord + n_local;
-
             if (global_m < M && global_n < N) {
                 if (n_local + 1 < TILE_N && global_n + 1 < N) {
                     float val0 = smem_C_ptr[m_local * TILE_N + n_local];
@@ -187,7 +223,6 @@ __global__ void fused_gemm_gguf_q4_k_kernel(
             int32_t n_local = i % TILE_N;
             int32_t global_m = block_m_coord + m_local;
             int32_t global_n = block_n_coord + n_local;
-
             if (global_m < M && global_n < N) {
                 float val = smem_C_ptr[m_local * TILE_N + n_local];
                 __half h_val = __float2half(val);
@@ -197,40 +232,33 @@ __global__ void fused_gemm_gguf_q4_k_kernel(
         }
     } else if constexpr (std::is_same_v<ElementAct, __nv_fp4_e2m1>) {
         auto fp4_out = reinterpret_cast<uint8_t *>(output);
-        for (int32_t i = tid * 2; i < TILE_M * TILE_N; i += blockDim.x * 2) {
-            int32_t m_local = i / TILE_N;
-            int32_t n_local = i % TILE_N;
+        for (int32_t i = tid; i < TILE_M * TILE_N / 2; i += blockDim.x) {
+            int32_t total_elements_idx = i * 2;
+            int32_t m_local = total_elements_idx / TILE_N;
+            int32_t n_local = total_elements_idx % TILE_N;
             int32_t global_m = block_m_coord + m_local;
             int32_t global_n = block_n_coord + n_local;
 
             if (global_m < M && global_n < N) {
-                if (n_local + 1 < TILE_N && global_n + 1 < N) {
-                    float v0 = smem_C_ptr[m_local * TILE_N + n_local];
-                    float v1 = smem_C_ptr[m_local * TILE_N + n_local + 1];
+                float v0 = smem_C_ptr[m_local * TILE_N + n_local];
+                float v1 = n_local + 1 < TILE_N && global_n + 1 < N ? smem_C_ptr[m_local * TILE_N + n_local + 1] : 0.0f;
 
-                    __half h0 = __float2half(v0);
-                    __half h1 = __float2half(v1);
-                    __half_raw h_raw0 = *reinterpret_cast<__half_raw *>(&h0);
-                    __half_raw h_raw1 = *reinterpret_cast<__half_raw *>(&h1);
+                __half h0 = __float2half(v0);
+                __half h1 = __float2half(v1);
+                __half_raw h_raw0 = *reinterpret_cast<__half_raw *>(&h0);
+                __half_raw h_raw1 = *reinterpret_cast<__half_raw *>(&h1);
 
-                    uint8_t r0 = __nv_cvt_halfraw_to_fp4(h_raw0, __NV_E2M1, cudaRoundNearest) & 0x0F;
-                    uint8_t r1 = __nv_cvt_halfraw_to_fp4(h_raw1, __NV_E2M1, cudaRoundNearest) & 0x0F;
+                uint8_t r0 = __nv_cvt_halfraw_to_fp4(h_raw0, __NV_E2M1, cudaRoundNearest) & 0x0F;
+                uint8_t r1 = __nv_cvt_halfraw_to_fp4(h_raw1, __NV_E2M1, cudaRoundNearest) & 0x0F;
 
-                    int32_t target_byte_idx = (global_m * N + global_n) / 2;
-                    fp4_out[target_byte_idx] = r0 | (r1 << 4);
-                } else {
-                    float v0 = smem_C_ptr[m_local * TILE_N + n_local];
-                    __half h0 = __float2half(v0);
-                    __half_raw h_raw0 = *reinterpret_cast<__half_raw *>(&h0);
-                    uint8_t r0 = __nv_cvt_halfraw_to_fp4(h_raw0, __NV_E2M1, cudaRoundNearest) & 0x0F;
-                    int32_t target_byte_idx = (global_m * N + global_n) / 2;
+                int32_t global_byte_row_stride = N >> 1;
+                int32_t target_byte_idx = global_m * global_byte_row_stride + (global_n >> 1);
 
-                    uint8_t current_byte = fp4_out[target_byte_idx];
-                    if ((global_m * N + global_n) % 2 == 0) {
-                        fp4_out[target_byte_idx] = (current_byte & 0xF0) | r0;
-                    } else {
-                        fp4_out[target_byte_idx] = (current_byte & 0x0F) | (r0 << 4);
-                    }
+                fp4_out[target_byte_idx] = r0 | (r1 << 4);
+
+                if (blockIdx.x == 0 && blockIdx.y == 0 && tid == 0 && i == 0) {
+                    printf("[EPILOGUE TRACE WRITE] FIRST BYTE ONLY | target_byte_idx=%d | smem_v0=%f, smem_v1=%f | r0=0x%X, r1=0x%X | final_byte=0x%02X\n",
+                           target_byte_idx, v0, v1, (int) r0, (int) r1, (int) (r0 | (r1 << 4)));
                 }
             }
         }
