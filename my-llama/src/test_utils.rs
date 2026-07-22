@@ -9,7 +9,7 @@ pub fn emu_fp4_e2m1_to_f32(byte: u8, idx: usize) -> f32 {
         if m == 0 {
             return 0.0;
         }
-        return sign * 0.25f32;
+        return sign * 1.0 * (m as f32 / 2.0);
     }
     let exp = e as i32 - 1;
     let mantissa = 1.0f32 + (m as f32 / 2.0f32);
@@ -32,8 +32,9 @@ pub fn emu_fp8_e4m3_to_f32(byte: u8) -> f32 {
         }
         return sign * 2.0f32.powi(-6) * (m as f32 / 8.0);
     }
-    let exp = e as i32 - 7; // ИСПРАВЛЕНО: Строго 7!
-    let mantissa = 1.0 + (m as f32 / 8.0);
+
+    let exp = e as i32 - 7;
+    let mantissa = 1.0f32 + (m as f32 / 8.0f32);
     sign * mantissa * 2.0f32.powi(exp)
 }
 

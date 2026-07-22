@@ -37,6 +37,12 @@ fn run_dequantize_mma_test(data_type: DataType) {
         DataType::FP4 => total_elements_a / 2,
     };
 
+    let output_bytes_actual = match data_type {
+        DataType::BF16 => total_elements_c * 2,
+        DataType::FP8 => total_elements_c,
+        DataType::FP4 => total_elements_c / 2,
+    };
+
     let num_gguf_blocks = total_elements_b / 256;
     let mut h_quant_weights = vec![BlockQ4K { d: 0, dmin: 0, scales: [0; 12], qs: [0; 128] }; num_gguf_blocks];
 
@@ -52,13 +58,9 @@ fn run_dequantize_mma_test(data_type: DataType) {
     }
 
     let h_input_a = vec![0x3Cu8; input_a_bytes];
-    let mut h_output_c = vec![0u16; total_elements_c];
+    let mut h_output_c = vec![0u8; output_bytes_actual];
 
-    let d_output_c = CudaBuffer::alloc(match data_type {
-        DataType::BF16 => total_elements_c * 2,
-        DataType::FP8 => total_elements_c,
-        DataType::FP4 => total_elements_c / 2,
-    });
+    let d_output_c = CudaBuffer::alloc(output_bytes_actual);
     let d_input_a = CudaBuffer::alloc(input_a_bytes);
     let d_quant_weights = CudaBuffer::alloc(num_gguf_blocks * size_of::<BlockQ4K>());
 
@@ -132,11 +134,6 @@ fn run_dequantize_mma_test(data_type: DataType) {
     let tflops = if avg_gpu_ms > 0.0 { (total_ops * 1e-12) / (avg_gpu_ms as f64 * 1e-3) } else { 0.0 };
 
     let weight_bytes_actual = num_gguf_blocks * size_of::<BlockQ4K>();
-    let output_bytes_actual = match data_type {
-        DataType::BF16 => total_elements_c * 2,
-        DataType::FP8 => total_elements_c,
-        DataType::FP4 => total_elements_c / 2,
-    };
     let algorithmic_bytes = input_a_bytes as u64 + weight_bytes_actual as u64 + output_bytes_actual as u64;
     let bandwidth_gbps = if avg_gpu_ms > 0.0 {
         (algorithmic_bytes as f64 * 1e-9) / (avg_gpu_ms as f64 * 1e-3)
@@ -161,7 +158,7 @@ fn run_dequantize_mma_test(data_type: DataType) {
             let mut accum = 0.0f32;
 
             for contr in 0..hidden_units_in as usize {
-                let input_val = match data_type {
+                let input_val_fp32 = match data_type {
                     DataType::BF16 => bf16_bits_to_f32(u16::from_le_bytes([
                         h_input_a[(row * hidden_units_in as usize + contr) * 2],
                         h_input_a[(row * hidden_units_in as usize + contr) * 2 + 1],
@@ -169,6 +166,10 @@ fn run_dequantize_mma_test(data_type: DataType) {
                     DataType::FP8 => emu_fp8_e4m3_to_f32(h_input_a[row * hidden_units_in as usize + contr]),
                     DataType::FP4 => emu_fp4_e2m1_to_f32(h_input_a[(row * hidden_units_in as usize + contr) / 2], contr),
                 };
+
+                // Симулируем округление активации на входе в Tensor Cores (smem_A)
+                let input_bf16_bits = f32_to_bf16_bits(input_val_fp32);
+                let input_val = bf16_bits_to_f32(input_bf16_bits);
 
                 let weight_element_idx = col * hidden_units_in as usize + contr;
                 let block_idx = weight_element_idx / 256;
@@ -197,15 +198,26 @@ fn run_dequantize_mma_test(data_type: DataType) {
                 let packed_byte = block.qs[byte_idx];
                 let raw_q = if pair_idx % 2 == 0 { packed_byte & 0x0F } else { packed_byte >> 4 };
 
-                let weight_val = d_super * raw_q as f32 - m_super;
+                let weight_val_fp32 = d_super * raw_q as f32 - m_super;
+
+                let weight_bf16_bits = f32_to_bf16_bits(weight_val_fp32);
+                let weight_val = bf16_bits_to_f32(weight_bf16_bits);
 
                 accum += input_val * weight_val;
             }
 
+            let accum_bf16_bits = f32_to_bf16_bits(accum);
+            accum = bf16_bits_to_f32(accum_bf16_bits);
+
+            let linear_idx = row * hidden_units_out as usize + col;
             let actual = match data_type {
-                DataType::BF16 => bf16_bits_to_f32(h_output_c[row * hidden_units_out as usize + col]),
-                DataType::FP8 => emu_fp8_e4m3_to_f32(h_output_c[row * hidden_units_out as usize + col] as u8),
-                DataType::FP4 => emu_fp4_e2m1_to_f32(h_output_c[(row * hidden_units_out as usize + col) / 2] as u8, col),
+                DataType::BF16 => {
+                    let b0 = h_output_c[linear_idx * 2];
+                    let b1 = h_output_c[linear_idx * 2 + 1];
+                    bf16_bits_to_f32(u16::from_le_bytes([b0, b1]))
+                },
+                DataType::FP8 => emu_fp8_e4m3_to_f32(h_output_c[linear_idx]),
+                DataType::FP4 => emu_fp4_e2m1_to_f32(h_output_c[linear_idx / 2], linear_idx),
             };
 
             let diff = (actual - accum).abs();

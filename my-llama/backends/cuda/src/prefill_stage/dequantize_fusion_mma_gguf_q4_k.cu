@@ -35,7 +35,7 @@ struct DequantQ4K {
 
         int32_t byte_idx = (j << 5) + (il << 2) + (pair_idx >> 1);
         uint8_t packed_byte = block.qs[byte_idx];
-        uint8_t raw_q = (pair_idx & 1) == 0 ? (packed_byte & 0x0F) : (packed_byte >> 4);
+        uint8_t raw_q = (pair_idx & 1) == 0 ? packed_byte & 0x0F : packed_byte >> 4;
 
         return d_super * static_cast<float>(raw_q) - m_super;
     }
@@ -87,7 +87,7 @@ __global__ void fused_gemm_gguf_q4_k_kernel(
     const int32_t num_k_tiles = (K + TILE_K - 1) / TILE_K;
     for (int32_t k_tile = 0; k_tile < num_k_tiles; ++k_tile) {
 #pragma unroll 4
-        for (int32_t i = tid; i < (TILE_M * TILE_K) / 8; i += blockDim.x) {
+        for (int32_t i = tid; i < TILE_M * TILE_K / 8; i += blockDim.x) {
             int32_t idx = i * 8;
             int32_t local_m = idx / TILE_K;
             int32_t local_k = idx % TILE_K;
@@ -111,16 +111,15 @@ __global__ void fused_gemm_gguf_q4_k_kernel(
                     *smem_ptr_u4 = *static_cast<const uint4 *>(static_cast<const void *>(local_regs));
                 } else if constexpr (std::is_same_v<ElementAct, __nv_fp4_e2m1>) {
                     auto fp4_in = reinterpret_cast<const uint8_t *>(&input_A[(global_m * K + global_k) >> 1]);
-                    __nv_bfloat16 local_regs[8];
 #pragma unroll
                     for (int v = 0; v < 4; ++v) {
+                        __nv_bfloat16 local_regs[8];
                         uint8_t packed_byte = fp4_in[v];
                         __half2_raw h2 = __nv_cvt_fp4x2_to_halfraw2(packed_byte, __NV_E2M1);
                         float2 f2 = __half22float2(*reinterpret_cast<__half2 *>(&h2));
                         local_regs[v * 2] = __float2bfloat16(f2.x);
                         local_regs[v * 2 + 1] = __float2bfloat16(f2.y);
                     }
-                    *smem_ptr_u4 = *static_cast<const uint4 *>(static_cast<const void *>(local_regs));
                 }
             } else {
                 *smem_ptr_u4 = make_uint4(0, 0, 0, 0);
