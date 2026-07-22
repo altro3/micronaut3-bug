@@ -43,8 +43,6 @@ struct DequantQ4K {
 
 using namespace cute;
 
-using namespace cute;
-
 template<typename ElementAct, int TILE_M, int TILE_N, int TILE_K>
 __global__ void fused_gemm_gguf_q4_k_kernel(
     ElementAct * __restrict__ output,
