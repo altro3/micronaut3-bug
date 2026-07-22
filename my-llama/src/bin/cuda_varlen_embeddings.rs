@@ -10,7 +10,8 @@ use cuda_runtime::{
 };
 use my_llama::test_utils::{emu_fp4_e2m1_to_f32, emu_fp8_e4m3_to_f32, f32_to_bf16_bits};
 
-fn run_benchmark_for_type(data_type: DataType, type_name: &str) {
+fn run_benchmark_for_type(data_type: DataType) {
+    let type_name = format!("{:?}", data_type);
     println!("\n=== ТЕСТИРОВАНИЕ ФОРМАТА: {} ===", type_name);
 
     let vocab_size = 152064;
@@ -292,8 +293,8 @@ fn run_benchmark_for_type(data_type: DataType, type_name: &str) {
 
 fn main() {
     println!("=== УЛЬТИМАТИВНЫЙ RAGGED-БЕНЧМАРК И ВАЛИДАЦИЯ VARLEN_EMBEDDINGS ===");
-    run_benchmark_for_type(DataType::BF16, "BF16 (Эталон)");
-    run_benchmark_for_type(DataType::FP8, "FP8 E4M3 (Промышленный)");
-    run_benchmark_for_type(DataType::FP4, "FP4 E2M1 (Аппаратный Blackwell)");
+    run_benchmark_for_type(DataType::BF16);
+    run_benchmark_for_type(DataType::FP8);
+    run_benchmark_for_type(DataType::FP4);
     println!("\n🚀 ВСЕ ФОРМАТЫ УСПЕШНО ПРОШЛИ ТЕЛЕМЕТРИЮ И МАТЕМАТИЧЕСКУЮ ВАЛИДАЦИЮ!");
 }

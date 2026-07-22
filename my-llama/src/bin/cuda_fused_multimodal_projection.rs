@@ -2,14 +2,16 @@ use std::ffi::c_void;
 use std::ptr;
 use std::time::Instant;
 
-use cuda_runtime::input_stage::launch_fused_multimodal_projection;
+use cuda_runtime::data_types::DataType;
+use cuda_runtime::input_stage::fused_multimodal_projection;
 use cuda_runtime::{
     CudaBuffer, device_synchronize, event_create, event_destroy, event_elapsed_time, event_record, event_synchronize, get_last_error,
     stream_create_with_flags, stream_destroy,
 };
 use my_llama::test_utils::{bf16_bits_to_f32, emu_fp4_e2m1_to_f32, emu_fp8_e4m3_to_f32, f32_to_bf16_bits};
 
-fn run_projection_test(data_type: i32, type_name: &str) {
+fn run_projection_test(data_type: DataType) {
+    let type_name = format!("{:?}", data_type);
     println!("\n=== PROJECTION TELEMETRY FORMAT: {} ===", type_name);
 
     let vision_hidden_size = 1152;
@@ -54,13 +56,12 @@ fn run_projection_test(data_type: i32, type_name: &str) {
         }
 
         let weight_bytes = match data_type {
-            0 => n * k * 2,
-            1 => n * k,
-            2 => (n * k) / 2,
-            _ => unreachable!(),
+            DataType::BF16 => n * k * 2,
+            DataType::FP8 => n * k,
+            DataType::FP4 => (n * k) / 2,
         };
         let mut weight_segment = vec![0x2Bu8; weight_bytes];
-        if data_type == 0 {
+        if data_type == DataType::BF16 {
             let weight_bf16 = unsafe { std::slice::from_raw_parts_mut(weight_segment.as_mut_ptr() as *mut u16, n * k) };
             for (j, item) in weight_bf16.iter_mut().enumerate() {
                 *item = f32_to_bf16_bits(0.02f32 * (j % 5) as f32);
@@ -130,7 +131,7 @@ fn run_projection_test(data_type: i32, type_name: &str) {
 
     for _ in 0..WARMUP {
         unsafe {
-            launch_fused_multimodal_projection(
+            fused_multimodal_projection(
                 raw_ptr_a,
                 raw_ptr_b,
                 raw_ptr_d,
@@ -163,7 +164,7 @@ fn run_projection_test(data_type: i32, type_name: &str) {
     for i in 0..ITERS {
         unsafe {
             event_record(start_events[i], stream);
-            launch_fused_multimodal_projection(
+            fused_multimodal_projection(
                 raw_ptr_a,
                 raw_ptr_b,
                 raw_ptr_d,
@@ -196,7 +197,6 @@ fn run_projection_test(data_type: i32, type_name: &str) {
 
     let avg_gpu_ms = total_gpu_ms / (ITERS as f32);
     let avg_host_ms = (total_host_time.as_secs_f32() * 1000.0f32) / (ITERS as f32);
-
     let tflops = if avg_gpu_ms > 0.0 {
         let mut total_ops = 0.0f64;
         for i in 0..num_segments {
@@ -243,17 +243,17 @@ fn run_projection_test(data_type: i32, type_name: &str) {
                     let input_val = bf16_bits_to_f32(h_inputs[s][row * k + contr]);
 
                     let weight_val = match data_type {
-                        0 => {
+                        DataType::BF16 => {
                             let weight_bf16 = unsafe { std::slice::from_raw_parts(h_weights[s].as_ptr() as *const u16, n * k) };
                             bf16_bits_to_f32(weight_bf16[col * k + contr])
                         },
-                        1 => {
+                        DataType::FP8 => {
                             let raw_fp8 = h_weights[s][col * k + contr];
                             let dequantized_weight = emu_fp8_e4m3_to_f32(raw_fp8) * scale;
                             let bf16_bits = f32_to_bf16_bits(dequantized_weight);
                             bf16_bits_to_f32(bf16_bits)
                         },
-                        2 => {
+                        DataType::FP4 => {
                             let linear_idx = col * k + contr;
                             let byte_idx = linear_idx / 2;
                             let packed_byte = h_weights[s][byte_idx];
@@ -261,13 +261,12 @@ fn run_projection_test(data_type: i32, type_name: &str) {
                             let raw_fp4 = (packed_byte >> (sub_byte_offset * 4)) & 0x0F;
                             emu_fp4_e2m1_to_f32(raw_fp4, linear_idx)
                         },
-                        _ => unreachable!(),
                     };
 
                     accum += input_val * weight_val;
                 }
 
-                if data_type == 2 {
+                if data_type == DataType::FP4 {
                     accum *= scale;
                 }
 
@@ -307,7 +306,7 @@ fn run_projection_test(data_type: i32, type_name: &str) {
 }
 
 pub fn main() {
-    run_projection_test(0, "BF16");
-    run_projection_test(1, "FP8");
-    run_projection_test(2, "FP4");
+    run_projection_test(DataType::BF16);
+    run_projection_test(DataType::FP8);
+    run_projection_test(DataType::FP4);
 }

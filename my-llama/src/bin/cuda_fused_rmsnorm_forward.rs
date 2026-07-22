@@ -10,7 +10,8 @@ use cuda_runtime::{
 };
 use my_llama::test_utils::{bf16_bits_to_f32, emu_fp4_e2m1_to_f32, emu_fp8_e4m3_to_f32, f32_to_bf16_bits};
 
-fn run_rmsnorm_test(data_type: DataType, type_name: &str) {
+fn run_rmsnorm_test(data_type: DataType) {
+    let type_name = format!("{:?}", data_type);
     println!("\n=== RMSNORM ТЕЛЕМЕТРИЯ ФОРМАТА: {} ===", type_name);
 
     let hidden_size = 8192;
@@ -213,7 +214,7 @@ fn run_rmsnorm_test(data_type: DataType, type_name: &str) {
 }
 
 fn main() {
-    run_rmsnorm_test(DataType::BF16, "BF16");
-    run_rmsnorm_test(DataType::FP8, "FP8");
-    run_rmsnorm_test(DataType::FP4, "FP4");
+    run_rmsnorm_test(DataType::BF16);
+    run_rmsnorm_test(DataType::FP8);
+    run_rmsnorm_test(DataType::FP4);
 }
