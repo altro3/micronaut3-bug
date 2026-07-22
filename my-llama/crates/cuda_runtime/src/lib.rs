@@ -1,7 +1,9 @@
 use std::ffi::c_void;
 use std::ptr;
 
+pub mod data_types;
 pub mod input_stage;
+pub mod prefill_stage;
 
 unsafe extern "C" {
     pub fn cudaMalloc(dev_ptr: *mut *mut c_void, size: usize) -> i32;

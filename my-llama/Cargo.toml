@@ -100,6 +100,10 @@ path = "src/bin/test_trainer.rs"
 #path = "src/bin/cuda_swiglu.rs"
 
 [[bin]]
+name = "cuda_dequantize_fusion_mma_gguf_q4_k"
+path = "src/bin/cuda_dequantize_fusion_mma_gguf_q4_k.rs"
+
+[[bin]]
 name = "cuda_fused_multimodal_projection"
 path = "src/bin/cuda_fused_multimodal_projection.rs"
 

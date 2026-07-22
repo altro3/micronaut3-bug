@@ -28,6 +28,12 @@ else()
             "${CMAKE_CURRENT_SOURCE_DIR}/input_stage/varlen_embeddings_launcher.cu"
     )
 
+    set(PREFILL_STAGE_SRCS
+            "${CMAKE_CURRENT_SOURCE_DIR}/prefill_stage/dequantize_fusion_mma_gguf_q4_k.cu"
+            "${CMAKE_CURRENT_SOURCE_DIR}/prefill_stage/dequantize_fusion_mma_gguf_q4_k_launcher.cu"
+            "${CMAKE_CURRENT_SOURCE_DIR}/prefill_stage/prefill_stage_dispatcher.cu"
+    )
+
     file(GLOB_RECURSE ATTENTION_SRCS CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/attention/*.cu" "${CMAKE_CURRENT_SOURCE_DIR}/attention/*.cuh")
     file(GLOB_RECURSE DECODING_SRCS CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/decoding/*.cu" "${CMAKE_CURRENT_SOURCE_DIR}/decoding/*.cuh")
     file(GLOB_RECURSE LAYERS_SRCS CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/layers/*.cu"  "${CMAKE_CURRENT_SOURCE_DIR}/layers/*.cuh")
@@ -40,6 +46,7 @@ else()
             ${ATTENTION_SRCS}
             ${DECODING_SRCS}
             ${INPUT_STAGE_SRCS}
+            ${PREFILL_STAGE_SRCS}
             ${LAYERS_SRCS}
             ${QUANT_SRCS}
             ${SPEC_SRCS}

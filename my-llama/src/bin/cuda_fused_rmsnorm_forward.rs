@@ -2,14 +2,15 @@ use std::ffi::c_void;
 use std::ptr;
 use std::time::Instant;
 
-use cuda_runtime::input_stage::launch_fused_rmsnorm_forward;
+use cuda_runtime::data_types::DataType;
+use cuda_runtime::input_stage::fused_rmsnorm_forward;
 use cuda_runtime::{
     CudaBuffer, device_synchronize, event_create, event_destroy, event_elapsed_time, event_record, event_synchronize, get_last_error,
     stream_create_with_flags, stream_destroy,
 };
 use my_llama::test_utils::{bf16_bits_to_f32, emu_fp4_e2m1_to_f32, emu_fp8_e4m3_to_f32, f32_to_bf16_bits};
 
-fn run_rmsnorm_test(data_type: i32, type_name: &str) {
+fn run_rmsnorm_test(data_type: DataType, type_name: &str) {
     println!("\n=== RMSNORM ТЕЛЕМЕТРИЯ ФОРМАТА: {} ===", type_name);
 
     let hidden_size = 8192;
@@ -20,13 +21,12 @@ fn run_rmsnorm_test(data_type: i32, type_name: &str) {
     let total_elements = (total_tokens * hidden_size) as usize;
 
     let input_bytes = match data_type {
-        0 => total_elements * 2,
-        1 => total_elements,
-        2 => total_elements / 2,
-        _ => unreachable!(),
+        DataType::BF16 => total_elements * 2,
+        DataType::FP8 => total_elements,
+        DataType::FP4 => total_elements / 2,
     };
 
-    let scale_elements = (total_elements / 32) as usize;
+    let scale_elements = total_elements / 32;
 
     let h_input = vec![0x3Cu8; input_bytes];
     let mut h_gamma = vec![0u16; hidden_size as usize];
@@ -50,7 +50,7 @@ fn run_rmsnorm_test(data_type: i32, type_name: &str) {
     let stream = stream_create_with_flags(0x01);
 
     unsafe {
-        launch_fused_rmsnorm_forward(
+        fused_rmsnorm_forward(
             d_out.ptr,
             d_input.ptr,
             d_gamma.ptr,
@@ -72,7 +72,7 @@ fn run_rmsnorm_test(data_type: i32, type_name: &str) {
 
     for _ in 0..WARMUP {
         unsafe {
-            launch_fused_rmsnorm_forward(
+            fused_rmsnorm_forward(
                 d_out.ptr,
                 d_input.ptr,
                 d_gamma.ptr,
@@ -100,7 +100,7 @@ fn run_rmsnorm_test(data_type: i32, type_name: &str) {
     for i in 0..ITERS {
         unsafe {
             event_record(start_events[i], stream);
-            launch_fused_rmsnorm_forward(
+            fused_rmsnorm_forward(
                 d_out.ptr,
                 d_input.ptr,
                 d_gamma.ptr,
@@ -125,7 +125,7 @@ fn run_rmsnorm_test(data_type: i32, type_name: &str) {
     let mut total_gpu_ms = 0.0_f32;
 
     let mut bytes_processed = (input_bytes as u64) + (hidden_size as u64 * 2) + (total_elements as u64 * 2);
-    if data_type == 2 {
+    if data_type == DataType::FP4 {
         bytes_processed += (scale_elements as u64) * 4;
     }
 
@@ -157,13 +157,12 @@ fn run_rmsnorm_test(data_type: i32, type_name: &str) {
 
         for f in 0..hidden_size as usize {
             let val = match data_type {
-                0 => bf16_bits_to_f32(u16::from_le_bytes([
+                DataType::BF16 => bf16_bits_to_f32(u16::from_le_bytes([
                     h_input[(row_offset_bf16 + f) * 2],
                     h_input[(row_offset_bf16 + f) * 2 + 1],
                 ])),
-                1 => emu_fp8_e4m3_to_f32(h_input[row_offset_bf16 + f]),
-                2 => emu_fp4_e2m1_to_f32(h_input[tok * (hidden_size as usize / 2) + f / 2], f),
-                _ => unreachable!(),
+                DataType::FP8 => emu_fp8_e4m3_to_f32(h_input[row_offset_bf16 + f]),
+                DataType::FP4 => emu_fp4_e2m1_to_f32(h_input[tok * (hidden_size as usize / 2) + f / 2], f),
             };
             sum_sq += val * val;
         }
@@ -173,17 +172,16 @@ fn run_rmsnorm_test(data_type: i32, type_name: &str) {
         for f in 0..hidden_size as usize {
             let actual = bf16_bits_to_f32(h_output[row_offset_bf16 + f]);
             let inp = match data_type {
-                0 => bf16_bits_to_f32(u16::from_le_bytes([
+                DataType::BF16 => bf16_bits_to_f32(u16::from_le_bytes([
                     h_input[(row_offset_bf16 + f) * 2],
                     h_input[(row_offset_bf16 + f) * 2 + 1],
                 ])),
-                1 => emu_fp8_e4m3_to_f32(h_input[row_offset_bf16 + f]),
-                2 => emu_fp4_e2m1_to_f32(h_input[tok * (hidden_size as usize / 2) + f / 2], f),
-                _ => unreachable!(),
+                DataType::FP8 => emu_fp8_e4m3_to_f32(h_input[row_offset_bf16 + f]),
+                DataType::FP4 => emu_fp4_e2m1_to_f32(h_input[tok * (hidden_size as usize / 2) + f / 2], f),
             };
             let g = bf16_bits_to_f32(h_gamma[f]);
 
-            let expected = if data_type == 2 {
+            let expected = if data_type == DataType::FP4 {
                 let scale_idx = (tok * hidden_size as usize + f) / 32;
                 let scale = h_scales[scale_idx];
                 inp * scale * inv_rms * g
@@ -215,7 +213,7 @@ fn run_rmsnorm_test(data_type: i32, type_name: &str) {
 }
 
 fn main() {
-    run_rmsnorm_test(0, "BF16");
-    run_rmsnorm_test(1, "FP8");
-    run_rmsnorm_test(2, "FP4");
+    run_rmsnorm_test(DataType::BF16, "BF16");
+    run_rmsnorm_test(DataType::FP8, "FP8");
+    run_rmsnorm_test(DataType::FP4, "FP4");
 }

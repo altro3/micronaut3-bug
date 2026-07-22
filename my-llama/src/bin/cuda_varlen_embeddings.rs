@@ -2,14 +2,15 @@ use std::ffi::c_void;
 use std::ptr;
 use std::time::Instant;
 
-use cuda_runtime::input_stage::launch_varlen_embeddings;
+use cuda_runtime::data_types::DataType;
+use cuda_runtime::input_stage::varlen_embeddings;
 use cuda_runtime::{
     CudaBuffer, device_synchronize, event_create, event_destroy, event_elapsed_time, event_record, event_synchronize, get_last_error,
     stream_create_with_flags, stream_destroy,
 };
 use my_llama::test_utils::{emu_fp4_e2m1_to_f32, emu_fp8_e4m3_to_f32, f32_to_bf16_bits};
 
-fn run_benchmark_for_type(data_type: i32, type_name: &str) {
+fn run_benchmark_for_type(data_type: DataType, type_name: &str) {
     println!("\n=== ТЕСТИРОВАНИЕ ФОРМАТА: {} ===", type_name);
 
     let vocab_size = 152064;
@@ -39,10 +40,9 @@ fn run_benchmark_for_type(data_type: i32, type_name: &str) {
     let out_features_u64 = out_features as u64;
 
     let weight_bytes = match data_type {
-        0 => (vocab_size_u64 * out_features_u64 * 2) as usize,
-        1 => (vocab_size_u64 * out_features_u64) as usize,
-        2 => (vocab_size_u64 * out_features_u64 / 2) as usize,
-        _ => unreachable!(),
+        DataType::BF16 => (vocab_size_u64 * out_features_u64 * 2) as usize,
+        DataType::FP8 => (vocab_size_u64 * out_features_u64) as usize,
+        DataType::FP4 => (vocab_size_u64 * out_features_u64 / 2) as usize,
     };
 
     let scale_elements = ((vocab_size_u64 * out_features_u64) / 32) as usize;
@@ -74,7 +74,7 @@ fn run_benchmark_for_type(data_type: i32, type_name: &str) {
 
     println!("[RUST] Отправка одиночного отладочного ядра...");
     unsafe {
-        launch_varlen_embeddings(
+        varlen_embeddings(
             d_out.ptr,
             d_weight.ptr,
             d_scales.ptr as *const f32,
@@ -104,7 +104,7 @@ fn run_benchmark_for_type(data_type: i32, type_name: &str) {
 
     for _ in 0..NUM_WARMUP {
         unsafe {
-            launch_varlen_embeddings(
+            varlen_embeddings(
                 d_out.ptr,
                 d_weight.ptr,
                 d_scales.ptr as *const f32,
@@ -137,7 +137,7 @@ fn run_benchmark_for_type(data_type: i32, type_name: &str) {
     for i in 0..NUM_ITERATIONS {
         unsafe {
             event_record(start_events[i], stream);
-            launch_varlen_embeddings(
+            varlen_embeddings(
                 d_out.ptr,
                 d_weight.ptr,
                 d_scales.ptr as *const f32,
@@ -196,7 +196,6 @@ fn run_benchmark_for_type(data_type: i32, type_name: &str) {
     println!("🎯 P50 ПСП:      {:.2} ГБ/сек", median_bw);
     println!("⚠️ P95 ПСП:      {:.2} ГБ/сек", p95_worst);
     println!("Jitter Шины:     {:.2} ГБ/сек", max_bw - min_bw);
-
     unsafe {
         d_slot_mapping.copy_to_host(h_slot_mapping.as_mut_ptr() as *mut c_void, (total_tokens * 4) as usize);
         d_out.copy_to_host(h_output.as_mut_ptr() as *mut c_void, (total_tokens * out_features * 2) as usize);
@@ -237,19 +236,19 @@ fn run_benchmark_for_type(data_type: i32, type_name: &str) {
                 0u16
             } else {
                 match data_type {
-                    0 => {
+                    DataType::BF16 => {
                         let w_offset = (token_id as usize * out_features as usize + f) * 2;
                         let b0 = h_weight[w_offset];
                         let b1 = h_weight[w_offset + 1];
                         ((b1 as u16) << 8) | (b0 as u16)
                     },
-                    1 => {
+                    DataType::FP8 => {
                         let w_offset = token_id as usize * out_features as usize + f;
                         let byte = h_weight[w_offset];
                         let val_f32 = emu_fp8_e4m3_to_f32(byte);
                         f32_to_bf16_bits(val_f32)
                     },
-                    2 => {
+                    DataType::FP4 => {
                         let total_elements_per_row = out_features as usize;
                         let w_offset = (token_id as usize * total_elements_per_row + f) / 2;
                         let byte = h_weight[w_offset];
@@ -258,7 +257,6 @@ fn run_benchmark_for_type(data_type: i32, type_name: &str) {
                         let scale = h_scales[scale_idx];
                         f32_to_bf16_bits(val_f32 * scale)
                     },
-                    _ => unreachable!(),
                 }
             };
 
@@ -294,8 +292,8 @@ fn run_benchmark_for_type(data_type: i32, type_name: &str) {
 
 fn main() {
     println!("=== УЛЬТИМАТИВНЫЙ RAGGED-БЕНЧМАРК И ВАЛИДАЦИЯ VARLEN_EMBEDDINGS ===");
-    run_benchmark_for_type(0, "BF16 (Эталон)");
-    run_benchmark_for_type(1, "FP8 E4M3 (Промышленный)");
-    run_benchmark_for_type(2, "FP4 E2M1 (Аппаратный Blackwell)");
+    run_benchmark_for_type(DataType::BF16, "BF16 (Эталон)");
+    run_benchmark_for_type(DataType::FP8, "FP8 E4M3 (Промышленный)");
+    run_benchmark_for_type(DataType::FP4, "FP4 E2M1 (Аппаратный Blackwell)");
     println!("\n🚀 ВСЕ ФОРМАТЫ УСПЕШНО ПРОШЛИ ТЕЛЕМЕТРИЮ И МАТЕМАТИЧЕСКУЮ ВАЛИДАЦИЮ!");
 }
