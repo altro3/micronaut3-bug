@@ -210,37 +210,41 @@ __global__ void fused_gemm_gguf_q4_k_kernel(
             }
         }
     } else if constexpr (std::is_same_v<ElementAct, __nv_fp4_e2m1>) {
-        auto fp4_out = reinterpret_cast<uint32_t *>(output);
-        constexpr float fp4_scale = 2.0f;
+        uint8_t *smem_fp4 = dynamic_shmem;
+
         for (int32_t i = tid; i < TILE_M * TILE_N; i += blockDim.x) {
             int32_t m_local = i / TILE_N;
             int32_t n_local = i % TILE_N;
+            float val = smem_C_ptr[m_local * TILE_N + n_local] / 2.0f;
+
+            __half h_val = __float2half(val);
+            __half_raw h_raw = *reinterpret_cast<__half_raw *>(&h_val);
+            smem_fp4[i] = __nv_cvt_halfraw_to_fp4(h_raw, __NV_E2M1, cudaRoundNearest) & 0x0F;
+        }
+        __syncthreads();
+
+        auto fp4_out = reinterpret_cast<uint32_t *>(output);
+        int32_t total_u32_elements = TILE_M * TILE_N / 8;
+
+        for (int32_t i = tid; i < total_u32_elements; i += blockDim.x) {
+            int32_t local_u32_idx = i;
+            int32_t base_elem_idx = local_u32_idx * 8;
+
+            int32_t m_local = base_elem_idx / TILE_N;
+            int32_t n_local = base_elem_idx % TILE_N;
             int32_t global_m = block_m_coord + m_local;
             int32_t global_n = block_n_coord + n_local;
 
             if (global_m < M && global_n < N) {
-                float val = smem_C_ptr[m_local * TILE_N + n_local] / fp4_scale;
-
-                // if (blockIdx.x == 0 && blockIdx.y == 0 && threadIdx.x == 0 && m_local == 0 && n_local == 0) {
-                //     printf("[GPU LOG] Block(0,0) Thread %d | Accum float: %f | Expected accumulation: 12.0959\n",
-                //            tid, smem_C_ptr[m_local * TILE_N + n_local]);
-                // }
-
-                __half h_val = __float2half(val);
-                __half_raw h_raw = *reinterpret_cast<__half_raw *>(&h_val);
-
-                uint8_t res_fp4 = __nv_cvt_halfraw_to_fp4(h_raw, __NV_E2M1, cudaRoundNearest) & 0x0F;
+                uint32_t packed_val = 0;
+#pragma unroll
+                for (int v = 0; v < 8; ++v) {
+                    packed_val |= static_cast<uint32_t>(smem_fp4[base_elem_idx + v]) << (v * 4);
+                }
 
                 int32_t global_element_idx = global_m * N + global_n;
                 int32_t global_u32_idx = global_element_idx / 8;
-                int32_t shift = global_element_idx % 8 * 4;
-
-                uint32_t mask = ~(0x0F << shift);
-                uint32_t value_to_write = static_cast<uint32_t>(res_fp4) << shift;
-
-                uint32_t *target_ptr = &fp4_out[global_u32_idx];
-                atomicAnd(target_ptr, mask);
-                atomicOr(target_ptr, value_to_write);
+                fp4_out[global_u32_idx] = packed_val;
             }
         }
     }
