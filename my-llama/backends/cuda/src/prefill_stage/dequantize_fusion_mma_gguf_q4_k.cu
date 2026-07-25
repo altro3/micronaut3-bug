@@ -221,10 +221,10 @@ __global__ void fused_gemm_gguf_q4_k_kernel(
             if (global_m < M && global_n < N) {
                 float val = smem_C_ptr[m_local * TILE_N + n_local] / fp4_scale;
 
-                if (blockIdx.x == 0 && blockIdx.y == 0 && threadIdx.x == 0 && m_local == 0 && n_local == 0) {
-                    printf("[GPU LOG] Block(0,0) Thread %d | Accum float: %f | Expected accumulation: 12.0959\n",
-                           tid, smem_C_ptr[m_local * TILE_N + n_local]);
-                }
+                // if (blockIdx.x == 0 && blockIdx.y == 0 && threadIdx.x == 0 && m_local == 0 && n_local == 0) {
+                //     printf("[GPU LOG] Block(0,0) Thread %d | Accum float: %f | Expected accumulation: 12.0959\n",
+                //            tid, smem_C_ptr[m_local * TILE_N + n_local]);
+                // }
 
                 __half h_val = __float2half(val);
                 __half_raw h_raw = *reinterpret_cast<__half_raw *>(&h_val);

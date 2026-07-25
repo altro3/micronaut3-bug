@@ -7,6 +7,8 @@
 #include <string>
 #include "data_types.h"
 #include "prefill_stage/dequantize_fusion_mma_gguf_q4_k.cuh"
+#include <algorithm>
+#include <iostream>
 
 extern "C" void launch_fused_gemm_gguf_q4_k(
     void *output_activations, const void *input_activations, const void *quantized_weights,
@@ -17,36 +19,59 @@ extern "C" void launch_fused_gemm_gguf_q4_k(
 static void run_benchmark(const int32_t data_type, const std::string &type_name, const int32_t M, const int32_t N, const int32_t K, const void *d_in, const void *d_w, void *d_out) {
     constexpr int32_t warmup_iters = 10;
     constexpr int32_t bench_iters = 100;
+    std::vector<float> iters_ms(bench_iters);
 
+    std::cout << "[BENCHMARK] Starting profile session for target: " << type_name << std::endl;
+    std::cout << "[BENCHMARK] Matrix dimensions: M=" << M << ", N=" << N << ", K=" << K << std::endl;
+
+    std::cout << "[BENCHMARK] Warming up Tensor Cores (" << warmup_iters << " iterations)..." << std::endl;
     for (int32_t i = 0; i < warmup_iters; ++i) {
         launch_fused_gemm_gguf_q4_k(d_out, d_in, d_w, M, N, K, data_type, nullptr);
     }
     cudaDeviceSynchronize();
 
-    cudaEvent_t start, stop;
-    cudaEventCreate(&start);
-    cudaEventCreate(&stop);
+    std::cout << "[BENCHMARK] Warmup complete. Running " << bench_iters << " hot iterations..." << std::endl;
 
-    cudaEventRecord(start, nullptr);
+    cudaEvent_t start, stop;
     for (int32_t i = 0; i < bench_iters; ++i) {
+        cudaEventCreate(&start);
+        cudaEventCreate(&stop);
+
+        cudaEventRecord(start, nullptr);
         launch_fused_gemm_gguf_q4_k(d_out, d_in, d_w, M, N, K, data_type, nullptr);
-        cudaStreamSynchronize(nullptr);
+        cudaEventRecord(stop, nullptr);
+        cudaEventSynchronize(stop);
+
+        float ms = 0.0f;
+        cudaEventElapsedTime(&ms, start, stop);
+        iters_ms[i] = ms;
+
+        cudaEventDestroy(start);
+        cudaEventDestroy(stop);
     }
-    cudaEventRecord(stop, nullptr);
     cudaDeviceSynchronize();
 
-    float milliseconds = 0.0f;
-    cudaEventElapsedTime(&milliseconds, start, stop);
+    std::ranges::sort(iters_ms);
 
-    const float avg_time_ms = milliseconds / bench_iters;
+    float sum_time = 0.0f;
+    for (const float t: iters_ms) sum_time += t;
+    const float avg_time_ms = sum_time / bench_iters;
+
+    const float p50 = iters_ms[static_cast<int32_t>(bench_iters * 0.50)];
+    const float p90 = iters_ms[static_cast<int32_t>(bench_iters * 0.90)];
+    const float p95 = iters_ms[static_cast<int32_t>(bench_iters * 0.95)];
 
     const double fops = 2.0 * static_cast<double>(M) * static_cast<double>(N) * static_cast<double>(K);
-    const double gflops = fops * 1e-9 / (static_cast<double>(avg_time_ms) * 1e-3);
+    const double avg_gflops = fops * 1e-9 / (static_cast<double>(avg_time_ms) * 1e-3);
 
-    std::cout << "[BENCHMARK " << type_name << "] Avg Time: " << avg_time_ms << " ms | Performance: " << gflops << " GFLOPs" << std::endl;
-
-    cudaEventDestroy(start);
-    cudaEventDestroy(stop);
+    std::cout << "==========================================================================" << std::endl;
+    std::cout << "[BENCHMARK RESULTS - " << type_name << "]" << std::endl;
+    std::cout << "  Average Time: " << avg_time_ms << " ms" << std::endl;
+    std::cout << "  Percentile 50% (Median): " << p50 << " ms" << std::endl;
+    std::cout << "  Percentile 90%: " << p90 << " ms" << std::endl;
+    std::cout << "  Percentile 95%: " << p95 << " ms" << std::endl;
+    std::cout << "  Average Compute Performance: " << avg_gflops << " GFLOPs" << std::endl;
+    std::cout << "==========================================================================" << std::endl;
 }
 
 TEST(GgufBenchmarkTest, BenchQwen05B_AllTypes) {
@@ -58,7 +83,7 @@ TEST(GgufBenchmarkTest, BenchQwen05B_AllTypes) {
         return;
     }
 
-    constexpr int32_t M = 1;
+    constexpr int32_t M = 64;
     constexpr int32_t N = 896;
     constexpr int32_t K = 896;
 
@@ -74,38 +99,12 @@ TEST(GgufBenchmarkTest, BenchQwen05B_AllTypes) {
     ASSERT_EQ(cudaMalloc(&d_w, host_real_weights.size() * sizeof(BlockQ4K)), cudaSuccess);
     ASSERT_EQ(cudaMemcpy(d_w, host_real_weights.data(), host_real_weights.size() * sizeof(BlockQ4K), cudaMemcpyHostToDevice), cudaSuccess);
 
-    // {
-    //     std::vector h_in(M * K, __float2bfloat16(0.01f));
-    //     void *d_in, *d_out;
-    //     cudaMalloc(&d_in, M * K * sizeof(__nv_bfloat16));
-    //     cudaMalloc(&d_out, M * N * sizeof(__nv_bfloat16));
-    //     cudaMemcpy(d_in, h_in.data(), h_in.size() * sizeof(__nv_bfloat16), cudaMemcpyHostToDevice);
-    //
-    //     run_benchmark(static_cast<int32_t>(DataType::BF16), "BF16", M, N, K, d_in, d_w, d_out);
-    //
-    //     cudaFree(d_in);
-    //     cudaFree(d_out);
-    // }
-    //
-    // {
-    //     std::vector h_in(M * K, static_cast<__nv_fp8_e4m3>(0.25f));
-    //     void *d_in, *d_out;
-    //     cudaMalloc(&d_in, M * K * sizeof(__nv_fp8_e4m3));
-    //     cudaMalloc(&d_out, M * N * sizeof(__nv_fp8_e4m3));
-    //     cudaMemcpy(d_in, h_in.data(), h_in.size() * sizeof(__nv_fp8_e4m3), cudaMemcpyHostToDevice);
-    //
-    //     run_benchmark(static_cast<int32_t>(DataType::FP8), "FP8", M, N, K, d_in, d_w, d_out);
-    //
-    //     cudaFree(d_in);
-    //     cudaFree(d_out);
-    // }
-
     {
-        const std::vector<uint8_t> h_in(M * K / 2, 0x11);
+        std::vector<uint8_t> h_in(M * K / 2, 0x11);
         void *d_in, *d_out;
-        cudaMalloc(&d_in, M * K / 2 * sizeof(uint8_t));
-        cudaMalloc(&d_out, M * N / 2 * sizeof(uint8_t));
-        cudaMemcpy(d_in, h_in.data(), h_in.size() * sizeof(uint8_t), cudaMemcpyHostToDevice);
+        ASSERT_EQ(cudaMalloc(&d_in, M * K / 2 * sizeof(uint8_t)), cudaSuccess);
+        ASSERT_EQ(cudaMalloc(&d_out, M * N * sizeof(__nv_bfloat16)), cudaSuccess);
+        ASSERT_EQ(cudaMemcpy(d_in, h_in.data(), h_in.size() * sizeof(uint8_t), cudaMemcpyHostToDevice), cudaSuccess);
 
         run_benchmark(static_cast<int32_t>(DataType::FP4), "FP4", M, N, K, d_in, d_w, d_out);
 
