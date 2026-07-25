@@ -70,9 +70,6 @@ extern "C" void launch_fused_gemm_gguf_q4_k(
             break;
         }
         case DataType::FP4: {
-            if (shmem_size >= 48 * 1024) {
-                cudaFuncSetAttribute(reinterpret_cast<const void *>(run_fused_gemm_gguf_q4_k_fp4), cudaFuncAttributeMaxDynamicSharedMemorySize, shmem_size);
-            }
             run_fused_gemm_gguf_q4_k_fp4(
                 static_cast<__nv_fp4_e2m1 *>(output_activations),
                 static_cast<const __nv_fp4_e2m1 *>(input_activations),
