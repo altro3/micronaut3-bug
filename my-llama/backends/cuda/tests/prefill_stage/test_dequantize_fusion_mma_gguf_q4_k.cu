@@ -161,29 +161,32 @@ TEST_F(GgufQ4KGemmTest, TestFP4) {
     ASSERT_EQ(cudaMemcpy(h_output.data(), d_out, h_output.size() * sizeof(uint8_t), cudaMemcpyDeviceToHost), cudaSuccess);
 
     __half2_raw raw_h2_in = __nv_cvt_fp4x2_to_halfraw2(0x11, __NV_E2M1);
-    const float in_val = __half2float((*reinterpret_cast<__half2 *>(&raw_h2_in)).x);
+    const float in_val = __half2float(reinterpret_cast<__half2 *>(&raw_h2_in)->x);
 
-    for (int32_t m = 0; m < M; ++m) {
-        for (int32_t n = 0; n < N; ++n) {
+    bool has_error = false;
+    for (int32_t m = 0; m < M && !has_error; ++m) {
+        for (int32_t n = 0; n < N && !has_error; ++n) {
+            const int32_t global_element_idx = m * N + n;
+            const int32_t global_u32_idx = global_element_idx / 8;
+            const int32_t shift = global_element_idx % 8 * 4;
+            const auto h_output_u32 = reinterpret_cast<const uint32_t *>(h_output.data());
+            const uint8_t nibble = (h_output_u32[global_u32_idx] >> shift) & 0x0F;
+            const uint8_t aligned_fp4x2 = (nibble << 4) | nibble;
+            __half2_raw r0 = __nv_cvt_fp4x2_to_halfraw2(aligned_fp4x2, __NV_E2M1);
+            const float actual = __half2float(reinterpret_cast<__half2 *>(&r0)->x) * 2.0f;
+
             float expected_accum = 0.0f;
             for (int32_t k = 0; k < K; ++k) {
                 expected_accum += in_val * h_unpacked_weights[n * K + k];
             }
 
-            const int32_t global_element_idx = m * N + n;
-            const int32_t global_u32_idx = global_element_idx / 8;
-            const int32_t shift = global_element_idx % 8 * 4;
-
-            const auto h_output_u32 = reinterpret_cast<const uint32_t *>(h_output.data());
-            const uint8_t nibble = (h_output_u32[global_u32_idx] >> shift) & 0x0F;
-
-            const uint8_t aligned_fp4x2 = (nibble << 4) | nibble;
-            __half2_raw r0 = __nv_cvt_fp4x2_to_halfraw2(aligned_fp4x2, __NV_E2M1);
-            const float actual = __half2float((*reinterpret_cast<__half2 *>(&r0)).x);
-
-            EXPECT_NEAR(actual, expected_accum, 2.5f);
+            if (abs(actual - expected_accum) > 2.5f) {
+                printf("[TEST ERROR] First mismatch at M=%d, N=%d | Actual: %f, Expected: %f\n", m, n, actual, expected_accum);
+                has_error = true;
+            }
         }
     }
+    EXPECT_FALSE(has_error);
     cudaFree(d_out);
     cudaFree(d_in);
     cudaFree(d_w);
