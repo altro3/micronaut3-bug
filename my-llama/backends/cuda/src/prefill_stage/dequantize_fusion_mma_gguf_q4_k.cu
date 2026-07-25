@@ -211,6 +211,7 @@ __global__ void fused_gemm_gguf_q4_k_kernel(
         }
     } else if constexpr (std::is_same_v<ElementAct, __nv_fp4_e2m1>) {
         auto fp4_out = reinterpret_cast<uint32_t *>(output);
+        constexpr float fp4_scale = 2.0f;
         for (int32_t i = tid; i < TILE_M * TILE_N; i += blockDim.x) {
             int32_t m_local = i / TILE_N;
             int32_t n_local = i % TILE_N;
@@ -218,9 +219,16 @@ __global__ void fused_gemm_gguf_q4_k_kernel(
             int32_t global_n = block_n_coord + n_local;
 
             if (global_m < M && global_n < N) {
-                float val = smem_C_ptr[m_local * TILE_N + n_local];
+                float val = smem_C_ptr[m_local * TILE_N + n_local] / fp4_scale;
+
+                if (blockIdx.x == 0 && blockIdx.y == 0 && threadIdx.x == 0 && m_local == 0 && n_local == 0) {
+                    printf("[GPU LOG] Block(0,0) Thread %d | Accum float: %f | Expected accumulation: 12.0959\n",
+                           tid, smem_C_ptr[m_local * TILE_N + n_local]);
+                }
+
                 __half h_val = __float2half(val);
                 __half_raw h_raw = *reinterpret_cast<__half_raw *>(&h_val);
+
                 uint8_t res_fp4 = __nv_cvt_halfraw_to_fp4(h_raw, __NV_E2M1, cudaRoundNearest) & 0x0F;
 
                 int32_t global_element_idx = global_m * N + global_n;

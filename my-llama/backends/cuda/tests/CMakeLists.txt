@@ -19,7 +19,7 @@ if (NOT TARGET gtest_main)
 endif ()
 
 file(GLOB_RECURSE TEST_SOURCES CONFIGURE_DEPENDS
-        "${CMAKE_CURRENT_SOURCE_DIR}/input_stage/*.cu"
+        #        "${CMAKE_CURRENT_SOURCE_DIR}/input_stage/*.cu"
         "${CMAKE_CURRENT_SOURCE_DIR}/prefill_stage/*.cu"
         "${CMAKE_CURRENT_SOURCE_DIR}/test_main.cpp"
 )

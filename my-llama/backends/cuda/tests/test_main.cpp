@@ -3,7 +3,7 @@
 #include <iostream>
 
 int main(int argc, char **argv) {
-    ::testing::InitGoogleTest(&argc, argv);
+    testing::InitGoogleTest(&argc, argv);
 
     int deviceCount = 0;
     const cudaError_t err = cudaGetDeviceCount(&deviceCount);

@@ -21,6 +21,13 @@ set(CMAKE_CUDA_ARCHITECTURES "120")
 set(CMAKE_CUDA_FLAGS_RELEASE "-O3 --use_fast_math -Xptxas -v --diag-suppress=20012 -static-global-template-stub=false")
 set(CMAKE_CXX_FLAGS_RELEASE "/O2 /GL /Zc:preprocessor")
 
+set(CMAKE_CUDA_FLAGS_DEBUG "-g -G -O0 -Xptxas -O0")
+if (MSVC)
+    set(CMAKE_CXX_FLAGS_DEBUG "/MDd /Zi /Ob0 /Od /RTC1")
+else ()
+    set(CMAKE_CXX_FLAGS_DEBUG "-g -O0")
+endif ()
+
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 include(Dependencies)
 
