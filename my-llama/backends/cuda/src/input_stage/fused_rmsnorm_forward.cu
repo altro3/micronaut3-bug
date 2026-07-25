@@ -204,8 +204,14 @@ __global__ void fused_rmsnorm_forward_kernel(
     }
 }
 
-template __global__ void fused_rmsnorm_forward_kernel<__nv_bfloat16>(__nv_bfloat16 * __restrict__, const void * __restrict__, const void * __restrict__, const float * __restrict__, float, int32_t, int32_t);
+void run_fused_rmsnorm_bf16(__nv_bfloat16 *out, const void *input, const void *gamma, const float *gamma_scales, float epsilon, int32_t total_tokens, int32_t hidden_size, int32_t tpb, int32_t shmem, cudaStream_t stream) {
+    fused_rmsnorm_forward_kernel<__nv_bfloat16><<<total_tokens, tpb, shmem, stream>>>(out, input, gamma, gamma_scales, epsilon, total_tokens, hidden_size);
+}
 
-template __global__ void fused_rmsnorm_forward_kernel<__nv_fp8_e4m3>(__nv_bfloat16 * __restrict__, const void * __restrict__, const void * __restrict__, const float * __restrict__, float, int32_t, int32_t);
+void run_fused_rmsnorm_fp8(__nv_bfloat16 *out, const void *input, const void *gamma, const float *gamma_scales, float epsilon, int32_t total_tokens, int32_t hidden_size, int32_t tpb, int32_t shmem, cudaStream_t stream) {
+    fused_rmsnorm_forward_kernel<__nv_fp8_e4m3><<<total_tokens, tpb, shmem, stream>>>(out, input, gamma, gamma_scales, epsilon, total_tokens, hidden_size);
+}
 
-template __global__ void fused_rmsnorm_forward_kernel<__nv_fp4_e2m1>(__nv_bfloat16 * __restrict__, const void * __restrict__, const void * __restrict__, const float * __restrict__, float, int32_t, int32_t);
+void run_fused_rmsnorm_fp4(__nv_bfloat16 *out, const void *input, const void *gamma, const float *gamma_scales, float epsilon, int32_t total_tokens, int32_t hidden_size, int32_t tpb, int32_t shmem, cudaStream_t stream) {
+    fused_rmsnorm_forward_kernel<__nv_fp4_e2m1><<<total_tokens, tpb, shmem, stream>>>(out, input, gamma, gamma_scales, epsilon, total_tokens, hidden_size);
+}

@@ -58,7 +58,7 @@ protected:
         int32_t high = num_seqs - 1;
         int32_t seq_idx = 0;
         while (low <= high) {
-            int32_t mid = low + (high - low) / 2;
+            const int32_t mid = low + (high - low) / 2;
             if (offsets[mid] <= token_idx) {
                 seq_idx = mid;
                 low = mid + 1;
@@ -74,12 +74,12 @@ protected:
         h_expected_slots.resize(total_tokens);
 
         for (int32_t i = 0; i < total_tokens; ++i) {
-            int32_t seq_idx = host_find_sequence_index(h_seq_offsets.data(), num_seqs, i);
-            int32_t start_tok_idx = h_seq_offsets[seq_idx];
-            int32_t token_local_idx = i - start_tok_idx;
-            int32_t logical_block_idx = token_local_idx / block_size;
-            int32_t block_offset = token_local_idx % block_size;
-            int32_t physical_block_id = h_block_table[seq_idx * max_blocks_per_seq + logical_block_idx];
+            const int32_t seq_idx = host_find_sequence_index(h_seq_offsets.data(), num_seqs, i);
+            const int32_t start_tok_idx = h_seq_offsets[seq_idx];
+            const int32_t token_local_idx = i - start_tok_idx;
+            const int32_t logical_block_idx = token_local_idx / block_size;
+            const int32_t block_offset = token_local_idx % block_size;
+            const int32_t physical_block_id = h_block_table[seq_idx * max_blocks_per_seq + logical_block_idx];
             h_expected_slots[i] = (physical_block_id != -1) ? (physical_block_id * block_size + block_offset) : -1;
         }
 
@@ -128,13 +128,13 @@ TEST_F(VarlenEmbeddingsTest, TestBF16) {
 
     for (int32_t i = 0; i < total_tokens; ++i) {
         EXPECT_EQ(h_slots_res[i], h_expected_slots[i]);
-        uint32_t tok = h_tokens[i];
+        const uint32_t tok = h_tokens[i];
         for (int32_t f = 0; f < out_features; ++f) {
-            float act = __bfloat162float(h_out_res[i * out_features + f]);
+            const float act = __bfloat162float(h_out_res[i * out_features + f]);
             if (tok >= static_cast<uint32_t>(vocab_size)) {
                 EXPECT_NEAR(act, 0.0f, 1e-5f);
             } else {
-                float exp = __bfloat162float(h_weight_bf16[tok * out_features + f]);
+                const float exp = __bfloat162float(h_weight_bf16[tok * out_features + f]);
                 EXPECT_NEAR(act, exp, 1e-5f);
             }
         }
@@ -146,7 +146,7 @@ TEST_F(VarlenEmbeddingsTest, TestFP8) {
     std::vector<__nv_fp8_e4m3> h_weight_fp8(vocab_size * out_features);
     std::vector<float> h_ref_floats(vocab_size * out_features);
     for (int32_t i = 0; i < vocab_size * out_features; ++i) {
-        float val = static_cast<float>(i % 4) * 0.5f + 0.25f;
+        const float val = static_cast<float>(i % 4) * 0.5f + 0.25f;
         h_weight_fp8[i] = static_cast<__nv_fp8_e4m3>(val);
         h_ref_floats[i] = static_cast<float>(h_weight_fp8[i]);
     }
@@ -166,13 +166,13 @@ TEST_F(VarlenEmbeddingsTest, TestFP8) {
     ASSERT_EQ(cudaMemcpy(h_out_res.data(), d_out, total_tokens * out_features * sizeof(__nv_bfloat16), cudaMemcpyDeviceToHost), cudaSuccess);
 
     for (int32_t i = 0; i < total_tokens; ++i) {
-        uint32_t tok = h_tokens[i];
+        const uint32_t tok = h_tokens[i];
         for (int32_t f = 0; f < out_features; ++f) {
-            float act = __bfloat162float(h_out_res[i * out_features + f]);
+            const float act = __bfloat162float(h_out_res[i * out_features + f]);
             if (tok >= static_cast<uint32_t>(vocab_size)) {
                 EXPECT_NEAR(act, 0.0f, 1e-5f);
             } else {
-                float exp = h_ref_floats[tok * out_features + f];
+                const float exp = h_ref_floats[tok * out_features + f];
                 EXPECT_NEAR(act, exp, 1e-2f);
             }
         }
