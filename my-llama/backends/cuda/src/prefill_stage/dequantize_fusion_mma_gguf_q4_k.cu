@@ -8,34 +8,34 @@
 using namespace cute;
 
 struct DequantQ4K {
-    static __device__ __forceinline__ float dequantize_element(const BlockQ4K * __restrict__ input_B_quant, int32_t global_n, int32_t global_k, int32_t K) {
-        int32_t total_weight_element_idx = global_n * K + global_k;
-        int32_t block_idx = total_weight_element_idx >> 8;
-        int32_t elem_in_block = total_weight_element_idx & 255;
+    static __device__ __forceinline__ float dequantize_element(const BlockQ4K * __restrict__ input_B_quant, const int32_t global_n, const int32_t global_k, const int32_t K) {
+        const int32_t total_weight_element_idx = global_n * K + global_k;
+        const int32_t block_idx = total_weight_element_idx >> 8;
+        const int32_t elem_in_block = total_weight_element_idx & 255;
 
         const BlockQ4K &block = input_B_quant[block_idx];
 
-        float d_val = __bfloat162float(block.d);
-        float dmin_val = __bfloat162float(block.dmin);
+        const float d_val = __bfloat162float(block.d);
+        const float dmin_val = __bfloat162float(block.dmin);
 
-        int32_t j = elem_in_block >> 6;
-        int32_t il = (elem_in_block >> 4) & 3;
-        int32_t pair_idx = elem_in_block & 15;
+        const int32_t j = elem_in_block >> 6;
+        const int32_t il = (elem_in_block >> 4) & 3;
+        const int32_t pair_idx = elem_in_block & 15;
 
-        int32_t j_mod = j & 1;
+        const int32_t j_mod = j & 1;
 
-        uint8_t s_low = block.scales[j_mod * 4 + il];
-        uint8_t s_high = block.scales[8 + j_mod * 2 + (il >> 1)];
+        const uint8_t s_low = block.scales[j_mod * 4 + il];
+        const uint8_t s_high = block.scales[8 + j_mod * 2 + (il >> 1)];
 
-        uint8_t sc = s_low & 63;
-        uint8_t min_sc = s_high & 63;
+        const uint8_t sc = s_low & 63;
+        const uint8_t min_sc = s_high & 63;
 
-        float d_super = d_val * static_cast<float>(sc);
-        float m_super = dmin_val * static_cast<float>(min_sc);
+        const float d_super = d_val * static_cast<float>(sc);
+        const float m_super = dmin_val * static_cast<float>(min_sc);
 
-        int32_t byte_idx = (j << 5) + (il << 2) + (pair_idx >> 1);
-        uint8_t packed_byte = block.qs[byte_idx];
-        uint8_t raw_q = (pair_idx & 1) == 0 ? packed_byte & 0x0F : packed_byte >> 4;
+        const int32_t byte_idx = (j << 5) + (il << 2) + (pair_idx >> 1);
+        const uint8_t packed_byte = block.qs[byte_idx];
+        const uint8_t raw_q = (pair_idx & 1) == 0 ? packed_byte & 0x0F : packed_byte >> 4;
 
         return d_super * static_cast<float>(raw_q) - m_super;
     }
@@ -179,7 +179,7 @@ __global__ void fused_gemm_gguf_q4_k_kernel(
 
         if (blockIdx.x == 0 && blockIdx.y == 0 && tid == 0 && k_tile == 0) {
             printf("[MMA FRAGMENT PRE_GEMM] FIRST THREAD ONLY | size(tC_rC)=%d | fragment_C(0) before GEMM = %f\n",
-                   (int) size(tC_rC), tC_rC(0));
+                   static_cast<int>(size(tC_rC)), tC_rC(0));
         }
 
         gemm(mma_core, tA_rA, tB_rB, tC_rC);
@@ -258,15 +258,21 @@ __global__ void fused_gemm_gguf_q4_k_kernel(
 
                 if (blockIdx.x == 0 && blockIdx.y == 0 && tid == 0 && i == 0) {
                     printf("[EPILOGUE TRACE WRITE] FIRST BYTE ONLY | target_byte_idx=%d | smem_v0=%f, smem_v1=%f | r0=0x%X, r1=0x%X | final_byte=0x%02X\n",
-                           target_byte_idx, v0, v1, (int) r0, (int) r1, (int) (r0 | (r1 << 4)));
+                           target_byte_idx, v0, v1, static_cast<int>(r0), static_cast<int>(r1), static_cast<int>(r0 | (r1 << 4)));
                 }
             }
         }
     }
 }
 
-template __global__ void fused_gemm_gguf_q4_k_kernel<bfloat16_t, 64, 64, 32>(bfloat16_t * __restrict__ output, const bfloat16_t * __restrict__ input_A, const BlockQ4K * __restrict__ input_B_quant, int32_t M, int32_t N, int32_t K);
+void run_fused_gemm_gguf_q4_k_bf16(bfloat16_t *output, const bfloat16_t *input_A, const BlockQ4K *input_B_quant, const int32_t M, const int32_t N, const int32_t K, dim3 grid, dim3 block, size_t shmem, cudaStream_t stream) {
+    fused_gemm_gguf_q4_k_kernel<bfloat16_t, 64, 64, 32><<<grid, block, shmem, stream>>>(output, input_A, input_B_quant, M, N, K);
+}
 
-template __global__ void fused_gemm_gguf_q4_k_kernel<__nv_fp8_e4m3, 64, 64, 32>(__nv_fp8_e4m3 * __restrict__ output, const __nv_fp8_e4m3 * __restrict__ input_A, const BlockQ4K * __restrict__ input_B_quant, int32_t M, int32_t N, int32_t K);
+void run_fused_gemm_gguf_q4_k_fp8(__nv_fp8_e4m3 *output, const __nv_fp8_e4m3 *input_A, const BlockQ4K *input_B_quant, const int32_t M, const int32_t N, const int32_t K, dim3 grid, dim3 block, size_t shmem, cudaStream_t stream) {
+    fused_gemm_gguf_q4_k_kernel<__nv_fp8_e4m3, 64, 64, 32><<<grid, block, shmem, stream>>>(output, input_A, input_B_quant, M, N, K);
+}
 
-template __global__ void fused_gemm_gguf_q4_k_kernel<__nv_fp4_e2m1, 64, 64, 32>(__nv_fp4_e2m1 * __restrict__ output, const __nv_fp4_e2m1 * __restrict__ input_A, const BlockQ4K * __restrict__ input_B_quant, int32_t M, int32_t N, int32_t K);
+void run_fused_gemm_gguf_q4_k_fp4(__nv_fp4_e2m1 *output, const __nv_fp4_e2m1 *input_A, const BlockQ4K *input_B_quant, const int32_t M, const int32_t N, const int32_t K, dim3 grid, dim3 block, size_t shmem, cudaStream_t stream) {
+    fused_gemm_gguf_q4_k_kernel<__nv_fp4_e2m1, 64, 64, 32><<<grid, block, shmem, stream>>>(output, input_A, input_B_quant, M, N, K);
+}

@@ -28,16 +28,17 @@ else()
             "${CMAKE_CURRENT_SOURCE_DIR}/input_stage/varlen_embeddings_launcher.cu"
     )
 
-#    set(PREFILL_STAGE_SRCS
-#            "${CMAKE_CURRENT_SOURCE_DIR}/prefill_stage/dequantize_fusion_mma_gguf_q4_k.cu"
-#            "${CMAKE_CURRENT_SOURCE_DIR}/prefill_stage/dequantize_fusion_mma_gguf_q4_k_launcher.cu"
-#            "${CMAKE_CURRENT_SOURCE_DIR}/prefill_stage/prefill_stage_dispatcher.cu"
-#    )
+    set(PREFILL_STAGE_SRCS
+            "${CMAKE_CURRENT_SOURCE_DIR}/prefill_stage/dequantize_fusion_mma_gguf_q4_k.cu"
+            "${CMAKE_CURRENT_SOURCE_DIR}/prefill_stage/dequantize_fusion_mma_gguf_q4_k_launcher.cu"
+            "${CMAKE_CURRENT_SOURCE_DIR}/prefill_stage/prefill_stage_dispatcher.cu"
+    )
 
     file(GLOB GLOBAL_HEADERS CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/../include/*.h")
 
     set(CUDA_SOURCES
             ${INPUT_STAGE_SRCS}
+            ${PREFILL_STAGE_SRCS}
     )
 
     add_library(cuda_kernels STATIC ${CUDA_SOURCES} ${FLASHINFER_OBJ})
