@@ -17,3 +17,9 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 include(Dependencies)
 
 add_subdirectory(src)
+
+option(BUILD_TESTS "Build C++ CUDA kernel tests" ON)
+if(BUILD_TESTS AND NOT ISOLATED_BUILD)
+    enable_testing()
+    add_subdirectory(tests)
+endif()

@@ -153,11 +153,14 @@ __global__ void varlen_embeddings_fused_kernel(
     }
 }
 
-template __global__ void varlen_embeddings_fused_kernel<__nv_bfloat16>(
-    __nv_bfloat16 * __restrict__, const void * __restrict__, const float * __restrict__, const uint32_t * __restrict__, const int32_t * __restrict__, const int32_t * __restrict__, int32_t * __restrict__, int32_t, int32_t, int32_t, int32_t, int32_t, int32_t);
+void run_varlen_embeddings_bf16(__nv_bfloat16* out, const void* weight, const float* weight_scales, const uint32_t* tokens, const int32_t* seq_offsets, const int32_t* block_table, int32_t* slot_mapping, int32_t max_blocks, int32_t b_size, int32_t t_tokens, int32_t out_f, int32_t v_size, int32_t n_seqs, int32_t tpb, cudaStream_t stream) {
+    varlen_embeddings_fused_kernel<__nv_bfloat16><<<t_tokens, tpb, 0, stream>>>(out, weight, weight_scales, tokens, seq_offsets, block_table, slot_mapping, max_blocks, b_size, t_tokens, out_f, v_size, n_seqs);
+}
 
-template __global__ void varlen_embeddings_fused_kernel<__nv_fp8_e4m3>(
-    __nv_bfloat16 * __restrict__, const void * __restrict__, const float * __restrict__, const uint32_t * __restrict__, const int32_t * __restrict__, const int32_t * __restrict__, int32_t * __restrict__, int32_t, int32_t, int32_t, int32_t, int32_t, int32_t);
+void run_varlen_embeddings_fp8(__nv_bfloat16* out, const void* weight, const float* weight_scales, const uint32_t* tokens, const int32_t* seq_offsets, const int32_t* block_table, int32_t* slot_mapping, int32_t max_blocks, int32_t b_size, int32_t t_tokens, int32_t out_f, int32_t v_size, int32_t n_seqs, int32_t tpb, cudaStream_t stream) {
+    varlen_embeddings_fused_kernel<__nv_fp8_e4m3><<<t_tokens, tpb, 0, stream>>>(out, weight, weight_scales, tokens, seq_offsets, block_table, slot_mapping, max_blocks, b_size, t_tokens, out_f, v_size, n_seqs);
+}
 
-template __global__ void varlen_embeddings_fused_kernel<__nv_fp4_e2m1>(
-    __nv_bfloat16 * __restrict__, const void * __restrict__, const float * __restrict__, const uint32_t * __restrict__, const int32_t * __restrict__, const int32_t * __restrict__, int32_t * __restrict__, int32_t, int32_t, int32_t, int32_t, int32_t, int32_t);
+void run_varlen_embeddings_fp4(__nv_bfloat16* out, const void* weight, const float* weight_scales, const uint32_t* tokens, const int32_t* seq_offsets, const int32_t* block_table, int32_t* slot_mapping, int32_t max_blocks, int32_t b_size, int32_t t_tokens, int32_t out_f, int32_t v_size, int32_t n_seqs, int32_t tpb, cudaStream_t stream) {
+    varlen_embeddings_fused_kernel<__nv_fp4_e2m1><<<t_tokens, tpb, 0, stream>>>(out, weight, weight_scales, tokens, seq_offsets, block_table, slot_mapping, max_blocks, b_size, t_tokens, out_f, v_size, n_seqs);
+}
