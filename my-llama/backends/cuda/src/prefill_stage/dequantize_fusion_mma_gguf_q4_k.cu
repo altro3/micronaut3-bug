@@ -9,35 +9,40 @@ using namespace cute;
 
 struct DequantQ4K {
     static __device__ __forceinline__ float dequantize_element(const BlockQ4K * __restrict__ input_B_quant, const int32_t global_n, const int32_t global_k, const int32_t K) {
-        const int32_t total_weight_element_idx = global_n * K + global_k;
-        const int32_t block_idx = total_weight_element_idx >> 8;
-        const int32_t elem_in_block = total_weight_element_idx & 255;
+        const int32_t super_block_idx = global_k / 256;
+        const int32_t block_idx = global_n * (K / 256) + super_block_idx;
+        const int32_t elem_in_block = global_k % 256;
 
         const BlockQ4K &block = input_B_quant[block_idx];
 
         const float d_val = __bfloat162float(block.d);
         const float dmin_val = __bfloat162float(block.dmin);
 
-        const int32_t j = elem_in_block >> 6;
-        const int32_t il = (elem_in_block >> 4) & 3;
-        const int32_t pair_idx = elem_in_block & 15;
+        const int32_t sub_block_idx = elem_in_block / 32;
+        const int32_t elem_idx = elem_in_block % 32;
 
-        const int32_t j_mod = j & 1;
+        const int32_t bit_offset_sc = sub_block_idx * 6;
+        const int32_t byte_offset_sc = bit_offset_sc / 8;
+        const int32_t bit_shift_sc = bit_offset_sc % 8;
+        uint32_t val_sc = block.scales[byte_offset_sc] | (block.scales[byte_offset_sc + 1] << 8);
+        if (byte_offset_sc + 2 < 12) {
+            val_sc |= block.scales[byte_offset_sc + 2] << 16;
+        }
+        const uint8_t sc = (val_sc >> bit_shift_sc) & 0x3F;
 
-        const uint8_t s_low = block.scales[j_mod * 4 + il];
-        const uint8_t s_high = block.scales[8 + j_mod * 2 + (il >> 1)];
+        const int32_t bit_offset_min = (sub_block_idx + 8) * 6;
+        const int32_t byte_offset_min = bit_offset_min / 8;
+        const int32_t bit_shift_min = bit_offset_min % 8;
+        uint32_t val_min = block.scales[byte_offset_min] | (block.scales[byte_offset_min + 1] << 8);
+        if (byte_offset_min + 2 < 12) {
+            val_min |= block.scales[byte_offset_min + 2] << 16;
+        }
+        const uint8_t min_sc = (val_min >> bit_shift_min) & 0x3F;
 
-        const uint8_t sc = s_low & 63;
-        const uint8_t min_sc = s_high & 63;
+        const uint8_t qs_byte = block.qs[sub_block_idx * 16 + elem_idx % 16];
+        const uint8_t raw_q = elem_idx < 16 ? qs_byte & 0x0F : qs_byte >> 4;
 
-        const float d_super = d_val * static_cast<float>(sc);
-        const float m_super = dmin_val * static_cast<float>(min_sc);
-
-        const int32_t byte_idx = (j << 5) + (il << 2) + (pair_idx >> 1);
-        const uint8_t packed_byte = block.qs[byte_idx];
-        const uint8_t raw_q = (pair_idx & 1) == 0 ? packed_byte & 0x0F : packed_byte >> 4;
-
-        return d_super * static_cast<float>(raw_q) - m_super;
+        return d_val * static_cast<float>(sc) * static_cast<float>(raw_q) - dmin_val * static_cast<float>(min_sc);
     }
 };
 
@@ -72,6 +77,7 @@ __global__ void fused_gemm_gguf_q4_k_kernel(
     auto thr_mma = mma_core.get_slice(tid);
     auto tA_sA_partitioned = thr_mma.partition_A(smem_A_tensor);
     auto tB_sB_partitioned = thr_mma.partition_B(smem_B_tensor);
+
     auto smem_C_ptr = reinterpret_cast<float *>(dynamic_shmem);
     auto smem_C_layout = make_layout(make_shape(Int<TILE_M>{}, Int<TILE_N>{}), LayoutRight{});
     auto smem_C_tensor = make_tensor(make_smem_ptr(smem_C_ptr), smem_C_layout);
@@ -82,6 +88,7 @@ __global__ void fused_gemm_gguf_q4_k_kernel(
     for (int32_t i = 0; i < size(tC_rC); ++i) {
         tC_rC(i) = 0.0f;
     }
+
     const int32_t num_k_tiles = (K + TILE_K - 1) / TILE_K;
     for (int32_t k_tile = 0; k_tile < num_k_tiles; ++k_tile) {
 #pragma unroll 4
@@ -92,6 +99,7 @@ __global__ void fused_gemm_gguf_q4_k_kernel(
             int32_t global_m = block_m_coord + local_m;
             int32_t global_k = k_tile * TILE_K + local_k;
             auto smem_ptr_u4 = reinterpret_cast<uint4 *>(&smem_A_ptr[local_m * TILE_K + local_k]);
+
             if (global_m < M && global_k < K) {
                 if constexpr (std::is_same_v<ElementAct, bfloat16_t> || std::is_same_v<ElementAct, __nv_bfloat16>) {
                     *smem_ptr_u4 = *reinterpret_cast<const uint4 *>(&input_A[global_m * K + global_k]);
@@ -116,39 +124,25 @@ __global__ void fused_gemm_gguf_q4_k_kernel(
                     int32_t global_fp4_element_idx = global_m * K + global_k;
                     auto fp4_in = &base_bytes[global_fp4_element_idx >> 1];
                     uint32_t u32_vals[4];
-
 #pragma unroll
                     for (int v = 0; v < 4; ++v) {
                         uint8_t packed_byte = fp4_in[v];
                         __half2_raw h2 = __nv_cvt_fp4x2_to_halfraw2(packed_byte, __NV_E2M1);
-                        __half2 *h2_ptr = reinterpret_cast<__half2 *>(&h2);
+                        auto h2_ptr = reinterpret_cast<__half2 *>(&h2);
                         float2 f2 = __half22float2(*h2_ptr);
-
                         __nv_bfloat16 bf16_x = __float2bfloat16(f2.x);
                         __nv_bfloat16 bf16_y = __float2bfloat16(f2.y);
-
                         uint16_t bits_x = *reinterpret_cast<uint16_t *>(&bf16_x);
                         uint16_t bits_y = *reinterpret_cast<uint16_t *>(&bf16_y);
                         u32_vals[v] = (static_cast<uint32_t>(bits_y) << 16) | bits_x;
-
-                        if (blockIdx.x == 0 && blockIdx.y == 0 && tid == 0 && k_tile == 0 && i == 0) {
-                            printf("[A_LOAD TRACE] tid=%d | v=%d | raw_byte=0x%02X | cvt_h2_bits=0x%08X | f2=(%f, %f) | bf16_to_smem=(%f, %f)\n",
-                                   tid, v, packed_byte, *reinterpret_cast<uint32_t *>(&h2), f2.x, f2.y, __bfloat162float(bf16_x), __bfloat162float(bf16_y));
-                        }
                     }
-
-                    uint4 final_u4 = make_uint4(u32_vals[0], u32_vals[1], u32_vals[2], u32_vals[3]);
-                    *smem_ptr_u4 = final_u4;
-
-                    if (blockIdx.x == 0 && blockIdx.y == 0 && tid == 0 && k_tile == 0 && i == 0) {
-                        printf("[A_SMEM WRITE] tid=%d | written_u4=(0x%08X, 0x%08X, 0x%08X, 0x%08X)\n",
-                               tid, final_u4.x, final_u4.y, final_u4.z, final_u4.w);
-                    }
+                    *smem_ptr_u4 = make_uint4(u32_vals[0], u32_vals[1], u32_vals[2], u32_vals[3]);
                 }
             } else {
                 *smem_ptr_u4 = make_uint4(0, 0, 0, 0);
             }
         }
+
 #pragma unroll 2
         for (int32_t i = tid; i < TILE_N * TILE_K; i += blockDim.x) {
             int32_t local_n = i / TILE_K;
@@ -159,11 +153,6 @@ __global__ void fused_gemm_gguf_q4_k_kernel(
             if (global_n < N && global_k < K) {
                 float out_fp32 = DequantQ4K::dequantize_element(input_B_quant, global_n, global_k, K);
                 smem_B_ptr[local_n * TILE_K + local_k] = __float2bfloat16(out_fp32);
-
-                if (blockIdx.x == 0 && blockIdx.y == 0 && tid == 0 && k_tile == 0 && i == 0) {
-                    printf("[B_DEQUANT TRACE] FIRST ELEMENT ONLY | out_fp32=%f | bf16_bits=0x%04X\n",
-                           out_fp32, *reinterpret_cast<uint16_t *>(&smem_B_ptr[local_n * TILE_K + local_k]));
-                }
             } else {
                 smem_B_ptr[local_n * TILE_K + local_k] = __float2bfloat16(0.0f);
             }
@@ -177,16 +166,7 @@ __global__ void fused_gemm_gguf_q4_k_kernel(
         cute::copy(tA_sA_partitioned, tA_rA);
         cute::copy(tB_sB_partitioned, tB_rB);
 
-        if (blockIdx.x == 0 && blockIdx.y == 0 && tid == 0 && k_tile == 0) {
-            printf("[MMA FRAGMENT PRE_GEMM] FIRST THREAD ONLY | size(tC_rC)=%d | fragment_C(0) before GEMM = %f\n",
-                   static_cast<int>(size(tC_rC)), tC_rC(0));
-        }
-
         gemm(mma_core, tA_rA, tB_rB, tC_rC);
-
-        if (blockIdx.x == 0 && blockIdx.y == 0 && tid == 0 && k_tile == 0) {
-            printf("[MMA FRAGMENT POST_GEMM] FIRST THREAD ONLY | fragment_C(0) after GEMM = %f\n", tC_rC(0));
-        }
 
         __syncthreads();
     }
@@ -196,7 +176,6 @@ __global__ void fused_gemm_gguf_q4_k_kernel(
         tC_sC_partitioned(i) = tC_rC(i);
     }
     __syncthreads();
-
     if constexpr (std::is_same_v<ElementAct, bfloat16_t> || std::is_same_v<ElementAct, __nv_bfloat16>) {
         auto output_v2 = reinterpret_cast<__nv_bfloat162 *>(output);
         for (int32_t i = tid * 2; i < TILE_M * TILE_N; i += blockDim.x * 2) {
@@ -231,35 +210,29 @@ __global__ void fused_gemm_gguf_q4_k_kernel(
             }
         }
     } else if constexpr (std::is_same_v<ElementAct, __nv_fp4_e2m1>) {
-        auto fp4_out = reinterpret_cast<uint8_t *>(output);
-        for (int32_t i = tid; i < TILE_M * TILE_N / 2; i += blockDim.x) {
-            int32_t total_elements_idx = i * 2;
-            int32_t m_local = total_elements_idx / TILE_N;
-            int32_t n_local = total_elements_idx % TILE_N;
+        auto fp4_out = reinterpret_cast<uint32_t *>(output);
+        for (int32_t i = tid; i < TILE_M * TILE_N; i += blockDim.x) {
+            int32_t m_local = i / TILE_N;
+            int32_t n_local = i % TILE_N;
             int32_t global_m = block_m_coord + m_local;
             int32_t global_n = block_n_coord + n_local;
 
             if (global_m < M && global_n < N) {
-                float v0 = smem_C_ptr[m_local * TILE_N + n_local];
-                float v1 = n_local + 1 < TILE_N && global_n + 1 < N ? smem_C_ptr[m_local * TILE_N + n_local + 1] : 0.0f;
+                float val = smem_C_ptr[m_local * TILE_N + n_local];
+                __half h_val = __float2half(val);
+                __half_raw h_raw = *reinterpret_cast<__half_raw *>(&h_val);
+                uint8_t res_fp4 = __nv_cvt_halfraw_to_fp4(h_raw, __NV_E2M1, cudaRoundNearest) & 0x0F;
 
-                __half h0 = __float2half(v0);
-                __half h1 = __float2half(v1);
-                __half_raw h_raw0 = *reinterpret_cast<__half_raw *>(&h0);
-                __half_raw h_raw1 = *reinterpret_cast<__half_raw *>(&h1);
+                int32_t global_element_idx = global_m * N + global_n;
+                int32_t global_u32_idx = global_element_idx / 8;
+                int32_t shift = global_element_idx % 8 * 4;
 
-                uint8_t r0 = __nv_cvt_halfraw_to_fp4(h_raw0, __NV_E2M1, cudaRoundNearest) & 0x0F;
-                uint8_t r1 = __nv_cvt_halfraw_to_fp4(h_raw1, __NV_E2M1, cudaRoundNearest) & 0x0F;
+                uint32_t mask = ~(0x0F << shift);
+                uint32_t value_to_write = static_cast<uint32_t>(res_fp4) << shift;
 
-                int32_t global_byte_row_stride = N >> 1;
-                int32_t target_byte_idx = global_m * global_byte_row_stride + (global_n >> 1);
-
-                fp4_out[target_byte_idx] = r0 | (r1 << 4);
-
-                if (blockIdx.x == 0 && blockIdx.y == 0 && tid == 0 && i == 0) {
-                    printf("[EPILOGUE TRACE WRITE] FIRST BYTE ONLY | target_byte_idx=%d | smem_v0=%f, smem_v1=%f | r0=0x%X, r1=0x%X | final_byte=0x%02X\n",
-                           target_byte_idx, v0, v1, static_cast<int>(r0), static_cast<int>(r1), static_cast<int>(r0 | (r1 << 4)));
-                }
+                uint32_t *target_ptr = &fp4_out[global_u32_idx];
+                atomicAnd(target_ptr, mask);
+                atomicOr(target_ptr, value_to_write);
             }
         }
     }
