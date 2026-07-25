@@ -211,17 +211,14 @@ __global__ void batched_projection_cutlass4_kernel(
     }
 }
 
-template __global__ void batched_projection_cutlass4_kernel<64, 64, 32, bfloat16_t>(
-    ProjectionParams params, const float * __restrict__ projection_bias, const float * __restrict__ quantization_scales,
-    int32_t local_output_dim, int32_t input_feature_dim, int32_t rank_offset
-);
+void run_batched_projection_bf16(ProjectionParams params, const float *projection_bias, const float *quantization_scales, int32_t local_output_dim, int32_t input_feature_dim, int32_t rank_offset, dim3 grid, dim3 block, size_t shmem, cudaStream_t stream) {
+    batched_projection_cutlass4_kernel<64, 64, 32, bfloat16_t><<<grid, block, shmem, stream>>>(params, projection_bias, quantization_scales, local_output_dim, input_feature_dim, rank_offset);
+}
 
-template __global__ void batched_projection_cutlass4_kernel<64, 64, 32, __nv_fp8_e4m3>(
-    ProjectionParams params, const float * __restrict__ projection_bias, const float * __restrict__ quantization_scales,
-    int32_t local_output_dim, int32_t input_feature_dim, int32_t rank_offset
-);
+void run_batched_projection_fp8(ProjectionParams params, const float *projection_bias, const float *quantization_scales, int32_t local_output_dim, int32_t input_feature_dim, int32_t rank_offset, dim3 grid, dim3 block, size_t shmem, cudaStream_t stream) {
+    batched_projection_cutlass4_kernel<64, 64, 32, __nv_fp8_e4m3><<<grid, block, shmem, stream>>>(params, projection_bias, quantization_scales, local_output_dim, input_feature_dim, rank_offset);
+}
 
-template __global__ void batched_projection_cutlass4_kernel<64, 64, 32, __nv_fp4_e2m1>(
-    ProjectionParams params, const float * __restrict__ projection_bias, const float * __restrict__ quantization_scales,
-    int32_t local_output_dim, int32_t input_feature_dim, int32_t rank_offset
-);
+void run_batched_projection_fp4(ProjectionParams params, const float *projection_bias, const float *quantization_scales, int32_t local_output_dim, int32_t input_feature_dim, int32_t rank_offset, dim3 grid, dim3 block, size_t shmem, cudaStream_t stream) {
+    batched_projection_cutlass4_kernel<64, 64, 32, __nv_fp4_e2m1><<<grid, block, shmem, stream>>>(params, projection_bias, quantization_scales, local_output_dim, input_feature_dim, rank_offset);
+}

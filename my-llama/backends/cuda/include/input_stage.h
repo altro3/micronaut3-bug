@@ -50,7 +50,6 @@ void launch_fused_multimodal_projection(
     int32_t tp_rank,
     int32_t tp_size,
     int32_t data_type,
-    void * __restrict__ workspace_ptr,
     void *stream_ptr
 );
 

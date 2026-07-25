@@ -24,7 +24,7 @@ void launch_fused_rmsnorm_forward(
 );
 }
 
-class FusedRMSNormTest : public ::testing::Test {
+class FusedRMSNormTest : public testing::Test {
 protected:
     const int32_t total_tokens = 4;
     const int32_t hidden_size = 128;

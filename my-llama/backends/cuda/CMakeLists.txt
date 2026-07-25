@@ -7,6 +7,11 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CUDA_STANDARD 20)
 set(CMAKE_CUDA_STANDARD_REQUIRED ON)
 
+if (MSVC)
+    string(APPEND CMAKE_CXX_FLAGS " /Zc:preprocessor")
+    string(APPEND CMAKE_CUDA_FLAGS " -Xcompiler=/Zc:preprocessor")
+endif ()
+
 set(CMAKE_CUDA_RUNTIME_LIBRARY Static)
 
 set(CMAKE_CUDA_ARCHITECTURES "120")
@@ -19,7 +24,7 @@ include(Dependencies)
 add_subdirectory(src)
 
 option(BUILD_TESTS "Build C++ CUDA kernel tests" ON)
-if(BUILD_TESTS AND NOT ISOLATED_BUILD)
+if (BUILD_TESTS AND NOT ISOLATED_BUILD)
     enable_testing()
     add_subdirectory(tests)
-endif()
+endif ()
