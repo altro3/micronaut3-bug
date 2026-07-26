@@ -34,10 +34,10 @@ static void run_benchmark(const int32_t data_type, const std::string &type_name,
     std::cout << "[BENCHMARK] Warmup complete. Running " << bench_iters << " hot iterations..." << std::endl;
 
     cudaEvent_t start, stop;
-    for (int32_t i = 0; i < bench_iters; ++i) {
-        cudaEventCreate(&start);
-        cudaEventCreate(&stop);
+    cudaEventCreate(&start);
+    cudaEventCreate(&stop);
 
+    for (int32_t i = 0; i < bench_iters; ++i) {
         cudaEventRecord(start, nullptr);
         launch_fused_gemm_gguf_q4_k(d_out, d_in, d_w, M, N, K, data_type, nullptr);
         cudaEventRecord(stop, nullptr);
@@ -46,10 +46,10 @@ static void run_benchmark(const int32_t data_type, const std::string &type_name,
         float ms = 0.0f;
         cudaEventElapsedTime(&ms, start, stop);
         iters_ms[i] = ms;
-
-        cudaEventDestroy(start);
-        cudaEventDestroy(stop);
     }
+
+    cudaEventDestroy(start);
+    cudaEventDestroy(stop);
     cudaDeviceSynchronize();
 
     std::ranges::sort(iters_ms);
@@ -75,23 +75,23 @@ static void run_benchmark(const int32_t data_type, const std::string &type_name,
     std::cout << "==========================================================================" << std::endl;
 }
 
-TEST_CASE("GgufBenchmarkTest - BenchQwen05B_AllTypes") {
-    const std::string file_path = "D:\\!models\\Qwen2.5-0.5B-Instruct-Q4_K_M.gguf";
+TEST_CASE("GgufBenchmarkTest - RealLLamStyleBench") {
+    const std::string file_path = "D:\\!models\\Qwen2.5-0.5B-Instruct-Q4_K_M.gguf"; // Или путь к Llama 8B
     std::ifstream file(file_path, std::ios::binary);
     if (!file.is_open()) {
         std::cout << "[SKIP Benchmark] File not found at " << file_path << std::endl;
         return;
     }
 
-    constexpr int32_t M = 64;
-    constexpr int32_t N = 896;
-    constexpr int32_t K = 896;
+    constexpr int32_t M = 1024;
+    constexpr int32_t N = 4096;
+    constexpr int32_t K = 4096;
 
     constexpr size_t total_weight_elements = N * K;
     constexpr size_t total_blocks = total_weight_elements / 256;
     std::vector<BlockQ4K> host_real_weights(total_blocks);
 
-    file.seekg(1024 * 1024 * 2);
+    file.seekg(1024 * 1024 * 10);
     file.read(reinterpret_cast<char *>(host_real_weights.data()), total_blocks * sizeof(BlockQ4K));
     file.close();
 
@@ -107,7 +107,7 @@ TEST_CASE("GgufBenchmarkTest - BenchQwen05B_AllTypes") {
         REQUIRE(cudaMalloc(&d_out, M * N * sizeof(__nv_bfloat16)) == cudaSuccess);
         REQUIRE(cudaMemcpy(d_in, h_in.data(), h_in.size() * sizeof(uint8_t), cudaMemcpyHostToDevice) == cudaSuccess);
 
-        run_benchmark(static_cast<int32_t>(DataType::FP4), "FP4", M, N, K, d_in, d_w, d_out);
+        run_benchmark(static_cast<int32_t>(DataType::FP4), "FP4_REAL_SCALE", M, N, K, d_in, d_w, d_out);
 
         cudaFree(d_in);
         cudaFree(d_out);
