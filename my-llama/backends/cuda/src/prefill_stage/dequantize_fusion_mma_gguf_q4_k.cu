@@ -93,12 +93,12 @@ __global__ void fused_gemm_gguf_q4_k_kernel(
     for (int32_t k_tile = 0; k_tile < num_k_tiles; ++k_tile) {
 #pragma unroll 4
         for (int32_t i = tid; i < TILE_M * TILE_K / 8; i += blockDim.x) {
-            int32_t idx = i * 8;
-            int32_t local_m = idx / TILE_K;
-            int32_t local_k = idx % TILE_K;
+            int32_t idx = i << 3;
+            int32_t local_m = idx >> 5;
+            int32_t local_k = idx & 31;
             int32_t global_m = block_m_coord + local_m;
             int32_t global_k = k_tile * TILE_K + local_k;
-            auto smem_ptr_u4 = reinterpret_cast<uint4 *>(&smem_A_ptr[local_m * TILE_K + local_k]);
+            auto smem_ptr_u4 = reinterpret_cast<uint4 *>(&smem_A_ptr[(local_m << 5) + local_k]);
 
             if (global_m < M && global_k < K) {
                 if constexpr (std::is_same_v<ElementAct, bfloat16_t> || std::is_same_v<ElementAct, __nv_bfloat16>) {
@@ -145,16 +145,16 @@ __global__ void fused_gemm_gguf_q4_k_kernel(
 
 #pragma unroll 2
         for (int32_t i = tid; i < TILE_N * TILE_K; i += blockDim.x) {
-            int32_t local_n = i / TILE_K;
-            int32_t local_k = i % TILE_K;
+            int32_t local_n = i >> 5;
+            int32_t local_k = i & 31;
             int32_t global_n = block_n_coord + local_n;
             int32_t global_k = k_tile * TILE_K + local_k;
 
             if (global_n < N && global_k < K) {
                 float out_fp32 = DequantQ4K::dequantize_element(input_B_quant, global_n, global_k, K);
-                smem_B_ptr[local_n * TILE_K + local_k] = __float2bfloat16(out_fp32);
+                smem_B_ptr[(local_n << 5) + local_k] = __float2bfloat16(out_fp32);
             } else {
-                smem_B_ptr[local_n * TILE_K + local_k] = __float2bfloat16(0.0f);
+                smem_B_ptr[(local_n << 5) + local_k] = __float2bfloat16(0.0f);
             }
         }
 
