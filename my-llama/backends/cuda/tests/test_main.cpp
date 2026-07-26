@@ -1,9 +1,11 @@
-#include <gtest/gtest.h>
+#define DOCTEST_CONFIG_IMPLEMENT
+#include <doctest/doctest.h>
 #include <cuda_runtime.h>
 #include <iostream>
 
-int main(int argc, char **argv) {
-    testing::InitGoogleTest(&argc, argv);
+int main(const int argc, char **argv) {
+    doctest::Context context;
+    context.applyCommandLine(argc, argv);
 
     int deviceCount = 0;
     const cudaError_t err = cudaGetDeviceCount(&deviceCount);
@@ -13,5 +15,10 @@ int main(int argc, char **argv) {
     }
     cudaSetDevice(0);
 
-    return RUN_ALL_TESTS();
+    const int res = context.run();
+    if (context.shouldExit()) {
+        return res;
+    }
+
+    return res;
 }

@@ -1,10 +1,4 @@
-cmake_minimum_required(VERSION 4.4.0)
 project(cuda_kernel_tests LANGUAGES CXX CUDA)
-
-set(CMAKE_CXX_STANDARD 23)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_CUDA_STANDARD 23)
-set(CMAKE_CUDA_STANDARD_REQUIRED ON)
 
 include(FetchContent)
 
@@ -69,4 +63,4 @@ target_link_libraries(run_cuda_tests PRIVATE
 )
 
 enable_testing()
-add_test(NAME ext_cuda_math_tests COMMAND run_cuda_tests)
+add_test(NAME ext_cuda_math_tests COMMAND run_cuda_tests -s)

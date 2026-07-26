@@ -1,4 +1,3 @@
-#define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
 #include <doctest/doctest.h>
 #include <cuda_runtime.h>
 #include <vector>
@@ -27,7 +26,6 @@ extern "C" void launch_fused_multimodal_projection(
     void *stream_ptr
 );
 
-// Элегантная RAII-замена для фикстур GTest под Doctest
 struct MultimodalProjectionContext {
     const int32_t num_segments = 2;
     const int32_t vision_hidden_size = 64;
@@ -109,9 +107,7 @@ TEST_CASE("MultimodalProjectionTest - TestBF16") {
                 acc += ctx.h_bias[ctx.tp_rank * ctx.local_output_dim + col];
                 const float expected = acc / (1.0f + std::exp(-acc));
                 const float actual = __bfloat162float(h_outputs[s][row * ctx.local_output_dim + col]);
-
-                // Нативная и стабильная валидация математики в Doctest через doctest::Approx
-                CHECK(actual == doctest::Approx(expected).epsilon(0.03)); // 3e-2f
+                CHECK(actual == doctest::Approx(expected).epsilon(0.03));
             }
         }
         cudaFree(const_cast<void *>(host_A[s]));
@@ -230,7 +226,7 @@ TEST_CASE("MultimodalProjectionTest - TestFP4") {
                 const float expected = acc / (1.0f + std::exp(-acc));
                 const float actual = __bfloat162float(h_outputs[s][row * ctx.local_output_dim + col]);
 
-                CHECK(actual == doctest::Approx(expected).epsilon(0.05)); // 5e-2f
+                CHECK(actual == doctest::Approx(expected).epsilon(0.05));
             }
         }
         cudaFree(const_cast<void *>(host_A[s]));
