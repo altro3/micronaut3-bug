@@ -146,6 +146,8 @@ __global__ void batched_projection_cutlass4_kernel(
             }
         } else if constexpr (std::is_same_v<T_Weight, __nv_fp4_e2m1>) {
             auto weights_fp4 = static_cast<const uint8_t *>(weight_ptr);
+            float2 f2_scale = make_float2(scale, scale);
+
 #pragma unroll 4
             for (int32_t i = tid; i < (TILE_N * TILE_K) / 32; i += blockDim.x) {
                 int32_t idx = i * 32;
@@ -162,18 +164,23 @@ __global__ void batched_projection_cutlass4_kernel(
 #pragma unroll
                     for (int v = 0; v < 16; ++v) {
                         uint8_t byte_val = raw_bytes[v];
-                        uint8_t raw_fp4_low = byte_val & 0x0F;
-                        uint8_t raw_fp4_high = (byte_val >> 4) & 0x0F;
+                        uint8_t raw_fp4_l = byte_val & 0x0F;
+                        uint8_t raw_fp4_h = (byte_val >> 4) & 0x0F;
 
-                        uint8_t aligned_low = (raw_fp4_low << 4) | raw_fp4_low;
-                        __half2_raw h2_l = __nv_cvt_fp4x2_to_halfraw2(aligned_low, __NV_E2M1);
+                        uint8_t aligned_l = (raw_fp4_l << 4) | raw_fp4_l;
+                        __half2_raw h2_l = __nv_cvt_fp4x2_to_halfraw2(aligned_l, __NV_E2M1);
                         float2 f2_l = __half22float2(*reinterpret_cast<__half2 *>(&h2_l));
-                        smem_B_ptr[(local_k + v * 2) * TILE_N + local_n] = static_cast<bfloat16_t>(f2_l.x * scale);
+                        float2 f2_scaled_l = __fmul2_rn(f2_l, f2_scale);
+                        __nv_bfloat162 bf16_v2_l = __float22bfloat162_rn(f2_scaled_l);
 
-                        uint8_t aligned_high = (raw_fp4_high << 4) | raw_fp4_high;
-                        __half2_raw h2_h = __nv_cvt_fp4x2_to_halfraw2(aligned_high, __NV_E2M1);
+                        uint8_t aligned_h = (raw_fp4_h << 4) | raw_fp4_h;
+                        __half2_raw h2_h = __nv_cvt_fp4x2_to_halfraw2(aligned_h, __NV_E2M1);
                         float2 f2_h = __half22float2(*reinterpret_cast<__half2 *>(&h2_h));
-                        smem_B_ptr[(local_k + v * 2 + 1) * TILE_N + local_n] = static_cast<bfloat16_t>(f2_h.x * scale);
+                        float2 f2_scaled_h = __fmul2_rn(f2_h, f2_scale);
+                        __nv_bfloat162 bf16_v2_h = __float22bfloat162_rn(f2_scaled_h);
+
+                        smem_B_ptr[(local_k + v * 2) * TILE_N + local_n] = static_cast<bfloat16_t>(bf16_v2_l.x);
+                        smem_B_ptr[(local_k + v * 2 + 1) * TILE_N + local_n] = static_cast<bfloat16_t>(bf16_v2_h.x);
                     }
                 } else {
 #pragma unroll
@@ -183,6 +190,7 @@ __global__ void batched_projection_cutlass4_kernel(
                 }
             }
         }
+
 
         __syncthreads();
 
