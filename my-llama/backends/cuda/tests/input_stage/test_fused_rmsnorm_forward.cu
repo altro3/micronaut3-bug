@@ -7,6 +7,7 @@
 #include <cmath>
 #include <random>
 #include <cstdint>
+#include <iostream>
 #include "data_types.h"
 
 extern "C" {
@@ -106,7 +107,7 @@ TEST_CASE("FusedRMSNormTest - TestFP8") {
     std::vector<__nv_fp8_e4m3> h_input_fp8(ctx.total_tokens * ctx.hidden_size);
     std::vector<float> h_quant_input(ctx.total_tokens * ctx.hidden_size);
     for (int32_t i = 0; i < ctx.total_tokens * ctx.hidden_size; ++i) {
-        h_input_fp8[i] = static_cast<__nv_fp8_e4m3>(ctx.h_flat_input[i]);
+        h_input_fp8[i] = __nv_fp8_e4m3(ctx.h_flat_input[i]);
         h_quant_input[i] = static_cast<float>(h_input_fp8[i]);
     }
 
