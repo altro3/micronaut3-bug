@@ -100,6 +100,19 @@ TEST_CASE("GgufBenchmarkTest - RealLLamStyleBench") {
     REQUIRE(cudaMemcpy(d_w, host_real_weights.data(), host_real_weights.size() * sizeof(BlockQ4K), cudaMemcpyHostToDevice) == cudaSuccess);
 
     {
+        std::vector<__nv_bfloat16> h_in(M * K, __float2bfloat16(0.1f));
+        void *d_in = nullptr;
+        void *d_out = nullptr;
+        REQUIRE(cudaMalloc(&d_in, M * K * sizeof(__nv_bfloat16)) == cudaSuccess);
+        REQUIRE(cudaMalloc(&d_out, M * N * sizeof(__nv_bfloat16)) == cudaSuccess);
+        REQUIRE(cudaMemcpy(d_in, h_in.data(), h_in.size() * sizeof(__nv_bfloat16), cudaMemcpyHostToDevice) == cudaSuccess);
+
+        run_benchmark(static_cast<int32_t>(DataType::BF16), "BF16_REAL_SCALE", M, N, K, d_in, d_w, d_out);
+
+        cudaFree(d_in);
+        cudaFree(d_out);
+    }
+    {
         std::vector<uint8_t> h_in(M * K, 0x25);
         void *d_in = nullptr;
         void *d_out = nullptr;
@@ -112,8 +125,6 @@ TEST_CASE("GgufBenchmarkTest - RealLLamStyleBench") {
         cudaFree(d_in);
         cudaFree(d_out);
     }
-
-    /*
     {
         std::vector<uint8_t> h_in(M * K / 2, 0x11);
         void *d_in = nullptr;
@@ -127,7 +138,6 @@ TEST_CASE("GgufBenchmarkTest - RealLLamStyleBench") {
         cudaFree(d_in);
         cudaFree(d_out);
     }
-    */
 
     cudaFree(d_w);
 }

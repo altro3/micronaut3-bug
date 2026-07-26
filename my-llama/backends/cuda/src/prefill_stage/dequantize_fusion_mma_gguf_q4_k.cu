@@ -101,23 +101,36 @@ __global__ void fused_gemm_gguf_q4_k_kernel(
             auto smem_ptr_u4 = reinterpret_cast<uint4 *>(&smem_A_ptr[(local_m << 5) + local_k]);
 
             if (global_m < M && global_k < K) {
+                int32_t row_offset = global_m * K + global_k;
+
                 if constexpr (std::is_same_v<ElementAct, bfloat16_t> || std::is_same_v<ElementAct, __nv_bfloat16>) {
                     *smem_ptr_u4 = *reinterpret_cast<const uint4 *>(&input_A[global_m * K + global_k]);
                 } else if constexpr (std::is_same_v<ElementAct, __nv_fp8_e4m3>) {
-                    auto base_bytes = reinterpret_cast<const uint8_t *>(input_A);
-                    auto fp8_in = &base_bytes[global_m * K + global_k];
+                    auto fp8_in_ptr = reinterpret_cast<const uint2 *>(reinterpret_cast<const uint8_t *>(input_A) + row_offset);
+
+                    uint2 packed_fp8_val = *fp8_in_ptr;
                     uint32_t u32_vals[4];
-#pragma unroll
-                    for (int v = 0; v < 4; ++v) {
-                        uint16_t packed = (static_cast<uint16_t>(fp8_in[v * 2 + 1]) << 8) | fp8_in[v * 2];
-                        __half2_raw h2 = __nv_cvt_fp8x2_to_halfraw2(packed, __NV_E4M3);
-                        float2 f2 = __half22float2(*reinterpret_cast<__half2 *>(&h2));
-                        __nv_bfloat16 bf_x = __float2bfloat16(f2.x);
-                        __nv_bfloat16 bf_y = __float2bfloat16(f2.y);
-                        uint16_t bits_x = *reinterpret_cast<uint16_t *>(&bf_x);
-                        uint16_t bits_y = *reinterpret_cast<uint16_t *>(&bf_y);
-                        u32_vals[v] = (static_cast<uint32_t>(bits_y) << 16) | bits_x;
-                    }
+
+                    uint16_t packed0 = packed_fp8_val.x & 0xFFFF;
+                    __half2_raw h2_0 = __nv_cvt_fp8x2_to_halfraw2(packed0, __NV_E4M3);
+                    float2 f2_0 = __half22float2(*reinterpret_cast<__half2 *>(&h2_0));
+                    u32_vals[0] = (static_cast<uint32_t>(*reinterpret_cast<uint16_t *>(&__float2bfloat16(f2_0.y))) << 16) | *reinterpret_cast<uint16_t *>(&__float2bfloat16(f2_0.x));
+
+                    uint16_t packed1 = packed_fp8_val.x >> 16;
+                    __half2_raw h2_1 = __nv_cvt_fp8x2_to_halfraw2(packed1, __NV_E4M3);
+                    float2 f2_1 = __half22float2(*reinterpret_cast<__half2 *>(&h2_1));
+                    u32_vals[1] = (static_cast<uint32_t>(*reinterpret_cast<uint16_t *>(&__float2bfloat16(f2_1.y))) << 16) | *reinterpret_cast<uint16_t *>(&__float2bfloat16(f2_1.x));
+
+                    uint16_t packed2 = packed_fp8_val.y & 0xFFFF;
+                    __half2_raw h2_2 = __nv_cvt_fp8x2_to_halfraw2(packed2, __NV_E4M3);
+                    float2 f2_2 = __half22float2(*reinterpret_cast<__half2 *>(&h2_2));
+                    u32_vals[2] = (static_cast<uint32_t>(*reinterpret_cast<uint16_t *>(&__float2bfloat16(f2_2.y))) << 16) | *reinterpret_cast<uint16_t *>(&__float2bfloat16(f2_2.x));
+
+                    uint16_t packed3 = packed_fp8_val.y >> 16;
+                    __half2_raw h2_3 = __nv_cvt_fp8x2_to_halfraw2(packed3, __NV_E4M3);
+                    float2 f2_3 = __half22float2(*reinterpret_cast<__half2 *>(&h2_3));
+                    u32_vals[3] = (static_cast<uint32_t>(*reinterpret_cast<uint16_t *>(&__float2bfloat16(f2_3.y))) << 16) | *reinterpret_cast<uint16_t *>(&__float2bfloat16(f2_3.x));
+
                     *smem_ptr_u4 = make_uint4(u32_vals[0], u32_vals[1], u32_vals[2], u32_vals[3]);
                 } else if constexpr (std::is_same_v<ElementAct, __nv_fp4_e2m1>) {
                     auto fp4_in = reinterpret_cast<const uint8_t *>(input_A) + ((global_m * K + global_k) >> 1);
