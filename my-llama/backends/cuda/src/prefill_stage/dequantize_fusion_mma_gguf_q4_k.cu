@@ -120,21 +120,16 @@ __global__ void fused_gemm_gguf_q4_k_kernel(
                     }
                     *smem_ptr_u4 = make_uint4(u32_vals[0], u32_vals[1], u32_vals[2], u32_vals[3]);
                 } else if constexpr (std::is_same_v<ElementAct, __nv_fp4_e2m1>) {
-                    auto base_bytes = reinterpret_cast<const uint8_t *>(input_A);
-                    int32_t global_fp4_element_idx = global_m * K + global_k;
-                    auto fp4_in = &base_bytes[global_fp4_element_idx >> 1];
+                    auto fp4_in = reinterpret_cast<const uint8_t *>(input_A) + ((global_m * K + global_k) >> 1);
                     uint32_t u32_vals[4];
 #pragma unroll
                     for (int v = 0; v < 4; ++v) {
                         uint8_t packed_byte = fp4_in[v];
                         __half2_raw h2 = __nv_cvt_fp4x2_to_halfraw2(packed_byte, __NV_E2M1);
-                        auto h2_ptr = reinterpret_cast<__half2 *>(&h2);
-                        float2 f2 = __half22float2(*h2_ptr);
+                        float2 f2 = __half22float2(*reinterpret_cast<__half2 *>(&h2));
                         __nv_bfloat16 bf16_x = __float2bfloat16(f2.x);
                         __nv_bfloat16 bf16_y = __float2bfloat16(f2.y);
-                        uint16_t bits_x = *reinterpret_cast<uint16_t *>(&bf16_x);
-                        uint16_t bits_y = *reinterpret_cast<uint16_t *>(&bf16_y);
-                        u32_vals[v] = (static_cast<uint32_t>(bits_y) << 16) | bits_x;
+                        u32_vals[v] = (static_cast<uint32_t>(*reinterpret_cast<uint16_t *>(&bf16_y)) << 16) | *reinterpret_cast<uint16_t *>(&bf16_x);
                     }
                     *smem_ptr_u4 = make_uint4(u32_vals[0], u32_vals[1], u32_vals[2], u32_vals[3]);
                 }
