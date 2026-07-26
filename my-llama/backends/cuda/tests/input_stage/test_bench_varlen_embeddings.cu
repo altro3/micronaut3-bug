@@ -111,9 +111,9 @@ static void run_embeddings_benchmark(
 }
 
 TEST_CASE("VarlenEmbeddingsBenchmark - ComprehensivePerformanceProfile") {
-    constexpr int32_t total_tokens = 2048;
+    constexpr int32_t total_tokens = 16384;
     constexpr int32_t out_features = 4096;
-    constexpr int32_t vocab_size = 32000;
+    constexpr int32_t vocab_size = 256000;
     constexpr int32_t num_seqs = 4;
     constexpr int32_t block_size = 16;
     constexpr int32_t max_blocks_per_seq = 64;
