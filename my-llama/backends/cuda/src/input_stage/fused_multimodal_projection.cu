@@ -115,47 +115,71 @@ __global__ void batched_projection_cutlass4_kernel(
             }
         } else if constexpr (std::is_same_v<T_Weight, __nv_fp8_e4m3>) {
             auto weights_fp8 = static_cast<const uint8_t *>(weight_ptr);
-            for (int32_t i = tid; i < TILE_N * TILE_K; i += blockDim.x) {
-                int32_t local_n = i % TILE_N;
-                int32_t local_k = i / TILE_N;
+#pragma unroll 4
+            for (int32_t i = tid; i < (TILE_N * TILE_K) / 16; i += blockDim.x) {
+                int32_t idx = i * 16;
+                int32_t local_n = idx / TILE_K;
+                int32_t local_k = idx % TILE_K;
                 int32_t global_n = block_n_coord + local_n;
                 int32_t global_k_weight = k_tile * TILE_K + local_k;
 
                 if (global_n < local_output_dim && global_k_weight < input_feature_dim) {
-                    int32_t base_global_idx = global_n * input_feature_dim + (global_k_weight & ~3);
-                    uint32_t packed_weights = *reinterpret_cast<const uint32_t *>(&weights_fp8[base_global_idx]);
-                    uint8_t raw_fp8 = reinterpret_cast<const uint8_t *>(&packed_weights)[global_k_weight & 3];
+                    uint4 packed_v = *reinterpret_cast<const uint4 *>(&weights_fp8[global_n * input_feature_dim + global_k_weight]);
+                    uint8_t *raw_bytes = reinterpret_cast<uint8_t *>(&packed_v);
 
-                    uint16_t packed_fp8x2 = (static_cast<uint16_t>(raw_fp8) << 8) | raw_fp8;
-                    __half2_raw h2 = __nv_cvt_fp8x2_to_halfraw2(packed_fp8x2, __NV_E4M3);
-                    float2 f2 = __half22float2(*reinterpret_cast<__half2 *>(&h2));
-                    smem_B_ptr[local_k * TILE_N + local_n] = static_cast<bfloat16_t>(f2.x * scale);
+#pragma unroll
+                    for (int v = 0; v < 16; ++v) {
+                        uint8_t raw_fp8 = raw_bytes[v];
+                        uint16_t packed_fp8x2 = (static_cast<uint16_t>(raw_fp8) << 8) | raw_fp8;
+                        __half2_raw h2 = __nv_cvt_fp8x2_to_halfraw2(packed_fp8x2, __NV_E4M3);
+                        float2 f2 = __half22float2(*reinterpret_cast<__half2 *>(&h2));
+                        int32_t curr_k = local_k + v;
+                        smem_B_ptr[curr_k * TILE_N + local_n] = static_cast<bfloat16_t>(f2.x * scale);
+                    }
                 } else {
-                    smem_B_ptr[local_k * TILE_N + local_n] = static_cast<bfloat16_t>(0.0f);
+#pragma unroll
+                    for (int v = 0; v < 16; ++v) {
+                        int32_t curr_k = local_k + v;
+                        smem_B_ptr[curr_k * TILE_N + local_n] = static_cast<bfloat16_t>(0.0f);
+                    }
                 }
             }
         } else if constexpr (std::is_same_v<T_Weight, __nv_fp4_e2m1>) {
             auto weights_fp4 = static_cast<const uint8_t *>(weight_ptr);
-            for (int32_t i = tid; i < TILE_N * TILE_K; i += blockDim.x) {
-                int32_t local_n = i % TILE_N;
-                int32_t local_k = i / TILE_N;
+#pragma unroll 4
+            for (int32_t i = tid; i < (TILE_N * TILE_K) / 32; i += blockDim.x) {
+                int32_t idx = i * 32;
+                int32_t local_n = idx / TILE_K;
+                int32_t local_k = idx % TILE_K;
                 int32_t global_n = block_n_coord + local_n;
                 int32_t global_k_weight = k_tile * TILE_K + local_k;
 
                 if (global_n < local_output_dim && global_k_weight < input_feature_dim) {
-                    int32_t global_bit_idx = (global_n * input_feature_dim + global_k_weight) * 4;
-                    int32_t base_byte_idx = global_bit_idx / 32 * 4;
-                    uint32_t packed_weights = *reinterpret_cast<const uint32_t *>(&weights_fp4[base_byte_idx]);
+                    int32_t byte_idx = (global_n * input_feature_dim + global_k_weight) / 2;
+                    uint4 packed_v = *reinterpret_cast<const uint4 *>(&weights_fp4[byte_idx]);
+                    uint8_t *raw_bytes = reinterpret_cast<uint8_t *>(&packed_v);
 
-                    int32_t sub_byte_offset = global_bit_idx % 32 / 4;
-                    uint8_t raw_fp4 = (reinterpret_cast<const uint8_t *>(&packed_weights)[sub_byte_offset / 2] >> (sub_byte_offset % 2 * 4)) & 0x0F;
+#pragma unroll
+                    for (int v = 0; v < 16; ++v) {
+                        uint8_t byte_val = raw_bytes[v];
+                        uint8_t raw_fp4_low = byte_val & 0x0F;
+                        uint8_t raw_fp4_high = (byte_val >> 4) & 0x0F;
 
-                    uint8_t aligned_fp4x2 = (raw_fp4 << 4) | raw_fp4;
-                    __half2_raw h2 = __nv_cvt_fp4x2_to_halfraw2(aligned_fp4x2, __NV_E2M1);
-                    float2 f2 = __half22float2(*reinterpret_cast<__half2 *>(&h2));
-                    smem_B_ptr[local_k * TILE_N + local_n] = static_cast<bfloat16_t>(f2.x * scale);
+                        uint8_t aligned_low = (raw_fp4_low << 4) | raw_fp4_low;
+                        __half2_raw h2_l = __nv_cvt_fp4x2_to_halfraw2(aligned_low, __NV_E2M1);
+                        float2 f2_l = __half22float2(*reinterpret_cast<__half2 *>(&h2_l));
+                        smem_B_ptr[(local_k + v * 2) * TILE_N + local_n] = static_cast<bfloat16_t>(f2_l.x * scale);
+
+                        uint8_t aligned_high = (raw_fp4_high << 4) | raw_fp4_high;
+                        __half2_raw h2_h = __nv_cvt_fp4x2_to_halfraw2(aligned_high, __NV_E2M1);
+                        float2 f2_h = __half22float2(*reinterpret_cast<__half2 *>(&h2_h));
+                        smem_B_ptr[(local_k + v * 2 + 1) * TILE_N + local_n] = static_cast<bfloat16_t>(f2_h.x * scale);
+                    }
                 } else {
-                    smem_B_ptr[local_k * TILE_N + local_n] = static_cast<bfloat16_t>(0.0f);
+#pragma unroll
+                    for (int v = 0; v < 32; ++v) {
+                        smem_B_ptr[(local_k + v) * TILE_N + local_n] = static_cast<bfloat16_t>(0.0f);
+                    }
                 }
             }
         }
