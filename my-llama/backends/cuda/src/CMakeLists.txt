@@ -5,18 +5,18 @@ include_directories(${LOCAL_CUTLASS_DIR}/tools/util/include)
 include_directories(${CUDAToolkit_INCLUDE_DIRS})
 
 set(FLASHINFER_OBJ)
-if(TARGET flashinfer_objects)
+if (TARGET flashinfer_objects)
     set(FLASHINFER_OBJ $<TARGET_OBJECTS:flashinfer_objects>)
-endif()
+endif ()
 
-if(ISOLATED_BUILD)
+if (ISOLATED_BUILD)
     message(STATUS "[MY_LLAMA] Isolated Mode Active.")
     set(DUMMY_FILE "${CMAKE_CURRENT_BINARY_DIR}/dummy_stub.cpp")
-    if(NOT EXISTS "${DUMMY_FILE}")
+    if (NOT EXISTS "${DUMMY_FILE}")
         file(WRITE "${DUMMY_FILE}" "// Stub.\n")
-    endif()
+    endif ()
     add_library(cuda_kernels STATIC "${DUMMY_FILE}" ${FLASHINFER_OBJ})
-else()
+else ()
     message(STATUS "[MY_LLAMA] Full Build Mode Active.")
 
     set(INPUT_STAGE_SRCS
@@ -42,8 +42,12 @@ else()
     )
 
     add_library(cuda_kernels STATIC ${CUDA_SOURCES} ${FLASHINFER_OBJ})
-endif()
+endif ()
 
 set_target_properties(cuda_kernels PROPERTIES
         POSITION_INDEPENDENT_CODE ON
+)
+
+target_compile_options(cuda_kernels PRIVATE
+        $<$<COMPILE_LANGUAGE:CUDA>:--expt-relaxed-constexpr>
 )

@@ -1,4 +1,4 @@
-#include <gtest/gtest.h>
+#include <doctest/doctest.h>
 #include <cuda_runtime.h>
 #include <cuda_bf16.h>
 #include <cuda_fp8.h>
@@ -9,6 +9,7 @@
 #include "prefill_stage/dequantize_fusion_mma_gguf_q4_k.cuh"
 #include <algorithm>
 #include <iostream>
+#include <ranges>
 
 extern "C" void launch_fused_gemm_gguf_q4_k(
     void *output_activations, const void *input_activations, const void *quantized_weights,
@@ -74,12 +75,11 @@ static void run_benchmark(const int32_t data_type, const std::string &type_name,
     std::cout << "==========================================================================" << std::endl;
 }
 
-TEST(GgufBenchmarkTest, BenchQwen05B_AllTypes) {
+TEST_CASE("GgufBenchmarkTest - BenchQwen05B_AllTypes") {
     const std::string file_path = "D:\\!models\\Qwen2.5-0.5B-Instruct-Q4_K_M.gguf";
     std::ifstream file(file_path, std::ios::binary);
     if (!file.is_open()) {
         std::cout << "[SKIP Benchmark] File not found at " << file_path << std::endl;
-        SUCCEED();
         return;
     }
 
@@ -95,16 +95,17 @@ TEST(GgufBenchmarkTest, BenchQwen05B_AllTypes) {
     file.read(reinterpret_cast<char *>(host_real_weights.data()), total_blocks * sizeof(BlockQ4K));
     file.close();
 
-    void *d_w;
-    ASSERT_EQ(cudaMalloc(&d_w, host_real_weights.size() * sizeof(BlockQ4K)), cudaSuccess);
-    ASSERT_EQ(cudaMemcpy(d_w, host_real_weights.data(), host_real_weights.size() * sizeof(BlockQ4K), cudaMemcpyHostToDevice), cudaSuccess);
+    void *d_w = nullptr;
+    REQUIRE(cudaMalloc(&d_w, host_real_weights.size() * sizeof(BlockQ4K)) == cudaSuccess);
+    REQUIRE(cudaMemcpy(d_w, host_real_weights.data(), host_real_weights.size() * sizeof(BlockQ4K), cudaMemcpyHostToDevice) == cudaSuccess);
 
     {
         std::vector<uint8_t> h_in(M * K / 2, 0x11);
-        void *d_in, *d_out;
-        ASSERT_EQ(cudaMalloc(&d_in, M * K / 2 * sizeof(uint8_t)), cudaSuccess);
-        ASSERT_EQ(cudaMalloc(&d_out, M * N * sizeof(__nv_bfloat16)), cudaSuccess);
-        ASSERT_EQ(cudaMemcpy(d_in, h_in.data(), h_in.size() * sizeof(uint8_t), cudaMemcpyHostToDevice), cudaSuccess);
+        void *d_in = nullptr;
+        void *d_out = nullptr;
+        REQUIRE(cudaMalloc(&d_in, M * K / 2 * sizeof(uint8_t)) == cudaSuccess);
+        REQUIRE(cudaMalloc(&d_out, M * N * sizeof(__nv_bfloat16)) == cudaSuccess);
+        REQUIRE(cudaMemcpy(d_in, h_in.data(), h_in.size() * sizeof(uint8_t), cudaMemcpyHostToDevice) == cudaSuccess);
 
         run_benchmark(static_cast<int32_t>(DataType::FP4), "FP4", M, N, K, d_in, d_w, d_out);
 

@@ -1,4 +1,4 @@
-#include <gtest/gtest.h>
+#include <doctest/doctest.h>
 #include <cuda_runtime.h>
 #include <cuda_bf16.h>
 #include <cuda_fp8.h>
@@ -28,8 +28,7 @@ void launch_varlen_embeddings(
 );
 }
 
-class VarlenEmbeddingsTest : public testing::Test {
-protected:
+struct VarlenEmbeddingsContext {
     const int32_t num_seqs = 3;
     const int32_t block_size = 4;
     const int32_t max_blocks_per_seq = 2;
@@ -69,7 +68,7 @@ protected:
         return seq_idx;
     }
 
-    void SetUp() override {
+    VarlenEmbeddingsContext() {
         total_tokens = h_seq_offsets.back();
         h_expected_slots.resize(total_tokens);
 
@@ -83,18 +82,18 @@ protected:
             h_expected_slots[i] = (physical_block_id != -1) ? (physical_block_id * block_size + block_offset) : -1;
         }
 
-        ASSERT_EQ(cudaMalloc(&d_out, total_tokens * out_features * sizeof(__nv_bfloat16)), cudaSuccess);
-        ASSERT_EQ(cudaMalloc(&d_tokens, total_tokens * sizeof(uint32_t)), cudaSuccess);
-        ASSERT_EQ(cudaMalloc(&d_seq_offsets, h_seq_offsets.size() * sizeof(int32_t)), cudaSuccess);
-        ASSERT_EQ(cudaMalloc(&d_block_table, h_block_table.size() * sizeof(int32_t)), cudaSuccess);
-        ASSERT_EQ(cudaMalloc(&d_slot_mapping, total_tokens * sizeof(int32_t)), cudaSuccess);
+        REQUIRE(cudaMalloc(&d_out, total_tokens * out_features * sizeof(__nv_bfloat16)) == cudaSuccess);
+        REQUIRE(cudaMalloc(&d_tokens, total_tokens * sizeof(uint32_t)) == cudaSuccess);
+        REQUIRE(cudaMalloc(&d_seq_offsets, h_seq_offsets.size() * sizeof(int32_t)) == cudaSuccess);
+        REQUIRE(cudaMalloc(&d_block_table, h_block_table.size() * sizeof(int32_t)) == cudaSuccess);
+        REQUIRE(cudaMalloc(&d_slot_mapping, total_tokens * sizeof(int32_t)) == cudaSuccess);
 
-        ASSERT_EQ(cudaMemcpy(d_tokens, h_tokens.data(), total_tokens * sizeof(uint32_t), cudaMemcpyHostToDevice), cudaSuccess);
-        ASSERT_EQ(cudaMemcpy(d_seq_offsets, h_seq_offsets.data(), h_seq_offsets.size() * sizeof(int32_t), cudaMemcpyHostToDevice), cudaSuccess);
-        ASSERT_EQ(cudaMemcpy(d_block_table, h_block_table.data(), h_block_table.size() * sizeof(int32_t), cudaMemcpyHostToDevice), cudaSuccess);
+        REQUIRE(cudaMemcpy(d_tokens, h_tokens.data(), total_tokens * sizeof(uint32_t), cudaMemcpyHostToDevice) == cudaSuccess);
+        REQUIRE(cudaMemcpy(d_seq_offsets, h_seq_offsets.data(), h_seq_offsets.size() * sizeof(int32_t), cudaMemcpyHostToDevice) == cudaSuccess);
+        REQUIRE(cudaMemcpy(d_block_table, h_block_table.data(), h_block_table.size() * sizeof(int32_t), cudaMemcpyHostToDevice) == cudaSuccess);
     }
 
-    void TearDown() override {
+    ~VarlenEmbeddingsContext() {
         cudaFree(d_out);
         cudaFree(d_tokens);
         cudaFree(d_seq_offsets);
@@ -103,91 +102,95 @@ protected:
     }
 };
 
-TEST_F(VarlenEmbeddingsTest, TestBF16) {
-    std::vector<__nv_bfloat16> h_weight_bf16(vocab_size * out_features);
-    for (int32_t i = 0; i < vocab_size * out_features; ++i) {
+TEST_CASE("VarlenEmbeddingsTest - TestBF16") {
+    VarlenEmbeddingsContext ctx;
+    std::vector<__nv_bfloat16> h_weight_bf16(ctx.vocab_size * ctx.out_features);
+    for (int32_t i = 0; i < ctx.vocab_size * ctx.out_features; ++i) {
         h_weight_bf16[i] = __float2bfloat16(static_cast<float>(i % 5) * 0.25f + 0.1f);
     }
 
-    void *d_weight_bf16;
-    ASSERT_EQ(cudaMalloc(&d_weight_bf16, vocab_size * out_features * sizeof(__nv_bfloat16)), cudaSuccess);
-    ASSERT_EQ(cudaMemcpy(d_weight_bf16, h_weight_bf16.data(), vocab_size * out_features * sizeof(__nv_bfloat16), cudaMemcpyHostToDevice), cudaSuccess);
-    ASSERT_EQ(cudaMemset(d_slot_mapping, -1, total_tokens * sizeof(int32_t)), cudaSuccess);
+    void *d_weight_bf16 = nullptr;
+    REQUIRE(cudaMalloc(&d_weight_bf16, ctx.vocab_size * ctx.out_features * sizeof(__nv_bfloat16)) == cudaSuccess);
+    REQUIRE(cudaMemcpy(d_weight_bf16, h_weight_bf16.data(), ctx.vocab_size * ctx.out_features * sizeof(__nv_bfloat16), cudaMemcpyHostToDevice) == cudaSuccess);
+    REQUIRE(cudaMemset(ctx.d_slot_mapping, -1, ctx.total_tokens * sizeof(int32_t)) == cudaSuccess);
 
     launch_varlen_embeddings(
-        d_out, d_weight_bf16, nullptr, d_tokens, d_seq_offsets, d_block_table, d_slot_mapping,
-        max_blocks_per_seq, block_size, total_tokens, out_features, vocab_size, num_seqs,
-        static_cast<int32_t>(DataType::BF16), threads_per_block, nullptr
+        ctx.d_out, d_weight_bf16, nullptr, ctx.d_tokens, ctx.d_seq_offsets, ctx.d_block_table, ctx.d_slot_mapping,
+        ctx.max_blocks_per_seq, ctx.block_size, ctx.total_tokens, ctx.out_features, ctx.vocab_size, ctx.num_seqs,
+        static_cast<int32_t>(DataType::BF16), ctx.threads_per_block, nullptr
     );
-    ASSERT_EQ(cudaDeviceSynchronize(), cudaSuccess);
+    REQUIRE(cudaDeviceSynchronize() == cudaSuccess);
 
-    std::vector<__nv_bfloat16> h_out_res(total_tokens * out_features);
-    std::vector<int32_t> h_slots_res(total_tokens);
-    ASSERT_EQ(cudaMemcpy(h_out_res.data(), d_out, total_tokens * out_features * sizeof(__nv_bfloat16), cudaMemcpyDeviceToHost), cudaSuccess);
-    ASSERT_EQ(cudaMemcpy(h_slots_res.data(), d_slot_mapping, total_tokens * sizeof(int32_t), cudaMemcpyDeviceToHost), cudaSuccess);
+    std::vector<__nv_bfloat16> h_out_res(ctx.total_tokens * ctx.out_features);
+    std::vector<int32_t> h_slots_res(ctx.total_tokens);
+    REQUIRE(cudaMemcpy(h_out_res.data(), ctx.d_out, ctx.total_tokens * ctx.out_features * sizeof(__nv_bfloat16), cudaMemcpyDeviceToHost) == cudaSuccess);
+    REQUIRE(cudaMemcpy(h_slots_res.data(), ctx.d_slot_mapping, ctx.total_tokens * sizeof(int32_t), cudaMemcpyDeviceToHost) == cudaSuccess);
 
-    for (int32_t i = 0; i < total_tokens; ++i) {
-        EXPECT_EQ(h_slots_res[i], h_expected_slots[i]);
-        const uint32_t tok = h_tokens[i];
-        for (int32_t f = 0; f < out_features; ++f) {
-            const float act = __bfloat162float(h_out_res[i * out_features + f]);
-            if (tok >= static_cast<uint32_t>(vocab_size)) {
-                EXPECT_NEAR(act, 0.0f, 1e-5f);
+    for (int32_t i = 0; i < ctx.total_tokens; ++i) {
+        CHECK(h_slots_res[i] == ctx.h_expected_slots[i]);
+        const uint32_t tok = ctx.h_tokens[i];
+        for (int32_t f = 0; f < ctx.out_features; ++f) {
+            const float act = __bfloat162float(h_out_res[i * ctx.out_features + f]);
+            if (tok >= static_cast<uint32_t>(ctx.vocab_size)) {
+                CHECK(act == doctest::Approx(0.0f).epsilon(1e-5));
             } else {
-                const float exp = __bfloat162float(h_weight_bf16[tok * out_features + f]);
-                EXPECT_NEAR(act, exp, 1e-5f);
+                const float exp = __bfloat162float(h_weight_bf16[tok * ctx.out_features + f]);
+                CHECK(act == doctest::Approx(exp).epsilon(1e-5));
             }
         }
     }
     cudaFree(d_weight_bf16);
 }
 
-TEST_F(VarlenEmbeddingsTest, TestFP8) {
-    std::vector<__nv_fp8_e4m3> h_weight_fp8(vocab_size * out_features);
-    std::vector<float> h_ref_floats(vocab_size * out_features);
-    for (int32_t i = 0; i < vocab_size * out_features; ++i) {
+TEST_CASE("VarlenEmbeddingsTest - TestFP8") {
+    VarlenEmbeddingsContext ctx;
+    std::vector<__nv_fp8_e4m3> h_weight_fp8(ctx.vocab_size * ctx.out_features);
+    std::vector<float> h_ref_floats(ctx.vocab_size * ctx.out_features);
+    for (int32_t i = 0; i < ctx.vocab_size * ctx.out_features; ++i) {
         const float val = static_cast<float>(i % 4) * 0.5f + 0.25f;
         h_weight_fp8[i] = static_cast<__nv_fp8_e4m3>(val);
         h_ref_floats[i] = static_cast<float>(h_weight_fp8[i]);
     }
 
-    void *d_weight_fp8;
-    ASSERT_EQ(cudaMalloc(&d_weight_fp8, vocab_size * out_features * sizeof(__nv_fp8_e4m3)), cudaSuccess);
-    ASSERT_EQ(cudaMemcpy(d_weight_fp8, h_weight_fp8.data(), vocab_size * out_features * sizeof(__nv_fp8_e4m3), cudaMemcpyHostToDevice), cudaSuccess);
+    void *d_weight_fp8 = nullptr;
+    REQUIRE(cudaMalloc(&d_weight_fp8, ctx.vocab_size * ctx.out_features * sizeof(__nv_fp8_e4m3)) == cudaSuccess);
+    REQUIRE(cudaMemcpy(d_weight_fp8, h_weight_fp8.data(), ctx.vocab_size * ctx.out_features * sizeof(__nv_fp8_e4m3), cudaMemcpyHostToDevice) == cudaSuccess);
 
     launch_varlen_embeddings(
-        d_out, d_weight_fp8, nullptr, d_tokens, d_seq_offsets, d_block_table, nullptr,
-        max_blocks_per_seq, block_size, total_tokens, out_features, vocab_size, num_seqs,
-        static_cast<int32_t>(DataType::FP8), threads_per_block, nullptr
+        ctx.d_out, d_weight_fp8, nullptr, ctx.d_tokens, ctx.d_seq_offsets, ctx.d_block_table, nullptr,
+        ctx.max_blocks_per_seq, ctx.block_size, ctx.total_tokens, ctx.out_features, ctx.vocab_size, ctx.num_seqs,
+        static_cast<int32_t>(DataType::FP8), ctx.threads_per_block, nullptr
     );
-    ASSERT_EQ(cudaDeviceSynchronize(), cudaSuccess);
+    REQUIRE(cudaDeviceSynchronize() == cudaSuccess);
 
-    std::vector<__nv_bfloat16> h_out_res(total_tokens * out_features);
-    ASSERT_EQ(cudaMemcpy(h_out_res.data(), d_out, total_tokens * out_features * sizeof(__nv_bfloat16), cudaMemcpyDeviceToHost), cudaSuccess);
+    std::vector<__nv_bfloat16> h_out_res(ctx.total_tokens * ctx.out_features);
+    REQUIRE(cudaMemcpy(h_out_res.data(), ctx.d_out, ctx.total_tokens * ctx.out_features * sizeof(__nv_bfloat16), cudaMemcpyDeviceToHost) == cudaSuccess);
 
-    for (int32_t i = 0; i < total_tokens; ++i) {
-        const uint32_t tok = h_tokens[i];
-        for (int32_t f = 0; f < out_features; ++f) {
-            const float act = __bfloat162float(h_out_res[i * out_features + f]);
-            if (tok >= static_cast<uint32_t>(vocab_size)) {
-                EXPECT_NEAR(act, 0.0f, 1e-5f);
+    for (int32_t i = 0; i < ctx.total_tokens; ++i) {
+        const uint32_t tok = ctx.h_tokens[i];
+        for (int32_t f = 0; f < ctx.out_features; ++f) {
+            const float act = __bfloat162float(h_out_res[i * ctx.out_features + f]);
+            if (tok >= static_cast<uint32_t>(ctx.vocab_size)) {
+                CHECK(act == doctest::Approx(0.0f).epsilon(1e-5));
             } else {
-                const float exp = h_ref_floats[tok * out_features + f];
-                EXPECT_NEAR(act, exp, 1e-2f);
+                const float exp = h_ref_floats[tok * ctx.out_features + f];
+                CHECK(act == doctest::Approx(exp).epsilon(1e-2));
             }
         }
     }
     cudaFree(d_weight_fp8);
 }
 
-TEST_F(VarlenEmbeddingsTest, TestFP4) {
-    const int32_t u32_per_row = out_features / 8;
-    const int32_t scales_per_row = out_features / 32;
-    std::vector<uint32_t> h_weight_fp4(vocab_size * u32_per_row);
-    std::vector<float> h_scales_fp4(vocab_size * scales_per_row);
-    std::vector<float> h_ref_floats(vocab_size * out_features);
+TEST_CASE("VarlenEmbeddingsTest - TestFP4") {
+    VarlenEmbeddingsContext ctx;
 
-    for (int32_t v = 0; v < vocab_size; ++v) {
+    const int32_t u32_per_row = ctx.out_features / 8;
+    const int32_t scales_per_row = ctx.out_features / 32;
+    std::vector<uint32_t> h_weight_fp4(ctx.vocab_size * u32_per_row);
+    std::vector<float> h_scales_fp4(ctx.vocab_size * scales_per_row);
+    std::vector<float> h_ref_floats(ctx.vocab_size * ctx.out_features);
+
+    for (int32_t v = 0; v < ctx.vocab_size; ++v) {
         for (int32_t s = 0; s < scales_per_row; ++s) {
             h_scales_fp4[v * scales_per_row + s] = 1.5f;
         }
@@ -206,39 +209,39 @@ TEST_F(VarlenEmbeddingsTest, TestFP4) {
             for (int32_t b = 0; b < 4; ++b) {
                 __half2_raw raw_h2 = __nv_cvt_fp4x2_to_halfraw2(bytes[b], __NV_E2M1);
                 __half2 h2 = *reinterpret_cast<__half2 *>(&raw_h2);
-                h_ref_floats[v * out_features + i * 8 + b * 2 + 0] = __half2float(h2.x) * current_scale;
-                h_ref_floats[v * out_features + i * 8 + b * 2 + 1] = __half2float(h2.y) * current_scale;
+                h_ref_floats[v * ctx.out_features + i * 8 + b * 2 + 0] = __half2float(h2.x) * current_scale;
+                h_ref_floats[v * ctx.out_features + i * 8 + b * 2 + 1] = __half2float(h2.y) * current_scale;
             }
         }
     }
 
-    void *d_weight_fp4;
-    float *d_scales_fp4;
-    ASSERT_EQ(cudaMalloc(&d_weight_fp4, h_weight_fp4.size() * sizeof(uint32_t)), cudaSuccess);
-    ASSERT_EQ(cudaMalloc(&d_scales_fp4, h_scales_fp4.size() * sizeof(float)), cudaSuccess);
+    void *d_weight_fp4 = nullptr;
+    float *d_scales_fp4 = nullptr;
+    REQUIRE(cudaMalloc(&d_weight_fp4, h_weight_fp4.size() * sizeof(uint32_t)) == cudaSuccess);
+    REQUIRE(cudaMalloc(&d_scales_fp4, h_scales_fp4.size() * sizeof(float)) == cudaSuccess);
 
-    ASSERT_EQ(cudaMemcpy(d_weight_fp4, h_weight_fp4.data(), h_weight_fp4.size() * sizeof(uint32_t), cudaMemcpyHostToDevice), cudaSuccess);
-    ASSERT_EQ(cudaMemcpy(d_scales_fp4, h_scales_fp4.data(), h_scales_fp4.size() * sizeof(float), cudaMemcpyHostToDevice), cudaSuccess);
+    REQUIRE(cudaMemcpy(d_weight_fp4, h_weight_fp4.data(), h_weight_fp4.size() * sizeof(uint32_t), cudaMemcpyHostToDevice) == cudaSuccess);
+    REQUIRE(cudaMemcpy(d_scales_fp4, h_scales_fp4.data(), h_scales_fp4.size() * sizeof(float), cudaMemcpyHostToDevice) == cudaSuccess);
 
     launch_varlen_embeddings(
-        d_out, d_weight_fp4, d_scales_fp4, d_tokens, d_seq_offsets, d_block_table, nullptr,
-        max_blocks_per_seq, block_size, total_tokens, out_features, vocab_size, num_seqs,
-        static_cast<int32_t>(DataType::FP4), threads_per_block, nullptr
+        ctx.d_out, d_weight_fp4, d_scales_fp4, ctx.d_tokens, ctx.d_seq_offsets, ctx.d_block_table, nullptr,
+        ctx.max_blocks_per_seq, ctx.block_size, ctx.total_tokens, ctx.out_features, ctx.vocab_size, ctx.num_seqs,
+        static_cast<int32_t>(DataType::FP4), ctx.threads_per_block, nullptr
     );
-    ASSERT_EQ(cudaDeviceSynchronize(), cudaSuccess);
+    REQUIRE(cudaDeviceSynchronize() == cudaSuccess);
 
-    std::vector<__nv_bfloat16> h_out_res(total_tokens * out_features);
-    ASSERT_EQ(cudaMemcpy(h_out_res.data(), d_out, total_tokens * out_features * sizeof(__nv_bfloat16), cudaMemcpyDeviceToHost), cudaSuccess);
+    std::vector<__nv_bfloat16> h_out_res(ctx.total_tokens * ctx.out_features);
+    REQUIRE(cudaMemcpy(h_out_res.data(), ctx.d_out, ctx.total_tokens * ctx.out_features * sizeof(__nv_bfloat16), cudaMemcpyDeviceToHost) == cudaSuccess);
 
-    for (int32_t i = 0; i < total_tokens; ++i) {
-        uint32_t tok = h_tokens[i];
-        for (int32_t f = 0; f < out_features; ++f) {
-            float act = __bfloat162float(h_out_res[i * out_features + f]);
-            if (tok >= static_cast<uint32_t>(vocab_size)) {
-                EXPECT_NEAR(act, 0.0f, 1e-5f);
+    for (int32_t i = 0; i < ctx.total_tokens; ++i) {
+        uint32_t tok = ctx.h_tokens[i];
+        for (int32_t f = 0; f < ctx.out_features; ++f) {
+            float act = __bfloat162float(h_out_res[i * ctx.out_features + f]);
+            if (tok >= static_cast<uint32_t>(ctx.vocab_size)) {
+                CHECK(act == doctest::Approx(0.0f).epsilon(1e-5));
             } else {
-                float exp = h_ref_floats[tok * out_features + f];
-                EXPECT_NEAR(act, exp, 1e-3f);
+                float exp = h_ref_floats[tok * ctx.out_features + f];
+                CHECK(act == doctest::Approx(exp).epsilon(1e-3));
             }
         }
     }
