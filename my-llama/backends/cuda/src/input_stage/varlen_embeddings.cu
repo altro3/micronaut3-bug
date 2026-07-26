@@ -59,108 +59,132 @@ __global__ void varlen_embeddings_fused_kernel(
     }
 
     if constexpr (std::is_same_v<T, __nv_fp4_e2m1>) {
-        const uint32_t *const w_u32 = static_cast<const uint32_t *>(weight);
-        const int64_t weight_row_u32_offset = static_cast<int64_t>(token_id) * (out_features / 8);
+        const uint2 *const w_u2 = static_cast<const uint2 *>(weight);
+        const int64_t weight_row_u2_offset = static_cast<int64_t>(token_id) * (out_features / 16);
         const int64_t scale_row_offset = static_cast<int64_t>(token_id) * (out_features / 32);
+        const int32_t u2_to_process = out_features / 16;
 
-        const int32_t u32_to_process = out_features / 8;
+        for (int32_t i = tid; i < u2_to_process; i += stride) {
+            const uint2 packed_val64 = __ldcs(&w_u2[weight_row_u2_offset + i]);
+            const float scale = __ldcs(&weight_scales[scale_row_offset + i]);
 
-        for (int32_t i = tid; i < u32_to_process; i += stride) {
-            const uint32_t packed_val32 = w_u32[weight_row_u32_offset + i];
+            uint32_t p0 = packed_val64.x;
+            uint32_t p1 = packed_val64.y;
 
-            const int32_t group_idx = i / 4;
-            const float scale = weight_scales[scale_row_offset + group_idx];
+            uint8_t b0 = static_cast<uint8_t>(p0 & 0xFF);
+            uint8_t b1 = static_cast<uint8_t>((p0 >> 8) & 0xFF);
+            uint8_t b2 = static_cast<uint8_t>((p0 >> 16) & 0xFF);
+            uint8_t b3 = static_cast<uint8_t>((p0 >> 24) & 0xFF);
+            uint8_t b4 = static_cast<uint8_t>(p1 & 0xFF);
+            uint8_t b5 = static_cast<uint8_t>((p1 >> 8) & 0xFF);
+            uint8_t b6 = static_cast<uint8_t>((p1 >> 16) & 0xFF);
+            uint8_t b7 = static_cast<uint8_t>((p1 >> 24) & 0xFF);
 
-            uint8_t byte0 = static_cast<uint8_t>(packed_val32 & 0xFF);
-            uint8_t byte1 = static_cast<uint8_t>((packed_val32 >> 8) & 0xFF);
-            uint8_t byte2 = static_cast<uint8_t>((packed_val32 >> 16) & 0xFF);
-            uint8_t byte3 = static_cast<uint8_t>((packed_val32 >> 24) & 0xFF);
+            float2 f2_0 = __half22float2(__half2(__nv_cvt_fp4x2_to_halfraw2(b0, __NV_E2M1)));
+            float2 f2_1 = __half22float2(__half2(__nv_cvt_fp4x2_to_halfraw2(b1, __NV_E2M1)));
+            float2 f2_2 = __half22float2(__half2(__nv_cvt_fp4x2_to_halfraw2(b2, __NV_E2M1)));
+            float2 f2_3 = __half22float2(__half2(__nv_cvt_fp4x2_to_halfraw2(b3, __NV_E2M1)));
+            float2 f2_4 = __half22float2(__half2(__nv_cvt_fp4x2_to_halfraw2(b4, __NV_E2M1)));
+            float2 f2_5 = __half22float2(__half2(__nv_cvt_fp4x2_to_halfraw2(b5, __NV_E2M1)));
+            float2 f2_6 = __half22float2(__half2(__nv_cvt_fp4x2_to_halfraw2(b6, __NV_E2M1)));
+            float2 f2_7 = __half22float2(__half2(__nv_cvt_fp4x2_to_halfraw2(b7, __NV_E2M1)));
 
-            __half2_raw raw_h2_0 = __nv_cvt_fp4x2_to_halfraw2(byte0, __NV_E2M1);
-            __half2_raw raw_h2_1 = __nv_cvt_fp4x2_to_halfraw2(byte1, __NV_E2M1);
-            __half2_raw raw_h2_2 = __nv_cvt_fp4x2_to_halfraw2(byte2, __NV_E2M1);
-            __half2_raw raw_h2_3 = __nv_cvt_fp4x2_to_halfraw2(byte3, __NV_E2M1);
+            uint4 out_v0, out_v1;
+            *reinterpret_cast<__nv_bfloat162 *>(&out_v0.x) = __floats2bfloat162_rn(f2_0.x * scale, f2_0.y * scale);
+            *reinterpret_cast<__nv_bfloat162 *>(&out_v0.y) = __floats2bfloat162_rn(f2_1.x * scale, f2_1.y * scale);
+            *reinterpret_cast<__nv_bfloat162 *>(&out_v0.z) = __floats2bfloat162_rn(f2_2.x * scale, f2_2.y * scale);
+            *reinterpret_cast<__nv_bfloat162 *>(&out_v0.w) = __floats2bfloat162_rn(f2_3.x * scale, f2_3.y * scale);
+            *reinterpret_cast<__nv_bfloat162 *>(&out_v1.x) = __floats2bfloat162_rn(f2_4.x * scale, f2_4.y * scale);
+            *reinterpret_cast<__nv_bfloat162 *>(&out_v1.y) = __floats2bfloat162_rn(f2_5.x * scale, f2_5.y * scale);
+            *reinterpret_cast<__nv_bfloat162 *>(&out_v1.z) = __floats2bfloat162_rn(f2_6.x * scale, f2_6.y * scale);
+            *reinterpret_cast<__nv_bfloat162 *>(&out_v1.w) = __floats2bfloat162_rn(f2_7.x * scale, f2_7.y * scale);
 
-            float2 f2_0 = __half22float2(*reinterpret_cast<__half2 *>(&raw_h2_0));
-            float2 f2_1 = __half22float2(*reinterpret_cast<__half2 *>(&raw_h2_1));
-            float2 f2_2 = __half22float2(*reinterpret_cast<__half2 *>(&raw_h2_2));
-            float2 f2_3 = __half22float2(*reinterpret_cast<__half2 *>(&raw_h2_3));
-
-            __nv_bfloat162 res0 = __floats2bfloat162_rn(f2_0.x * scale, f2_0.y * scale);
-            __nv_bfloat162 res1 = __floats2bfloat162_rn(f2_1.x * scale, f2_1.y * scale);
-            __nv_bfloat162 res2 = __floats2bfloat162_rn(f2_2.x * scale, f2_2.y * scale);
-            __nv_bfloat162 res3 = __floats2bfloat162_rn(f2_3.x * scale, f2_3.y * scale);
-
-            const int32_t out_base = i * 8;
-            uint2 final_u2_0;
-            *reinterpret_cast<__nv_bfloat162 *>(&final_u2_0.x) = res0;
-            *reinterpret_cast<__nv_bfloat162 *>(&final_u2_0.y) = res1;
-
-            uint2 final_u2_1;
-            *reinterpret_cast<__nv_bfloat162 *>(&final_u2_1.x) = res2;
-            *reinterpret_cast<__nv_bfloat162 *>(&final_u2_1.y) = res3;
-
-            __stcs(reinterpret_cast<uint2 *>(&out_ptr[out_base]), final_u2_0);
-            __stcs(reinterpret_cast<uint2 *>(&out_ptr[out_base + 4]), final_u2_1);
+            const int32_t out_base = i * 16;
+            __stcs(reinterpret_cast<uint4 *>(&out_ptr[out_base]), out_v0);
+            __stcs(reinterpret_cast<uint4 *>(&out_ptr[out_base + 8]), out_v1);
         }
     } else {
         const auto w_u4 = static_cast<const uint4 *>(weight);
 
         if constexpr (std::is_same_v<T, __nv_bfloat16>) {
-            const int32_t out_features_v4 = out_features / 8;
+            const int32_t out_features_v4 = out_features >> 3;
             const int64_t weight_row_u4_offset = static_cast<int64_t>(token_id) * out_features_v4;
 
             for (int32_t idx_v4 = tid; idx_v4 < out_features_v4; idx_v4 += stride) {
                 const uint4 w0 = __ldcs(&w_u4[weight_row_u4_offset + idx_v4]);
-                const int32_t out_offset = idx_v4 * 8;
-
-                auto out_bf162 = reinterpret_cast<__nv_bfloat162 *>(&out_ptr[out_offset]);
-
-                out_bf162[0] = *reinterpret_cast<const __nv_bfloat162 *>(&w0.x);
-                out_bf162[1] = *reinterpret_cast<const __nv_bfloat162 *>(&w0.y);
-                out_bf162[2] = *reinterpret_cast<const __nv_bfloat162 *>(&w0.z);
-                out_bf162[3] = *reinterpret_cast<const __nv_bfloat162 *>(&w0.w);
+                const int32_t out_offset = idx_v4 << 3;
+                __stcs(reinterpret_cast<uint4 *>(&out_ptr[out_offset]), w0);
             }
         } else if constexpr (std::is_same_v<T, __nv_fp8_e4m3>) {
-            const int32_t out_features_v4 = out_features / 16;
+            const int32_t out_features_v4 = out_features >> 4;
             const int64_t weight_row_u4_offset = static_cast<int64_t>(token_id) * out_features_v4;
 
             for (int32_t idx_v4 = tid; idx_v4 < out_features_v4; idx_v4 += stride) {
                 const uint4 w0 = __ldcs(&w_u4[weight_row_u4_offset + idx_v4]);
-                const int32_t out_offset = idx_v4 * 16;
+                const int32_t out_offset = idx_v4 << 4;
 
-                auto packed_vals = reinterpret_cast<const uint32_t *>(&w0);
+                const uint32_t *const packed_vals = reinterpret_cast<const uint32_t *>(&w0);
 
-                for (int32_t w = 0; w < 4; ++w) {
-                    uint32_t val32 = packed_vals[w];
-                    uint16_t low16 = static_cast<uint16_t>(val32 & 0xFFFF);
-                    uint16_t high16 = static_cast<uint16_t>((val32 >> 16) & 0xFFFF);
+                float2 f2_0 = __half22float2(__half2(__nv_cvt_fp8x2_to_halfraw2(static_cast<uint16_t>(packed_vals[0] & 0xFFFF), __NV_E4M3)));
+                float2 f2_1 = __half22float2(__half2(__nv_cvt_fp8x2_to_halfraw2(static_cast<uint16_t>((packed_vals[0] >> 16) & 0xFFFF), __NV_E4M3)));
+                float2 f2_2 = __half22float2(__half2(__nv_cvt_fp8x2_to_halfraw2(static_cast<uint16_t>(packed_vals[1] & 0xFFFF), __NV_E4M3)));
+                float2 f2_3 = __half22float2(__half2(__nv_cvt_fp8x2_to_halfraw2(static_cast<uint16_t>((packed_vals[1] >> 16) & 0xFFFF), __NV_E4M3)));
+                float2 f2_4 = __half22float2(__half2(__nv_cvt_fp8x2_to_halfraw2(static_cast<uint16_t>(packed_vals[2] & 0xFFFF), __NV_E4M3)));
+                float2 f2_5 = __half22float2(__half2(__nv_cvt_fp8x2_to_halfraw2(static_cast<uint16_t>((packed_vals[2] >> 16) & 0xFFFF), __NV_E4M3)));
+                float2 f2_6 = __half22float2(__half2(__nv_cvt_fp8x2_to_halfraw2(static_cast<uint16_t>(packed_vals[3] & 0xFFFF), __NV_E4M3)));
+                float2 f2_7 = __half22float2(__half2(__nv_cvt_fp8x2_to_halfraw2(static_cast<uint16_t>((packed_vals[3] >> 16) & 0xFFFF), __NV_E4M3)));
 
-                    float2 f2_low = __half22float2(__nv_cvt_fp8x2_to_halfraw2(low16, __NV_E4M3));
-                    float2 f2_high = __half22float2(__nv_cvt_fp8x2_to_halfraw2(high16, __NV_E4M3));
+                uint4 final_u4_0;
+                *reinterpret_cast<__nv_bfloat162 *>(&final_u4_0.x) = __floats2bfloat162_rn(f2_0.x, f2_0.y);
+                *reinterpret_cast<__nv_bfloat162 *>(&final_u4_0.y) = __floats2bfloat162_rn(f2_1.x, f2_1.y);
+                *reinterpret_cast<__nv_bfloat162 *>(&final_u4_0.z) = __floats2bfloat162_rn(f2_2.x, f2_2.y);
+                *reinterpret_cast<__nv_bfloat162 *>(&final_u4_0.w) = __floats2bfloat162_rn(f2_3.x, f2_3.y);
 
-                    __nv_bfloat162 res_low = __floats2bfloat162_rn(f2_low.x, f2_low.y);
-                    __nv_bfloat162 res_high = __floats2bfloat162_rn(f2_high.x, f2_high.y);
+                uint4 final_u4_1;
+                *reinterpret_cast<__nv_bfloat162 *>(&final_u4_1.x) = __floats2bfloat162_rn(f2_4.x, f2_4.y);
+                *reinterpret_cast<__nv_bfloat162 *>(&final_u4_1.y) = __floats2bfloat162_rn(f2_5.x, f2_5.y);
+                *reinterpret_cast<__nv_bfloat162 *>(&final_u4_1.z) = __floats2bfloat162_rn(f2_6.x, f2_6.y);
+                *reinterpret_cast<__nv_bfloat162 *>(&final_u4_1.w) = __floats2bfloat162_rn(f2_7.x, f2_7.y);
 
-                    uint2 final_u2;
-                    *reinterpret_cast<__nv_bfloat162 *>(&final_u2.x) = res_low;
-                    *reinterpret_cast<__nv_bfloat162 *>(&final_u2.y) = res_high;
-
-                    __stcs(reinterpret_cast<uint2 *>(&out_ptr[out_offset + w * 4]), final_u2);
-                }
+                __stcs(reinterpret_cast<uint4 *>(&out_ptr[out_offset]), final_u4_0);
+                __stcs(reinterpret_cast<uint4 *>(&out_ptr[out_offset + 8]), final_u4_1);
             }
         }
     }
 }
 
-void run_varlen_embeddings_bf16(__nv_bfloat16* out, const void* weight, const float* weight_scales, const uint32_t* tokens, const int32_t* seq_offsets, const int32_t* block_table, int32_t* slot_mapping, int32_t max_blocks, int32_t b_size, int32_t t_tokens, int32_t out_f, int32_t v_size, int32_t n_seqs, int32_t tpb, cudaStream_t stream) {
-    varlen_embeddings_fused_kernel<__nv_bfloat16><<<t_tokens, tpb, 0, stream>>>(out, weight, weight_scales, tokens, seq_offsets, block_table, slot_mapping, max_blocks, b_size, t_tokens, out_f, v_size, n_seqs);
+void run_varlen_embeddings_bf16(
+    __nv_bfloat16 *out, const void *weight, const float *weight_scales, const uint32_t *tokens,
+    const int32_t *seq_offsets, const int32_t *block_table, int32_t *slot_mapping,
+    int32_t max_blocks, int32_t b_size, int32_t t_tokens, int32_t out_f, int32_t v_size,
+    int32_t n_seqs, int32_t tpb, cudaStream_t stream
+) {
+    varlen_embeddings_fused_kernel<__nv_bfloat16><<<t_tokens, tpb, 0, stream>>>(
+        out, weight, weight_scales, tokens, seq_offsets, block_table, slot_mapping,
+        max_blocks, b_size, t_tokens, out_f, v_size, n_seqs
+    );
 }
 
-void run_varlen_embeddings_fp8(__nv_bfloat16* out, const void* weight, const float* weight_scales, const uint32_t* tokens, const int32_t* seq_offsets, const int32_t* block_table, int32_t* slot_mapping, int32_t max_blocks, int32_t b_size, int32_t t_tokens, int32_t out_f, int32_t v_size, int32_t n_seqs, int32_t tpb, cudaStream_t stream) {
-    varlen_embeddings_fused_kernel<__nv_fp8_e4m3><<<t_tokens, tpb, 0, stream>>>(out, weight, weight_scales, tokens, seq_offsets, block_table, slot_mapping, max_blocks, b_size, t_tokens, out_f, v_size, n_seqs);
+void run_varlen_embeddings_fp8(
+    __nv_bfloat16 *out, const void *weight, const float *weight_scales, const uint32_t *tokens,
+    const int32_t *seq_offsets, const int32_t *block_table, int32_t *slot_mapping,
+    int32_t max_blocks, int32_t b_size, int32_t t_tokens, int32_t out_f, int32_t v_size,
+    int32_t n_seqs, int32_t tpb, cudaStream_t stream
+) {
+    varlen_embeddings_fused_kernel<__nv_fp8_e4m3><<<t_tokens, tpb, 0, stream>>>(
+        out, weight, weight_scales, tokens, seq_offsets, block_table, slot_mapping,
+        max_blocks, b_size, t_tokens, out_f, v_size, n_seqs
+    );
 }
 
-void run_varlen_embeddings_fp4(__nv_bfloat16* out, const void* weight, const float* weight_scales, const uint32_t* tokens, const int32_t* seq_offsets, const int32_t* block_table, int32_t* slot_mapping, int32_t max_blocks, int32_t b_size, int32_t t_tokens, int32_t out_f, int32_t v_size, int32_t n_seqs, int32_t tpb, cudaStream_t stream) {
-    varlen_embeddings_fused_kernel<__nv_fp4_e2m1><<<t_tokens, tpb, 0, stream>>>(out, weight, weight_scales, tokens, seq_offsets, block_table, slot_mapping, max_blocks, b_size, t_tokens, out_f, v_size, n_seqs);
+void run_varlen_embeddings_fp4(
+    __nv_bfloat16 *out, const void *weight, const float *weight_scales, const uint32_t *tokens,
+    const int32_t *seq_offsets, const int32_t *block_table, int32_t *slot_mapping,
+    int32_t max_blocks, int32_t b_size, int32_t t_tokens, int32_t out_f, int32_t v_size,
+    int32_t n_seqs, int32_t tpb, cudaStream_t stream
+) {
+    varlen_embeddings_fused_kernel<__nv_fp4_e2m1><<<t_tokens, tpb, 0, stream>>>(
+        out, weight, weight_scales, tokens, seq_offsets, block_table, slot_mapping,
+        max_blocks, b_size, t_tokens, out_f, v_size, n_seqs
+    );
 }

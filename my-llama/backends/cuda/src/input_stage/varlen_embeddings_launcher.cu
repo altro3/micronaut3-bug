@@ -32,7 +32,6 @@ void launch_varlen_embeddings(
     const auto stream = static_cast<cudaStream_t>(stream_ptr);
     const auto type = static_cast<DataType>(data_type);
     __nv_bfloat16 *out_bf16 = static_cast<__nv_bfloat16 *>(out);
-
     switch (type) {
         case DataType::BF16:
             run_varlen_embeddings_bf16(out_bf16, weight, weight_scales, tokens, seq_offsets, block_table, slot_mapping, max_blocks_per_seq, block_size, total_tokens, out_features, vocab_size, num_seqs, threads_per_block, stream);

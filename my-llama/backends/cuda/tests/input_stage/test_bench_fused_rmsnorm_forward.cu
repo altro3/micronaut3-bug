@@ -91,7 +91,7 @@ static void run_rmsnorm_benchmark(
     std::cout << "==========================================================================" << std::endl;
 }
 
-TEST_CASE("GgufRMSNormBenchmark - ComprehensivePerformanceProfile") {
+TEST_CASE("RMSNormBenchmark - ComprehensivePerformanceProfile") {
     constexpr int32_t total_tokens = 4096;
     constexpr int32_t hidden_size = 4096;
     constexpr int32_t num_buffers = 8;
