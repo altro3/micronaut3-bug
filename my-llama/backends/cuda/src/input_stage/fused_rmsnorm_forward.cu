@@ -31,12 +31,16 @@ __global__ void fused_rmsnorm_forward_kernel(
 
     float thread_sum_sq = 0.0f;
 
+    uint4 cached_in_bf16[8];
+    int32_t reg_idx = 0;
+
     if constexpr (std::is_same_v<T, __nv_bfloat16>) {
         const __nv_bfloat16 *const row_in = static_cast<const __nv_bfloat16 *>(input) + row_offset_bf16;
         const int32_t stride = blockDim.x * 8;
 
         for (int32_t i = tid * 8; i < hidden_size; i += stride) {
             uint4 in_v4 = __ldcs(reinterpret_cast<const uint4 *>(&row_in[i]));
+            cached_in_bf16[reg_idx++] = in_v4;
             auto h2_ptr = reinterpret_cast<const __nv_bfloat162 *>(&in_v4);
 #pragma unroll
             for (int32_t j = 0; j < 4; ++j) {
@@ -102,12 +106,12 @@ __global__ void fused_rmsnorm_forward_kernel(
 
     const float inv_rms = s_warp_sums[0];
     if constexpr (std::is_same_v<T, __nv_bfloat16>) {
-        const __nv_bfloat16 *const row_in = static_cast<const __nv_bfloat16 *>(input) + row_offset_bf16;
         const auto g_ptr = static_cast<const __nv_bfloat16 *>(gamma);
         const int32_t stride = blockDim.x * 8;
+        reg_idx = 0;
 
         for (int32_t i = tid * 8; i < hidden_size; i += stride) {
-            uint4 in_v4 = __ldcs(reinterpret_cast<const uint4 *>(&row_in[i]));
+            uint4 in_v4 = cached_in_bf16[reg_idx++];
             uint4 gamma_v4 = __ldcs(reinterpret_cast<const uint4 *>(&g_ptr[i]));
 
             auto h2_in = reinterpret_cast<const __nv_bfloat162 *>(&in_v4);
