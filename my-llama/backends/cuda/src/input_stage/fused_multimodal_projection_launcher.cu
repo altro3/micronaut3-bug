@@ -40,7 +40,7 @@ extern "C" void launch_fused_multimodal_projection(
 
     for (int32_t i = 0; i < num_segments; ++i) {
         int32_t m = host_problem_shapes[i * 3 + 0];
-        max_m = (m > max_m) ? m : max_m;
+        max_m = m > max_m ? m : max_m;
 
         params.inputs[i] = host_ptr_A[i];
         params.weights[i] = host_ptr_B[i];

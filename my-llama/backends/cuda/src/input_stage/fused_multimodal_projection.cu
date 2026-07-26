@@ -120,7 +120,7 @@ __global__ void batched_projection_cutlass4_kernel(
         } else if constexpr (std::is_same_v<T_Weight, __nv_fp8_e4m3>) {
             auto weights_fp8 = static_cast<const uint8_t *>(weight_ptr);
 #pragma unroll 4
-            for (int32_t i = tid; i < (TILE_N * TILE_K) / 16; i += blockDim.x) {
+            for (int32_t i = tid; i < TILE_N * TILE_K / 16; i += blockDim.x) {
                 int32_t idx = i * 16;
                 int32_t local_n = idx / TILE_K;
                 int32_t local_k = idx % TILE_K;
@@ -154,7 +154,7 @@ __global__ void batched_projection_cutlass4_kernel(
             float2 f2_scale = make_float2(scale, scale);
 
 #pragma unroll 4
-            for (int32_t i = tid; i < (TILE_N * TILE_K) / 32; i += blockDim.x) {
+            for (int32_t i = tid; i < TILE_N * TILE_K / 32; i += blockDim.x) {
                 int32_t idx = i * 32;
                 int32_t local_n = idx / TILE_K;
                 int32_t local_k = idx % TILE_K;

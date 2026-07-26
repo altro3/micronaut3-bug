@@ -12,7 +12,7 @@ void run_fused_gemm_gguf_q4_k_fp8(__nv_fp8_e4m3 *output, const __nv_fp8_e4m3 *in
 
 void run_fused_gemm_gguf_q4_k_fp4(__nv_fp4_e2m1 *output, const __nv_fp4_e2m1 *input_A, const BlockQ4K *input_B_quant, int32_t M, int32_t N, int32_t K, dim3 grid, dim3 block, size_t shmem, cudaStream_t stream);
 
-static size_t get_shmem_size_dynamic(int32_t TILE_M, int32_t TILE_N, int32_t TILE_K, DataType type) {
+static size_t get_shmem_size_dynamic(const int32_t TILE_M, const int32_t TILE_N, const int32_t TILE_K, const DataType type) {
     size_t element_size_A = 2;
     if (type == DataType::FP8) element_size_A = 1;
     if (type == DataType::FP4) element_size_A = 1;
@@ -46,9 +46,6 @@ extern "C" void launch_fused_gemm_gguf_q4_k(
 
     switch (type) {
         case DataType::BF16: {
-            if (shmem_size >= 48 * 1024) {
-                cudaFuncSetAttribute(reinterpret_cast<const void *>(run_fused_gemm_gguf_q4_k_bf16), cudaFuncAttributeMaxDynamicSharedMemorySize, shmem_size);
-            }
             run_fused_gemm_gguf_q4_k_bf16(
                 static_cast<cutlass::bfloat16_t *>(output_activations),
                 static_cast<const cutlass::bfloat16_t *>(input_activations),
@@ -58,9 +55,6 @@ extern "C" void launch_fused_gemm_gguf_q4_k(
             break;
         }
         case DataType::FP8: {
-            if (shmem_size >= 48 * 1024) {
-                cudaFuncSetAttribute(reinterpret_cast<const void *>(run_fused_gemm_gguf_q4_k_fp8), cudaFuncAttributeMaxDynamicSharedMemorySize, shmem_size);
-            }
             run_fused_gemm_gguf_q4_k_fp8(
                 static_cast<__nv_fp8_e4m3 *>(output_activations),
                 static_cast<const __nv_fp8_e4m3 *>(input_activations),
