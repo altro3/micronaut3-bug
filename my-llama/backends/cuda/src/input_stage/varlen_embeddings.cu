@@ -85,25 +85,45 @@ __global__ void varlen_embeddings_fused_kernel(
             uint32_t p2 = packed_val128.z;
             uint32_t p3 = packed_val128.w;
 
-            float2 f2_0 = __half22float2(__half2(__nv_cvt_fp4x2_to_halfraw2(static_cast<uint8_t>(p0 & 0xFF), __NV_E2M1)));
-            float2 f2_1 = __half22float2(__half2(__nv_cvt_fp4x2_to_halfraw2(static_cast<uint8_t>((p0 >> 8) & 0xFF), __NV_E2M1)));
-            float2 f2_2 = __half22float2(__half2(__nv_cvt_fp4x2_to_halfraw2(static_cast<uint8_t>((p0 >> 16) & 0xFF), __NV_E2M1)));
-            float2 f2_3 = __half22float2(__half2(__nv_cvt_fp4x2_to_halfraw2(static_cast<uint8_t>((p0 >> 24) & 0xFF), __NV_E2M1)));
+            uint8_t b0 = static_cast<uint8_t>(__byte_perm(p0, 0, 0x4440));
+            uint8_t b1 = static_cast<uint8_t>(__byte_perm(p0, 0, 0x4441));
+            uint8_t b2 = static_cast<uint8_t>(__byte_perm(p0, 0, 0x4442));
+            uint8_t b3 = static_cast<uint8_t>(__byte_perm(p0, 0, 0x4443));
 
-            float2 f2_4 = __half22float2(__half2(__nv_cvt_fp4x2_to_halfraw2(static_cast<uint8_t>(p1 & 0xFF), __NV_E2M1)));
-            float2 f2_5 = __half22float2(__half2(__nv_cvt_fp4x2_to_halfraw2(static_cast<uint8_t>((p1 >> 8) & 0xFF), __NV_E2M1)));
-            float2 f2_6 = __half22float2(__half2(__nv_cvt_fp4x2_to_halfraw2(static_cast<uint8_t>((p1 >> 16) & 0xFF), __NV_E2M1)));
-            float2 f2_7 = __half22float2(__half2(__nv_cvt_fp4x2_to_halfraw2(static_cast<uint8_t>((p1 >> 24) & 0xFF), __NV_E2M1)));
+            uint8_t b4 = static_cast<uint8_t>(__byte_perm(p1, 0, 0x4440));
+            uint8_t b5 = static_cast<uint8_t>(__byte_perm(p1, 0, 0x4441));
+            uint8_t b6 = static_cast<uint8_t>(__byte_perm(p1, 0, 0x4442));
+            uint8_t b7 = static_cast<uint8_t>(__byte_perm(p1, 0, 0x4443));
 
-            float2 f2_8 = __half22float2(__half2(__nv_cvt_fp4x2_to_halfraw2(static_cast<uint8_t>(p2 & 0xFF), __NV_E2M1)));
-            float2 f2_9 = __half22float2(__half2(__nv_cvt_fp4x2_to_halfraw2(static_cast<uint8_t>((p2 >> 8) & 0xFF), __NV_E2M1)));
-            float2 f2_10 = __half22float2(__half2(__nv_cvt_fp4x2_to_halfraw2(static_cast<uint8_t>((p2 >> 16) & 0xFF), __NV_E2M1)));
-            float2 f2_11 = __half22float2(__half2(__nv_cvt_fp4x2_to_halfraw2(static_cast<uint8_t>((p2 >> 24) & 0xFF), __NV_E2M1)));
+            uint8_t b8 = static_cast<uint8_t>(__byte_perm(p2, 0, 0x4440));
+            uint8_t b9 = static_cast<uint8_t>(__byte_perm(p2, 0, 0x4441));
+            uint8_t b10 = static_cast<uint8_t>(__byte_perm(p2, 0, 0x4442));
+            uint8_t b11 = static_cast<uint8_t>(__byte_perm(p2, 0, 0x4443));
 
-            float2 f2_12 = __half22float2(__half2(__nv_cvt_fp4x2_to_halfraw2(static_cast<uint8_t>(p3 & 0xFF), __NV_E2M1)));
-            float2 f2_13 = __half22float2(__half2(__nv_cvt_fp4x2_to_halfraw2(static_cast<uint8_t>((p3 >> 8) & 0xFF), __NV_E2M1)));
-            float2 f2_14 = __half22float2(__half2(__nv_cvt_fp4x2_to_halfraw2(static_cast<uint8_t>((p3 >> 16) & 0xFF), __NV_E2M1)));
-            float2 f2_15 = __half22float2(__half2(__nv_cvt_fp4x2_to_halfraw2(static_cast<uint8_t>((p3 >> 24) & 0xFF), __NV_E2M1)));
+            uint8_t b12 = static_cast<uint8_t>(__byte_perm(p3, 0, 0x4440));
+            uint8_t b13 = static_cast<uint8_t>(__byte_perm(p3, 0, 0x4441));
+            uint8_t b14 = static_cast<uint8_t>(__byte_perm(p3, 0, 0x4442));
+            uint8_t b15 = static_cast<uint8_t>(__byte_perm(p3, 0, 0x4443));
+
+            float2 f2_0 = __half22float2(__half2(__nv_cvt_fp4x2_to_halfraw2(b0, __NV_E2M1)));
+            float2 f2_1 = __half22float2(__half2(__nv_cvt_fp4x2_to_halfraw2(b1, __NV_E2M1)));
+            float2 f2_2 = __half22float2(__half2(__nv_cvt_fp4x2_to_halfraw2(b2, __NV_E2M1)));
+            float2 f2_3 = __half22float2(__half2(__nv_cvt_fp4x2_to_halfraw2(b3, __NV_E2M1)));
+
+            float2 f2_4 = __half22float2(__half2(__nv_cvt_fp4x2_to_halfraw2(b4, __NV_E2M1)));
+            float2 f2_5 = __half22float2(__half2(__nv_cvt_fp4x2_to_halfraw2(b5, __NV_E2M1)));
+            float2 f2_6 = __half22float2(__half2(__nv_cvt_fp4x2_to_halfraw2(b6, __NV_E2M1)));
+            float2 f2_7 = __half22float2(__half2(__nv_cvt_fp4x2_to_halfraw2(b7, __NV_E2M1)));
+
+            float2 f2_8 = __half22float2(__half2(__nv_cvt_fp4x2_to_halfraw2(b8, __NV_E2M1)));
+            float2 f2_9 = __half22float2(__half2(__nv_cvt_fp4x2_to_halfraw2(b9, __NV_E2M1)));
+            float2 f2_10 = __half22float2(__half2(__nv_cvt_fp4x2_to_halfraw2(b10, __NV_E2M1)));
+            float2 f2_11 = __half22float2(__half2(__nv_cvt_fp4x2_to_halfraw2(b11, __NV_E2M1)));
+
+            float2 f2_12 = __half22float2(__half2(__nv_cvt_fp4x2_to_halfraw2(b12, __NV_E2M1)));
+            float2 f2_13 = __half22float2(__half2(__nv_cvt_fp4x2_to_halfraw2(b13, __NV_E2M1)));
+            float2 f2_14 = __half22float2(__half2(__nv_cvt_fp4x2_to_halfraw2(b14, __NV_E2M1)));
+            float2 f2_15 = __half22float2(__half2(__nv_cvt_fp4x2_to_halfraw2(b15, __NV_E2M1)));
 
             uint4 out_v0, out_v1, out_v2, out_v3;
             *reinterpret_cast<__nv_bfloat162 *>(&out_v0.x) = __floats2bfloat162_rn(f2_0.x * scales.x, f2_0.y * scales.x);
@@ -184,6 +204,7 @@ __global__ void varlen_embeddings_fused_kernel(
         }
     }
 }
+
 
 void run_varlen_embeddings_bf16(
     __nv_bfloat16 *out, const void *weight, const float *weight_scales, const uint32_t *tokens,
