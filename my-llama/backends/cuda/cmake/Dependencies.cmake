@@ -58,3 +58,52 @@ if (FETCH_CUTLASS)
     include_directories(${LOCAL_CUTLASS_DIR}/include)
     include_directories(${LOCAL_CUTLASS_DIR}/tools/util/include)
 endif ()
+
+include(FetchContent)
+
+set(MY_LLAMA_DEPS_DIR "D:/.my_llama_deps" CACHE PATH "Directory for localized CUDA/AI dependencies cache")
+
+macro(download_llama_dependency DEP_NAME DEP_VERSION DEP_SOURCE DEP_TAG)
+    set(LOCAL_DEP_DIR "${MY_LLAMA_DEPS_DIR}/${DEP_NAME}-v${DEP_VERSION}")
+
+    if (NOT TARGET ${DEP_NAME})
+        if (EXISTS "${LOCAL_DEP_DIR}/CMakeLists.txt")
+            message(STATUS "[MY_LLAMA] Found LOCAL ${DEP_NAME} cache at ${LOCAL_DEP_DIR}.")
+            FetchContent_Declare(${DEP_NAME} SOURCE_DIR "${LOCAL_DEP_DIR}")
+        else ()
+            message(STATUS "[MY_LLAMA] ${DEP_NAME} not found locally. Fetching...")
+
+            if ("${DEP_SOURCE}" MATCHES "\\.git$")
+                FetchContent_Declare(
+                        ${DEP_NAME}_download
+                        GIT_REPOSITORY "${DEP_SOURCE}"
+                        GIT_TAG "${DEP_TAG}"
+                        GIT_SHALLOW TRUE
+                )
+            else ()
+                FetchContent_Declare(${DEP_NAME}_download URL "${DEP_SOURCE}" DOWNLOAD_NO_EXTRACT TRUE)
+            endif ()
+
+            FetchContent_MakeAvailable(${DEP_NAME}_download)
+
+            FetchContent_GetProperties(${DEP_NAME}_download SOURCE_DIR DOWNLOADED_DIR)
+            file(MAKE_DIRECTORY "${LOCAL_DEP_DIR}")
+
+            if ("${DEP_SOURCE}" MATCHES "\\.git$")
+                file(COPY ${DOWNLOADED_DIR}/ DESTINATION "${LOCAL_DEP_DIR}")
+            else ()
+                file(GLOB ARCHIVE_FILE "${DOWNLOADED_DIR}/*.tar.gz" "${DOWNLOADED_DIR}/*.zip")
+                execute_process(
+                        COMMAND tar -xf "${ARCHIVE_FILE}" -C "${LOCAL_DEP_DIR}" --strip-components=1
+                        RESULT_VARIABLE TAR_RESULT
+                )
+                if (NOT TAR_RESULT EQUAL 0)
+                    message(FATAL_ERROR "[MY_LLAMA] Native windows tar failed to extract ${DEP_NAME} v${DEP_VERSION}")
+                endif ()
+            endif ()
+        endif ()
+
+        FetchContent_Declare(${DEP_NAME} SOURCE_DIR "${LOCAL_DEP_DIR}")
+        FetchContent_MakeAvailable(${DEP_NAME})
+    endif ()
+endmacro()
