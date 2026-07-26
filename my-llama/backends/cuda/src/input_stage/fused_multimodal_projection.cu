@@ -24,7 +24,7 @@ __global__ void batched_projection_cutlass4_kernel(
     const int32_t block_m_coord = blockIdx.x * TILE_M;
     const int32_t block_n_coord = blockIdx.y * TILE_N;
 
-    if (block_m_coord >= batch_num_tokens) return;
+    if (block_m_coord >= batch_num_tokens || block_n_coord >= local_output_dim) return;
 
     auto input_ptr = static_cast<const bfloat16_t *>(params.inputs[segment_id]);
     const void *weight_ptr = params.weights[segment_id];
@@ -104,7 +104,11 @@ __global__ void batched_projection_cutlass4_kernel(
                     auto reg_data = reinterpret_cast<bfloat16_t *>(&data);
 #pragma unroll
                     for (int v = 0; v < 8; ++v) {
-                        smem_B_ptr[(local_k + v) * TILE_N + local_n] = reg_data[v];
+                        if (global_k_weight + v < input_feature_dim) {
+                            smem_B_ptr[(local_k + v) * TILE_N + local_n] = reg_data[v];
+                        } else {
+                            smem_B_ptr[(local_k + v) * TILE_N + local_n] = static_cast<bfloat16_t>(0.0f);
+                        }
                     }
                 } else {
 #pragma unroll
@@ -125,29 +129,29 @@ __global__ void batched_projection_cutlass4_kernel(
 
                 if (global_n < local_output_dim && global_k_weight < input_feature_dim) {
                     uint4 packed_v = *reinterpret_cast<const uint4 *>(&weights_fp8[global_n * input_feature_dim + global_k_weight]);
-                    uint8_t *raw_bytes = reinterpret_cast<uint8_t *>(&packed_v);
-
+                    auto raw_bytes = reinterpret_cast<uint8_t *>(&packed_v);
 #pragma unroll
                     for (int v = 0; v < 16; ++v) {
-                        uint8_t raw_fp8 = raw_bytes[v];
-                        uint16_t packed_fp8x2 = (static_cast<uint16_t>(raw_fp8) << 8) | raw_fp8;
-                        __half2_raw h2 = __nv_cvt_fp8x2_to_halfraw2(packed_fp8x2, __NV_E4M3);
-                        float2 f2 = __half22float2(*reinterpret_cast<__half2 *>(&h2));
-                        int32_t curr_k = local_k + v;
-                        smem_B_ptr[curr_k * TILE_N + local_n] = static_cast<bfloat16_t>(f2.x * scale);
+                        if (global_k_weight + v < input_feature_dim) {
+                            uint8_t raw_fp8 = raw_bytes[v];
+                            uint16_t packed_fp8x2 = (static_cast<uint16_t>(raw_fp8) << 8) | raw_fp8;
+                            __half2_raw h2 = __nv_cvt_fp8x2_to_halfraw2(packed_fp8x2, __NV_E4M3);
+                            float2 f2 = __half22float2(*reinterpret_cast<__half2 *>(&h2));
+                            smem_B_ptr[(local_k + v) * TILE_N + local_n] = static_cast<bfloat16_t>(f2.x * scale);
+                        } else {
+                            smem_B_ptr[(local_k + v) * TILE_N + local_n] = static_cast<bfloat16_t>(0.0f);
+                        }
                     }
                 } else {
 #pragma unroll
                     for (int v = 0; v < 16; ++v) {
-                        int32_t curr_k = local_k + v;
-                        smem_B_ptr[curr_k * TILE_N + local_n] = static_cast<bfloat16_t>(0.0f);
+                        smem_B_ptr[(local_k + v) * TILE_N + local_n] = static_cast<bfloat16_t>(0.0f);
                     }
                 }
             }
         } else if constexpr (std::is_same_v<T_Weight, __nv_fp4_e2m1>) {
             auto weights_fp4 = static_cast<const uint8_t *>(weight_ptr);
             float2 f2_scale = make_float2(scale, scale);
-
 #pragma unroll 4
             for (int32_t i = tid; i < (TILE_N * TILE_K) / 32; i += blockDim.x) {
                 int32_t idx = i * 32;
@@ -159,28 +163,34 @@ __global__ void batched_projection_cutlass4_kernel(
                 if (global_n < local_output_dim && global_k_weight < input_feature_dim) {
                     int32_t byte_idx = (global_n * input_feature_dim + global_k_weight) / 2;
                     uint4 packed_v = *reinterpret_cast<const uint4 *>(&weights_fp4[byte_idx]);
-                    uint8_t *raw_bytes = reinterpret_cast<uint8_t *>(&packed_v);
-
+                    auto raw_bytes = reinterpret_cast<uint8_t *>(&packed_v);
 #pragma unroll
                     for (int v = 0; v < 16; ++v) {
                         uint8_t byte_val = raw_bytes[v];
                         uint8_t raw_fp4_l = byte_val & 0x0F;
                         uint8_t raw_fp4_h = (byte_val >> 4) & 0x0F;
 
-                        uint8_t aligned_l = (raw_fp4_l << 4) | raw_fp4_l;
-                        __half2_raw h2_l = __nv_cvt_fp4x2_to_halfraw2(aligned_l, __NV_E2M1);
-                        float2 f2_l = __half22float2(*reinterpret_cast<__half2 *>(&h2_l));
-                        float2 f2_scaled_l = __fmul2_rn(f2_l, f2_scale);
-                        __nv_bfloat162 bf16_v2_l = __float22bfloat162_rn(f2_scaled_l);
+                        if (global_k_weight + v * 2 < input_feature_dim) {
+                            uint8_t aligned_l = (raw_fp4_l << 4) | raw_fp4_l;
+                            __half2_raw h2_l = __nv_cvt_fp4x2_to_halfraw2(aligned_l, __NV_E2M1);
+                            float2 f2_l = __half22float2(*reinterpret_cast<__half2 *>(&h2_l));
+                            float2 f2_scaled_l = __fmul2_rn(f2_l, f2_scale);
+                            __nv_bfloat162 bf16_v2_l = __float22bfloat162_rn(f2_scaled_l);
+                            smem_B_ptr[(local_k + v * 2) * TILE_N + local_n] = static_cast<bfloat16_t>(bf16_v2_l.x);
+                        } else {
+                            smem_B_ptr[(local_k + v * 2) * TILE_N + local_n] = static_cast<bfloat16_t>(0.0f);
+                        }
 
-                        uint8_t aligned_h = (raw_fp4_h << 4) | raw_fp4_h;
-                        __half2_raw h2_h = __nv_cvt_fp4x2_to_halfraw2(aligned_h, __NV_E2M1);
-                        float2 f2_h = __half22float2(*reinterpret_cast<__half2 *>(&h2_h));
-                        float2 f2_scaled_h = __fmul2_rn(f2_h, f2_scale);
-                        __nv_bfloat162 bf16_v2_h = __float22bfloat162_rn(f2_scaled_h);
-
-                        smem_B_ptr[(local_k + v * 2) * TILE_N + local_n] = static_cast<bfloat16_t>(bf16_v2_l.x);
-                        smem_B_ptr[(local_k + v * 2 + 1) * TILE_N + local_n] = static_cast<bfloat16_t>(bf16_v2_h.x);
+                        if (global_k_weight + v * 2 + 1 < input_feature_dim) {
+                            uint8_t aligned_h = (raw_fp4_h << 4) | raw_fp4_h;
+                            __half2_raw h2_h = __nv_cvt_fp4x2_to_halfraw2(aligned_h, __NV_E2M1);
+                            float2 f2_h = __half22float2(*reinterpret_cast<__half2 *>(&h2_h));
+                            float2 f2_scaled_h = __fmul2_rn(f2_h, f2_scale);
+                            __nv_bfloat162 bf16_v2_h = __float22bfloat162_rn(f2_scaled_h);
+                            smem_B_ptr[(local_k + v * 2 + 1) * TILE_N + local_n] = static_cast<bfloat16_t>(bf16_v2_h.x);
+                        } else {
+                            smem_B_ptr[(local_k + v * 2 + 1) * TILE_N + local_n] = static_cast<bfloat16_t>(0.0f);
+                        }
                     }
                 } else {
 #pragma unroll
@@ -191,17 +201,12 @@ __global__ void batched_projection_cutlass4_kernel(
             }
         }
 
-
         __syncthreads();
-
         auto tA_rA = thr_mma.make_fragment_A(tA_sA_partitioned);
         auto tB_rB = thr_mma.make_fragment_B(tB_sB_partitioned);
-
         cute::copy(tA_sA_partitioned, tA_rA);
         cute::copy(tB_sB_partitioned, tB_rB);
-
         gemm(mma_core, tA_rA, tB_rB, tC_rC);
-
         __syncthreads();
     }
 
@@ -219,26 +224,28 @@ __global__ void batched_projection_cutlass4_kernel(
         int32_t global_m = block_m_coord + m_local;
         int32_t global_n = block_n_coord + n_local;
 
-        if (global_m < batch_num_tokens && global_n + 1 < local_output_dim) {
+        if (global_m < batch_num_tokens && global_n < local_output_dim) {
             float bias0 = projection_bias != nullptr ? projection_bias[rank_offset + global_n] : 0.0f;
-            float bias1 = projection_bias != nullptr ? projection_bias[rank_offset + global_n + 1] : 0.0f;
-
             float val0 = smem_C_ptr[m_local * TILE_N + n_local] + bias0;
-            float val1 = smem_C_ptr[m_local * TILE_N + n_local + 1] + bias1;
-
             val0 = val0 / (1.0f + __expf(-val0));
-            val1 = val1 / (1.0f + __expf(-val1));
-
             __nv_bfloat16 out0 = __float2bfloat16(val0);
-            __nv_bfloat16 out1 = __float2bfloat16(val1);
 
-            int32_t target_idx = (global_m * local_output_dim + global_n) >> 1;
-            output_v2[target_idx] = __halves2bfloat162(out0, out1);
-        } else if (global_m < batch_num_tokens && global_n < local_output_dim) {
-            float bias0 = projection_bias != nullptr ? projection_bias[rank_offset + global_n] : 0.0f;
-            float val0 = smem_C_ptr[m_local * TILE_N + n_local] + bias0;
-            val0 = val0 / (1.0f + __expf(-val0));
-            output_ptr[global_m * local_output_dim + global_n] = bfloat16_t(val0);
+            if (global_n + 1 < local_output_dim) {
+                float bias1 = projection_bias != nullptr ? projection_bias[rank_offset + global_n + 1] : 0.0f;
+                float val1 = smem_C_ptr[m_local * TILE_N + n_local + 1] + bias1;
+                val1 = val1 / (1.0f + __expf(-val1));
+                __nv_bfloat16 out1 = __float2bfloat16(val1);
+
+                int32_t target_idx = (global_m * local_output_dim + global_n) >> 1;
+                if ((global_n & 1) == 0) {
+                    output_v2[target_idx] = __halves2bfloat162(out0, out1);
+                } else {
+                    output_ptr[global_m * local_output_dim + global_n] = static_cast<bfloat16_t>(out0);
+                    output_ptr[global_m * local_output_dim + global_n + 1] = static_cast<bfloat16_t>(out1);
+                }
+            } else {
+                output_ptr[global_m * local_output_dim + global_n] = static_cast<bfloat16_t>(out0);
+            }
         }
     }
 }
