@@ -27,7 +27,14 @@ __global__ void varlen_embeddings_fused_kernel(
 
     if (tid == 0) {
         if (slot_mapping != nullptr && seq_offsets != nullptr && block_table != nullptr) {
-            const int32_t seq_idx = find_sequence_index(seq_offsets, num_seqs, token_idx);
+            int32_t seq_idx = 0;
+#pragma unroll
+            for (int32_t s = 0; s < 4; ++s) {
+                if (s < num_seqs && seq_offsets[s] <= token_idx) {
+                    seq_idx = s;
+                }
+            }
+
             const int32_t start_tok_idx = seq_offsets[seq_idx];
             const int32_t token_local_idx = token_idx - start_tok_idx;
             const int32_t logical_block_idx = token_local_idx / block_size;
