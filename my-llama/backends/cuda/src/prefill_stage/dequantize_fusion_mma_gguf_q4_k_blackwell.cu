@@ -1,7 +1,6 @@
 #include "dequantize_fusion_mma_gguf_q4_k_blackwell.cuh"
 #include <cuda_runtime.h>
-#include <cutlass/util/packed_stride.hpp>
-
+#include <iostream>
 #include "cute/tensor.hpp"
 #include "cutlass/tensor_ref.h"
 #include "cutlass/epilogue/thread/linear_combination.h"
@@ -10,6 +9,7 @@
 #include "cutlass/epilogue/collective/collective_builder.hpp"
 #include "cutlass/gemm/device/gemm_universal_adapter.h"
 #include "cutlass/gemm/kernel/gemm_universal.h"
+#include "cutlass/util/packed_stride.hpp"
 
 using namespace cute;
 
@@ -120,10 +120,27 @@ extern "C" void launch_fused_gemm_gguf_blackwell_fp4_native(
     int K = hidden_units_in;
     cudaStream_t stream = static_cast<cudaStream_t>(stream_ptr);
 
+    std::cout << "[DIAGNOSTIC] Problem shapes submitted -> M: " << M << ", N: " << N << ", K: " << K << std::endl;
+
+    if (M == 0 || N == 0 || K == 0) {
+        std::cerr << "[DIAGNOSTIC ERROR] Matrix dimension is zero! Core dump prevented." << std::endl;
+        return;
+    }
+
     using Sm1xxBlkScaledConfig = typename GemmKernel1Sm::CollectiveMainloop::Sm1xxBlkScaledConfig;
 
     auto layout_SFA = Sm1xxBlkScaledConfig::tile_atom_to_shape_SFA(make_shape(M, N, K, 1));
     auto layout_SFB = Sm1xxBlkScaledConfig::tile_atom_to_shape_SFB(make_shape(M, N, K, 1));
+
+    std::cout << "[DIAGNOSTIC] layout_SFA total logical size: " << size(layout_SFA) << std::endl;
+    std::cout << "[DIAGNOSTIC] layout_SFB total logical size: " << size(layout_SFB) << std::endl;
+    std::cout << "[DIAGNOSTIC] layout_SFA physical size (filtered): " << size(filter_zeros(layout_SFA)) << std::endl;
+    std::cout << "[DIAGNOSTIC] layout_SFB physical size (filtered): " << size(filter_zeros(layout_SFB)) << std::endl;
+
+    if (size(filter_zeros(layout_SFA)) == 0 || size(filter_zeros(layout_SFB)) == 0) {
+        std::cerr << "[DIAGNOSTIC ERROR] Block-scaled layout generation returned size 0. Check tile dimensions and K constraints!" << std::endl;
+        return;
+    }
 
     static ElementB *d_processed_B = nullptr;
     static ElementSFB *d_processed_SFB = nullptr;
@@ -181,13 +198,24 @@ extern "C" void launch_fused_gemm_gguf_blackwell_fp4_native(
 
     Gemm1Sm gemm_op;
 
+    cutlass::Status status = gemm_op.can_implement(args);
+    if (status != cutlass::Status::kSuccess) {
+        std::cerr << "[DIAGNOSTIC ERROR] gemm_op.can_implement failed! CUTLASS Status Code: "
+                << cutlass::cutlassGetStatusString(status) << std::endl;
+        return;
+    }
+
     size_t workspace_size = Gemm1Sm::get_workspace_size(args);
     void *workspace_ptr = nullptr;
     if (workspace_size > 0) {
         cudaMalloc(&workspace_ptr, workspace_size);
     }
 
-    gemm_op.run(args, workspace_ptr, stream);
+    status = gemm_op.run(args, workspace_ptr, stream);
+    if (status != cutlass::Status::kSuccess) {
+        std::cerr << "[DIAGNOSTIC ERROR] gemm_op.run critical execution failure! Code: "
+                << cutlass::cutlassGetStatusString(status) << std::endl;
+    }
 
     if (workspace_ptr) {
         cudaFree(workspace_ptr);
