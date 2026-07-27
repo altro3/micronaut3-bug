@@ -4,6 +4,7 @@
 #include <cstdlib>
 #include <vector>
 #include <string_view>
+#include <algorithm>
 
 #define CUDA_CHECK(call) \
 do { \
@@ -14,6 +15,55 @@ do { \
         std::exit(EXIT_FAILURE); \
     } \
 } while (0)
+
+template<typename T>
+class DeviceBuffer {
+    T *d_ptr = nullptr;
+    size_t count = 0;
+
+public:
+    explicit DeviceBuffer(const size_t element_count) : count(element_count) {
+        if (count > 0) {
+            CUDA_CHECK(cudaMalloc(&d_ptr, count * sizeof(T)));
+        }
+    }
+
+    DeviceBuffer(const size_t element_count, const int memset_value) : count(element_count) {
+        if (count > 0) {
+            CUDA_CHECK(cudaMalloc(&d_ptr, count * sizeof(T)));
+            CUDA_CHECK(cudaMemset(d_ptr, memset_value, count * sizeof(T)));
+        }
+    }
+
+    DeviceBuffer(const std::vector<T> &host_vec) : count(host_vec.size()) {
+        if (count > 0) {
+            CUDA_CHECK(cudaMalloc(&d_ptr, count * sizeof(T)));
+            CUDA_CHECK(cudaMemcpy(d_ptr, host_vec.data(), count * sizeof(T), cudaMemcpyHostToDevice));
+        }
+    }
+
+    ~DeviceBuffer() {
+        if (d_ptr) {
+            cudaFree(d_ptr);
+        }
+    }
+
+    T *get() const { return d_ptr; }
+    void *get_void() const { return reinterpret_cast<void *>(d_ptr); }
+    const void *get_const_void() const { return reinterpret_cast<const void *>(d_ptr); }
+    size_t size_bytes() const { return count * sizeof(T); }
+
+    void copy_to_device(const std::vector<T> &host_vec) {
+        const size_t copy_count = std::min(count, host_vec.size());
+        if (copy_count > 0) {
+            CUDA_CHECK(cudaMemcpy(d_ptr, host_vec.data(), copy_count * sizeof(T), cudaMemcpyHostToDevice));
+        }
+    }
+
+    DeviceBuffer(const DeviceBuffer &) = delete;
+
+    DeviceBuffer &operator=(const DeviceBuffer &) = delete;
+};
 
 class L2CacheFlusher {
     void *d_flush_buffer = nullptr;
@@ -69,6 +119,53 @@ public:
         float ms = 0.0f;
         CUDA_CHECK(cudaEventElapsedTime(&ms, start_event, stop_event));
         return ms;
+    }
+};
+
+class BenchmarkReporter {
+public:
+    static void report_performance(
+        const std::string_view target_name,
+        const std::string_view type_name,
+        std::vector<float> &iters_ms,
+        const double total_fops = 0.0,
+        const double total_bytes_moved = 0.0
+    ) {
+        if (iters_ms.empty()) return;
+
+        std::ranges::sort(iters_ms);
+
+        float total_time_ms = 0.0f;
+        for (const float t: iters_ms) {
+            total_time_ms += t;
+        }
+
+        const float avg_time_ms = total_time_ms / iters_ms.size();
+        const float p50 = iters_ms[static_cast<size_t>(iters_ms.size() * 0.50)];
+        const float p90 = iters_ms[static_cast<size_t>(iters_ms.size() * 0.90)];
+        const float p95 = iters_ms[static_cast<size_t>(iters_ms.size() * 0.95)];
+
+        std::cout << "==========================================================================" << std::endl;
+        std::cout << "[" << target_name << " BENCHMARK RESULTS - " << type_name << "]" << std::endl;
+        std::cout << "  Average Time:   " << avg_time_ms << " ms" << std::endl;
+        std::cout << "  Median (50%):   " << p50 << " ms" << std::endl;
+        std::cout << "  Percentile 90%: " << p90 << " ms" << std::endl;
+        std::cout << "  Percentile 95%: " << p95 << " ms" << std::endl;
+
+        if (total_fops > 0.0) {
+            const double avg_perf = total_fops * 1e-12 / (static_cast<double>(avg_time_ms) * 1e-3);
+            if (avg_perf >= 1000.0) {
+                std::cout << "  Compute Perf:   " << avg_perf / 1000.0 << " PFLOPs/s" << std::endl;
+            } else {
+                std::cout << "  Compute Perf:   " << avg_perf << " TFLOPs/s" << std::endl;
+            }
+        }
+
+        if (total_bytes_moved > 0.0) {
+            const double avg_gb_s = total_bytes_moved * 1e-9 / (static_cast<double>(avg_time_ms) * 1e-3);
+            std::cout << "  Real Bandwidth: " << avg_gb_s << " GB/s" << std::endl;
+        }
+        std::cout << "==========================================================================" << std::endl;
     }
 };
 
