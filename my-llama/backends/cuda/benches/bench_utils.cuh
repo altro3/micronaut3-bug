@@ -22,7 +22,7 @@ class DeviceBuffer {
     size_t count = 0;
 
 public:
-    explicit DeviceBuffer(const size_t element_count) : count(element_count) {
+    DeviceBuffer(const size_t element_count) : count(element_count) {
         if (count > 0) {
             CUDA_CHECK(cudaMalloc(&d_ptr, count * sizeof(T)));
         }
@@ -48,13 +48,33 @@ public:
         }
     }
 
+    // Конструктор перемещения (Move Constructor)
+    DeviceBuffer(DeviceBuffer &&other) noexcept : d_ptr(other.d_ptr), count(other.count) {
+        other.d_ptr = nullptr;
+        other.count = 0;
+    }
+
+    // Перемещающее присваивание (Move Assignment)
+    DeviceBuffer &operator=(DeviceBuffer &&other) noexcept {
+        if (this != &other) {
+            if (d_ptr) {
+                cudaFree(d_ptr);
+            }
+            d_ptr = other.d_ptr;
+            count = other.count;
+            other.d_ptr = nullptr;
+            other.count = 0;
+        }
+        return *this;
+    }
+
     T *get() const { return d_ptr; }
     void *get_void() const { return reinterpret_cast<void *>(d_ptr); }
     const void *get_const_void() const { return reinterpret_cast<const void *>(d_ptr); }
     size_t size_bytes() const { return count * sizeof(T); }
 
     void copy_to_device(const std::vector<T> &host_vec) {
-        const size_t copy_count = std::min(count, host_vec.size());
+        size_t copy_count = std::min(count, host_vec.size());
         if (copy_count > 0) {
             CUDA_CHECK(cudaMemcpy(d_ptr, host_vec.data(), copy_count * sizeof(T), cudaMemcpyHostToDevice));
         }
@@ -70,7 +90,7 @@ class L2CacheFlusher {
     size_t buffer_size = 0;
 
 public:
-    explicit L2CacheFlusher(const size_t size_bytes = 128 * 1024 * 1024) : buffer_size(size_bytes) {
+    L2CacheFlusher(const size_t size_bytes = 128 * 1024 * 1024) : buffer_size(size_bytes) {
         CUDA_CHECK(cudaMalloc(&d_flush_buffer, buffer_size));
     }
 
@@ -125,11 +145,12 @@ public:
 class BenchmarkReporter {
 public:
     static void report_performance(
-        const std::string_view target_name,
-        const std::string_view type_name,
+        std::string_view target_name,
+        std::string_view type_name,
         std::vector<float> &iters_ms,
         const double total_fops = 0.0,
-        const double total_bytes_moved = 0.0
+        const double total_bytes_moved = 0.0,
+        bool use_gflops_unit = false
     ) {
         if (iters_ms.empty()) return;
 
@@ -147,23 +168,28 @@ public:
 
         std::cout << "==========================================================================" << std::endl;
         std::cout << "[" << target_name << " BENCHMARK RESULTS - " << type_name << "]" << std::endl;
-        std::cout << "  Average Time:   " << avg_time_ms << " ms" << std::endl;
-        std::cout << "  Median (50%):   " << p50 << " ms" << std::endl;
-        std::cout << "  Percentile 90%: " << p90 << " ms" << std::endl;
-        std::cout << "  Percentile 95%: " << p95 << " ms" << std::endl;
+        std::cout << "  Real Average Time:        " << avg_time_ms << " ms" << std::endl;
+        std::cout << "  Percentile 50% (Median): " << p50 << " ms" << std::endl;
+        std::cout << "  Percentile 90%:          " << p90 << " ms" << std::endl;
+        std::cout << "  Percentile 95%:          " << p95 << " ms" << std::endl;
 
         if (total_fops > 0.0) {
-            const double avg_perf = total_fops * 1e-12 / (static_cast<double>(avg_time_ms) * 1e-3);
-            if (avg_perf >= 1000.0) {
-                std::cout << "  Compute Perf:   " << avg_perf / 1000.0 << " PFLOPs/s" << std::endl;
+            if (use_gflops_unit) {
+                const double avg_gflops = total_fops * 1e-9 / (static_cast<double>(avg_time_ms) * 1e-3);
+                std::cout << "  Average Compute Perf:    " << avg_gflops << " GFLOPs" << std::endl;
             } else {
-                std::cout << "  Compute Perf:   " << avg_perf << " TFLOPs/s" << std::endl;
+                const double avg_tflops = total_fops * 1e-12 / (static_cast<double>(avg_time_ms) * 1e-3);
+                if (avg_tflops >= 1000.0) {
+                    std::cout << "  Real Compute Perf:       " << avg_tflops / 1000.0 << " PFLOPs/s" << std::endl;
+                } else {
+                    std::cout << "  Real Compute Perf:       " << avg_tflops << " TFLOPs/s" << std::endl;
+                }
             }
         }
 
         if (total_bytes_moved > 0.0) {
             const double avg_gb_s = total_bytes_moved * 1e-9 / (static_cast<double>(avg_time_ms) * 1e-3);
-            std::cout << "  Real Bandwidth: " << avg_gb_s << " GB/s" << std::endl;
+            std::cout << "  Real Bandwidth:          " << avg_gb_s << " GB/s" << std::endl;
         }
         std::cout << "==========================================================================" << std::endl;
     }
@@ -179,7 +205,7 @@ extern std::vector<BenchmarkCase> &get_benchmark_registry();
 
 class BenchmarkRegistrar {
 public:
-    BenchmarkRegistrar(const std::string_view name, void (*func)()) {
+    BenchmarkRegistrar(std::string_view name, void (*func)()) {
         get_benchmark_registry().push_back({name, func});
     }
 };
