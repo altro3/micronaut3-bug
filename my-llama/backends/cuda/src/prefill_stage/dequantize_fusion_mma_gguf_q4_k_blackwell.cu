@@ -1,216 +1,197 @@
+#include "dequantize_fusion_mma_gguf_q4_k_blackwell.cuh"
 #include <cuda_runtime.h>
-#include <cuda_fp16.h>
-#include <cuda_bf16.h>
-#include <cuda/barrier>
-#include <cute/tensor.hpp>
-#include <cutlass/numeric_types.h>
+#include <cutlass/util/packed_stride.hpp>
 
-#include "dequantize_fusion_mma_gguf_q4_k.cuh"
+#include "cute/tensor.hpp"
+#include "cutlass/tensor_ref.h"
+#include "cutlass/epilogue/thread/linear_combination.h"
+#include "cutlass/gemm/dispatch_policy.hpp"
+#include "cutlass/gemm/collective/collective_builder.hpp"
+#include "cutlass/epilogue/collective/collective_builder.hpp"
+#include "cutlass/gemm/device/gemm_universal_adapter.h"
+#include "cutlass/gemm/kernel/gemm_universal.h"
 
 using namespace cute;
 
-__device__ __forceinline__ void dequantize_q4_k_to_fp4(
-    const BlockQ4K &block,
-    const int local_k_idx,
-    float_e2m1_t *out_fp4) {
-    const int sub_block_idx = local_k_idx / 32;
-    const int element_idx = local_k_idx % 32;
+#if defined(CUTLASS_ARCH_MMA_SM103_SUPPORTED)
 
-    const float d_val = __bfloat162float(block.d);
-    const float dmin_val = __bfloat162float(block.dmin);
+using ElementA = cutlass::float_e2m1_t;
+using ElementSFA = cutlass::float_ue4m3_t;
+using LayoutATag = cutlass::layout::RowMajor;
+constexpr int AlignmentA = 32;
+using ElementB = cutlass::float_e2m1_t;
+using ElementSFB = cutlass::float_ue4m3_t;
+using LayoutBTag = cutlass::layout::ColumnMajor;
+constexpr int AlignmentB = 32;
+using ElementD = cutlass::bfloat16_t;
+using ElementC = cutlass::bfloat16_t;
+using LayoutCTag = cutlass::layout::RowMajor;
+using LayoutDTag = cutlass::layout::RowMajor;
+constexpr int AlignmentD = 128 / cutlass::sizeof_bits<ElementD>::value;
+constexpr int AlignmentC = 128 / cutlass::sizeof_bits<ElementC>::value;
+using ElementAccumulator = float;
+using ArchTag = cutlass::arch::Sm103;
+using OperatorClass = cutlass::arch::OpClassBlockScaledTensorOp;
+using MmaTileShape1Sm = cute::Shape<cute::_128, cute::_256, Int<768> >;
+using ClusterShape = cute::Shape<int, int, cute::_1>;
 
-    const uint8_t sc_byte = block.scales[sub_block_idx * 2 + element_idx / 16];
-    const float scale = element_idx % 16 < 8 ? sc_byte & 0x0F : sc_byte >> 4;
+using CollectiveEpilogue1Sm = typename cutlass::epilogue::collective::CollectiveBuilder<
+    ArchTag, OperatorClass,
+    MmaTileShape1Sm, ClusterShape,
+    cutlass::epilogue::collective::EpilogueTileAuto,
+    ElementAccumulator, ElementAccumulator,
+    ElementC, LayoutCTag, AlignmentC,
+    ElementD, LayoutDTag, AlignmentD,
+    cutlass::epilogue::NoSmemWarpSpecialized1Sm
+>::CollectiveOp;
 
-    const uint8_t q_byte = block.qs[(sub_block_idx * 32 + element_idx) / 2];
-    const uint8_t q_raw = element_idx % 2 == 0 ? q_byte & 0x0F : q_byte >> 4;
+using CollectiveMainloop1Sm = typename cutlass::gemm::collective::CollectiveBuilder<
+    ArchTag, OperatorClass,
+    cute::tuple<ElementA, ElementSFA>, LayoutATag, AlignmentA,
+    cute::tuple<ElementB, ElementSFB>, LayoutBTag, AlignmentB,
+    ElementAccumulator,
+    MmaTileShape1Sm, ClusterShape,
+    cutlass::gemm::collective::StageCountAutoCarveout<static_cast<int>(sizeof(typename CollectiveEpilogue1Sm::SharedStorage))>,
+    cutlass::gemm::KernelTmaWarpSpecialized1SmBlockScaledMxNvf4UltraVs16Sm103
+>::CollectiveOp;
 
-    const float dequantized_f32 = d_val * scale * q_raw - dmin_val;
+using GemmKernel1Sm = cutlass::gemm::kernel::GemmUniversal<
+    Shape<int, int, int, int>,
+    CollectiveMainloop1Sm,
+    CollectiveEpilogue1Sm
+>;
 
-    *out_fp4 = float_e2m1_t(dequantized_f32);
-}
+using Gemm1Sm = cutlass::gemm::device::GemmUniversalAdapter<GemmKernel1Sm>;
 
-template<
-    class TileM, class TileN, class TileK,
-    class ElementA, class ElementC, class StageCount
->
-__global__ void __launch_bounds__(128, 2)
-dequantize_fusion_mma_gguf_q4_k_kernel(
-    const ElementA *ptr_A, const int stride_A,
+template<class LayoutSFBType>
+__global__ void preprocess_gguf_q4_k_to_mx_fp4_kernel(
     const BlockQ4K *ptr_B_q4,
-    ElementC *ptr_C, const int stride_C,
-    const int M, const int N, const int K) {
-    using namespace cute;
+    ElementB *ptr_B_out,
+    ElementSFB *ptr_SFB_out,
+    LayoutSFBType layout_SFB,
+    int N, int K) {
+    int global_n = blockIdx.x * blockDim.x + threadIdx.x;
+    int global_k = blockIdx.y * blockDim.y + threadIdx.y;
 
-    extern __shared__ uint8_t shared_storage[];
+    if (global_n >= N || global_k >= K) return;
 
-    const int block_m = blockIdx.x;
-    const int block_n = blockIdx.y;
-    int tid = threadIdx.x;
+    int total_blocks_k = K / 256;
+    int block_k_idx = global_k / 256;
+    int local_k_idx = global_k % 256;
+    int b_gmem_idx = global_n * total_blocks_k + block_k_idx;
 
-    const auto tShapeM = make_shape(M);
-    const auto tShapeN = make_shape(N);
-    const auto tShapeK = make_shape(K);
+    const BlockQ4K &block = ptr_B_q4[b_gmem_idx];
 
-    Tensor gA = make_tensor(make_gmem_ptr(ptr_A), make_layout(make_shape(tShapeM, tShapeK), make_stride(stride_A, _1{})));
-    Tensor gC = make_tensor(make_gmem_ptr(ptr_C), make_layout(make_shape(tShapeM, tShapeN), make_stride(stride_C, _1{})));
+    int sub_block_idx = local_k_idx / 32;
+    int element_idx = local_k_idx % 32;
 
-    Tensor lA = local_tile(gA, make_tile(TileM{}, TileK{}), make_coord(block_m, _));
-    Tensor lC = local_tile(gC, make_tile(TileM{}, TileN{}), make_coord(block_m, block_n));
+    float d_val = __bfloat162float(block.d);
+    float dmin_val = __bfloat162float(block.dmin);
 
-    const int blocks_per_tile_k = TileK::value / 256;
+    uint8_t sc_byte = block.scales[sub_block_idx * 2 + (element_idx / 16)];
+    float scale = (element_idx % 16 < 8) ? (sc_byte & 0x0F) : (sc_byte >> 4);
 
-    auto smem_layout_A = make_layout(make_shape(TileM{}, TileK{}, StageCount{}), LayoutRight{});
+    uint8_t q_byte = block.qs[(sub_block_idx * 32 + element_idx) / 2];
+    uint8_t q_raw = (element_idx % 2 == 0) ? (q_byte & 0x0F) : (q_byte >> 4);
 
-    Tensor sA = make_tensor(make_smem_ptr(static_cast<ElementA *>(shared_storage)), smem_layout_A);
-    const auto sB_q4 = static_cast<BlockQ4K *>(shared_storage + cosize(smem_layout_A) * sizeof(ElementA));
+    float dequantized_f32 = d_val * scale * q_raw - dmin_val;
 
-    const int warp_id = tid / 32;
-    const int lane_id = tid % 32;
+    int out_weight_idx = global_n * K + global_k;
+    ptr_B_out[out_weight_idx] = ElementB(dequantized_f32);
 
-    constexpr int TotalStages = StageCount::value;
-    using barrier_t = cuda::barrier<cuda::thread_scope_block>;
-
-    alignas(64) __shared__ uint8_t barrier_storage_full[sizeof(barrier_t) * TotalStages];
-    alignas(64) __shared__ uint8_t barrier_storage_empty[sizeof(barrier_t) * TotalStages];
-
-    const auto full_barriers = reinterpret_cast<barrier_t *>(barrier_storage_full);
-    const auto empty_barriers = reinterpret_cast<barrier_t *>(barrier_storage_empty);
-
-    if (tid < TotalStages) {
-        init(&full_barriers[tid], 1);
-        init(&empty_barriers[tid], 1);
-    }
-    __syncthreads();
-
-    auto tiled_copy_A = make_tiled_copy(
-        Copy_Atom<SM90_TMA_LOAD, ElementA>{},
-        Layout<Shape<_1, _1> >{},
-        Layout<Shape<_1, _1> >{}
-    );
-    auto thr_copy_A = tiled_copy_A.get_slice(tid);
-
-    auto tiled_mma = make_tiled_mma(
-        MMA_Atom<SM120_16x8x32_TN<ElementC, float_e2m1_t, float_e2m1_t> >{},
-        Layout<Shape<_2, _2, _1> >{}
-    );
-    auto thr_mma = tiled_mma.get_slice(tid);
-
-    auto accumulators = partition_fragment_C(tiled_mma, make_shape(TileM{}, TileN{}));
-    clear(accumulators);
-
-    const int k_tiles = size<1>(lA);
-
-    if (warp_id == 3) {
-        int write_stage = 0;
-
-        for (int k = 0; k < k_tiles; ++k) {
-            empty_barriers[write_stage].arrive_and_wait();
-
-            if (lane_id == 0) {
-                Tensor cA = thr_copy_A.get_container(lA(_, k), sA(_, _, write_stage));
-                copy(tiled_copy_A, cA);
-            }
-
-            const int b_gmem_idx = block_n * blocks_per_tile_k + k * blocks_per_tile_k;
-            if (tid < blocks_per_tile_k * 32) {
-                const int local_block = tid / 32;
-                if (lane_id < sizeof(BlockQ4K) / sizeof(uint32_t)) {
-                    const auto src = reinterpret_cast<const uint32_t *>(&ptr_B_q4[b_gmem_idx + local_block]);
-                    const auto dst = reinterpret_cast<uint32_t *>(&sB_q4[write_stage * blocks_per_tile_k + local_block]);
-                    dst[lane_id] = src[lane_id];
-                }
-            }
-
-            __syncthreads();
-            if (lane_id == 0) {
-                full_barriers[write_stage].arrive();
-            }
-
-            write_stage++;
-            if (write_stage >= TotalStages) write_stage = 0;
-        }
-    } else {
-        int read_stage = 0;
-
-        for (int k = 0; k < k_tiles; ++k) {
-            full_barriers[read_stage].arrive_and_wait();
-
-            Tensor tCsA = thr_mma.partition_A(sA(_, _, read_stage));
-            Tensor rA_in = thr_mma.make_fragment_A(tCsA);
-            copy(tiled_mma, tCsA, rA_in);
-
-            auto rA_fp4 = make_fragment_like<float_e2m1_t>(rA_in);
-            for (int i = 0; i < size(rA_in); ++i) {
-                rA_fp4(i) = float_e2m1_t(__bfloat162float(rA_in(i)));
-            }
-
-            auto rB_fp4 = thr_mma.make_fragment_B(thr_mma.partition_B(sA(_, _, read_stage)));
-
-            for (int n_idx = 0; n_idx < TileN::value; ++n_idx) {
-                for (int k_idx = 0; k_idx < TileK::value; ++k_idx) {
-                    const int global_k = k * TileK::value + k_idx;
-                    const int block_k_idx = global_k / 256;
-                    const int local_k_idx = global_k % 256;
-
-                    const int b_smem_idx = read_stage * blocks_per_tile_k + block_k_idx % blocks_per_tile_k;
-
-                    float_e2m1_t unpacked_weight;
-                    dequantize_q4_k_to_fp4(sB_q4[b_smem_idx], local_k_idx, &unpacked_weight);
-
-                    int frag_b_idx = (n_idx * TileK::value + k_idx) % size(rB_fp4);
-                    if (tid % 32 == 0) {
-                        rB_fp4(frag_b_idx) = unpacked_weight;
-                    }
-                }
-            }
-
-            gemm(tiled_mma, accumulators, rA_fp4, rB_fp4, accumulators);
-
-            if (lane_id == 0) {
-                empty_barriers[read_stage].arrive();
-            }
-
-            read_stage++;
-            if (read_stage >= TotalStages) read_stage = 0;
-        }
-
-        auto tCgC = thr_mma.partition_C(lC);
-        copy(accumulators, tCgC);
+    if (global_k % 32 == 0) {
+        int logical_k_sf = global_k / 32;
+        auto sf_coord = make_coord(global_n, logical_k_sf, 0);
+        int packed_sf_idx = layout_SFB(sf_coord);
+        ptr_SFB_out[packed_sf_idx] = ElementSFB(scale * d_val);
     }
 }
 
-void launch_dequantize_fusion_mma_gguf_q4_k(
-    const void *A, const void *B_q4, void *C,
-    const int M, const int N, const int K,
-    const int stride_A, const int stride_C,
-    cudaStream_t stream) {
-    using TileM = Int<128>;
-    using TileN = Int<128>;
-    using TileK = Int<256>;
+extern "C" void launch_fused_gemm_gguf_blackwell_fp4_native(
+    void *output_activations,
+    const void *input_activations,
+    const void *quantized_weights,
+    int32_t batch_size_or_tokens,
+    int32_t hidden_units_out,
+    int32_t hidden_units_in,
+    void *stream_ptr) {
+    int M = batch_size_or_tokens;
+    int N = hidden_units_out;
+    int K = hidden_units_in;
+    cudaStream_t stream = static_cast<cudaStream_t>(stream_ptr);
 
-    using ElementA = nv_bfloat16;
-    using ElementC = float;
-    using StageCount = Int<2>;
+    using Sm1xxBlkScaledConfig = typename GemmKernel1Sm::CollectiveMainloop::Sm1xxBlkScaledConfig;
 
-    constexpr auto smem_layout_A = make_layout(make_shape(TileM{}, TileK{}, StageCount{}), LayoutRight{});
-    constexpr int blocks_in_tile_k = TileK::value / 256;
-    size_t smem_bytes = cosize(smem_layout_A) * sizeof(ElementA) + blocks_in_tile_k * StageCount::value * sizeof(BlockQ4K);
+    auto layout_SFA = Sm1xxBlkScaledConfig::tile_atom_to_shape_SFA(make_shape(M, N, K, 1));
+    auto layout_SFB = Sm1xxBlkScaledConfig::tile_atom_to_shape_SFB(make_shape(M, N, K, 1));
 
-    dim3 grid((M + TileM::value - 1) / TileM::value, (N + TileN::value - 1) / TileN::value, 1);
-    dim3 block(128, 1, 1);
+    static ElementB *d_processed_B = nullptr;
+    static ElementSFB *d_processed_SFB = nullptr;
+    static ElementSFA *d_processed_SFA = nullptr;
+    static int current_M = 0;
+    static int current_N = 0;
+    static int current_K = 0;
 
-    cudaFuncSetAttribute(
-        reinterpret_cast<const void *>(dequantize_fusion_mma_gguf_q4_k_kernel<TileM, TileN, TileK, ElementA, ElementC, StageCount>),
-        cudaFuncAttributeMaxDynamicSharedMemorySize,
-        smem_bytes
+    if (d_processed_B == nullptr || current_M != M || current_N != N || current_K != K) {
+        if (d_processed_B) {
+            cudaFree(d_processed_B);
+            cudaFree(d_processed_SFB);
+            cudaFree(d_processed_SFA);
+        }
+        cudaMalloc(&d_processed_B, N * K * sizeof(ElementB));
+        cudaMalloc(&d_processed_SFB, size(filter_zeros(layout_SFB)) * sizeof(ElementSFB));
+        cudaMalloc(&d_processed_SFA, size(filter_zeros(layout_SFA)) * sizeof(ElementSFA));
+
+        cudaMemset(d_processed_SFA, 0x3C, size(filter_zeros(layout_SFA)) * sizeof(ElementSFA));
+
+        current_M = M;
+        current_N = N;
+        current_K = K;
+    }
+
+    dim3 block(16, 16);
+    dim3 grid((N + 15) / 16, (K + 15) / 16);
+    preprocess_gguf_q4_k_to_mx_fp4_kernel<<<grid, block, 0, stream>>>(
+        static_cast<const BlockQ4K *>(quantized_weights),
+        d_processed_B,
+        d_processed_SFB,
+        layout_SFB,
+        N, K
     );
 
-    dequantize_fusion_mma_gguf_q4_k_kernel<TileM, TileN, TileK, ElementA, ElementC, StageCount>
-            <<<grid, block, smem_bytes, stream>>>(
-                static_cast<const ElementA *>(A), stride_A,
-                static_cast<const BlockQ4K *>(B_q4),
-                static_cast<ElementC *>(C), stride_C,
-                M, N, K
-            );
+    auto stride_A = cutlass::make_cute_packed_stride(typename GemmKernel1Sm::StrideA{}, {M, K, 1});
+    auto stride_B = cutlass::make_cute_packed_stride(typename GemmKernel1Sm::StrideB{}, {N, K, 1});
+    auto stride_C = cutlass::make_cute_packed_stride(typename GemmKernel1Sm::StrideC{}, {M, N, 1});
+
+    typename GemmKernel1Sm::Arguments args{
+        cutlass::gemm::GemmUniversalMode::kGemm,
+        {M, N, K, 1},
+        {
+            static_cast<ElementA const *>(input_activations), stride_A,
+            static_cast<ElementB const *>(d_processed_B), stride_B,
+            static_cast<ElementSFA const *>(d_processed_SFA), layout_SFA,
+            static_cast<ElementSFB const *>(d_processed_SFB), layout_SFB
+        },
+        {
+            {1.0f, 0.0f},
+            static_cast<ElementC *>(output_activations), stride_C,
+            static_cast<ElementD *>(output_activations), stride_C
+        }
+    };
+
+    Gemm1Sm gemm_op;
+
+    size_t workspace_size = Gemm1Sm::get_workspace_size(args);
+    void *workspace_ptr = nullptr;
+    if (workspace_size > 0) {
+        cudaMalloc(&workspace_ptr, workspace_size);
+    }
+
+    gemm_op.run(args, workspace_ptr, stream);
+
+    if (workspace_ptr) {
+        cudaFree(workspace_ptr);
+    }
 }
+
+#endif
