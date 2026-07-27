@@ -148,8 +148,8 @@ void run_fused_gemm_gguf_blackwell_fp4(
     using ArchTag = cutlass::arch::Sm103;
     using OperatorClass = cutlass::arch::OpClassBlockScaledTensorOp;
 
-    using MmaTileShape2Sm = Shape<_256, _256, Int<768> >;
-    using ClusterShape = Shape<int, int, _1>;
+    using MmaTileShape2Sm = Shape<_128, _128, Int<256> >;
+    using ClusterShape = Shape<_2, _2, _1>;
 
     using CollectiveEpilogue2Sm = cutlass::epilogue::collective::CollectiveBuilder<
         ArchTag, OperatorClass,
@@ -196,8 +196,8 @@ void run_fused_gemm_gguf_blackwell_fp4(
     };
 
     arguments.scheduler.max_swizzle_size = 0;
-    arguments.hw_info.cluster_shape = dim3(2, 1, 1);
-    arguments.hw_info.cluster_shape_fallback = dim3(2, 1, 1);
+    arguments.hw_info.cluster_shape = dim3(2, 2, 1);
+    arguments.hw_info.cluster_shape_fallback = dim3(2, 2, 1);
 
     const size_t workspace_size = GemmInstance::get_workspace_size(arguments);
     uint8_t *workspace = nullptr;
