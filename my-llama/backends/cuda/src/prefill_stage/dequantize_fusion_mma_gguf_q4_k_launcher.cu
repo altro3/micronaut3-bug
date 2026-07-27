@@ -13,12 +13,18 @@ void run_fused_gemm_gguf_q4_k_fp8(__nv_fp8_e4m3 *output, const __nv_fp8_e4m3 *in
 void run_fused_gemm_gguf_q4_k_fp4(__nv_fp4_e2m1 *output, const __nv_fp4_e2m1 *input_A, const BlockQ4K *input_B_quant, int32_t M, int32_t N, int32_t K, dim3 grid, dim3 block, size_t shmem, cudaStream_t stream);
 
 static size_t get_shmem_size_dynamic(const int32_t TILE_M, const int32_t TILE_N, const int32_t TILE_K, const DataType type) {
-    size_t element_size_A = 2;
-    if (type == DataType::FP8) element_size_A = 1;
-    if (type == DataType::FP4) element_size_A = 1;
+    size_t shmem_A_bytes = 0;
 
-    const size_t shmem_input = TILE_M * TILE_K * element_size_A + TILE_N * TILE_K * sizeof(__nv_bfloat16);
+    if (type == DataType::BF16) {
+        shmem_A_bytes = TILE_M * TILE_K * 2;
+    } else if (type == DataType::FP8) {
+        shmem_A_bytes = TILE_M * TILE_K * 1;
+    } else if (type == DataType::FP4) {
+        shmem_A_bytes = (TILE_M * TILE_K) >> 1;
+    }
+    const size_t shmem_input = shmem_A_bytes + TILE_N * TILE_K * sizeof(__nv_bfloat16);
     const size_t shmem_output = TILE_M * TILE_N * sizeof(float);
+
     return std::max(shmem_input, shmem_output);
 }
 

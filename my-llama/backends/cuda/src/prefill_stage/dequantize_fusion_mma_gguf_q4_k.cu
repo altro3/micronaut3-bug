@@ -184,6 +184,7 @@ __global__ void fused_gemm_gguf_q4_k_kernel(
         tC_sC_partitioned(i) = tC_rC(i);
     }
     __syncthreads();
+
     if constexpr (std::is_same_v<ElementAct, bfloat16_t> || std::is_same_v<ElementAct, __nv_bfloat16>) {
         auto output_v2 = reinterpret_cast<__nv_bfloat162 *>(output);
         for (int32_t i = tid * 2; i < TILE_M * TILE_N; i += blockDim.x * 2) {
@@ -191,6 +192,7 @@ __global__ void fused_gemm_gguf_q4_k_kernel(
             int32_t n_local = i % TILE_N;
             int32_t global_m = block_m_coord + m_local;
             int32_t global_n = block_n_coord + n_local;
+
             if (global_m < M && global_n < N) {
                 if (n_local + 1 < TILE_N && global_n + 1 < N) {
                     float val0 = smem_C_ptr[m_local * TILE_N + n_local];
@@ -204,46 +206,69 @@ __global__ void fused_gemm_gguf_q4_k_kernel(
             }
         }
     } else if constexpr (std::is_same_v<ElementAct, __nv_fp8_e4m3>) {
-        auto fp8_out = reinterpret_cast<uint8_t *>(output);
-        for (int32_t i = tid; i < TILE_M * TILE_N; i += blockDim.x) {
+        auto fp8_out_v2 = reinterpret_cast<uint16_t *>(output);
+        for (int32_t i = tid * 2; i < TILE_M * TILE_N; i += blockDim.x * 2) {
             int32_t m_local = i / TILE_N;
             int32_t n_local = i % TILE_N;
             int32_t global_m = block_m_coord + m_local;
             int32_t global_n = block_n_coord + n_local;
+
             if (global_m < M && global_n < N) {
-                float val = smem_C_ptr[m_local * TILE_N + n_local];
-                __half h_val = __float2half(val);
-                __half_raw h_raw = *reinterpret_cast<__half_raw *>(&h_val);
-                fp8_out[global_m * N + global_n] = __nv_cvt_halfraw_to_fp8(h_raw, __NV_NOSAT, __NV_E4M3);
+                if (n_local + 1 < TILE_N && global_n + 1 < N) {
+                    float val0 = smem_C_ptr[m_local * TILE_N + n_local];
+                    float val1 = smem_C_ptr[m_local * TILE_N + n_local + 1];
+
+                    __half2 h2 = __floats2half2_rn(val0, val1);
+                    __half2_raw h2_raw = *reinterpret_cast<__half2_raw *>(&h2);
+
+                    uint16_t res_fp8x2 = __nv_cvt_halfraw2_to_fp8x2(h2_raw, __NV_NOSAT, __NV_E4M3);
+                    int32_t target_idx = (global_m * N + global_n) >> 1;
+                    fp8_out_v2[target_idx] = res_fp8x2;
+                } else {
+                    float val = smem_C_ptr[m_local * TILE_N + n_local];
+                    __half h_val = __float2half(val);
+                    __half_raw h_raw = *reinterpret_cast<__half_raw *>(&h_val);
+                    __nv_fp8_storage_t raw_fp8 = __nv_cvt_halfraw_to_fp8(h_raw, __NV_NOSAT, __NV_E4M3);
+                    reinterpret_cast<uint8_t *>(output)[global_m * N + global_n] = raw_fp8;
+                }
             }
         }
     } else if constexpr (std::is_same_v<ElementAct, __nv_fp4_e2m1>) {
         auto fp4_out = reinterpret_cast<uint32_t *>(output);
         constexpr float fp4_scale = 2.0f;
-        for (int32_t i = tid; i < TILE_M * TILE_N; i += blockDim.x) {
-            int32_t m_local = i / TILE_N;
-            int32_t n_local = i % TILE_N;
+
+        const int32_t total_u32_elements = (TILE_M * TILE_N) >> 3;
+
+        for (int32_t i = tid; i < total_u32_elements; i += blockDim.x) {
+            int32_t total_elem_idx = i << 3;
+            int32_t m_local = total_elem_idx / TILE_N;
+            int32_t n_local = total_elem_idx % TILE_N;
+
             int32_t global_m = block_m_coord + m_local;
             int32_t global_n = block_n_coord + n_local;
 
             if (global_m < M && global_n < N) {
-                float val = smem_C_ptr[m_local * TILE_N + n_local] / fp4_scale;
+                uint32_t packed_value = 0;
+                bool has_valid_data = false;
 
-                __half h_val = __float2half(val);
-                __half_raw h_raw = *reinterpret_cast<__half_raw *>(&h_val);
+#pragma unroll
+                for (int32_t v = 0; v < 8; ++v) {
+                    if (global_n + v < N && n_local + v < TILE_N) {
+                        float val = smem_C_ptr[m_local * TILE_N + n_local + v] / fp4_scale;
+                        __half h_val = __float2half(val);
+                        __half_raw h_raw = *reinterpret_cast<__half_raw *>(&h_val);
 
-                uint8_t res_fp4 = __nv_cvt_halfraw_to_fp4(h_raw, __NV_E2M1, cudaRoundNearest) & 0x0F;
+                        uint32_t res_fp4 = __nv_cvt_halfraw_to_fp4(h_raw, __NV_E2M1, cudaRoundNearest) & 0x0F;
+                        packed_value |= res_fp4 << (v * 4);
+                        has_valid_data = true;
+                    }
+                }
 
-                int32_t global_element_idx = global_m * N + global_n;
-                int32_t global_u32_idx = global_element_idx / 8;
-                int32_t shift = global_element_idx % 8 * 4;
-
-                uint32_t mask = ~(0x0F << shift);
-                uint32_t value_to_write = static_cast<uint32_t>(res_fp4) << shift;
-
-                uint32_t *target_ptr = &fp4_out[global_u32_idx];
-                atomicAnd(target_ptr, mask);
-                atomicOr(target_ptr, value_to_write);
+                if (has_valid_data) {
+                    int32_t global_element_idx = global_m * N + global_n;
+                    int32_t global_u32_idx = global_element_idx >> 3;
+                    fp4_out[global_u32_idx] = packed_value;
+                }
             }
         }
     }
