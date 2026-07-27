@@ -27,7 +27,7 @@ static void run_benchmark(
     constexpr int32_t bench_iters = 100;
 
     std::vector<float> iters_ms(bench_iters);
-    GPUTimer timer;
+    const GPUTimer timer;
 
     std::cout << "[BENCHMARK] Starting profile session for target: " << type_name << std::endl;
     std::cout << "[BENCHMARK] Matrix dimensions: M=" << M << ", N=" << N << ", K=" << K << std::endl;

@@ -22,7 +22,7 @@ class DeviceBuffer {
     size_t count = 0;
 
 public:
-    DeviceBuffer(const size_t element_count) : count(element_count) {
+    explicit DeviceBuffer(const size_t element_count) : count(element_count) {
         if (count > 0) {
             CUDA_CHECK(cudaMalloc(&d_ptr, count * sizeof(T)));
         }
@@ -35,7 +35,7 @@ public:
         }
     }
 
-    DeviceBuffer(const std::vector<T> &host_vec) : count(host_vec.size()) {
+    explicit DeviceBuffer(const std::vector<T> &host_vec) : count(host_vec.size()) {
         if (count > 0) {
             CUDA_CHECK(cudaMalloc(&d_ptr, count * sizeof(T)));
             CUDA_CHECK(cudaMemcpy(d_ptr, host_vec.data(), count * sizeof(T), cudaMemcpyHostToDevice));
@@ -48,13 +48,11 @@ public:
         }
     }
 
-    // Конструктор перемещения (Move Constructor)
     DeviceBuffer(DeviceBuffer &&other) noexcept : d_ptr(other.d_ptr), count(other.count) {
         other.d_ptr = nullptr;
         other.count = 0;
     }
 
-    // Перемещающее присваивание (Move Assignment)
     DeviceBuffer &operator=(DeviceBuffer &&other) noexcept {
         if (this != &other) {
             if (d_ptr) {
@@ -74,7 +72,7 @@ public:
     size_t size_bytes() const { return count * sizeof(T); }
 
     void copy_to_device(const std::vector<T> &host_vec) {
-        size_t copy_count = std::min(count, host_vec.size());
+        const size_t copy_count = std::min(count, host_vec.size());
         if (copy_count > 0) {
             CUDA_CHECK(cudaMemcpy(d_ptr, host_vec.data(), copy_count * sizeof(T), cudaMemcpyHostToDevice));
         }
@@ -90,7 +88,7 @@ class L2CacheFlusher {
     size_t buffer_size = 0;
 
 public:
-    L2CacheFlusher(const size_t size_bytes = 128 * 1024 * 1024) : buffer_size(size_bytes) {
+    explicit L2CacheFlusher(const size_t size_bytes = 128 * 1024 * 1024) : buffer_size(size_bytes) {
         CUDA_CHECK(cudaMalloc(&d_flush_buffer, buffer_size));
     }
 
@@ -145,12 +143,12 @@ public:
 class BenchmarkReporter {
 public:
     static void report_performance(
-        std::string_view target_name,
-        std::string_view type_name,
+        const std::string_view target_name,
+        const std::string_view type_name,
         std::vector<float> &iters_ms,
         const double total_fops = 0.0,
         const double total_bytes_moved = 0.0,
-        bool use_gflops_unit = false
+        const bool use_gflops_unit = false
     ) {
         if (iters_ms.empty()) return;
 
@@ -205,8 +203,8 @@ extern std::vector<BenchmarkCase> &get_benchmark_registry();
 
 class BenchmarkRegistrar {
 public:
-    BenchmarkRegistrar(std::string_view name, void (*func)()) {
-        get_benchmark_registry().push_back({name, func});
+    BenchmarkRegistrar(const std::string_view name, void (*func)()) {
+        get_benchmark_registry().push_back({.name = name, .func = func});
     }
 };
 

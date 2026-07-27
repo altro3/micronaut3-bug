@@ -34,15 +34,15 @@ static void run_projection_benchmark(
     const void **h_inputs, const void **h_weights, void **h_outputs,
     const float *d_bias, const float *d_scales,
     const int32_t *h_shapes_array, const int32_t num_segments, size_t single_weight_bytes,
-    L2CacheFlusher &flusher
+    const L2CacheFlusher &flusher
 ) {
     constexpr int32_t warmup_iters = 20;
     constexpr int32_t bench_iters = 100;
 
     std::vector<float> iters_ms(bench_iters);
-    GPUTimer timer;
+    const GPUTimer timer;
 
-    auto launch_helper = [&]() {
+    auto launch_helper = [&] {
         launch_fused_multimodal_projection(
             h_inputs, h_weights, h_outputs, d_bias, d_scales, h_shapes_array,
             num_segments, vision_hidden_size, text_hidden_size, 0, 1, data_type, nullptr
@@ -63,12 +63,12 @@ static void run_projection_benchmark(
         iters_ms[i] = timer.elapsed_ms();
     }
 
-    double operations = 2.0 * static_cast<double>(total_tokens) * static_cast<double>(vision_hidden_size) * static_cast<double>(text_hidden_size);
+    const double operations = 2.0 * static_cast<double>(total_tokens) * static_cast<double>(vision_hidden_size) * static_cast<double>(text_hidden_size);
 
-    size_t read_A_bytes = total_tokens * vision_hidden_size * 2;
-    size_t read_B_bytes = num_segments * single_weight_bytes;
-    size_t write_C_bytes = total_tokens * text_hidden_size * 2;
-    double total_bytes_moved = static_cast<double>(read_A_bytes + read_B_bytes + write_C_bytes);
+    const size_t read_A_bytes = total_tokens * vision_hidden_size * 2;
+    const size_t read_B_bytes = num_segments * single_weight_bytes;
+    const size_t write_C_bytes = total_tokens * text_hidden_size * 2;
+    const double total_bytes_moved = static_cast<double>(read_A_bytes + read_B_bytes + write_C_bytes);
 
     BenchmarkReporter::report_performance("MULTIMODAL PROJECTION", type_name, iters_ms, operations, total_bytes_moved);
 }
@@ -85,7 +85,7 @@ void run_multimodal_projection_benchmarks() {
         std::exit(EXIT_FAILURE);
     }
 
-    L2CacheFlusher flusher;
+    const L2CacheFlusher flusher;
 
     std::vector<int32_t> h_shapes_array(num_segments * 3);
     for (int32_t i = 0; i < num_segments; ++i) {
@@ -121,8 +121,8 @@ void run_multimodal_projection_benchmarks() {
         allocated_weights_fp4.emplace_back(weight_fp4_bytes, 0);
     }
 
-    DeviceBuffer<float> d_bias(text_hidden_size, 0);
-    DeviceBuffer<float> d_scales(num_segments, 0);
+    const DeviceBuffer<float> d_bias(text_hidden_size, 0);
+    const DeviceBuffer<float> d_scales(num_segments, 0);
 
     std::vector<const void *> host_inputs_ptr(num_segments);
     std::vector<void *> host_outputs_ptr(num_segments);
