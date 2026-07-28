@@ -15,16 +15,16 @@ using namespace cute;
 
 #if defined(CUTLASS_ARCH_MMA_SM103_SUPPORTED)
 
-using ElementA = cutlass::float_e2m1_t;
-using ElementSFA = cutlass::float_ue4m3_t;
+using ElementA = float_e2m1_t;
+using ElementSFA = float_ue4m3_t;
 using LayoutATag = cutlass::layout::RowMajor;
 constexpr int AlignmentA = 32;
-using ElementB = cutlass::float_e2m1_t;
-using ElementSFB = cutlass::float_ue4m3_t;
+using ElementB = float_e2m1_t;
+using ElementSFB = float_ue4m3_t;
 using LayoutBTag = cutlass::layout::ColumnMajor;
 constexpr int AlignmentB = 32;
-using ElementD = cutlass::bfloat16_t;
-using ElementC = cutlass::bfloat16_t;
+using ElementD = bfloat16_t;
+using ElementC = bfloat16_t;
 using LayoutCTag = cutlass::layout::RowMajor;
 using LayoutDTag = cutlass::layout::RowMajor;
 constexpr int AlignmentD = 128 / cutlass::sizeof_bits<ElementD>::value;
@@ -32,10 +32,10 @@ constexpr int AlignmentC = 128 / cutlass::sizeof_bits<ElementC>::value;
 using ElementAccumulator = float;
 using ArchTag = cutlass::arch::Sm103;
 using OperatorClass = cutlass::arch::OpClassBlockScaledTensorOp;
-using MmaTileShape1Sm = cute::Shape<cute::_128, cute::_256, Int<768> >;
-using ClusterShape = cute::Shape<int, int, cute::_1>;
+using MmaTileShape1Sm = Shape<_128, _256, Int<768> >;
+using ClusterShape = Shape<int, int, _1>;
 
-using CollectiveEpilogue1Sm = typename cutlass::epilogue::collective::CollectiveBuilder<
+using CollectiveEpilogue1Sm = cutlass::epilogue::collective::CollectiveBuilder<
     ArchTag, OperatorClass,
     MmaTileShape1Sm, ClusterShape,
     cutlass::epilogue::collective::EpilogueTileAuto,
@@ -45,13 +45,13 @@ using CollectiveEpilogue1Sm = typename cutlass::epilogue::collective::Collective
     cutlass::epilogue::NoSmemWarpSpecialized1Sm
 >::CollectiveOp;
 
-using CollectiveMainloop1Sm = typename cutlass::gemm::collective::CollectiveBuilder<
+using CollectiveMainloop1Sm = cutlass::gemm::collective::CollectiveBuilder<
     ArchTag, OperatorClass,
-    cute::tuple<ElementA, ElementSFA>, LayoutATag, AlignmentA,
-    cute::tuple<ElementB, ElementSFB>, LayoutBTag, AlignmentB,
+    tuple<ElementA, ElementSFA>, LayoutATag, AlignmentA,
+    tuple<ElementB, ElementSFB>, LayoutBTag, AlignmentB,
     ElementAccumulator,
     MmaTileShape1Sm, ClusterShape,
-    cutlass::gemm::collective::StageCountAutoCarveout<static_cast<int>(sizeof(typename CollectiveEpilogue1Sm::SharedStorage))>,
+    cutlass::gemm::collective::StageCountAutoCarveout<static_cast<int>(sizeof(CollectiveEpilogue1Sm::SharedStorage))>,
     cutlass::gemm::KernelTmaWarpSpecialized1SmBlockScaledMxNvf4UltraVs16Sm103
 >::CollectiveOp;
 
@@ -88,11 +88,11 @@ __global__ void preprocess_gguf_q4_k_to_mx_fp4_kernel(
     float d_val = __bfloat162float(block.d);
     float dmin_val = __bfloat162float(block.dmin);
 
-    uint8_t sc_byte = block.scales[sub_block_idx * 2 + (element_idx / 16)];
-    float scale = (element_idx % 16 < 8) ? (sc_byte & 0x0F) : (sc_byte >> 4);
+    uint8_t sc_byte = block.scales[sub_block_idx * 2 + element_idx / 16];
+    float scale = element_idx % 16 < 8 ? sc_byte & 0x0F : sc_byte >> 4;
 
     uint8_t q_byte = block.qs[(sub_block_idx * 32 + element_idx) / 2];
-    uint8_t q_raw = (element_idx % 2 == 0) ? (q_byte & 0x0F) : (q_byte >> 4);
+    uint8_t q_raw = element_idx % 2 == 0 ? q_byte & 0x0F : q_byte >> 4;
 
     float dequantized_f32 = d_val * scale * q_raw - dmin_val;
 
@@ -127,7 +127,7 @@ extern "C" void launch_fused_gemm_gguf_blackwell_fp4_native(
         return;
     }
 
-    using Sm1xxBlkScaledConfig = typename GemmKernel1Sm::CollectiveMainloop::Sm1xxBlkScaledConfig;
+    using Sm1xxBlkScaledConfig = GemmKernel1Sm::CollectiveMainloop::Sm1xxBlkScaledConfig;
 
     auto layout_SFA = Sm1xxBlkScaledConfig::tile_atom_to_shape_SFA(make_shape(M, N, K, 1));
     auto layout_SFB = Sm1xxBlkScaledConfig::tile_atom_to_shape_SFB(make_shape(M, N, K, 1));
@@ -176,11 +176,11 @@ extern "C" void launch_fused_gemm_gguf_blackwell_fp4_native(
         N, K
     );
 
-    auto stride_A = cutlass::make_cute_packed_stride(typename GemmKernel1Sm::StrideA{}, {M, K, 1});
-    auto stride_B = cutlass::make_cute_packed_stride(typename GemmKernel1Sm::StrideB{}, {N, K, 1});
-    auto stride_C = cutlass::make_cute_packed_stride(typename GemmKernel1Sm::StrideC{}, {M, N, 1});
+    auto stride_A = cutlass::make_cute_packed_stride(GemmKernel1Sm::StrideA{}, {M, K, 1});
+    auto stride_B = cutlass::make_cute_packed_stride(GemmKernel1Sm::StrideB{}, {N, K, 1});
+    auto stride_C = cutlass::make_cute_packed_stride(GemmKernel1Sm::StrideC{}, {M, N, 1});
 
-    typename GemmKernel1Sm::Arguments args{
+    GemmKernel1Sm::Arguments args{
         cutlass::gemm::GemmUniversalMode::kGemm,
         {M, N, K, 1},
         {
