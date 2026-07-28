@@ -16,6 +16,7 @@ if (MSVC)
 
     add_compile_definitions(
             CUTLASS_ARCH_MMA_SM103_SUPPORTED=1
+            CUTLASS_DEBUG_TRACE_LEVEL=0
             _CRT_SECURE_NO_WARNINGS
     )
 

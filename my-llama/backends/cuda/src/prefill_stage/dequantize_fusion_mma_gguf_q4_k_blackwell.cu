@@ -1,7 +1,6 @@
 #include <iostream>
 #include "cutlass/cutlass.h"
 #include "cute/tensor.hpp"
-#include "cutlass/tensor_ref.h"
 #include "cutlass/bfloat16.h"
 #include "cutlass/float8.h"
 #include "cutlass/float_subbyte.h"
@@ -11,11 +10,13 @@
 #include "cutlass/epilogue/collective/collective_builder.hpp"
 #include "cutlass/gemm/device/gemm_universal_adapter.h"
 #include "cutlass/gemm/kernel/gemm_universal.hpp"
-#include "cutlass/util/packed_stride.hpp"
+#include <cutlass/util/packed_stride.hpp>
 
 using namespace cute;
 
-#if defined(CUTLASS_ARCH_MMA_SM103_SUPPORTED)
+#ifndef CUTLASS_ARCH_MMA_SM103_SUPPORTED
+#define CUTLASS_ARCH_MMA_SM103_SUPPORTED 1
+#endif
 
 extern "C" void launch_blackwell_fp4_native_gemm(
     void *output_d,
@@ -38,12 +39,12 @@ extern "C" void launch_blackwell_fp4_native_gemm(
     using ElementA = cutlass::float_e2m1_t;
     using ElementSFA = cutlass::float_ue4m3_t;
     using LayoutATag = cutlass::layout::RowMajor;
-    constexpr int AlignmentA = 256;
+    constexpr int AlignmentA = 32;
 
     using ElementB = cutlass::float_e2m1_t;
     using ElementSFB = cutlass::float_ue4m3_t;
     using LayoutBTag = cutlass::layout::ColumnMajor;
-    constexpr int AlignmentB = 256;
+    constexpr int AlignmentB = 32;
 
     using ElementD = cutlass::bfloat16_t;
     using ElementC = cutlass::bfloat16_t;
@@ -88,10 +89,17 @@ extern "C" void launch_blackwell_fp4_native_gemm(
     using Gemm1Sm = cutlass::gemm::device::GemmUniversalAdapter<GemmKernel1Sm>;
     using Sm1xxBlkScaledConfig = typename GemmKernel1Sm::CollectiveMainloop::Sm1xxBlkScaledConfig;
 
-    auto stride_A = cutlass::make_cute_packed_stride(typename GemmKernel1Sm::StrideA{}, {M, K, batch});
-    auto stride_B = cutlass::make_cute_packed_stride(typename GemmKernel1Sm::StrideB{}, {N, K, batch});
-    auto stride_C = cutlass::make_cute_packed_stride(typename GemmKernel1Sm::StrideC{}, {M, N, batch});
-    auto stride_D = cutlass::make_cute_packed_stride(typename GemmKernel1Sm::StrideD{}, {M, N, batch});
+    // Восстанавливаем оригинальные типы шагов (Strides), которые ожидает Arguments движка
+    using StrideA = typename CollectiveMainloop1Sm::StrideA;
+    using StrideB = typename CollectiveMainloop1Sm::StrideB;
+    using StrideC = typename CollectiveEpilogue1Sm::StrideC;
+    using StrideD = typename CollectiveEpilogue1Sm::StrideD;
+
+    // Используем встроенный генератор шагов CUTLASS — теперь типы сойдутся со структурой Arguments на 100%
+    StrideA stride_A = cutlass::make_cute_packed_stride(StrideA{}, {M, K, batch});
+    StrideB stride_B = cutlass::make_cute_packed_stride(StrideB{}, {N, K, batch});
+    StrideC stride_C = cutlass::make_cute_packed_stride(StrideC{}, {M, N, batch});
+    StrideD stride_D = cutlass::make_cute_packed_stride(StrideD{}, {M, N, batch});
 
     auto layout_SFA = Sm1xxBlkScaledConfig::tile_atom_to_shape_SFA(cute::make_shape(M, N, K, batch));
     auto layout_SFB = Sm1xxBlkScaledConfig::tile_atom_to_shape_SFB(cute::make_shape(M, N, K, batch));
@@ -115,18 +123,15 @@ extern "C" void launch_blackwell_fp4_native_gemm(
         }
     };
 
-    int cluster_m = (M >= 256) ? 2 : 1;
-    int cluster_n = 1;
-
     args.scheduler.max_swizzle_size = 0;
-    args.hw_info.cluster_shape = dim3(cluster_m, cluster_n, 1);
+    args.hw_info.cluster_shape = dim3(1, 1, 1);
     args.hw_info.cluster_shape_fallback = dim3(1, 1, 1);
 
     Gemm1Sm gemm_op;
 
     cutlass::Status status = gemm_op.can_implement(args);
     if (status != cutlass::Status::kSuccess) {
-        std::cerr << "[ENGINE ERROR] Layout/alignment mismatch or unsupported shapes." << std::endl;
+        std::cerr << "[ENGINE ERROR] can_implement failed: " << cutlass::cutlassGetStatusString(status) << std::endl;
         return;
     }
 
@@ -152,5 +157,3 @@ extern "C" void launch_blackwell_fp4_native_gemm(
         cudaFreeAsync(workspace_ptr, stream);
     }
 }
-
-#endif
