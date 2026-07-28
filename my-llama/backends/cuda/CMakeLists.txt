@@ -14,17 +14,18 @@ set(CMAKE_CUDA_RUNTIME_LIBRARY Static)
 if (MSVC)
     set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 
-    add_compile_options($<$<COMPILE_LANGUAGE:CXX>:/Zc:preprocessor>)
-    add_compile_options($<$<COMPILE_LANGUAGE:CUDA>:-Xcompiler=/Zc:preprocessor>)
-    add_compile_options($<$<COMPILE_LANGUAGE:CUDA>:-Xcompiler=/std:c++20>)
-    add_compile_options($<$<COMPILE_LANGUAGE:CXX>:/utf-8>)
+    add_compile_definitions(
+            CUTLASS_ARCH_MMA_SM103_SUPPORTED=1
+            _CRT_SECURE_NO_WARNINGS
+    )
 
-    set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} /MACHINE:X64")
-    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} /MACHINE:X64")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /Zc:preprocessor /utf-8 /wd4068 /wd4624 /wd4190 /wd4018")
 endif ()
 
-set(CMAKE_CUDA_FLAGS_RELEASE "-O2 --use_fast_math -Xptxas --maxrregcount=128 -Xptxas -O1 -Xptxas -v --diag-suppress=20012 -static-global-template-stub=false")
+set(CMAKE_CUDA_FLAGS_RELEASE "-O2 --use_fast_math -Xptxas --maxrregcount=128 -Xptxas -O1 -Xptxas -v --diag-suppress=20012 -static-global-template-stub=false --expt-relaxed-constexpr")
+
 if (MSVC)
+    set(CMAKE_CUDA_FLAGS_RELEASE "${CMAKE_CUDA_FLAGS_RELEASE} -Xcompiler=/Zc:preprocessor -Xcompiler=/std:c++20 -Xcompiler=/wd4068 -Xcompiler=/wd4624 -Xcompiler=/wd4190 -Xcompiler=/wd4018")
     set(CMAKE_CXX_FLAGS_RELEASE "/O2")
 else ()
     set(CMAKE_CXX_FLAGS_RELEASE "-O3")

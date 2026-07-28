@@ -1,114 +1,145 @@
 #include <doctest/doctest.h>
 #include <cuda_runtime.h>
-#include <cuda_bf16.h>
 #include <vector>
-#include <iostream>
+#include <cmath>
+#include <algorithm>
+#include "cutlass/bfloat16.h"
+#include "cutlass/float8.h"
+#include "cutlass/float_subbyte.h"
+#include "cutlass/layout/vector.h" // Тот самый пропущенный инклуд
+#include "cutlass/util/host_tensor.h"
+#include "cutlass/util/packed_stride.hpp"
 #include "prefill_stage/dequantize_fusion_mma_gguf_q4_k_blackwell.cuh"
 
-struct BlackwellGgufNativeTestContext {
-    const int32_t M = 1024;
-    const int32_t N = 4096;
-    const int32_t K = 4096;
+using ElementSFA = cutlass::float_ue4m3_t;
+using ElementSFB = cutlass::float_ue4m3_t;
+using ElementD = cutlass::bfloat16_t;
 
-    std::vector<BlockQ4K> h_weights_quant;
-    std::vector<float> h_unpacked_weights;
+TEST_CASE("BlackwellNativeFp4GemmTest - Verification") {
+    const int32_t M = 256;
+    const int32_t N = 1024;
+    const int32_t K = 1024;
 
-    BlackwellGgufNativeTestContext() {
-        const int32_t total_weight_elements = N * K;
-        const int32_t total_blocks = total_weight_elements / 256;
-        h_weights_quant.resize(total_blocks);
-        h_unpacked_weights.resize(total_weight_elements);
+    cutlass::HostTensor<uint8_t, cutlass::layout::PackedVectorLayout> tensor_A_packed;
+    cutlass::HostTensor<uint8_t, cutlass::layout::PackedVectorLayout> tensor_B_packed;
 
-        for (int32_t b = 0; b < total_blocks; ++b) {
-            h_weights_quant[b].d = __float2bfloat16(0.02f);
-            h_weights_quant[b].dmin = __float2bfloat16(0.005f);
+    cutlass::HostTensor<ElementSFA, cutlass::layout::PackedVectorLayout> tensor_SFA;
+    cutlass::HostTensor<ElementSFB, cutlass::layout::PackedVectorLayout> tensor_SFB;
+    cutlass::HostTensor<ElementD, cutlass::layout::PackedVectorLayout> tensor_D;
 
-            for (int32_t s = 0; s < 12; ++s) {
-                h_weights_quant[b].scales[s] = 8;
+    tensor_A_packed.reset(cutlass::make_Coord((M * K) / 2));
+    tensor_B_packed.reset(cutlass::make_Coord((N * K) / 2));
+    tensor_SFA.reset(cutlass::make_Coord((M * K) / 16));
+    tensor_SFB.reset(cutlass::make_Coord((N * K) / 16));
+    tensor_D.reset(cutlass::make_Coord(M * N));
+
+    std::vector<float> h_raw_A(M * K, 0.5f);
+    std::vector<float> h_raw_B(N * K, 0.25f);
+
+    for (int32_t m = 0; m < M; ++m) {
+        for (int32_t k = 0; k < K; k += 16) {
+            float max_val = 0.0f;
+            for (int32_t i = 0; i < 16; ++i) {
+                max_val = std::max(max_val, std::abs(h_raw_A[m * K + k + i]));
             }
-            for (int32_t q = 0; q < 128; ++q) {
-                h_weights_quant[b].qs[q] = 0x33;
-            }
-        }
+            float sf_a = max_val / 6.0f;
+            if (sf_a == 0.0f) sf_a = 1.0f;
 
-        for (int32_t k = 0; k < K; ++k) {
-            for (int32_t n = 0; n < N; ++n) {
-                const int32_t idx = n * K + k;
+            tensor_SFA.host_data()[(m * K + k) / 16] = cutlass::float_ue4m3_t(sf_a);
 
-                const int32_t total_blocks_k = K / 256;
-                const int32_t block_k_idx = k / 256;
-                const int32_t local_k_idx = k % 256;
-                const int32_t b_idx = n * total_blocks_k + block_k_idx;
+            for (int32_t i = 0; i < 16; i += 2) {
+                int32_t idx0 = m * K + k + i;
+                int32_t idx1 = m * K + k + i + 1;
 
-                const int32_t sub_block_idx = local_k_idx / 32;
-                const int32_t elem_idx = local_k_idx % 32;
+                float q_val0 = std::max(-6.0f, std::min(6.0f, std::round(h_raw_A[idx0] / sf_a)));
+                float q_val1 = std::max(-6.0f, std::min(6.0f, std::round(h_raw_A[idx1] / sf_a)));
 
-                const uint8_t sc_byte = h_weights_quant[b_idx].scales[sub_block_idx * 2 + elem_idx / 16];
-                float scale = elem_idx % 16 < 8 ? sc_byte & 0x0F : sc_byte >> 4;
+                uint8_t packed_byte = (static_cast<uint8_t>(q_val0) & 0x0F) |
+                                      ((static_cast<uint8_t>(q_val1) & 0x0F) << 4);
 
-                const uint8_t q_byte = h_weights_quant[b_idx].qs[(sub_block_idx * 32 + elem_idx) / 2];
-                uint8_t q_raw = elem_idx % 2 == 0 ? q_byte & 0x0F : q_byte >> 4;
-
-                float d_val = __bfloat162float(h_weights_quant[b_idx].d);
-                float dmin_val = __bfloat162float(h_weights_quant[b_idx].dmin);
-
-                float raw_weight = d_val * scale * q_raw - dmin_val;
-                h_unpacked_weights[idx] = raw_weight;
+                tensor_A_packed.host_data()[idx0 / 2] = packed_byte;
             }
         }
     }
-};
 
-TEST_CASE("GgufBlackwellPrefillTest - AccuracyVerification") {
-    BlackwellGgufNativeTestContext ctx;
+    for (int32_t n = 0; n < N; ++n) {
+        for (int32_t k = 0; k < K; k += 16) {
+            float max_val = 0.0f;
+            for (int32_t i = 0; i < 16; ++i) {
+                max_val = std::max(max_val, std::abs(h_raw_B[n * K + k + i]));
+            }
+            float sf_b = max_val / 6.0f;
+            if (sf_b == 0.0f) sf_b = 1.0f;
 
-    std::vector<__nv_bfloat16> h_input(ctx.M * ctx.K, __float2bfloat16(0.5f));
-    std::vector<__nv_bfloat16> h_output(ctx.M * ctx.N, __float2bfloat16(0.0f));
+            tensor_SFB.host_data()[(n * K + k) / 16] = cutlass::float_ue4m3_t(sf_b);
 
-    void *d_out = nullptr;
-    void *d_in = nullptr;
-    void *d_w = nullptr;
+            for (int32_t i = 0; i < 16; i += 2) {
+                int32_t k_idx0 = k + i;
+                int32_t k_idx1 = k + i + 1;
 
-    REQUIRE(cudaMalloc(&d_out, ctx.M * ctx.N * sizeof(__nv_bfloat16)) == cudaSuccess);
-    REQUIRE(cudaMalloc(&d_in, ctx.M * ctx.K * sizeof(__nv_bfloat16)) == cudaSuccess);
-    REQUIRE(cudaMalloc(&d_w, ctx.h_weights_quant.size() * sizeof(BlockQ4K)) == cudaSuccess);
+                float q_val0 = std::max(-6.0f, std::min(6.0f, std::round(h_raw_B[n * K + k_idx0] / sf_b)));
+                float q_val1 = std::max(-6.0f, std::min(6.0f, std::round(h_raw_B[n * K + k_idx1] / sf_b)));
 
-    REQUIRE(cudaMemcpy(d_in, h_input.data(), h_input.size() * sizeof(__nv_bfloat16), cudaMemcpyHostToDevice) == cudaSuccess);
-    REQUIRE(cudaMemcpy(d_w, ctx.h_weights_quant.data(), ctx.h_weights_quant.size() * sizeof(BlockQ4K), cudaMemcpyHostToDevice) == cudaSuccess);
+                uint8_t packed_byte = (static_cast<uint8_t>(q_val0) & 0x0F) |
+                                      ((static_cast<uint8_t>(q_val1) & 0x0F) << 4);
 
-    launch_fused_gemm_gguf_blackwell_fp4_native(
-        d_out,
-        d_in,
-        d_w,
-        ctx.M,
-        ctx.N,
-        ctx.K,
+                int32_t linear_packed_idx = (k_idx0 * N + n) / 2;
+                tensor_B_packed.host_data()[linear_packed_idx] = packed_byte;
+            }
+        }
+    }
+
+    tensor_A_packed.sync_device();
+    tensor_B_packed.sync_device();
+    tensor_SFA.sync_device();
+    tensor_SFB.sync_device();
+
+    cudaMemset(tensor_D.device_data(), 0, M * N * sizeof(ElementD));
+
+    launch_blackwell_fp4_native_gemm(
+        tensor_D.device_data(),
+        tensor_A_packed.device_data(),
+        tensor_B_packed.device_data(),
+        tensor_SFA.device_data(),
+        tensor_SFB.device_data(),
+        M, N, K,
         nullptr
     );
 
     REQUIRE(cudaDeviceSynchronize() == cudaSuccess);
-    REQUIRE(cudaMemcpy(h_output.data(), d_out, h_output.size() * sizeof(__nv_bfloat16), cudaMemcpyDeviceToHost) == cudaSuccess);
+
+    tensor_D.sync_host();
 
     bool has_error = false;
-    for (int32_t m = 0; m < ctx.M && !has_error; ++m) {
-        for (int32_t n = 0; n < ctx.N && !has_error; ++n) {
+    for (int32_t m = 0; m < M && !has_error; ++m) {
+        for (int32_t n = 0; n < N && !has_error; ++n) {
             float expected = 0.0f;
-            for (int32_t k = 0; k < ctx.K; ++k) {
-                expected += __bfloat162float(h_input[m * ctx.K + k]) * ctx.h_unpacked_weights[k * ctx.N + n];
+            for (int32_t k = 0; k < K; ++k) {
+                float sf_a = static_cast<float>(tensor_SFA.host_data()[(m * K + k) / 16]);
+                float sf_b = static_cast<float>(tensor_SFB.host_data()[(n * K + k) / 16]);
+
+                uint8_t byte_A = tensor_A_packed.host_data()[(m * K + k) / 2];
+                int8_t raw_fp4_A = (k % 2 == 0) ? (byte_A & 0x0F) : (byte_A >> 4);
+                if (raw_fp4_A > 7) raw_fp4_A -= 16;
+
+                uint8_t byte_B = tensor_B_packed.host_data()[(k * N + n) / 2];
+                int8_t raw_fp4_B = (k % 2 == 0) ? (byte_B & 0x0F) : (byte_B >> 4);
+                if (raw_fp4_B > 7) raw_fp4_B -= 16;
+
+                float val_a = static_cast<float>(raw_fp4_A) * sf_a;
+                float val_b = static_cast<float>(raw_fp4_B) * sf_b;
+
+                expected += val_a * val_b;
             }
 
-            const float actual = __bfloat162float(h_output[m * ctx.N + n]);
+            const float actual = static_cast<float>(tensor_D.host_data()[m * N + n]);
 
             if (std::abs(actual - expected) > 1.5f) {
-                printf("[TEST ACCURACY ERROR] Mismatch at token M=%d, unit N=%d | Actual kernel out: %f, Expected host math: %f\n", m, n, actual, expected);
+                printf("[ERROR] Mismatch at M=%d, N=%d | Actual: %f, Expected: %f\n", m, n, actual, expected);
                 has_error = true;
             }
         }
     }
 
     CHECK_FALSE(has_error);
-
-    cudaFree(d_out);
-    cudaFree(d_in);
-    cudaFree(d_w);
 }
