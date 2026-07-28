@@ -2,16 +2,18 @@
 #include <stdint.h>
 #include <cuda_bf16.h>
 
-struct __align__(16) BlockQ4K {
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+#pragma pack(push, 1)
+struct BlockQ4K {
     __nv_bfloat16 d;
     __nv_bfloat16 dmin;
     uint8_t scales[12];
     uint8_t qs[128];
 };
-
-#ifdef __cplusplus
-extern "C" {
-#endif
+#pragma pack(pop)
 
 void launch_fused_gemm_gguf_blackwell_fp4_native(
     void *output_activations,
@@ -25,4 +27,8 @@ void launch_fused_gemm_gguf_blackwell_fp4_native(
 
 #ifdef __cplusplus
 }
+#endif
+
+#ifdef __cplusplus
+static_assert(sizeof(BlockQ4K) == 144, "GGUF structural layout validation failed! Struct size must be exactly 144 bytes.");
 #endif

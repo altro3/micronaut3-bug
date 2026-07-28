@@ -3,7 +3,6 @@
 #include <cuda_bf16.h>
 #include <vector>
 #include <iostream>
-#include <cmath>
 #include "prefill_stage/dequantize_fusion_mma_gguf_q4_k_blackwell.cuh"
 
 struct BlackwellGgufNativeTestContext {
@@ -34,7 +33,8 @@ struct BlackwellGgufNativeTestContext {
 
         for (int32_t k = 0; k < K; ++k) {
             for (int32_t n = 0; n < N; ++n) {
-                const int32_t idx = k * N + n;
+                const int32_t idx = n * K + k;
+
                 const int32_t total_blocks_k = K / 256;
                 const int32_t block_k_idx = k / 256;
                 const int32_t local_k_idx = k % 256;
@@ -43,16 +43,17 @@ struct BlackwellGgufNativeTestContext {
                 const int32_t sub_block_idx = local_k_idx / 32;
                 const int32_t elem_idx = local_k_idx % 32;
 
-                const uint8_t sc_byte = h_weights_quant[b_idx].scales[sub_block_idx * 2 + (elem_idx / 16)];
-                float scale = (elem_idx % 16 < 8) ? (sc_byte & 0x0F) : (sc_byte >> 4);
+                const uint8_t sc_byte = h_weights_quant[b_idx].scales[sub_block_idx * 2 + elem_idx / 16];
+                float scale = elem_idx % 16 < 8 ? sc_byte & 0x0F : sc_byte >> 4;
 
                 const uint8_t q_byte = h_weights_quant[b_idx].qs[(sub_block_idx * 32 + elem_idx) / 2];
-                uint8_t q_raw = (elem_idx % 2 == 0) ? (q_byte & 0x0F) : (q_byte >> 4);
+                uint8_t q_raw = elem_idx % 2 == 0 ? q_byte & 0x0F : q_byte >> 4;
 
                 float d_val = __bfloat162float(h_weights_quant[b_idx].d);
                 float dmin_val = __bfloat162float(h_weights_quant[b_idx].dmin);
 
-                h_unpacked_weights[idx] = d_val * scale * q_raw - dmin_val;
+                float raw_weight = d_val * scale * q_raw - dmin_val;
+                h_unpacked_weights[idx] = raw_weight;
             }
         }
     }
