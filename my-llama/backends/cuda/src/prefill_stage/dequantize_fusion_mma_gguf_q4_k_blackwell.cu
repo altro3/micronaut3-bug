@@ -32,22 +32,22 @@ extern "C" void launch_blackwell_fp4_native_gemm(
     int N = n_extent;
     int K = k_extent;
     int batch = 1;
-    cudaStream_t stream = static_cast<cudaStream_t>(stream_ptr);
+    auto stream = static_cast<cudaStream_t>(stream_ptr);
 
     if (M == 0 || N == 0 || K == 0) return;
 
-    using ElementA = cutlass::float_e2m1_t;
-    using ElementSFA = cutlass::float_ue4m3_t;
+    using ElementA = float_e2m1_t;
+    using ElementSFA = float_ue4m3_t;
     using LayoutATag = cutlass::layout::RowMajor;
     constexpr int AlignmentA = 32;
 
-    using ElementB = cutlass::float_e2m1_t;
-    using ElementSFB = cutlass::float_ue4m3_t;
+    using ElementB = float_e2m1_t;
+    using ElementSFB = float_ue4m3_t;
     using LayoutBTag = cutlass::layout::ColumnMajor;
     constexpr int AlignmentB = 32;
 
-    using ElementD = cutlass::bfloat16_t;
-    using ElementC = cutlass::bfloat16_t;
+    using ElementD = bfloat16_t;
+    using ElementC = bfloat16_t;
     using LayoutCTag = cutlass::layout::RowMajor;
     using LayoutDTag = cutlass::layout::RowMajor;
     constexpr int AlignmentD = 8;
@@ -57,10 +57,10 @@ extern "C" void launch_blackwell_fp4_native_gemm(
     using ArchTag = cutlass::arch::Sm103;
     using OperatorClass = cutlass::arch::OpClassBlockScaledTensorOp;
 
-    using MmaTileShape1Sm = cute::Shape<cute::_128, cute::_256, Int<768> >;
-    using ClusterShape = cute::Shape<int, int, cute::_1>;
+    using MmaTileShape1Sm = Shape<_128, _256, _128>;
+    using ClusterShape = Shape<int, int, _1>;
 
-    using CollectiveEpilogue1Sm = typename cutlass::epilogue::collective::CollectiveBuilder<
+    using CollectiveEpilogue1Sm = cutlass::epilogue::collective::CollectiveBuilder<
         ArchTag, OperatorClass,
         MmaTileShape1Sm, ClusterShape,
         cutlass::epilogue::collective::EpilogueTileAuto,
@@ -70,13 +70,13 @@ extern "C" void launch_blackwell_fp4_native_gemm(
         cutlass::epilogue::NoSmemWarpSpecialized1Sm
     >::CollectiveOp;
 
-    using CollectiveMainloop1Sm = typename cutlass::gemm::collective::CollectiveBuilder<
+    using CollectiveMainloop1Sm = cutlass::gemm::collective::CollectiveBuilder<
         ArchTag, OperatorClass,
-        cute::tuple<ElementA, ElementSFA>, LayoutATag, AlignmentA,
-        cute::tuple<ElementB, ElementSFB>, LayoutBTag, AlignmentB,
+        tuple<ElementA, ElementSFA>, LayoutATag, AlignmentA,
+        tuple<ElementB, ElementSFB>, LayoutBTag, AlignmentB,
         ElementAccumulator,
         MmaTileShape1Sm, ClusterShape,
-        cutlass::gemm::collective::StageCountAutoCarveout<static_cast<int>(sizeof(typename CollectiveEpilogue1Sm::SharedStorage))>,
+        cutlass::gemm::collective::StageCountAutoCarveout<static_cast<int>(sizeof(CollectiveEpilogue1Sm::SharedStorage))>,
         cutlass::gemm::KernelTmaWarpSpecialized1SmBlockScaledMxNvf4UltraVs16Sm103
     >::CollectiveOp;
 
@@ -87,39 +87,37 @@ extern "C" void launch_blackwell_fp4_native_gemm(
     >;
 
     using Gemm1Sm = cutlass::gemm::device::GemmUniversalAdapter<GemmKernel1Sm>;
-    using Sm1xxBlkScaledConfig = typename GemmKernel1Sm::CollectiveMainloop::Sm1xxBlkScaledConfig;
+    using Sm1xxBlkScaledConfig = GemmKernel1Sm::CollectiveMainloop::Sm1xxBlkScaledConfig;
 
-    // Восстанавливаем оригинальные типы шагов (Strides), которые ожидает Arguments движка
-    using StrideA = typename CollectiveMainloop1Sm::StrideA;
-    using StrideB = typename CollectiveMainloop1Sm::StrideB;
-    using StrideC = typename CollectiveEpilogue1Sm::StrideC;
-    using StrideD = typename CollectiveEpilogue1Sm::StrideD;
+    using StrideA = CollectiveMainloop1Sm::StrideA;
+    using StrideB = CollectiveMainloop1Sm::StrideB;
+    using StrideC = CollectiveEpilogue1Sm::StrideC;
+    using StrideD = CollectiveEpilogue1Sm::StrideD;
 
-    // Используем встроенный генератор шагов CUTLASS — теперь типы сойдутся со структурой Arguments на 100%
     StrideA stride_A = cutlass::make_cute_packed_stride(StrideA{}, {M, K, batch});
     StrideB stride_B = cutlass::make_cute_packed_stride(StrideB{}, {N, K, batch});
     StrideC stride_C = cutlass::make_cute_packed_stride(StrideC{}, {M, N, batch});
     StrideD stride_D = cutlass::make_cute_packed_stride(StrideD{}, {M, N, batch});
 
-    auto layout_SFA = Sm1xxBlkScaledConfig::tile_atom_to_shape_SFA(cute::make_shape(M, N, K, batch));
-    auto layout_SFB = Sm1xxBlkScaledConfig::tile_atom_to_shape_SFB(cute::make_shape(M, N, K, batch));
+    auto layout_SFA = Sm1xxBlkScaledConfig::tile_atom_to_shape_SFA(make_shape(M, N, K, batch));
+    auto layout_SFB = Sm1xxBlkScaledConfig::tile_atom_to_shape_SFB(make_shape(M, N, K, batch));
 
     float alpha = 1.0f;
     float beta = 0.0f;
 
-    typename Gemm1Sm::Arguments args{
-        cutlass::gemm::GemmUniversalMode::kGemm,
-        {M, N, K, batch},
-        {
-            reinterpret_cast<ElementA *>(const_cast<void *>(input_a)), stride_A,
-            reinterpret_cast<ElementB *>(const_cast<void *>(weights_b)), stride_B,
-            reinterpret_cast<ElementSFA *>(const_cast<void *>(scales_a)), layout_SFA,
-            reinterpret_cast<ElementSFB *>(const_cast<void *>(scales_b)), layout_SFB
+    Gemm1Sm::Arguments args{
+        .mode = cutlass::gemm::GemmUniversalMode::kGemm,
+        .problem_shape = {M, N, K, batch},
+        .mainloop = {
+            .ptr_A = static_cast<ElementA *>(const_cast<void *>(input_a)), .dA = stride_A,
+            .ptr_B = static_cast<ElementB *>(const_cast<void *>(weights_b)), .dB = stride_B,
+            .ptr_SFA = static_cast<ElementSFA *>(const_cast<void *>(scales_a)), .layout_SFA = layout_SFA,
+            .ptr_SFB = static_cast<ElementSFB *>(const_cast<void *>(scales_b)), .layout_SFB = layout_SFB
         },
-        {
-            {alpha, beta},
-            nullptr, stride_C,
-            reinterpret_cast<ElementD *>(output_d), stride_D
+        .epilogue = {
+            .thread = {.alpha = alpha, .beta = beta},
+            .ptr_C = nullptr, .dC = stride_C,
+            .ptr_D = static_cast<ElementD *>(output_d), .dD = stride_D
         }
     };
 
