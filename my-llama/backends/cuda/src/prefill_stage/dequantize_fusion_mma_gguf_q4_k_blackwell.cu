@@ -22,7 +22,7 @@ template<typename T>
 struct KernelTraits;
 
 template<>
-struct KernelTraits<cutlass::bfloat16_t> {
+struct KernelTraits<bfloat16_t> {
     using MmaTileShape = Shape<_128, _128, _128>;
     using ClusterShape = Shape<_1, _1, _1>;
     using PerSmTileShape_MNK = Shape<_128, _128, _128>;
@@ -47,16 +47,16 @@ extern "C" void launch_blackwell_fp4_native_gemm(
 
     if (M == 0 || N == 0 || K == 0) return;
 
-    using ElementA = cutlass::nv_float4_t<cutlass::float_e2m1_t>;
+    using ElementA = cutlass::nv_float4_t<float_e2m1_t>;
     using LayoutATag = cutlass::layout::RowMajor;
     constexpr int AlignmentA = 32;
 
-    using ElementB = cutlass::nv_float4_t<cutlass::float_e2m1_t>;
+    using ElementB = cutlass::nv_float4_t<float_e2m1_t>;
     using LayoutBTag = cutlass::layout::ColumnMajor;
     constexpr int AlignmentB = 32;
 
-    using ElementD = cutlass::bfloat16_t;
-    using ElementC = cutlass::bfloat16_t;
+    using ElementD = bfloat16_t;
+    using ElementC = bfloat16_t;
     using LayoutCTag = cutlass::layout::RowMajor;
     using LayoutDTag = cutlass::layout::RowMajor;
     constexpr int AlignmentD = 128 / cutlass::sizeof_bits<ElementD>::value;
@@ -66,7 +66,7 @@ extern "C" void launch_blackwell_fp4_native_gemm(
     using ArchTag = cutlass::arch::Sm120;
     using OperatorClass = cutlass::arch::OpClassBlockScaledTensorOp;
 
-    using Traits = KernelTraits<cutlass::bfloat16_t>;
+    using Traits = KernelTraits<bfloat16_t>;
     using MmaTileShape = Traits::MmaTileShape;
     using ClusterShape = Traits::ClusterShape;
     using PerSmTileShape_MNK = Traits::PerSmTileShape_MNK;
@@ -105,8 +105,8 @@ extern "C" void launch_blackwell_fp4_native_gemm(
     using StrideC = GemmKernel::StrideC;
     using StrideD = GemmKernel::StrideD;
 
-    using ElementSFA = cutlass::float_ue4m3_t;
-    using ElementSFB = cutlass::float_ue4m3_t;
+    using ElementSFA = float_ue4m3_t;
+    using ElementSFB = float_ue4m3_t;
 
     StrideA stride_A = cutlass::make_cute_packed_stride(StrideA{}, {M, K, batch});
     StrideB stride_B = cutlass::make_cute_packed_stride(StrideB{}, {N, K, batch});
