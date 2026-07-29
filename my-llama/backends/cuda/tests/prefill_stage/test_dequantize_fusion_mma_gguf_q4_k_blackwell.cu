@@ -20,8 +20,8 @@ TEST_CASE("BlackwellNativeFp4GemmTest - Verification") {
     std::vector<uint8_t> h_A(M * K / 2, 0);
     std::vector<uint8_t> h_B(N * K / 2, 0);
 
-    std::vector h_SFA(M * K / 16, ElementSFA(1.0f));
-    std::vector h_SFB(N * K / 16, ElementSFB(1.0f));
+    std::vector h_SFA(M * K / 32, ElementSFA(1.0f));
+    std::vector h_SFB(N * K / 32, ElementSFB(1.0f));
     std::vector h_D(M * N, ElementD(0.0f));
 
     std::ranges::fill(h_A, 0x77);

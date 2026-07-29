@@ -8,7 +8,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CUDA_STANDARD 20)
 set(CMAKE_CUDA_STANDARD_REQUIRED ON)
 
-set(CMAKE_CUDA_ARCHITECTURES "120a")
+set(CMAKE_CUDA_ARCHITECTURES OFF)
 set(CMAKE_CUDA_RUNTIME_LIBRARY Static)
 
 if (MSVC)
@@ -23,7 +23,9 @@ if (MSVC)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /Zc:preprocessor /utf-8 /wd4068 /wd4624 /wd4190 /wd4018")
 endif ()
 
-set(CMAKE_CUDA_FLAGS_RELEASE "-O2 --use_fast_math -Xptxas --maxrregcount=128 -Xptxas -O1 -Xptxas -v --diag-suppress=20012 -static-global-template-stub=false --expt-relaxed-constexpr")
+set(BLACKWELL_CUDA_GENCODE "-gencode=arch=compute_100,code=sm_120a -gencode=arch=compute_120a,code=sm_120a")
+
+set(CMAKE_CUDA_FLAGS_RELEASE "-O3 --use_fast_math -Xptxas --maxrregcount=128 -Xptxas -v --diag-suppress=20012 -static-global-template-stub=false --expt-relaxed-constexpr ${BLACKWELL_CUDA_GENCODE}")
 
 if (MSVC)
     set(CMAKE_CUDA_FLAGS_RELEASE "${CMAKE_CUDA_FLAGS_RELEASE} -Xcompiler=/Zc:preprocessor -Xcompiler=/std:c++20 -Xcompiler=/wd4068 -Xcompiler=/wd4624 -Xcompiler=/wd4190 -Xcompiler=/wd4018")
@@ -32,10 +34,11 @@ else ()
     set(CMAKE_CXX_FLAGS_RELEASE "-O3")
 endif ()
 
-set(CMAKE_CUDA_FLAGS_DEBUG "-g -O0 -Xptxas -O0")
 if (MSVC)
+    set(CMAKE_CUDA_FLAGS_DEBUG "-O0 -Xptxas -O0 ${BLACKWELL_CUDA_GENCODE} -Xcompiler=/Zi -Xcompiler=/Ob0 -Xcompiler=/Od")
     set(CMAKE_CXX_FLAGS_DEBUG "/Zi /Ob0 /Od")
 else ()
+    set(CMAKE_CUDA_FLAGS_DEBUG "-O0 -Xptxas -O0 ${BLACKWELL_CUDA_GENCODE}")
     set(CMAKE_CXX_FLAGS_DEBUG "-g -O0")
 endif ()
 
