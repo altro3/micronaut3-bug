@@ -27,19 +27,16 @@ TEST_CASE("BlackwellNativeFp4GemmTest - Verification") {
         std::cout << "[REGS] Max Registers per Block: " << prop.regsPerBlock << std::endl;
         std::cout << "[REGS] Max Registers per SM:    " << prop.regsPerMultiprocessor << std::endl;
 
-        // Архитектура сетки и асинхронные возможности Blackwell
         std::cout << "[GRID] SM (Multiprocessor) Count: " << prop.multiProcessorCount << std::endl;
         std::cout << "[GRID] Max Threads per SM:        " << prop.maxThreadsPerMultiProcessor << std::endl;
         std::cout << "[GRID] Max Threads per Block:     " << prop.maxThreadsPerBlock << std::endl;
         std::cout << "[GRID] Warp Size:                 " << prop.warpSize << std::endl;
         std::cout << "[GRID] Max Thread Block Clusters: " << prop.maxGridSize[0] << "x" << prop.maxGridSize[1] << "x" << prop.maxGridSize[2] << std::endl;
 
-        // Подсистема памяти и кэширования для TMA (Tensor Memory Accelerator)
         std::cout << "[MEM] L2 Cache Size:             " << prop.l2CacheSize / (1024 * 1024) << " MB" << std::endl;
         std::cout << "[MEM] Memory Bus Width:          " << prop.memoryBusWidth << " bit" << std::endl;
         std::cout << "[MEM] ECC Enabled:               " << (prop.ECCEnabled ? "Yes" : "No") << std::endl;
 
-        // Аппаратные фичи для асинхронных ядер
         std::cout << "[FEAT] Unified Addressing (UVA): " << (prop.unifiedAddressing ? "Yes" : "No") << std::endl;
         std::cout << "[FEAT] Concurrent Kernels:       " << (prop.concurrentKernels ? "Yes" : "No") << std::endl;
         std::cout << "[FEAT] Cooperative Launch:       " << (prop.cooperativeLaunch ? "Yes" : "No") << std::endl;
@@ -52,17 +49,16 @@ TEST_CASE("BlackwellNativeFp4GemmTest - Verification") {
     constexpr int32_t N = 4096;
     constexpr int32_t K = 4096;
 
-    // std::vector<uint8_t> h_A(M * K / 2, 0);
-    // std::vector<uint8_t> h_B(N * K / 2, 0);
-    std::vector<ElementD> h_A(M * K, ElementD(1.0f));
-    std::vector<ElementD> h_B(N * K, ElementD(1.0f));
+    std::vector<uint8_t> h_A(M * K / 2, 0);
+    std::vector<uint8_t> h_B(N * K / 2, 0);
 
-    std::vector h_SFA(M * K / 16, ElementSFA(1.0f));
-    std::vector h_SFB(N * K / 16, ElementSFB(1.0f));
-    std::vector h_D(M * N, ElementD(0.0f));
+    // Исправлено: явно указаны шаблонные типы для векторов скейлов и результатов (убран CTAD-баг MSVC)
+    std::vector<ElementSFA> h_SFA(M * K / 16, ElementSFA(1.0f));
+    std::vector<ElementSFB> h_SFB(N * K / 16, ElementSFB(1.0f));
+    std::vector<ElementD> h_D(M * N, ElementD(0.0f));
 
-    std::ranges::fill(h_A, ElementD(1.0f));
-    std::ranges::fill(h_B, ElementD(1.0f));
+    std::ranges::fill(h_A, 0x33);
+    std::ranges::fill(h_B, 0x33);
 
     std::ranges::fill(h_SFA, ElementSFA(1.0f));
     std::ranges::fill(h_SFB, ElementSFB(1.0f));
@@ -105,6 +101,7 @@ TEST_CASE("BlackwellNativeFp4GemmTest - Verification") {
     REQUIRE(cudaMemcpyAsync(h_D.data(), d_D, h_D.size() * sizeof(ElementD), cudaMemcpyDeviceToHost, test_stream) == cudaSuccess);
     REQUIRE(cudaStreamSynchronize(test_stream) == cudaSuccess);
 
+    // Исправлено: добавлен явный каст из cutlass::bfloat16_t во float для вывода через std::cout
     float sample_actual = float(h_D[0]);
     std::cout << "[ENGINE INFO] Blackwell Hardware MMA Output: " << sample_actual << std::endl;
 

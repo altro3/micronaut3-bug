@@ -1,3 +1,4 @@
+#include <iostream>
 #include <cuda_runtime.h>
 #include "cutlass/cutlass.h"
 #include "cutlass/gemm/device/gemm_universal_adapter.h"
@@ -56,13 +57,15 @@ struct Fp4GemmSm120 {
     >::CollectiveOp;
 
     using CollectiveMainloop = cutlass::gemm::collective::CollectiveBuilder<
-        ArchTag, OperatorClass, ElementA, LayoutATag, AlignmentA, ElementB, LayoutBTag, AlignmentB,
+        ArchTag, OperatorClass,
+        cutlass::nv_float4_t<float_e2m1_t>, LayoutATag, AlignmentA,
+        cutlass::nv_float4_t<float_e2m1_t>, LayoutBTag, AlignmentB,
         ElementAccumulator, MmaTileShape, ClusterShape,
-        cutlass::gemm::collective::StageCountAutoCarveout<static_cast<int>(sizeof(typename CollectiveEpilogue::SharedStorage))>,
+        cutlass::gemm::collective::StageCountAuto,
         cutlass::gemm::collective::KernelScheduleAuto
     >::CollectiveOp;
 
-    using GemmKernel = cutlass::gemm::kernel::GemmUniversal<Shape<int, int, int, int>, CollectiveMainloop, CollectiveEpilogue, void>;
+    using GemmKernel = cutlass::gemm::kernel::GemmUniversal<Shape<int, int, int, int>, CollectiveMainloop, CollectiveEpilogue>;
     using Gemm = cutlass::gemm::device::GemmUniversalAdapter<GemmKernel>;
 
     using StrideA = Gemm::GemmKernel::StrideA;
@@ -112,6 +115,7 @@ extern "C" void launch_blackwell_fp4_native_gemm(
 #else
 #define ALIGN_32 alignas(32)
 #endif
+
     ALIGN_32 GemmOp::Gemm::Arguments arguments{
         cutlass::gemm::GemmUniversalMode::kGemm,
         {m, n, k, 1},
@@ -127,7 +131,18 @@ extern "C" void launch_blackwell_fp4_native_gemm(
             static_cast<ElementD *>(output_d), stride_D
         }
     };
+
+    arguments.hw_info.sm_count = 82;
+    arguments.hw_info.max_active_clusters = 1;
+    arguments.hw_info.cluster_shape = dim3(1, 1, 1);
+
     GemmOp::Gemm gemm;
+
+    cutlass::Status status = gemm.can_implement(arguments);
+    if (status != cutlass::Status::kSuccess) {
+        std::cerr << "[ENGINE ERROR] can_implement failed: " << cutlass::cutlassGetStatusString(status) << std::endl;
+        return;
+    }
 
     size_t workspace_size = GemmOp::Gemm::get_workspace_size(arguments);
     void *workspace = nullptr;
@@ -135,12 +150,17 @@ extern "C" void launch_blackwell_fp4_native_gemm(
         if (cudaMalloc(&workspace, workspace_size) != cudaSuccess) return;
     }
 
-    if (gemm.initialize(arguments, workspace) != cutlass::Status::kSuccess) {
+    status = gemm.initialize(arguments, workspace);
+    if (status != cutlass::Status::kSuccess) {
+        std::cerr << "[ENGINE ERROR] Initialize failed: " << cutlass::cutlassGetStatusString(status) << std::endl;
         if (workspace) cudaFree(workspace);
         return;
     }
 
-    gemm.run(stream);
+    status = gemm.run(stream);
+    if (status != cutlass::Status::kSuccess) {
+        std::cerr << "[ENGINE ERROR] Run failed: " << cutlass::cutlassGetStatusString(status) << std::endl;
+    }
 
     if (workspace) {
         cudaFree(workspace);
