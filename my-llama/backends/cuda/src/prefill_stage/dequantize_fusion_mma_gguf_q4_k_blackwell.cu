@@ -15,7 +15,7 @@ template<typename T>
 struct KernelTraits;
 
 template<>
-struct KernelTraits<cutlass::bfloat16_t> {
+struct KernelTraits<bfloat16_t> {
     using MmaTileShape = Shape<_128, _128, _128>;
     using ClusterShape = Shape<_1, _1, _1>;
     using PerSmTileShape_MNK = Shape<_128, _128, _128>;
@@ -23,11 +23,11 @@ struct KernelTraits<cutlass::bfloat16_t> {
 
 template<typename T>
 struct Fp4GemmSm120 {
-    using ElementA = cutlass::nv_float4_t<cutlass::float_e2m1_t>;
+    using ElementA = cutlass::nv_float4_t<float_e2m1_t>;
     using LayoutATag = cutlass::layout::RowMajor;
     static constexpr int AlignmentA = 32;
 
-    using ElementB = cutlass::nv_float4_t<cutlass::float_e2m1_t>;
+    using ElementB = cutlass::nv_float4_t<float_e2m1_t>;
     using LayoutBTag = cutlass::layout::ColumnMajor;
     static constexpr int AlignmentB = 32;
 
@@ -42,11 +42,11 @@ struct Fp4GemmSm120 {
     using ArchTag = cutlass::arch::Sm120;
     using OperatorClass = cutlass::arch::OpClassBlockScaledTensorOp;
 
-    using MmaTileShape = typename KernelTraits<T>::MmaTileShape;
-    using ClusterShape = typename KernelTraits<T>::ClusterShape;
-    using PerSmTileShape_MNK = typename KernelTraits<T>::PerSmTileShape_MNK;
+    using MmaTileShape = KernelTraits<T>::MmaTileShape;
+    using ClusterShape = KernelTraits<T>::ClusterShape;
+    using PerSmTileShape_MNK = KernelTraits<T>::PerSmTileShape_MNK;
 
-    using CollectiveEpilogue = typename cutlass::epilogue::collective::CollectiveBuilder<
+    using CollectiveEpilogue = cutlass::epilogue::collective::CollectiveBuilder<
         ArchTag, OperatorClass, PerSmTileShape_MNK, ClusterShape,
         cutlass::epilogue::collective::EpilogueTileAuto,
         ElementAccumulator, ElementAccumulator,
@@ -55,7 +55,7 @@ struct Fp4GemmSm120 {
         cutlass::epilogue::collective::EpilogueScheduleAuto
     >::CollectiveOp;
 
-    using CollectiveMainloop = typename cutlass::gemm::collective::CollectiveBuilder<
+    using CollectiveMainloop = cutlass::gemm::collective::CollectiveBuilder<
         ArchTag, OperatorClass, ElementA, LayoutATag, AlignmentA, ElementB, LayoutBTag, AlignmentB,
         ElementAccumulator, MmaTileShape, ClusterShape,
         cutlass::gemm::collective::StageCountAutoCarveout<static_cast<int>(sizeof(typename CollectiveEpilogue::SharedStorage))>,
@@ -65,10 +65,10 @@ struct Fp4GemmSm120 {
     using GemmKernel = cutlass::gemm::kernel::GemmUniversal<Shape<int, int, int, int>, CollectiveMainloop, CollectiveEpilogue, void>;
     using Gemm = cutlass::gemm::device::GemmUniversalAdapter<GemmKernel>;
 
-    using StrideA = typename Gemm::GemmKernel::StrideA;
-    using StrideB = typename Gemm::GemmKernel::StrideB;
-    using StrideD = typename Gemm::GemmKernel::StrideD;
-    using Sm1xxBlkScaledConfig = typename Gemm::GemmKernel::CollectiveMainloop::Sm1xxBlkScaledConfig;
+    using StrideA = Gemm::GemmKernel::StrideA;
+    using StrideB = Gemm::GemmKernel::StrideB;
+    using StrideD = Gemm::GemmKernel::StrideD;
+    using Sm1xxBlkScaledConfig = Gemm::GemmKernel::CollectiveMainloop::Sm1xxBlkScaledConfig;
 };
 
 extern "C" void launch_blackwell_fp4_native_gemm(
@@ -82,16 +82,16 @@ extern "C" void launch_blackwell_fp4_native_gemm(
     int32_t k_extent,
     void *stream_ptr
 ) {
-    using GemmOp = Fp4GemmSm120<cutlass::bfloat16_t>;
-    using ElementA = typename GemmOp::Gemm::ElementA;
-    using ElementB = typename GemmOp::Gemm::ElementB;
-    using ElementSFA = cutlass::float_ue4m3_t;
-    using ElementSFB = cutlass::float_ue4m3_t;
-    using ElementD = typename GemmOp::Gemm::ElementD;
-    using StrideA = typename GemmOp::StrideA;
-    using StrideB = typename GemmOp::StrideB;
-    using StrideD = typename GemmOp::StrideD;
-    using Sm1xxBlkScaledConfig = typename GemmOp::Sm1xxBlkScaledConfig;
+    using GemmOp = Fp4GemmSm120<bfloat16_t>;
+    using ElementA = GemmOp::Gemm::ElementA;
+    using ElementB = GemmOp::Gemm::ElementB;
+    using ElementSFA = float_ue4m3_t;
+    using ElementSFB = float_ue4m3_t;
+    using ElementD = GemmOp::Gemm::ElementD;
+    using StrideA = GemmOp::StrideA;
+    using StrideB = GemmOp::StrideB;
+    using StrideD = GemmOp::StrideD;
+    using Sm1xxBlkScaledConfig = GemmOp::Sm1xxBlkScaledConfig;
 
     int m = m_extent;
     int n = n_extent;
@@ -104,10 +104,15 @@ extern "C" void launch_blackwell_fp4_native_gemm(
     auto stride_B = cutlass::make_cute_packed_stride(StrideB{}, {n, k, 1});
     auto stride_D = cutlass::make_cute_packed_stride(StrideD{}, {m, n, 1});
 
-    auto layout_SFA = Sm1xxBlkScaledConfig::tile_atom_to_shape_SFA(cute::make_shape(m, n, k, 1));
-    auto layout_SFB = Sm1xxBlkScaledConfig::tile_atom_to_shape_SFB(cute::make_shape(m, n, k, 1));
+    auto layout_SFA = Sm1xxBlkScaledConfig::tile_atom_to_shape_SFA(make_shape(m, n, k, 1));
+    auto layout_SFB = Sm1xxBlkScaledConfig::tile_atom_to_shape_SFB(make_shape(m, n, k, 1));
 
-    typename GemmOp::Gemm::Arguments arguments{
+#if defined(_MSC_VER)
+#define ALIGN_32 __declspec(align(32))
+#else
+#define ALIGN_32 alignas(32)
+#endif
+    ALIGN_32 GemmOp::Gemm::Arguments arguments{
         cutlass::gemm::GemmUniversalMode::kGemm,
         {m, n, k, 1},
         {
@@ -122,8 +127,7 @@ extern "C" void launch_blackwell_fp4_native_gemm(
             static_cast<ElementD *>(output_d), stride_D
         }
     };
-
-    typename GemmOp::Gemm gemm;
+    GemmOp::Gemm gemm;
 
     size_t workspace_size = GemmOp::Gemm::get_workspace_size(arguments);
     void *workspace = nullptr;
