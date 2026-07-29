@@ -13,19 +13,19 @@ using ElementSFB = cutlass::float_ue4m3_t;
 using ElementD = cutlass::bfloat16_t;
 
 TEST_CASE("BlackwellNativeFp4GemmTest - Verification") {
-    constexpr int32_t M = 128;
-    constexpr int32_t N = 256;
-    constexpr int32_t K = 128;
+    constexpr int32_t M = 1024;
+    constexpr int32_t N = 4096;
+    constexpr int32_t K = 4096;
 
     std::vector<uint8_t> h_A(M * K / 2, 0);
     std::vector<uint8_t> h_B(N * K / 2, 0);
 
-    std::vector h_SFA(M * K / 32, ElementSFA(1.0f));
-    std::vector h_SFB(N * K / 32, ElementSFB(1.0f));
-    std::vector h_D(M * N, ElementD(0.0f));
+    std::vector<ElementSFA> h_SFA(M * K / 32, ElementSFA(1.0f));
+    std::vector<ElementSFB> h_SFB(N * K / 32, ElementSFB(1.0f));
+    std::vector<ElementD> h_D(M * N, ElementD(0.0f));
 
-    std::ranges::fill(h_A, 0x77);
-    std::ranges::fill(h_B, 0x77);
+    std::ranges::fill(h_A, 0x11);
+    std::ranges::fill(h_B, 0x11);
 
     cudaStream_t test_stream;
     REQUIRE(cudaStreamCreate(&test_stream) == cudaSuccess);
@@ -72,7 +72,7 @@ TEST_CASE("BlackwellNativeFp4GemmTest - Verification") {
     REQUIRE(cudaMemcpyAsync(h_D.data(), d_D, h_D.size() * sizeof(ElementD), cudaMemcpyDeviceToHost, test_stream) == cudaSuccess);
     REQUIRE(cudaStreamSynchronize(test_stream) == cudaSuccess);
 
-    float sample_actual = h_D[0];
+    float sample_actual = float(h_D[0]);
     std::cout << "[ENGINE INFO] Blackwell Hardware MMA Output: " << sample_actual << std::endl;
 
     bool has_error = false;

@@ -67,9 +67,9 @@ extern "C" void launch_blackwell_fp4_native_gemm(
     using OperatorClass = cutlass::arch::OpClassBlockScaledTensorOp;
 
     using Traits = KernelTraits<cutlass::bfloat16_t>;
-    using MmaTileShape = Traits::MmaTileShape;
-    using ClusterShape = Traits::ClusterShape;
-    using PerSmTileShape_MNK = Traits::PerSmTileShape_MNK;
+    using MmaTileShape = typename Traits::MmaTileShape;
+    using ClusterShape = typename Traits::ClusterShape;
+    using PerSmTileShape_MNK = typename Traits::PerSmTileShape_MNK;
 
     using CollectiveEpilogue = typename cutlass::epilogue::collective::CollectiveBuilder<
         ArchTag, OperatorClass,
@@ -94,8 +94,8 @@ extern "C" void launch_blackwell_fp4_native_gemm(
     using GemmKernel = cutlass::gemm::kernel::GemmUniversal<
         Shape<int, int, int, int>,
         CollectiveMainloop,
-        CollectiveEpilogue
-    >;
+        CollectiveEpilogue,
+        void>;
 
     using Gemm1Sm = cutlass::gemm::device::GemmUniversalAdapter<GemmKernel>;
     using Sm1xxBlkScaledConfig = typename GemmKernel::CollectiveMainloop::Sm1xxBlkScaledConfig;
@@ -113,11 +113,8 @@ extern "C" void launch_blackwell_fp4_native_gemm(
     StrideC stride_C = cutlass::make_cute_packed_stride(StrideC{}, {M, N, batch});
     StrideD stride_D = cutlass::make_cute_packed_stride(StrideD{}, {M, N, batch});
 
-    auto layout_SFA = Sm1xxBlkScaledConfig::tile_atom_to_shape_SFA(make_shape(M, N, K, batch));
-    auto layout_SFB = Sm1xxBlkScaledConfig::tile_atom_to_shape_SFB(make_shape(M, N, K, batch));
-
-    float alpha = 1.0f;
-    float beta = 0.0f;
+    auto layout_SFA = Sm1xxBlkScaledConfig::tile_atom_to_shape_SFA(cute::make_shape(M, N, K, batch));
+    auto layout_SFB = Sm1xxBlkScaledConfig::tile_atom_to_shape_SFB(cute::make_shape(M, N, K, batch));
 
     using InternalElementA = typename GemmKernel::CollectiveMainloop::ElementA;
     using InternalElementB = typename GemmKernel::CollectiveMainloop::ElementB;
@@ -132,14 +129,11 @@ extern "C" void launch_blackwell_fp4_native_gemm(
             static_cast<ElementSFB const *>(scales_b), layout_SFB
         },
         {
-            {alpha, beta},
-            nullptr, stride_C,
+            {},
+            static_cast<ElementD const *>(nullptr), stride_C,
             static_cast<ElementD *>(output_d), stride_D
         }
     };
-
-    args.scheduler.max_swizzle_size = 1;
-    args.hw_info.cluster_shape = dim3(1, 1, 1);
 
     Gemm1Sm gemm_op;
 
