@@ -18,7 +18,7 @@ if (MSVC)
             CUTLASS_DEBUG_TRACE_LEVEL=0
             _CRT_SECURE_NO_WARNINGS
     )
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /Zc:preprocessor /utf-8 /wd4068 /wd4624 /wd4190 /wd4018")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /Zc:preprocessor /Zc:inline /utf-8 /wd4068 /wd4624 /wd4190 /wd4018")
 else ()
     add_compile_definitions(
             CUTLASS_ARCH_MMA_SM120_SUPPORTED=1
@@ -26,7 +26,7 @@ else ()
     )
 endif ()
 
-set(BLACKWELL_CUDA_GENCODE "-gencode=arch=compute_120a,code=sm_120a -gencode=arch=compute_120,code=sm_120a")
+set(BLACKWELL_CUDA_GENCODE "-gencode=arch=compute_120,code=sm_120 -gencode=arch=compute_120a,code=sm_120a")
 
 set(CMAKE_CUDA_FLAGS_RELEASE "-O3 --use_fast_math -Xptxas --maxrregcount=128 -Xptxas -v --diag-suppress=20012 -static-global-template-stub=false --expt-relaxed-constexpr ${BLACKWELL_CUDA_GENCODE}")
 
