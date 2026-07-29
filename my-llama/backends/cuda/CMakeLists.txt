@@ -26,7 +26,7 @@ else ()
     )
 endif ()
 
-set(BLACKWELL_CUDA_GENCODE "-gencode=arch=compute_120,code=sm_120 -gencode=arch=compute_120a,code=sm_120a")
+set(BLACKWELL_CUDA_GENCODE "-gencode=arch=compute_120,code=sm_120")
 
 set(CMAKE_CUDA_FLAGS_RELEASE "-O3 --use_fast_math -Xptxas --maxrregcount=128 -Xptxas -v --diag-suppress=20012 -static-global-template-stub=false --expt-relaxed-constexpr ${BLACKWELL_CUDA_GENCODE}")
 
