@@ -1,5 +1,3 @@
-project(cuda_kernel_tests LANGUAGES CXX CUDA)
-
 include(FetchContent)
 
 set(DOCTEST_VERSION "2.5.3")
@@ -13,9 +11,18 @@ file(GLOB_RECURSE TEST_SOURCES CONFIGURE_DEPENDS
 
 add_executable(run_cuda_tests ${TEST_SOURCES})
 
+set_target_properties(run_cuda_tests PROPERTIES
+        CUDA_ARCHITECTURES "120"
+)
+
 if (MSVC)
     target_compile_options(run_cuda_tests PRIVATE
             $<$<COMPILE_LANGUAGE:CXX>:/GS->
+            $<$<COMPILE_LANGUAGE:CUDA>:-gencode=arch=compute_120,code=sm_120>
+    )
+else ()
+    target_compile_options(run_cuda_tests PRIVATE
+            $<$<COMPILE_LANGUAGE:CUDA>:-gencode=arch=compute_120,code=sm_120>
     )
 endif ()
 

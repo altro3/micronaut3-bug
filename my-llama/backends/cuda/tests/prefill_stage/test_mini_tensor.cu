@@ -1,0 +1,73 @@
+#include <doctest/doctest.h>
+#include <cuda_runtime.h>
+#include <cuda_bf16.h>
+#include <iostream>
+#include <vector>
+#include "prefill_stage/mini_tensor_test.cuh"
+
+TEST_CASE("MiniTensorCoreVerificationTest - Split Compilation") {
+    std::cout << "\n=========================================" << std::endl;
+    std::cout << "=== [STARTING TENSOR CORE MINI BENCH] ===" << std::endl;
+    std::cout << "=========================================" << std::endl;
+
+    constexpr int M = 16;
+    constexpr int N = 16;
+    constexpr int K = 16;
+
+    std::cout << "[HOST] Initializing source vectors..." << std::endl;
+    std::vector<__nv_bfloat16> h_A(M * K);
+    std::vector<__nv_bfloat16> h_B(K * N);
+    std::vector<float> h_C(M * N, 0.0f);
+
+    for (int i = 0; i < M * K; ++i) h_A[i] = __float2bfloat16(1.0f);
+    for (int i = 0; i < K * N; ++i) h_B[i] = __float2bfloat16(2.0f);
+
+    std::cout << "[CUDA] Initializing active device context..." << std::endl;
+    REQUIRE(cudaSetDevice(0) == cudaSuccess);
+
+    cudaStream_t stream = nullptr;
+    cudaError_t stream_err = cudaStreamCreate(&stream);
+    std::cout << "[CUDA] Stream creation status: " << stream_err << ", Stream Object: " << stream << std::endl;
+    REQUIRE(stream_err == cudaSuccess);
+
+    float *d_C = nullptr;
+    void *d_A = nullptr;
+    void *d_B = nullptr;
+
+    std::cout << "[CUDA] Allocating Global Memory on RTX 5090..." << std::endl;
+    REQUIRE(cudaMalloc(&d_A, h_A.size() * sizeof(__nv_bfloat16)) == cudaSuccess);
+    REQUIRE(cudaMalloc(&d_B, h_B.size() * sizeof(__nv_bfloat16)) == cudaSuccess);
+    REQUIRE(cudaMalloc(&d_C, h_C.size() * sizeof(float)) == cudaSuccess);
+
+    std::cout << "[CUDA] Executing Async Memcpy HostToDevice..." << std::endl;
+    REQUIRE(cudaMemcpyAsync(d_A, h_A.data(), h_A.size() * sizeof(__nv_bfloat16), cudaMemcpyHostToDevice, stream) == cudaSuccess);
+    REQUIRE(cudaMemcpyAsync(d_B, h_B.data(), h_B.size() * sizeof(__nv_bfloat16), cudaMemcpyHostToDevice, stream) == cudaSuccess);
+    REQUIRE(cudaMemsetAsync(d_C, 0, h_C.size() * sizeof(float), stream) == cudaSuccess);
+
+    std::cout << "[CUDA] Invoking external launch_mini_wmma_bf16..." << std::endl;
+    cudaError_t launch_err = launch_mini_wmma_bf16(d_C, d_A, d_B, stream);
+    std::cout << "[CUDA] Call finished with code: " << launch_err << std::endl;
+    REQUIRE(launch_err == cudaSuccess);
+
+    std::cout << "[CUDA] Synchronizing stream..." << std::endl;
+    cudaError_t sync_err = cudaStreamSynchronize(stream);
+    std::cout << "[CUDA] Stream sync status: " << sync_err << std::endl;
+    REQUIRE(sync_err == cudaSuccess);
+
+    std::cout << "[CUDA] Fetching matrix C back to host..." << std::endl;
+    REQUIRE(cudaMemcpyAsync(h_C.data(), d_C, h_C.size() * sizeof(float), cudaMemcpyDeviceToHost, stream) == cudaSuccess);
+    REQUIRE(cudaStreamSynchronize(stream) == cudaSuccess);
+
+    std::cout << "\n=== [TENSOR CORE HARDWARE MATRIX OUT] ===" << std::endl;
+    std::cout << "Expected cell value (1.0 * 2.0 * 16): 32" << std::endl;
+    std::cout << "Actual hardware value at index 0:     " << h_C[0] << std::endl;
+    std::cout << "=========================================\n" << std::endl;
+
+    REQUIRE(h_C[0] == 32.0f);
+
+    std::cout << "[CUDA] Cleaning up allocated buffers..." << std::endl;
+    cudaFree(d_A);
+    cudaFree(d_B);
+    cudaFree(d_C);
+    cudaStreamDestroy(stream);
+}

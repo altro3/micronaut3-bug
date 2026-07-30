@@ -15,7 +15,7 @@ if (ISOLATED_BUILD)
     if (NOT EXISTS "${DUMMY_FILE}")
         file(WRITE "${DUMMY_FILE}" "// Stub.\n")
     endif ()
-    add_library(cuda_kernels STATIC "${DUMMY_FILE}" ${FLASHINFER_OBJ})
+    add_library(cuda_kernels OBJECT "${DUMMY_FILE}" ${FLASHINFER_OBJ})
 else ()
     message(STATUS "[MY_LLAMA] Full Build Mode Active.")
 
@@ -35,6 +35,7 @@ else ()
             #            "${CMAKE_CURRENT_SOURCE_DIR}/prefill_stage/dequantize_fusion_mma_gguf_q4_k_blackwell2.cu"
             "${CMAKE_CURRENT_SOURCE_DIR}/prefill_stage/dequantize_fusion_mma_gguf_q4_k_launcher.cu"
             "${CMAKE_CURRENT_SOURCE_DIR}/prefill_stage/prefill_stage_dispatcher.cu"
+            "${CMAKE_CURRENT_SOURCE_DIR}/prefill_stage/mini_tensor_test.cu"
     )
 
     file(GLOB GLOBAL_HEADERS CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/../include/*.h")
@@ -44,13 +45,14 @@ else ()
             ${PREFILL_STAGE_SRCS}
     )
 
-    add_library(cuda_kernels STATIC ${CUDA_SOURCES} ${FLASHINFER_OBJ})
+    add_library(cuda_kernels OBJECT ${CUDA_SOURCES} ${FLASHINFER_OBJ})
 endif ()
 
 set_target_properties(cuda_kernels PROPERTIES
         POSITION_INDEPENDENT_CODE ON
+        CUDA_ARCHITECTURES "120"
 )
 
 target_compile_options(cuda_kernels PRIVATE
-        $<$<COMPILE_LANGUAGE:CUDA>:--expt-relaxed-constexpr>
+        $<$<COMPILE_LANGUAGE:CUDA>:--expt-relaxed-constexpr -gencode=arch=compute_120,code=sm_120>
 )
