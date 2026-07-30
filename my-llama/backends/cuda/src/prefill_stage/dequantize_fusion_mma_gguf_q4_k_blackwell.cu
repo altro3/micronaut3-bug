@@ -8,7 +8,6 @@
 #include "cutlass/util/packed_stride.hpp"
 #include "cutlass/bfloat16.h"
 #include "cutlass/float8.h"
-#include "cutlass/float_subbyte.h"
 
 using namespace cute;
 
@@ -24,13 +23,15 @@ struct KernelTraits<bfloat16_t> {
 
 template<typename T>
 struct Fp4GemmSm120 {
-    using ElementA = cutlass::nv_float4_t<float_e2m1_t>;
+    using ElementA = float_e2m1_t;
     using LayoutATag = cutlass::layout::RowMajor;
     static constexpr int AlignmentA = 32;
 
-    using ElementB = cutlass::nv_float4_t<float_e2m1_t>;
+    using ElementB = float_e2m1_t;
     using LayoutBTag = cutlass::layout::ColumnMajor;
     static constexpr int AlignmentB = 32;
+
+    using ElementScale = float_ue4m3_t;
 
     using ElementD = T;
     using ElementC = T;
@@ -58,8 +59,8 @@ struct Fp4GemmSm120 {
 
     using CollectiveMainloop = cutlass::gemm::collective::CollectiveBuilder<
         ArchTag, OperatorClass,
-        cutlass::nv_float4_t<float_e2m1_t>, LayoutATag, AlignmentA,
-        cutlass::nv_float4_t<float_e2m1_t>, LayoutBTag, AlignmentB,
+        tuple<ElementA, ElementScale>, LayoutATag, AlignmentA,
+        tuple<ElementB, ElementScale>, LayoutBTag, AlignmentB,
         ElementAccumulator, MmaTileShape, ClusterShape,
         cutlass::gemm::collective::StageCountAuto,
         cutlass::gemm::collective::KernelScheduleAuto
@@ -86,10 +87,10 @@ extern "C" void launch_blackwell_fp4_native_gemm(
     void *stream_ptr
 ) {
     using GemmOp = Fp4GemmSm120<bfloat16_t>;
-    using ElementA = GemmOp::Gemm::ElementA;
-    using ElementB = GemmOp::Gemm::ElementB;
-    using ElementSFA = float_ue4m3_t;
-    using ElementSFB = float_ue4m3_t;
+    using ElementA = GemmOp::ElementA;
+    using ElementB = GemmOp::ElementB;
+    using ElementSFA = GemmOp::ElementScale;
+    using ElementSFB = GemmOp::ElementScale;
     using ElementD = GemmOp::Gemm::ElementD;
     using StrideA = GemmOp::StrideA;
     using StrideB = GemmOp::StrideB;
@@ -103,9 +104,9 @@ extern "C" void launch_blackwell_fp4_native_gemm(
 
     if (m == 0 || n == 0 || k == 0) return;
 
-    auto stride_A = cutlass::make_cute_packed_stride(StrideA{}, {m, k, 1});
-    auto stride_B = cutlass::make_cute_packed_stride(StrideB{}, {n, k, 1});
-    auto stride_D = cutlass::make_cute_packed_stride(StrideD{}, {m, n, 1});
+    auto stride_A = cutlass::make_cute_packed_stride(StrideA{}, make_shape(m, k, 1));
+    auto stride_B = cutlass::make_cute_packed_stride(StrideB{}, make_shape(n, k, 1));
+    auto stride_D = cutlass::make_cute_packed_stride(StrideD{}, make_shape(m, n, 1));
 
     auto layout_SFA = Sm1xxBlkScaledConfig::tile_atom_to_shape_SFA(make_shape(m, n, k, 1));
     auto layout_SFB = Sm1xxBlkScaledConfig::tile_atom_to_shape_SFB(make_shape(m, n, k, 1));
