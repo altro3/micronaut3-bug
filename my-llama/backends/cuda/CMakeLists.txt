@@ -12,7 +12,7 @@ set(CMAKE_CUDA_ARCHITECTURES 120)
 set(CMAKE_CUDA_RUNTIME_LIBRARY Shared)
 
 if (MSVC)
-    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
     add_compile_definitions(
             CUTLASS_ARCH_MMA_SM120_SUPPORTED=1
             CUTLASS_DEBUG_TRACE_LEVEL=0

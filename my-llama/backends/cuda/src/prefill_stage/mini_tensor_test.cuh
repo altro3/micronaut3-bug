@@ -8,8 +8,7 @@ extern "C" {
 cudaError_t launch_mini_wmma_bf16(
     float *d_C,
     const void *d_A,
-    const void *d_B,
-    cudaStream_t stream
+    const void *d_B
 );
 
 #ifdef __cplusplus

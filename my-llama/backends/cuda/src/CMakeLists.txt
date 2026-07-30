@@ -15,7 +15,7 @@ if (ISOLATED_BUILD)
     if (NOT EXISTS "${DUMMY_FILE}")
         file(WRITE "${DUMMY_FILE}" "// Stub.\n")
     endif ()
-    add_library(cuda_kernels OBJECT "${DUMMY_FILE}" ${FLASHINFER_OBJ})
+    add_library(cuda_kernels STATIC "${DUMMY_FILE}" ${FLASHINFER_OBJ})
 else ()
     message(STATUS "[MY_LLAMA] Full Build Mode Active.")
 
@@ -45,7 +45,7 @@ else ()
             ${PREFILL_STAGE_SRCS}
     )
 
-    add_library(cuda_kernels OBJECT ${CUDA_SOURCES} ${FLASHINFER_OBJ})
+    add_library(cuda_kernels STATIC ${CUDA_SOURCES} ${FLASHINFER_OBJ})
 endif ()
 
 set_target_properties(cuda_kernels PROPERTIES
