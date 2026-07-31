@@ -1,60 +1,38 @@
-include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../include)
-include_directories(${flashinfer_SOURCE_DIR}/include)
-include_directories(${LOCAL_CUTLASS_DIR}/include)
-include_directories(${LOCAL_CUTLASS_DIR}/tools/util/include)
-include_directories(${CUDAToolkit_INCLUDE_DIRS})
+set(CUDA_SOURCES
+        "input_stage/fused_multimodal_projection.cu"
+        "input_stage/fused_multimodal_projection_launcher.cu"
+        "input_stage/fused_rmsnorm_forward.cu"
+        "input_stage/fused_rmsnorm_forward_launcher.cu"
+        "input_stage/varlen_embeddings.cu"
+        "input_stage/varlen_embeddings_launcher.cu"
+        "prefill_stage/dequantize_fusion_mma_gguf_q4_k.cu"
+        "prefill_stage/dequantize_fusion_mma_gguf_q4_k_launcher.cu"
+        "prefill_stage/prefill_stage_dispatcher.cu"
+)
 
 set(FLASHINFER_OBJ)
 if (TARGET flashinfer_objects)
     set(FLASHINFER_OBJ $<TARGET_OBJECTS:flashinfer_objects>)
 endif ()
 
-if (ISOLATED_BUILD)
-    message(STATUS "[MY_LLAMA] Isolated Mode Active.")
-    set(DUMMY_FILE "${CMAKE_CURRENT_BINARY_DIR}/dummy_stub.cpp")
-    if (NOT EXISTS "${DUMMY_FILE}")
-        file(WRITE "${DUMMY_FILE}" "// Stub.\n")
-    endif ()
-    add_library(cuda_kernels STATIC "${DUMMY_FILE}" ${FLASHINFER_OBJ})
-else ()
-    message(STATUS "[MY_LLAMA] Full Build Mode Active.")
+add_library(cuda_kernels STATIC ${CUDA_SOURCES} ${FLASHINFER_OBJ})
 
-    set(INPUT_STAGE_SRCS
-            "${CMAKE_CURRENT_SOURCE_DIR}/input_stage/fused_multimodal_projection.cu"
-            "${CMAKE_CURRENT_SOURCE_DIR}/input_stage/fused_multimodal_projection_launcher.cu"
-            "${CMAKE_CURRENT_SOURCE_DIR}/input_stage/fused_rmsnorm_forward.cu"
-            "${CMAKE_CURRENT_SOURCE_DIR}/input_stage/fused_rmsnorm_forward_launcher.cu"
-            "${CMAKE_CURRENT_SOURCE_DIR}/input_stage/varlen_embeddings.cu"
-            "${CMAKE_CURRENT_SOURCE_DIR}/input_stage/varlen_embeddings_launcher.cu"
-    )
-
-    set(PREFILL_STAGE_SRCS
-            "${CMAKE_CURRENT_SOURCE_DIR}/prefill_stage/dequantize_fusion_mma_gguf_q4_k.cu"
-            #            "${CMAKE_CURRENT_SOURCE_DIR}/prefill_stage/dequantize_fusion_mma_gguf_q4_k_2.cu"
-            "${CMAKE_CURRENT_SOURCE_DIR}/prefill_stage/dequantize_fusion_mma_gguf_q4_k_blackwell.cu"
-            #            "${CMAKE_CURRENT_SOURCE_DIR}/prefill_stage/dequantize_fusion_mma_gguf_q4_k_blackwell2.cu"
-            "${CMAKE_CURRENT_SOURCE_DIR}/prefill_stage/dequantize_fusion_mma_gguf_q4_k_launcher.cu"
-            "${CMAKE_CURRENT_SOURCE_DIR}/prefill_stage/prefill_stage_dispatcher.cu"
-            "${CMAKE_CURRENT_SOURCE_DIR}/prefill_stage/mini_tensor_test.cu"
-    )
-
-    file(GLOB GLOBAL_HEADERS CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/../include/*.h")
-
-    set(CUDA_SOURCES
-            ${INPUT_STAGE_SRCS}
-            ${PREFILL_STAGE_SRCS}
-    )
-
-    add_library(cuda_kernels SHARED ${CUDA_SOURCES} ${FLASHINFER_OBJ})
-endif ()
+target_include_directories(cuda_kernels PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/../include
+        ${flashinfer_SOURCE_DIR}/include
+        ${LOCAL_CUTLASS_DIR}/include
+        ${LOCAL_CUTLASS_DIR}/tools/util/include
+        ${CUDAToolkit_INCLUDE_DIRS}
+)
 
 set_target_properties(cuda_kernels PROPERTIES
         POSITION_INDEPENDENT_CODE ON
         CUDA_ARCHITECTURES "120"
-        WINDOWS_EXPORT_ALL_SYMBOLS ON
-        CUDA_SEPARATE_COMPILATION OFF
+        CUDA_SEPARABLE_COMPILATION OFF
 )
 
-target_compile_options(cuda_kernels PRIVATE
-        $<$<COMPILE_LANGUAGE:CUDA>:--expt-relaxed-constexpr -gencode=arch=compute_120,code=sm_120 -Xcompiler=/Zc:preprocessor,/Zc:inline,/Zc:lambda,/std:c++20>
+target_link_libraries(cuda_kernels PRIVATE
+        CUDA::cublas
+        CUDA::cublasLt
+        CUDA::cudart_static
 )

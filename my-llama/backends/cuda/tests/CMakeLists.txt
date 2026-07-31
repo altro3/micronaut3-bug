@@ -1,19 +1,18 @@
-cmake_minimum_required(VERSION 4.4.1)
-project(cuda_kernel_tests LANGUAGES CXX CUDA)
-
-include(FetchContent)
-
-set(CMAKE_CUDA_STANDARD 23)
-set(CMAKE_CUDA_ARCHITECTURES "120")
-set(CMAKE_CUDA_STANDARD_REQUIRED ON)
-
 set(DOCTEST_VERSION "2.5.3")
-FetchContent_Declare(
+
+download_llama_dependency(
         doctest
-        GIT_REPOSITORY https://github.com
-        GIT_TAG "v${DOCTEST_VERSION}"
+        "${DOCTEST_VERSION}"
+        "https://github.com/doctest/doctest/releases/download/v${DOCTEST_VERSION}/doctest-v${DOCTEST_VERSION}.tar.gz"
+        ""
 )
-FetchContent_MakeAvailable(doctest)
+
+if (NOT TARGET doctest::doctest)
+    add_library(doctest::doctest INTERFACE IMPORTED GLOBALLY)
+    set_target_properties(doctest::doctest PROPERTIES
+            INTERFACE_INCLUDE_DIRECTORIES "${MY_LLAMA_DEPS_DIR}/doctest-${DOCTEST_VERSION}/doctest"
+    )
+endif ()
 
 file(GLOB_RECURSE TEST_FILES CONFIGURE_DEPENDS
         "${CMAKE_CURRENT_SOURCE_DIR}/input_stage/test_*.cu"
