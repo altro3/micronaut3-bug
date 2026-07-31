@@ -45,14 +45,16 @@ else ()
             ${PREFILL_STAGE_SRCS}
     )
 
-    add_library(cuda_kernels STATIC ${CUDA_SOURCES} ${FLASHINFER_OBJ})
+    add_library(cuda_kernels SHARED ${CUDA_SOURCES} ${FLASHINFER_OBJ})
 endif ()
 
 set_target_properties(cuda_kernels PROPERTIES
         POSITION_INDEPENDENT_CODE ON
         CUDA_ARCHITECTURES "120"
+        WINDOWS_EXPORT_ALL_SYMBOLS ON
+        CUDA_SEPARATE_COMPILATION OFF
 )
 
 target_compile_options(cuda_kernels PRIVATE
-        $<$<COMPILE_LANGUAGE:CUDA>:--expt-relaxed-constexpr -gencode=arch=compute_120,code=sm_120>
+        $<$<COMPILE_LANGUAGE:CUDA>:--expt-relaxed-constexpr -gencode=arch=compute_120,code=sm_120 -Xcompiler=/Zc:preprocessor,/Zc:inline,/Zc:lambda,/std:c++20>
 )

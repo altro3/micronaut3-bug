@@ -29,17 +29,16 @@ endif ()
 
 set(BLACKWELL_CUDA_GENCODE "-gencode=arch=compute_120,code=sm_120")
 
-set(CMAKE_CUDA_FLAGS_RELEASE "-O3 --use_fast_math -Xptxas --maxrregcount=128 -Xptxas -v --diag-suppress=20012 -static-global-template-stub=false --expt-relaxed-constexpr ${BLACKWELL_CUDA_GENCODE}")
-
 if (MSVC)
-    set(CMAKE_CUDA_FLAGS_RELEASE "${CMAKE_CUDA_FLAGS_RELEASE} -Xcompiler=/Zc:preprocessor -Xcompiler=/Zc:inline -Xcompiler=/Zc:lambda -Xcompiler=/std:c++20 -Xcompiler=/wd4068 -Xcompiler=/wd4624 -Xcompiler=/wd4190 -Xcompiler=/wd4018")
+    set(CMAKE_CUDA_FLAGS_RELEASE "-O3 --use_fast_math -Xptxas --maxrregcount=128 -Xptxas -v --diag-suppress=20012 -static-global-template-stub=false --expt-relaxed-constexpr ${BLACKWELL_CUDA_GENCODE} -Xcompiler=/Zc:preprocessor,/Zc:inline,/Zc:lambda,/std:c++20,/wd4068,/wd4624,/wd4190,/wd4018")
     set(CMAKE_CXX_FLAGS_RELEASE "/O2")
 else ()
+    set(CMAKE_CUDA_FLAGS_RELEASE "-O3 --use_fast_math -Xptxas --maxrregcount=128 -Xptxas -v --diag-suppress=20012 -static-global-template-stub=false --expt-relaxed-constexpr ${BLACKWELL_CUDA_GENCODE}")
     set(CMAKE_CXX_FLAGS_RELEASE "-O3")
 endif ()
 
 if (MSVC)
-    set(CMAKE_CUDA_FLAGS_DEBUG "-O0 -Xptxas -O0 ${BLACKWELL_CUDA_GENCODE} -Xcompiler=/Zc:preprocessor -Xcompiler=/Ob0 -Xcompiler=/Od")
+    set(CMAKE_CUDA_FLAGS_DEBUG "-O0 -Xptxas -O0 ${BLACKWELL_CUDA_GENCODE} -Xcompiler=/Zc:preprocessor,/Ob0,/Od")
     set(CMAKE_CXX_FLAGS_DEBUG "/Ob0 /Od")
 else ()
     set(CMAKE_CUDA_FLAGS_DEBUG "-O0 -Xptxas -O0 ${BLACKWELL_CUDA_GENCODE}")
