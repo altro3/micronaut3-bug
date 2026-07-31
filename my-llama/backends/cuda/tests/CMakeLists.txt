@@ -20,12 +20,12 @@ file(GLOB_RECURSE TEST_FILES CONFIGURE_DEPENDS
 )
 
 set(CUDA_COMMON_INCLUDE_DIRS
-        ${CMAKE_CURRENT_SOURCE_DIR}/../include
-        ${CMAKE_CURRENT_SOURCE_DIR}/../src
-        ${flashinfer_SOURCE_DIR}/include
-        ${LOCAL_CUTLASS_DIR}/include
-        ${LOCAL_CUTLASS_DIR}/tools/util/include
-        ${CUDAToolkit_INCLUDE_DIRS}
+        "${CMAKE_CURRENT_SOURCE_DIR}/../include"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../src"
+        "${flashinfer_SOURCE_DIR}/include"
+        "${LOCAL_CUTLASS_DIR}/include"
+        "${LOCAL_CUTLASS_DIR}/tools/util/include"
+        "${CUDAToolkit_INCLUDE_DIRS}"
 )
 
 foreach (test_file ${TEST_FILES})
@@ -45,7 +45,7 @@ foreach (test_file ${TEST_FILES})
     endif ()
 
     target_compile_options(${test_name} PRIVATE
-            $<$<COMPILE_LANGUAGE:CUDA>:--expt-relaxed-constexpr -O3 --use_fast_math -Xptxas -v>
+            $<$<COMPILE_LANGUAGE:CUDA>:--expt-relaxed-constexpr -Xptxas -v>
     )
 
     target_include_directories(${test_name} PRIVATE
@@ -64,6 +64,10 @@ foreach (test_file ${TEST_FILES})
     set_target_properties(${test_name} PROPERTIES
             CUDA_SEPARABLE_COMPILATION OFF
             RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/tests"
+            CXX_STANDARD 23
+            CXX_STANDARD_REQUIRED ON
+            CUDA_STANDARD 23
+            CUDA_STANDARD_REQUIRED ON
     )
 
     add_test(NAME ${test_name} COMMAND ${test_name} -s)

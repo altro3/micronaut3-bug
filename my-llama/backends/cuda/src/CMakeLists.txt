@@ -1,13 +1,13 @@
 set(CUDA_SOURCES
-        "input_stage/fused_multimodal_projection.cu"
-        "input_stage/fused_multimodal_projection_launcher.cu"
-        "input_stage/fused_rmsnorm_forward.cu"
-        "input_stage/fused_rmsnorm_forward_launcher.cu"
-        "input_stage/varlen_embeddings.cu"
-        "input_stage/varlen_embeddings_launcher.cu"
-        "prefill_stage/dequantize_fusion_mma_gguf_q4_k.cu"
-        "prefill_stage/dequantize_fusion_mma_gguf_q4_k_launcher.cu"
-        "prefill_stage/prefill_stage_dispatcher.cu"
+        "${CMAKE_CURRENT_SOURCE_DIR}/input_stage/fused_multimodal_projection.cu"
+        "${CMAKE_CURRENT_SOURCE_DIR}/input_stage/fused_multimodal_projection_launcher.cu"
+        "${CMAKE_CURRENT_SOURCE_DIR}/input_stage/fused_rmsnorm_forward.cu"
+        "${CMAKE_CURRENT_SOURCE_DIR}/input_stage/fused_rmsnorm_forward_launcher.cu"
+        "${CMAKE_CURRENT_SOURCE_DIR}/input_stage/varlen_embeddings.cu"
+        "${CMAKE_CURRENT_SOURCE_DIR}/input_stage/varlen_embeddings_launcher.cu"
+        "${CMAKE_CURRENT_SOURCE_DIR}/prefill_stage/dequantize_fusion_mma_gguf_q4_k.cu"
+        "${CMAKE_CURRENT_SOURCE_DIR}/prefill_stage/dequantize_fusion_mma_gguf_q4_k_launcher.cu"
+        "${CMAKE_CURRENT_SOURCE_DIR}/prefill_stage/prefill_stage_dispatcher.cu"
 )
 
 set(FLASHINFER_OBJ)
@@ -18,21 +18,30 @@ endif ()
 add_library(cuda_kernels STATIC ${CUDA_SOURCES} ${FLASHINFER_OBJ})
 
 target_include_directories(cuda_kernels PRIVATE
-        ${CMAKE_CURRENT_SOURCE_DIR}/../include
-        ${flashinfer_SOURCE_DIR}/include
-        ${LOCAL_CUTLASS_DIR}/include
-        ${LOCAL_CUTLASS_DIR}/tools/util/include
-        ${CUDAToolkit_INCLUDE_DIRS}
+        "${CMAKE_CURRENT_SOURCE_DIR}/../include"
+        "${flashinfer_SOURCE_DIR}/include"
+        "${LOCAL_CUTLASS_DIR}/include"
+        "${LOCAL_CUTLASS_DIR}/tools/util/include"
+        "${CUDAToolkit_INCLUDE_DIRS}"
 )
 
 set_target_properties(cuda_kernels PROPERTIES
         POSITION_INDEPENDENT_CODE ON
         CUDA_ARCHITECTURES "120"
         CUDA_SEPARABLE_COMPILATION OFF
+        CXX_STANDARD 23
+        CXX_STANDARD_REQUIRED ON
+        CUDA_STANDARD 23
+        CUDA_STANDARD_REQUIRED ON
 )
 
 target_link_libraries(cuda_kernels PRIVATE
         CUDA::cublas
         CUDA::cublasLt
         CUDA::cudart_static
+)
+
+target_compile_options(cuda_kernels PRIVATE
+        $<$<COMPILE_LANGUAGE:CUDA>:-std=c++23>
+        $<$<COMPILE_LANGUAGE:CUDA>:-Xcompiler=/std:c++23>
 )
