@@ -19,24 +19,24 @@ __global__ void cute_blackwell_bf16_kernel(
     if (threadIdx.x == 0) {
         printf("[DEVICE KERNEL] STEP 2: Instantiating MMA_Atom<mma_op>\n");
     }
-    MMA_Atom<mma_op> mma_atom;
+    constexpr MMA_Atom<mma_op> mma_atom;
 
     if (threadIdx.x == 0) {
         printf("[DEVICE KERNEL] STEP 3: Executing make_tiled_mma\n");
     }
-    auto tiled_mma = make_tiled_mma(mma_atom);
+    constexpr auto tiled_mma = make_tiled_mma(mma_atom);
 
     if (threadIdx.x == 0) {
         printf("[DEVICE KERNEL] STEP 4: Fetching thread slice via get_thread_slice\n");
     }
-    auto thr_mma = tiled_mma.get_thread_slice(threadIdx.x);
+    const auto thr_mma = tiled_mma.get_thread_slice(threadIdx.x);
 
     if (threadIdx.x == 0) {
         printf("[DEVICE KERNEL] STEP 5: Declaring matrix shapes and layouts (16x16)\n");
     }
-    auto layout_A = make_layout(make_shape(Int<16>{}, Int<16>{}), GenRowMajor{});
-    auto layout_B = make_layout(make_shape(Int<16>{}, Int<16>{}), GenColMajor{});
-    auto layout_C = make_layout(make_shape(Int<16>{}, Int<16>{}), GenRowMajor{});
+    constexpr auto layout_A = make_layout(make_shape(Int<16>{}, Int<16>{}), GenRowMajor{});
+    constexpr auto layout_B = make_layout(make_shape(Int<16>{}, Int<16>{}), GenColMajor{});
+    constexpr auto layout_C = make_layout(make_shape(Int<16>{}, Int<16>{}), GenRowMajor{});
 
     if (threadIdx.x == 0) {
         printf("[DEVICE KERNEL] STEP 6: Creating global memory tensors\n");
@@ -99,13 +99,13 @@ extern "C" cudaError_t launch_mini_wmma_bf16(
     printf("[HOST LAUNCH] Inside launch_mini_wmma_bf16 function entry point\n");
     printf("[HOST LAUNCH] Matrix A: %p, Matrix B: %p, Matrix C: %p\n", d_A, d_B, d_C);
 
-    const __nv_bfloat16 *a_ptr = static_cast<const __nv_bfloat16 *>(d_A);
-    const __nv_bfloat16 *b_ptr = static_cast<const __nv_bfloat16 *>(d_B);
+    const auto a_ptr = static_cast<const __nv_bfloat16 *>(d_A);
+    const auto b_ptr = static_cast<const __nv_bfloat16 *>(d_B);
 
     printf("[HOST LAUNCH] Dispatching __global__ cute_blackwell_bf16_kernel<<<1, 32>>>\n");
     cute_blackwell_bf16_kernel<<<1, 32, 0, 0>>>(d_C, a_ptr, b_ptr);
 
-    cudaError_t err = cudaGetLastError();
+    const cudaError_t err = cudaGetLastError();
     printf("[HOST LAUNCH] Driver evaluation status immediately after dispatch: %d\n", err);
 
     return err;
@@ -122,7 +122,7 @@ int main() {
 
     std::vector<__nv_bfloat16> h_A(M * K);
     std::vector<__nv_bfloat16> h_B(K * N);
-    std::vector<float> h_C(M * N, 0.0f);
+    std::vector h_C(M * N, 0.0f);
 
     for (int i = 0; i < M * K; ++i) h_A[i] = __float2bfloat16(1.0f);
     for (int i = 0; i < K * N; ++i) h_B[i] = __float2bfloat16(2.0f);
@@ -146,13 +146,12 @@ int main() {
 
     printf("[HOST] Directly dispatching __global__ kernel bypassing any libraries...\n");
 
-    // Прямой вызов без extern "C", без прослоек, без линковки
     cute_blackwell_bf16_kernel<<<1, 32, 0, 0>>>(d_C, static_cast<const __nv_bfloat16 *>(d_A), static_cast<const __nv_bfloat16 *>(d_B));
 
-    cudaError_t launch_err = cudaGetLastError();
+    const cudaError_t launch_err = cudaGetLastError();
     printf("[HOST] Launch error status code: %d (%s)\n", launch_err, cudaGetErrorString(launch_err));
 
-    cudaError_t sync_err = cudaDeviceSynchronize();
+    const cudaError_t sync_err = cudaDeviceSynchronize();
     printf("[HOST] Device sync status code: %d (%s)\n", sync_err, cudaGetErrorString(sync_err));
 
     cudaMemcpy(h_C.data(), d_C, h_C.size() * sizeof(float), cudaMemcpyDeviceToHost);

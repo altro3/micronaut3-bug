@@ -1,5 +1,5 @@
 #define DOCTEST_CONFIG_IMPLEMENT
-#include <doctest/doctest.h>
+#include <doctest.h>
 #include <cuda_runtime.h>
 #include <iostream>
 
