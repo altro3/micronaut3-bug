@@ -1,16 +1,15 @@
-set(DOCTEST_VERSION "2.5.3")
+set(DOCTEST_TAG "v2.5.3")
 
 download_llama_dependency(
         doctest
-        "${DOCTEST_VERSION}"
-        "https://github.com/doctest/doctest/releases/download/v${DOCTEST_VERSION}/doctest-v${DOCTEST_VERSION}.tar.gz"
-        ""
+        "https://github.com/doctest/doctest/releases/download/${DOCTEST_TAG}/doctest-${DOCTEST_TAG}.tar.gz"
+        "${DOCTEST_TAG}"
 )
 
 if (NOT TARGET doctest::doctest)
     add_library(doctest::doctest INTERFACE IMPORTED GLOBALLY)
     set_target_properties(doctest::doctest PROPERTIES
-            INTERFACE_INCLUDE_DIRECTORIES "${MY_LLAMA_DEPS_DIR}/doctest-${DOCTEST_VERSION}/doctest"
+            INTERFACE_INCLUDE_DIRECTORIES "${MY_LLAMA_DEPS_DIR}/doctest-${DOCTEST_TAG}"
     )
 endif ()
 
@@ -64,9 +63,9 @@ foreach (test_file ${TEST_FILES})
     set_target_properties(${test_name} PROPERTIES
             CUDA_SEPARABLE_COMPILATION OFF
             RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/tests"
-            CXX_STANDARD 23
+            CXX_STANDARD 20
             CXX_STANDARD_REQUIRED ON
-            CUDA_STANDARD 23
+            CUDA_STANDARD 20
             CUDA_STANDARD_REQUIRED ON
     )
 

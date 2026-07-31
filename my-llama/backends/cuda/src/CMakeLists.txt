@@ -29,9 +29,9 @@ set_target_properties(cuda_kernels PROPERTIES
         POSITION_INDEPENDENT_CODE ON
         CUDA_ARCHITECTURES "120"
         CUDA_SEPARABLE_COMPILATION OFF
-        CXX_STANDARD 23
+        CXX_STANDARD 20
         CXX_STANDARD_REQUIRED ON
-        CUDA_STANDARD 23
+        CUDA_STANDARD 20
         CUDA_STANDARD_REQUIRED ON
 )
 
@@ -39,9 +39,4 @@ target_link_libraries(cuda_kernels PRIVATE
         CUDA::cublas
         CUDA::cublasLt
         CUDA::cudart_static
-)
-
-target_compile_options(cuda_kernels PRIVATE
-        $<$<COMPILE_LANGUAGE:CUDA>:-std=c++23>
-        $<$<COMPILE_LANGUAGE:CUDA>:-Xcompiler=/std:c++23>
 )

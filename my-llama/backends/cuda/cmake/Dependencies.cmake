@@ -3,8 +3,8 @@ find_package(CUDAToolkit REQUIRED)
 
 set(MY_LLAMA_DEPS_DIR "D:/.my_llama_deps" CACHE PATH "Directory for localized CUDA/AI dependencies cache")
 
-macro(download_llama_dependency DEP_NAME DEP_VERSION DEP_SOURCE DEP_TAG)
-    set(LOCAL_DEP_DIR "${MY_LLAMA_DEPS_DIR}/${DEP_NAME}-${DEP_VERSION}")
+macro(download_llama_dependency DEP_NAME DEP_SOURCE DEP_TAG)
+    set(LOCAL_DEP_DIR "${MY_LLAMA_DEPS_DIR}/${DEP_NAME}-${DEP_TAG}")
 
     if (NOT TARGET ${DEP_NAME})
         if (EXISTS "${LOCAL_DEP_DIR}/include" OR EXISTS "${LOCAL_DEP_DIR}/CMakeLists.txt")
@@ -38,7 +38,7 @@ macro(download_llama_dependency DEP_NAME DEP_VERSION DEP_SOURCE DEP_TAG)
                         RESULT_VARIABLE TAR_RESULT
                 )
                 if (NOT TAR_RESULT EQUAL 0)
-                    message(FATAL_ERROR "[MY_LLAMA] Native windows tar failed to extract ${DEP_NAME} v${DEP_VERSION}")
+                    message(FATAL_ERROR "[MY_LLAMA] Native windows tar failed to extract ${DEP_NAME} ${DEP_TAG}")
                 endif ()
             endif ()
         endif ()
@@ -61,9 +61,8 @@ set(LOCAL_CUTLASS_DIR "${MY_LLAMA_DEPS_DIR}/cutlass-${CUTLASS_TAG}")
 
 download_llama_dependency(
         flashinfer
-        "${FLASHINFER_TAG}"
         "https://github.com/flashinfer-ai/flashinfer/archive/refs/tags/${FLASHINFER_TAG}.zip"
-        ""
+        "${FLASHINFER_TAG}"
 )
 set(flashinfer_SOURCE_DIR "${LOCAL_FLASHINFER_DIR}")
 
@@ -73,7 +72,6 @@ set(CUTLASS_ENABLE_TESTS OFF CACHE BOOL "Disable CUTLASS tests" FORCE)
 
 download_llama_dependency(
         cutlass
-        "${CUTLASS_TAG}"
         "https://github.com//NVIDIA/cutlass/archive/refs/tags/${CUTLASS_TAG}.zip"
-        ""
+        "${CUTLASS_TAG}"
 )
