@@ -46,30 +46,81 @@ target_link_libraries(cuda_kernels PRIVATE
 )
 ]]
 
-add_executable(pure_kernel_bench "${CMAKE_CURRENT_SOURCE_DIR}/prefill_stage/mini_tensor_test.cu")
+#set_target_properties(pure_kernel_bench PROPERTIES
+#        CXX_STANDARD 20
+#        CUDA_STANDARD 20
+#        CUDA_SEPARATE_COMPILATION OFF
+#        CUDA_LINKER_LANGUAGE CUDA
+#)
+
+#target_compile_options(pure_kernel_bench PRIVATE
+#        $<$<COMPILE_LANGUAGE:CUDA>:-DIN_PLACE_DEBUG>
+#)
+#
+#target_include_directories(pure_kernel_bench PRIVATE
+#        "${LOCAL_CUTLASS_DIR}/include"
+#        "${LOCAL_CUTLASS_DIR}/tools/util/include"
+#        "${CUDAToolkit_INCLUDE_DIRS}"
+#)
+#
+#target_link_libraries(pure_kernel_bench PRIVATE
+#        my_llama_cutlass_headers
+#        cudart
+#        cuda
+#)
+
+set(CUDA_BIN_DIR "${CUDAToolkit_BIN_DIR}")
+set(CUDA_INC_DIR "${CUDAToolkit_INCLUDE_DIRS}")
+
+set(KERNEL_SRC "${CMAKE_CURRENT_SOURCE_DIR}/prefill_stage/mini_tensor_test.cu")
+set(HEADER_SRC "${CMAKE_CURRENT_SOURCE_DIR}/prefill_stage/mini_tensor_test.cuh")
+set(TEST_SRC "${CMAKE_CURRENT_SOURCE_DIR}/prefill_stage/main_test.cu")
+set(EXE_OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/pure_kernel_bench.exe")
+
+add_custom_command(
+        OUTPUT ${EXE_OUTPUT}
+        COMMAND "${CUDA_BIN_DIR}/nvcc.exe"
+        -std=c++20
+        -O3
+        -arch=sm_120
+        -Xcompiler "/Zc:preprocessor"
+        -Xcompiler "/MT"
+        -I"${LOCAL_CUTLASS_DIR}/include"
+        -I"${LOCAL_CUTLASS_DIR}/tools/util/include"
+        -I"${CUDA_INC_DIR}"
+        -I"${CUDA_INC_DIR}/cccl"
+        -DIN_PLACE_DEBUG
+        -Xlinker "/NODEFAULTLIB:cudart.lib"
+        -Xlinker "/NODEFAULTLIB:msvcrt.lib"
+        "${KERNEL_SRC}" "${TEST_SRC}"
+        -o "${EXE_OUTPUT}"
+        DEPENDS ${KERNEL_SRC} ${TEST_SRC} ${HEADER_SRC}
+        COMMENT "[MY_LLAMA] Compiling and linking Blackwell CUTLASS kernel via strict NVCC pipeline..."
+)
+
+add_custom_target(pure_kernel_bench ALL DEPENDS ${EXE_OUTPUT})
 
 set_target_properties(pure_kernel_bench PROPERTIES
+        OUTPUT_NAME "pure_kernel_bench"
+        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"
+)
+
+add_executable(mini_tensor_test "${KERNEL_SRC}" "${TEST_SRC}" "${HEADER_SRC}")
+
+set_target_properties(mini_tensor_test PROPERTIES
         CXX_STANDARD 20
         CUDA_STANDARD 20
         CUDA_SEPARATE_COMPILATION OFF
         CUDA_LINKER_LANGUAGE CUDA
 )
 
-target_compile_options(pure_kernel_bench PRIVATE
-        $<$<COMPILE_LANGUAGE:CUDA>:-DIN_PLACE_DEBUG>
-)
-
-target_link_options(pure_kernel_bench PRIVATE
-        $<$<PLATFORM_ID:Windows>:/NODEFAULTLIB:msvcrt.lib /NODEFAULTLIB:msvcrtd.lib /NODEFAULTLIB:cudart.lib>
-)
-
-target_include_directories(pure_kernel_bench PRIVATE
+target_include_directories(mini_tensor_test PRIVATE
         "${LOCAL_CUTLASS_DIR}/include"
         "${LOCAL_CUTLASS_DIR}/tools/util/include"
         "${CUDAToolkit_INCLUDE_DIRS}"
 )
 
-target_link_libraries(pure_kernel_bench PRIVATE
+target_link_libraries(mini_tensor_test PRIVATE
         cudart_static
         cuda
 )
