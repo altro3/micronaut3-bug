@@ -59,6 +59,10 @@ target_compile_options(pure_kernel_bench PRIVATE
         $<$<COMPILE_LANGUAGE:CUDA>:-DIN_PLACE_DEBUG>
 )
 
+target_link_options(pure_kernel_bench PRIVATE
+        $<$<PLATFORM_ID:Windows>:/NODEFAULTLIB:msvcrt.lib /NODEFAULTLIB:msvcrtd.lib /NODEFAULTLIB:cudart.lib>
+)
+
 target_include_directories(pure_kernel_bench PRIVATE
         "${LOCAL_CUTLASS_DIR}/include"
         "${LOCAL_CUTLASS_DIR}/tools/util/include"
@@ -66,6 +70,6 @@ target_include_directories(pure_kernel_bench PRIVATE
 )
 
 target_link_libraries(pure_kernel_bench PRIVATE
-        cudart
+        cudart_static
         cuda
 )
