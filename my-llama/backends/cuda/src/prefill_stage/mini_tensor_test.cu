@@ -99,8 +99,8 @@ extern "C" cudaError_t launch_mini_wmma_bf16(
     printf("[HOST LAUNCH] Inside launch_mini_wmma_bf16 function entry point\n");
     printf("[HOST LAUNCH] Matrix A: %p, Matrix B: %p, Matrix C: %p\n", d_A, d_B, d_C);
 
-    const auto a_ptr = static_cast<const __nv_bfloat16 *>(d_A);
-    const auto b_ptr = static_cast<const __nv_bfloat16 *>(d_B);
+    const __nv_bfloat16 *a_ptr = static_cast<const __nv_bfloat16 *>(d_A);
+    const __nv_bfloat16 *b_ptr = static_cast<const __nv_bfloat16 *>(d_B);
 
     printf("[HOST LAUNCH] Dispatching __global__ cute_blackwell_bf16_kernel<<<1, 32>>>\n");
     cute_blackwell_bf16_kernel<<<1, 32, 0, 0>>>(d_C, a_ptr, b_ptr);
