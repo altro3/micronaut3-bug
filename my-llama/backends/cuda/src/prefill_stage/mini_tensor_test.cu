@@ -2,6 +2,7 @@
 #include <cute/atom/mma_atom.hpp>
 #include <cuda_bf16.h>
 #include <stdio.h>
+#include <vector>
 
 using namespace cute;
 
@@ -24,7 +25,7 @@ __global__ void cute_blackwell_bf16_kernel(
     if (threadIdx.x == 0) {
         printf("[DEVICE KERNEL] STEP 3: Executing make_tiled_mma\n");
     }
-    constexpr auto tiled_mma = make_tiled_mma(mma_atom);
+    constexpr auto tiled_mma = make_tiled_mma(mma_atom, make_layout(make_shape(Int<1>{}, Int<1>{}, Int<1>{})));
 
     if (threadIdx.x == 0) {
         printf("[DEVICE KERNEL] STEP 4: Fetching thread slice via get_thread_slice\n");
@@ -34,9 +35,9 @@ __global__ void cute_blackwell_bf16_kernel(
     if (threadIdx.x == 0) {
         printf("[DEVICE KERNEL] STEP 5: Declaring matrix shapes and layouts (16x16)\n");
     }
-    constexpr auto layout_A = make_layout(make_shape(Int<16>{}, Int<16>{}), GenRowMajor{});
-    constexpr auto layout_B = make_layout(make_shape(Int<16>{}, Int<16>{}), GenColMajor{});
-    constexpr auto layout_C = make_layout(make_shape(Int<16>{}, Int<16>{}), GenRowMajor{});
+    constexpr auto layout_A = make_layout(make_shape(Int<16>{}, Int<16>{}), LayoutRight{});
+    constexpr auto layout_B = make_layout(make_shape(Int<16>{}, Int<16>{}), LayoutLeft{});
+    constexpr auto layout_C = make_layout(make_shape(Int<16>{}, Int<16>{}), LayoutRight{});
 
     if (threadIdx.x == 0) {
         printf("[DEVICE KERNEL] STEP 6: Creating global memory tensors\n");
@@ -57,7 +58,7 @@ __global__ void cute_blackwell_bf16_kernel(
     }
     auto tArA = thr_mma.make_fragment_A(tAgA);
     auto tBrB = thr_mma.make_fragment_B(tBgB);
-    auto tCrC = thr_mma.make_fragment_C(tCgC);
+    auto tCrC = thr_mma.partition_C(g_C);
 
     if (threadIdx.x == 0) {
         printf("[DEVICE KERNEL] STEP 9: Clearing accumulator registers\n");
@@ -74,9 +75,9 @@ __global__ void cute_blackwell_bf16_kernel(
     __syncthreads();
 
     if (threadIdx.x == 0) {
-        printf("[DEVICE KERNEL] STEP 11: Invoking hardware cute::gemm with MMA_Atom signature\n");
+        printf("[DEVICE KERNEL] STEP 11: Invoking hardware cute::gemm with TiledMMA\n");
     }
-    cute::gemm(mma_atom, tArA, tBrB, tCrC);
+    cute::gemm(tiled_mma, tArA, tBrB, tCrC);
 
     printf("[DEVICE KERNEL] Thread %d reached post-GEMM barrier\n", threadIdx.x);
     __syncthreads();
@@ -84,36 +85,16 @@ __global__ void cute_blackwell_bf16_kernel(
     if (threadIdx.x == 0) {
         printf("[DEVICE KERNEL] STEP 12: Copying results back from registers to global memory C\n");
     }
-    copy(tCrC, tCgC);
+    cute::copy(tCrC, tCgC);
 
     if (threadIdx.x == 0) {
         printf("[DEVICE KERNEL] STEP 13: Kernel execution pipeline fully completed.\n");
     }
 }
 
-extern "C" cudaError_t launch_mini_wmma_bf16(
-    float *d_C,
-    const void *d_A,
-    const void *d_B
-) {
-    printf("[HOST LAUNCH] Inside launch_mini_wmma_bf16 function entry point\n");
-    printf("[HOST LAUNCH] Matrix A: %p, Matrix B: %p, Matrix C: %p\n", d_A, d_B, d_C);
-
-    const __nv_bfloat16 *a_ptr = static_cast<const __nv_bfloat16 *>(d_A);
-    const __nv_bfloat16 *b_ptr = static_cast<const __nv_bfloat16 *>(d_B);
-
-    printf("[HOST LAUNCH] Dispatching __global__ cute_blackwell_bf16_kernel<<<1, 32>>>\n");
-    cute_blackwell_bf16_kernel<<<1, 32, 0, 0>>>(d_C, a_ptr, b_ptr);
-
-    const cudaError_t err = cudaGetLastError();
-    printf("[HOST LAUNCH] Driver evaluation status immediately after dispatch: %d\n", err);
-
-    return err;
-}
-
 int main() {
     printf("\n=========================================\n");
-    printf("=== [MONOLITHIC DIRECT KERNEL LAUNCH] ===\n");
+    printf("=== [BLACKWELL TENSOR CORE MINI TEST] ===\n");
     printf("=========================================\n");
 
     constexpr int M = 16;
@@ -122,7 +103,7 @@ int main() {
 
     std::vector<__nv_bfloat16> h_A(M * K);
     std::vector<__nv_bfloat16> h_B(K * N);
-    std::vector h_C(M * N, 0.0f);
+    std::vector<float> h_C(M * N, 0.0f);
 
     for (int i = 0; i < M * K; ++i) h_A[i] = __float2bfloat16(1.0f);
     for (int i = 0; i < K * N; ++i) h_B[i] = __float2bfloat16(2.0f);
@@ -144,20 +125,20 @@ int main() {
     cudaMemcpy(d_B, h_B.data(), h_B.size() * sizeof(__nv_bfloat16), cudaMemcpyHostToDevice);
     cudaMemset(d_C, 0, h_C.size() * sizeof(float));
 
-    printf("[HOST] Directly dispatching __global__ kernel bypassing any libraries...\n");
+    printf("[HOST] Launching kernel on Blackwell SM120...\n");
 
-    cute_blackwell_bf16_kernel<<<1, 32, 0, 0>>>(d_C, static_cast<const __nv_bfloat16 *>(d_A), static_cast<const __nv_bfloat16 *>(d_B));
+    cute_blackwell_bf16_kernel<<<1, 32>>>(d_C, static_cast<const __nv_bfloat16 *>(d_A), static_cast<const __nv_bfloat16 *>(d_B));
 
-    const cudaError_t launch_err = cudaGetLastError();
-    printf("[HOST] Launch error status code: %d (%s)\n", launch_err, cudaGetErrorString(launch_err));
+    cudaError_t launch_err = cudaGetLastError();
+    printf("[HOST] Launch status code: %d (%s)\n", launch_err, cudaGetErrorString(launch_err));
 
-    const cudaError_t sync_err = cudaDeviceSynchronize();
-    printf("[HOST] Device sync status code: %d (%s)\n", sync_err, cudaGetErrorString(sync_err));
+    cudaError_t sync_err = cudaDeviceSynchronize();
+    printf("[HOST] Sync status code: %d (%s)\n", sync_err, cudaGetErrorString(sync_err));
 
     cudaMemcpy(h_C.data(), d_C, h_C.size() * sizeof(float), cudaMemcpyDeviceToHost);
 
-    printf("\n=== [TENSOR CORE VALUE VERIFICATION] ===\n");
-    printf("Expected cell value: 32\n");
+    printf("\n=== [VERIFICATION] ===\n");
+    printf("Expected cell value: 32.000000\n");
     printf("Actual cell value:   %f\n", h_C[0]);
     printf("=========================================\n\n");
 
