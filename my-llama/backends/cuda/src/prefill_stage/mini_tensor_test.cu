@@ -12,90 +12,54 @@ __global__ void cute_blackwell_bf16_kernel(
     const __nv_bfloat16 *b_matrix
 ) {
     if (threadIdx.x == 0) {
-        printf("[DEVICE KERNEL] STEP 1: Entered kernel. GPU Pointers -> A: %p, B: %p, C: %p\n", a_matrix, b_matrix, c_matrix);
+        printf("[DEVICE KERNEL] >>> SUCCESS! Control reached inside GPU kernel. <<<\n");
+        printf("[DEVICE KERNEL] STEP 1: GPU Pointers received -> A: %p, B: %p, C: %p\n", a_matrix, b_matrix, c_matrix);
     }
 
     using mma_op = SM80_16x8x16_F32BF16BF16F32_TN;
-
-    if (threadIdx.x == 0) {
-        printf("[DEVICE KERNEL] STEP 2: Instantiating MMA_Atom<mma_op>\n");
-    }
     constexpr MMA_Atom<mma_op> mma_atom;
+    constexpr auto tiled_mma = make_tiled_mma(mma_atom);
 
-    if (threadIdx.x == 0) {
-        printf("[DEVICE KERNEL] STEP 3: Executing make_tiled_mma\n");
-    }
-    constexpr auto tiled_mma = make_tiled_mma(mma_atom, make_layout(make_shape(Int<1>{}, Int<1>{}, Int<1>{})));
-
-    if (threadIdx.x == 0) {
-        printf("[DEVICE KERNEL] STEP 4: Fetching thread slice via get_thread_slice\n");
-    }
     const auto thr_mma = tiled_mma.get_thread_slice(threadIdx.x);
 
-    if (threadIdx.x == 0) {
-        printf("[DEVICE KERNEL] STEP 5: Declaring matrix shapes and layouts (16x16)\n");
-    }
     constexpr auto layout_A = make_layout(make_shape(Int<16>{}, Int<16>{}), LayoutRight{});
     constexpr auto layout_B = make_layout(make_shape(Int<16>{}, Int<16>{}), LayoutLeft{});
     constexpr auto layout_C = make_layout(make_shape(Int<16>{}, Int<16>{}), LayoutRight{});
 
-    if (threadIdx.x == 0) {
-        printf("[DEVICE KERNEL] STEP 6: Creating global memory tensors\n");
-    }
     auto g_A = make_tensor(a_matrix, layout_A);
     auto g_B = make_tensor(b_matrix, layout_B);
     auto g_C = make_tensor(c_matrix, layout_C);
 
-    if (threadIdx.x == 0) {
-        printf("[DEVICE KERNEL] STEP 7: Partitioning global tensors per thread lane\n");
-    }
     auto tAgA = thr_mma.partition_A(g_A);
     auto tBgB = thr_mma.partition_B(g_B);
     auto tCgC = thr_mma.partition_C(g_C);
 
-    if (threadIdx.x == 0) {
-        printf("[DEVICE KERNEL] STEP 8: Allocating hardware register fragments\n");
-    }
     auto tArA = thr_mma.make_fragment_A(tAgA);
     auto tBrB = thr_mma.make_fragment_B(tBgB);
-    auto tCrC = thr_mma.partition_C(g_C);
+    auto tCrC = thr_mma.make_fragment_C(tCgC);
 
-    if (threadIdx.x == 0) {
-        printf("[DEVICE KERNEL] STEP 9: Clearing accumulator registers\n");
-    }
     clear(tCrC);
 
-    if (threadIdx.x == 0) {
-        printf("[DEVICE KERNEL] STEP 10: Copying data from GMEM to registers (A and B)\n");
-    }
     copy(tAgA, tArA);
     copy(tBgB, tBrB);
 
-    printf("[DEVICE KERNEL] Thread %d reached pre-GEMM barrier\n", threadIdx.x);
     __syncthreads();
 
-    if (threadIdx.x == 0) {
-        printf("[DEVICE KERNEL] STEP 11: Invoking hardware cute::gemm with TiledMMA\n");
-    }
-    cute::gemm(tiled_mma, tArA, tBrB, tCrC);
+    gemm(tiled_mma, tArA, tBrB, tCrC);
 
-    printf("[DEVICE KERNEL] Thread %d reached post-GEMM barrier\n", threadIdx.x);
     __syncthreads();
 
-    if (threadIdx.x == 0) {
-        printf("[DEVICE KERNEL] STEP 12: Copying results back from registers to global memory C\n");
-    }
-    cute::copy(tCrC, tCgC);
-
-    if (threadIdx.x == 0) {
-        printf("[DEVICE KERNEL] STEP 13: Kernel execution pipeline fully completed.\n");
-    }
+    copy(tCrC, tCgC);
 }
 
 int main() {
-    printf("\n=========================================\n");
-    printf("=== [BLACKWELL TENSOR CORE MINI TEST] ===\n");
-    printf("=========================================\n");
+    int device_id = 0;
+    if (cudaSetDevice(device_id) != cudaSuccess) {
+        printf("[HOST ERROR] Failed to set device 0\n");
+        return -1;
+    }
+
+    cudaFree(0);
 
     constexpr int M = 16;
     constexpr int N = 16;
@@ -107,11 +71,6 @@ int main() {
 
     for (int i = 0; i < M * K; ++i) h_A[i] = __float2bfloat16(1.0f);
     for (int i = 0; i < K * N; ++i) h_B[i] = __float2bfloat16(2.0f);
-
-    if (cudaSetDevice(0) != cudaSuccess) {
-        printf("[HOST ERROR] Failed to set CUDA device 0\n");
-        return -1;
-    }
 
     float *d_C = nullptr;
     void *d_A = nullptr;
@@ -125,15 +84,19 @@ int main() {
     cudaMemcpy(d_B, h_B.data(), h_B.size() * sizeof(__nv_bfloat16), cudaMemcpyHostToDevice);
     cudaMemset(d_C, 0, h_C.size() * sizeof(float));
 
-    printf("[HOST] Launching kernel on Blackwell SM120...\n");
+    printf("[HOST] Launching C++ CuTe GEMM kernel on Tensor Cores...\n");
 
-    cute_blackwell_bf16_kernel<<<1, 32>>>(d_C, static_cast<const __nv_bfloat16 *>(d_A), static_cast<const __nv_bfloat16 *>(d_B));
+    cute_blackwell_bf16_kernel<<<1, 32>>>(
+        d_C,
+        static_cast<const __nv_bfloat16 *>(d_A),
+        static_cast<const __nv_bfloat16 *>(d_B)
+    );
 
     cudaError_t launch_err = cudaGetLastError();
-    printf("[HOST] Launch status code: %d (%s)\n", launch_err, cudaGetErrorString(launch_err));
+    printf("[HOST] Launch status: %d (%s)\n", launch_err, cudaGetErrorString(launch_err));
 
     cudaError_t sync_err = cudaDeviceSynchronize();
-    printf("[HOST] Sync status code: %d (%s)\n", sync_err, cudaGetErrorString(sync_err));
+    printf("[HOST] Sync status: %d (%s)\n", sync_err, cudaGetErrorString(sync_err));
 
     cudaMemcpy(h_C.data(), d_C, h_C.size() * sizeof(float), cudaMemcpyDeviceToHost);
 
@@ -147,4 +110,65 @@ int main() {
     cudaFree(d_C);
 
     return 0;
+}
+
+void deviceInfo() {
+    printf("\n=========================================\n");
+    printf("=== [HARDWARE CAPABILITIES REPORT] ===\n");
+    printf("=========================================\n");
+
+    int device_id = 0;
+    if (cudaSetDevice(device_id) != cudaSuccess) {
+        printf("[HOST ERROR] Failed to set CUDA device 0\n");
+        return;
+    }
+
+    cudaDeviceProp prop;
+    if (cudaGetDeviceProperties(&prop, device_id) != cudaSuccess) {
+        printf("[HOST ERROR] Failed to get device properties\n");
+        return;
+    }
+
+    int clock_rate = 0;
+    int mem_clock_rate = 0;
+    int max_threads_per_sm = 0;
+    int max_blocks_per_sm = 0;
+
+    cudaDeviceGetAttribute(&clock_rate, cudaDevAttrClockRate, device_id);
+    cudaDeviceGetAttribute(&mem_clock_rate, cudaDevAttrMemoryClockRate, device_id);
+    cudaDeviceGetAttribute(&max_threads_per_sm, cudaDevAttrMaxThreadsPerMultiProcessor, device_id);
+    cudaDeviceGetAttribute(&max_blocks_per_sm, cudaDevAttrMaxBlocksPerMultiprocessor, device_id);
+
+    printf("Device Name:                              %s\n", prop.name);
+    printf("Compute Capability:                       %d.%d\n", prop.major, prop.minor);
+    printf("Total Global Memory:                      %zu MB\n", prop.totalGlobalMem / (1024 * 1024));
+    printf("Multiprocessor (SM) Count:                %d\n", prop.multiProcessorCount);
+    printf("Core Clock Rate:                          %.2f GHz\n", clock_rate * 1e-6);
+    printf("L2 Cache Size:                            %d MB\n", prop.l2CacheSize / (1024 * 1024));
+
+    printf("\n--- Memory & Warp Execution Limits ---\n");
+    printf("Total Constant Memory:                    %zu KB\n", prop.totalConstMem / 1024);
+    printf("Shared Memory per Block (Default):        %zu KB\n", prop.sharedMemPerBlock / 1024);
+    printf("Shared Memory per Block (Opt-in Max):     %zu KB\n", prop.sharedMemPerBlockOptin / 1024);
+    printf("Shared Memory per SM:                     %zu KB\n", prop.sharedMemPerMultiprocessor / 1024);
+    printf("Registers per Block:                      %d\n", prop.regsPerBlock);
+    printf("Registers per SM:                         %d\n", prop.regsPerMultiprocessor);
+    printf("Warp Size:                                %d\n", prop.warpSize);
+    printf("Max Threads per Block:                    %d\n", prop.maxThreadsPerBlock);
+    printf("Max Threads per SM:                       %d\n", max_threads_per_sm);
+    printf("Max Blocks per SM:                        %d\n", max_blocks_per_sm);
+
+    printf("\n--- Grid & Block Geometry Limits ---\n");
+    printf("Max Block Dimensions:                     [%d, %d, %d]\n", prop.maxThreadsDim[0], prop.maxThreadsDim[1], prop.maxThreadsDim[2]);
+    printf("Max Grid Dimensions:                      [%d, %d, %d]\n", prop.maxGridSize[0], prop.maxGridSize[1], prop.maxGridSize[2]);
+
+    printf("\n--- Hardware Engine Features ---\n");
+    printf("Concurrent Kernels Support:               %s\n", prop.concurrentKernels ? "Yes" : "No");
+    printf("Async Engine Count:                       %d\n", prop.asyncEngineCount);
+    printf("Unified Addressing (UVA) Support:         %s\n", prop.unifiedAddressing ? "Yes" : "No");
+    printf("Memory Clock Rate:                        %.2f GHz\n", mem_clock_rate * 1e-6);
+    printf("Memory Bus Width:                         %d bits\n", prop.memoryBusWidth);
+    printf("Peak Memory Bandwidth:                    %.2f GB/s\n", 2.0 * mem_clock_rate * (prop.memoryBusWidth / 8.0) * 1e-6);
+    printf("Cooperative Launch Support:               %s\n", prop.cooperativeLaunch ? "Yes" : "No");
+    printf("Multi-GPU Board:                          %s\n", prop.isMultiGpuBoard ? "Yes" : "No");
 }
