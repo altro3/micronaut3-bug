@@ -3,20 +3,10 @@
 #include <vector>
 #include <iostream>
 #include <algorithm>
+
+#include "dequantize_fusion_mma_gguf_q4_k_blackwell.cuh"
 #include "cutlass/bfloat16.h"
 #include "cutlass/float8.h"
-
-extern "C" void launch_blackwell_fp4_native_gemm(
-    void *output_d,
-    const void *input_a,
-    const void *weights_b,
-    const void *scales_a,
-    const void *scales_b,
-    int32_t m_extent,
-    int32_t n_extent,
-    int32_t k_extent,
-    void *stream_ptr
-);
 
 using ElementSFA = cutlass::float_ue4m3_t;
 using ElementSFB = cutlass::float_ue4m3_t;

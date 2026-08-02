@@ -3,6 +3,8 @@
 #include <cuda_fp8.h>
 #include <cuda_fp4.h>
 #include <algorithm>
+
+#include "core_api.h"
 #include "dequantize_fusion_mma_gguf_q4_k.cuh"
 #include "data_types.h"
 
@@ -28,7 +30,7 @@ static size_t get_shmem_size_dynamic(const int32_t TILE_M, const int32_t TILE_N,
     return std::max(shmem_input, shmem_output);
 }
 
-extern "C" void launch_fused_gemm_gguf_q4_k(
+extern "C" KERNEL_API void launch_fused_gemm_gguf_q4_k(
     void *output_activations,
     const void *input_activations,
     const void *quantized_weights,

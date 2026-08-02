@@ -11,8 +11,7 @@ void run_fused_rmsnorm_fp8(__nv_bfloat16 *out, const void *input, const void *ga
 
 void run_fused_rmsnorm_fp4(__nv_bfloat16 *out, const void *input, const void *gamma, const float *gamma_scales, float epsilon, int32_t total_tokens, int32_t hidden_size, int32_t tpb, int32_t shmem, cudaStream_t stream);
 
-extern "C" {
-KERNEL_API void launch_fused_rmsnorm_forward(
+extern "C" KERNEL_API void launch_fused_rmsnorm_forward(
     void *out,
     const void *input,
     const void *gamma,
@@ -44,5 +43,4 @@ KERNEL_API void launch_fused_rmsnorm_forward(
             run_fused_rmsnorm_fp4(out_bf16, input, gamma, gamma_scales, epsilon, total_tokens, hidden_size, threads_per_block, shared_mem_bytes, stream);
             break;
     }
-}
 }

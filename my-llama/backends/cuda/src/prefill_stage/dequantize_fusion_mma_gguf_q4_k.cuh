@@ -2,6 +2,8 @@
 #include <stdint.h>
 #include <cuda_bf16.h>
 
+#include "core_api.h"
+
 struct __align__(16) BlockQ4K {
     __nv_bfloat16 d;
     __nv_bfloat16 dmin;
@@ -9,11 +11,7 @@ struct __align__(16) BlockQ4K {
     uint8_t qs[128];
 };
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-void launch_fused_gemm_gguf_q4_k(
+extern "C" KERNEL_API void launch_fused_gemm_gguf_q4_k(
     void *output_activations,
     const void *input_activations,
     const void *quantized_weights,
@@ -23,7 +21,3 @@ void launch_fused_gemm_gguf_q4_k(
     int32_t data_type,
     void *stream_ptr
 );
-
-#ifdef __cplusplus
-}
-#endif

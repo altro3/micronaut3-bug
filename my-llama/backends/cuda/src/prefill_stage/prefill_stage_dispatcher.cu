@@ -3,7 +3,9 @@
 #include "data_types.h"
 #include <cstdio>
 
-extern "C" void launch_prefill_linear(
+#include "core_api.h"
+
+extern "C" KERNEL_API void launch_prefill_linear(
     void *output_activations,
     const void *input_activations,
     const void *quantized_weights,

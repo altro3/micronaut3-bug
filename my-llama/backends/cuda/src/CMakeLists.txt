@@ -98,14 +98,28 @@ set(CUDA_BIN_DIR "${CUDAToolkit_BIN_DIR}")
 set(CUDA_INC_DIR "${CUDAToolkit_INCLUDE_DIRS}")
 
 set(COMPILE_SOURCES
-        "${CMAKE_CURRENT_SOURCE_DIR}/prefill_stage/mini_tensor_test.cu"
+        "${CMAKE_CURRENT_SOURCE_DIR}/input_stage/fused_multimodal_projection.cu"
+        "${CMAKE_CURRENT_SOURCE_DIR}/input_stage/fused_multimodal_projection_launcher.cu"
         "${CMAKE_CURRENT_SOURCE_DIR}/input_stage/fused_rmsnorm_forward.cu"
         "${CMAKE_CURRENT_SOURCE_DIR}/input_stage/fused_rmsnorm_forward_launcher.cu"
+        "${CMAKE_CURRENT_SOURCE_DIR}/input_stage/varlen_embeddings.cu"
+        "${CMAKE_CURRENT_SOURCE_DIR}/input_stage/varlen_embeddings_launcher.cu"
+
+        "${CMAKE_CURRENT_SOURCE_DIR}/prefill_stage/dequantize_fusion_mma_gguf_q4_k.cu"
+        "${CMAKE_CURRENT_SOURCE_DIR}/prefill_stage/dequantize_fusion_mma_gguf_q4_k_blackwell.cu"
+        "${CMAKE_CURRENT_SOURCE_DIR}/prefill_stage/dequantize_fusion_mma_gguf_q4_k_launcher.cu"
+        "${CMAKE_CURRENT_SOURCE_DIR}/prefill_stage/prefill_stage_dispatcher.cu"
+        "${CMAKE_CURRENT_SOURCE_DIR}/prefill_stage/mini_tensor_test.cu"
 )
 set(IDE_SOURCES
         ${COMPILE_SOURCES}
-        "${CMAKE_CURRENT_SOURCE_DIR}/prefill_stage/mini_tensor_test.cuh"
+        "${CMAKE_CURRENT_SOURCE_DIR}/input_stage/fused_multimodal_projection.cuh"
         "${CMAKE_CURRENT_SOURCE_DIR}/input_stage/fused_rmsnorm_forward.cuh"
+        "${CMAKE_CURRENT_SOURCE_DIR}/input_stage/varlen_embeddings.cuh"
+
+        "${CMAKE_CURRENT_SOURCE_DIR}/prefill_stage/dequantize_fusion_mma_gguf_q4_k.cuh"
+        "${CMAKE_CURRENT_SOURCE_DIR}/prefill_stage/dequantize_fusion_mma_gguf_q4_k_blackwell.cuh"
+        "${CMAKE_CURRENT_SOURCE_DIR}/prefill_stage/mini_tensor_test.cuh"
 )
 
 set(DLL_OUTPUT "${CMAKE_BINARY_DIR}/bin/cuda_kernels.dll")
@@ -138,7 +152,7 @@ add_custom_command(
 )
 
 add_custom_target(my_llama_kernels_compile ALL DEPENDS "${DLL_OUTPUT}" "${LIB_OUTPUT}")
-add_library(cuda_kernels INTERFACE)
+add_library(cuda_kernels INTERFACE ${IDE_SOURCES})
 add_dependencies(cuda_kernels my_llama_kernels_compile)
 
 target_include_directories(cuda_kernels INTERFACE

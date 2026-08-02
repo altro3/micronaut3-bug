@@ -1,11 +1,9 @@
 #pragma once
 #include <stdint.h>
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+#include "core_api.h"
 
-void launch_blackwell_fp4_native_gemm(
+extern "C" KERNEL_API void launch_blackwell_fp4_native_gemm(
     void *output_d,
     const void *input_a,
     const void *weights_b,
@@ -16,7 +14,3 @@ void launch_blackwell_fp4_native_gemm(
     int32_t k_extent,
     void *stream_ptr
 );
-
-#ifdef __cplusplus
-}
-#endif

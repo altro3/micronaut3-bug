@@ -3,13 +3,15 @@
 #include <cassert>
 #include <cutlass/numeric_types.h>
 
+#include "core_api.h"
+
 void run_batched_projection_bf16(ProjectionParams params, const float *projection_bias, const float *quantization_scales, int32_t local_output_dim, int32_t input_feature_dim, int32_t rank_offset, dim3 grid, dim3 block, size_t shmem, cudaStream_t stream);
 
 void run_batched_projection_fp8(ProjectionParams params, const float *projection_bias, const float *quantization_scales, int32_t local_output_dim, int32_t input_feature_dim, int32_t rank_offset, dim3 grid, dim3 block, size_t shmem, cudaStream_t stream);
 
 void run_batched_projection_fp4(ProjectionParams params, const float *projection_bias, const float *quantization_scales, int32_t local_output_dim, int32_t input_feature_dim, int32_t rank_offset, dim3 grid, dim3 block, size_t shmem, cudaStream_t stream);
 
-extern "C" void launch_fused_multimodal_projection(
+extern "C" KERNEL_API void launch_fused_multimodal_projection(
     const void ** __restrict__ host_ptr_A,
     const void ** __restrict__ host_ptr_B,
     void ** __restrict__ host_ptr_D,
