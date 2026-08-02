@@ -6,24 +6,9 @@
 #include <vector>
 #include <cmath>
 #include <random>
-#include <cstdint>
 #include <iostream>
 #include "data_types.h"
-
-extern "C" {
-void launch_fused_rmsnorm_forward(
-    void *out,
-    const void *input,
-    const void *gamma,
-    const float *gamma_scales,
-    float epsilon,
-    int32_t total_tokens,
-    int32_t hidden_size,
-    int32_t data_type,
-    int32_t threads_per_block,
-    void *stream_ptr
-);
-}
+#include "input_stage/fused_rmsnorm_forward.cuh"
 
 struct RMSNormContext {
     const int32_t total_tokens = 4;
@@ -63,6 +48,9 @@ struct RMSNormContext {
 };
 
 TEST_CASE("FusedRMSNormTest - TestBF16") {
+
+    printf("FusedRMSNormTest !!!!!!!!!!");
+
     RMSNormContext ctx;
 
     std::vector<__nv_bfloat16> h_input_bf16(ctx.total_tokens * ctx.hidden_size);

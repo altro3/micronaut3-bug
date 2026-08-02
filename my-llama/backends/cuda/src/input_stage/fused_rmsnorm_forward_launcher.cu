@@ -3,6 +3,7 @@
 #include <stdint.h>
 
 #include "data_types.h"
+#include "fused_rmsnorm_forward.cuh"
 
 void run_fused_rmsnorm_bf16(__nv_bfloat16 *out, const void *input, const void *gamma, const float *gamma_scales, float epsilon, int32_t total_tokens, int32_t hidden_size, int32_t tpb, int32_t shmem, cudaStream_t stream);
 
@@ -11,7 +12,7 @@ void run_fused_rmsnorm_fp8(__nv_bfloat16 *out, const void *input, const void *ga
 void run_fused_rmsnorm_fp4(__nv_bfloat16 *out, const void *input, const void *gamma, const float *gamma_scales, float epsilon, int32_t total_tokens, int32_t hidden_size, int32_t tpb, int32_t shmem, cudaStream_t stream);
 
 extern "C" {
-void launch_fused_rmsnorm_forward(
+KERNEL_API void launch_fused_rmsnorm_forward(
     void *out,
     const void *input,
     const void *gamma,
