@@ -1,11 +1,8 @@
 #pragma once
 #include <stdint.h>
+#include "core_api.h"
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-void launch_prefill_linear(
+extern "C" KERNEL_API void launch_prefill_linear(
     void *output_activations,
     const void *input_activations,
     const void *quantized_weights,
@@ -16,7 +13,3 @@ void launch_prefill_linear(
     int32_t quantization_type,
     void *stream_ptr
 );
-
-#ifdef __cplusplus
-}
-#endif

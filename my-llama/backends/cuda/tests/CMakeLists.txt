@@ -21,13 +21,20 @@ file(GLOB_RECURSE TEST_FILES CONFIGURE_DEPENDS
 set(TESTS_SPECIFIC_INCLUDES
         "${CMAKE_CURRENT_SOURCE_DIR}/../include"
         "${CMAKE_CURRENT_SOURCE_DIR}/../src"
-        "${flashinfer_SOURCE_DIR}/include"
 )
+
+if (flashinfer_SOURCE_DIR)
+    list(APPEND TESTS_SPECIFIC_INCLUDES "${flashinfer_SOURCE_DIR}/include")
+endif ()
 
 foreach (test_file ${TEST_FILES})
     get_filename_component(test_name ${test_file} NAME_WE)
 
     add_executable(${test_name} ${test_file} "${CMAKE_CURRENT_SOURCE_DIR}/test_main.cpp")
+
+    set_target_properties(${test_name} PROPERTIES
+            COMPILE_FLAGS ""
+    )
 
     target_link_libraries(${test_name} PRIVATE inference_compile_options)
 
@@ -36,8 +43,8 @@ foreach (test_file ${TEST_FILES})
     endif ()
 
     target_compile_options(${test_name} PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:--expt-relaxed-constexpr -Xptxas -v>)
-
     target_include_directories(${test_name} PRIVATE ${TESTS_SPECIFIC_INCLUDES})
+    add_dependencies(${test_name} cuda_kernels)
 
     target_link_libraries(${test_name} PRIVATE
             doctest::doctest
@@ -47,6 +54,8 @@ foreach (test_file ${TEST_FILES})
 
     set_target_properties(${test_name} PROPERTIES
             CUDA_SEPARABLE_COMPILATION OFF
+            RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_BINARY_DIR}/bin"
+            RUNTIME_OUTPUT_DIRECTORY_DEBUG "${CMAKE_BINARY_DIR}/bin"
             RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
     )
 

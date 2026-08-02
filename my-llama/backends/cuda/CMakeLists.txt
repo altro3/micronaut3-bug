@@ -68,6 +68,17 @@ add_subdirectory(benches)
 
 option(BUILD_TESTS "Build C++ CUDA kernel tests" ON)
 if (BUILD_TESTS AND NOT ISOLATED_BUILD)
+
     enable_testing()
     add_subdirectory(tests)
+    get_directory_property(ALL_DYNAMIC_TESTS DIRECTORY tests TESTS)
+
+    add_custom_target(check
+            COMMAND ${CMAKE_CTEST_COMMAND} -C $<CONFIG> --output-on-failure
+            COMMENT "[MY_LLAMA] Running all inference engine tests..."
+    )
+
+    if (ALL_DYNAMIC_TESTS)
+        add_dependencies(check ${ALL_DYNAMIC_TESTS})
+    endif ()
 endif ()

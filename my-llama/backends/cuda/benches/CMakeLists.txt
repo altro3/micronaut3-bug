@@ -19,8 +19,11 @@ endif ()
 
 target_include_directories(run_cuda_benches PRIVATE
         "${CMAKE_CURRENT_SOURCE_DIR}/../include"
-        "${flashinfer_SOURCE_DIR}/include"
 )
+
+if (flashinfer_SOURCE_DIR)
+    target_include_directories(run_cuda_benches PRIVATE "${flashinfer_SOURCE_DIR}/include")
+endif ()
 
 target_link_libraries(run_cuda_benches PRIVATE
         cuda_kernels
