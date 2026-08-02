@@ -1,14 +1,14 @@
+#include "mini_tensor_test.cuh"
 #include <cute/tensor.hpp>
 #include <cute/atom/mma_atom.hpp>
 #include <cuda_bf16.h>
-#include <stdio.h>
 
 using namespace cute;
 
 __global__ void cute_blackwell_bf16_kernel(
-    float *c_matrix,
-    const __nv_bfloat16 *a_matrix,
-    const __nv_bfloat16 *b_matrix
+float *c_matrix,
+const __nv_bfloat16 *a_matrix,
+const __nv_bfloat16 *b_matrix
 ) {
     using mma_op = SM80_16x8x16_F32BF16BF16F32_TN;
     constexpr MMA_Atom<mma_op> mma_atom;
@@ -46,10 +46,10 @@ __global__ void cute_blackwell_bf16_kernel(
     copy(tCrC, tCgC);
 }
 
-void launch_cute_blackwell_gemm(float *d_C, const void *d_A, const void *d_B) {
+extern "C" KERNEL_API void launch_cute_blackwell_gemm(float *d_C, const void *d_A, const void *d_B) {
     cute_blackwell_bf16_kernel<<<1, 32>>>(
-        d_C,
-        static_cast<const __nv_bfloat16 *>(d_A),
-        static_cast<const __nv_bfloat16 *>(d_B)
+    d_C,
+    static_cast<const __nv_bfloat16 *>(d_A),
+    static_cast<const __nv_bfloat16 *>(d_B)
     );
 }

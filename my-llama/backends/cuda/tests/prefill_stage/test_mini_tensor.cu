@@ -1,74 +1,55 @@
 #include <doctest.h>
+#include "prefill_stage/mini_tensor_test.cuh"
 #include <cuda_runtime.h>
 #include <cuda_bf16.h>
-#include <iostream>
+#include <stdio.h>
 #include <vector>
-#include "prefill_stage/mini_tensor_test.cuh"
 
-TEST_CASE("MiniTensorCoreVerificationTest - Split Compilation") {
-    std::cout << "\n=========================================" << std::endl;
-    std::cout << "=== [STARTING TENSOR CORE MINI BENCH] ===" << std::endl;
-    std::cout << "=========================================" << std::endl;
+TEST_CASE("Testing Blackwell CuTe GEMM via Tensor Cores DLL") {
+    REQUIRE(cudaSetDevice(0) == cudaSuccess);
+    cudaFree(nullptr);
 
-    constexpr int M = 16;
-    constexpr int N = 16;
-    constexpr int K = 16;
-
-    size_t size_A = M * K * sizeof(__nv_bfloat16);
-    size_t size_B = K * N * sizeof(__nv_bfloat16);
-    size_t size_C = M * N * sizeof(float);
-
-    __nv_bfloat16* h_A = nullptr;
-    __nv_bfloat16* h_B = nullptr;
-    float* h_C = nullptr;
-
-    REQUIRE(cudaMallocHost(&h_A, size_A) == cudaSuccess);
-    REQUIRE(cudaMallocHost(&h_B, size_B) == cudaSuccess);
-    REQUIRE(cudaMallocHost(&h_C, size_C) == cudaSuccess);
+    constexpr int M = 16, N = 16, K = 16;
+    std::vector<__nv_bfloat16> h_A(M * K);
+    std::vector<__nv_bfloat16> h_B(K * N);
+    std::vector h_C(M * N, 0.0f);
 
     for (int i = 0; i < M * K; ++i) h_A[i] = __float2bfloat16(1.0f);
     for (int i = 0; i < K * N; ++i) h_B[i] = __float2bfloat16(2.0f);
-    for (int i = 0; i < M * N; ++i) h_C[i] = 0.0f;
-
-    REQUIRE(cudaSetDevice(0) == cudaSuccess);
 
     float *d_C = nullptr;
-    void *d_A = nullptr;
-    void *d_B = nullptr;
+    void *d_A = nullptr, *d_B = nullptr;
 
-    REQUIRE(cudaMalloc(&d_A, size_A) == cudaSuccess);
-    REQUIRE(cudaMalloc(&d_B, size_B) == cudaSuccess);
-    REQUIRE(cudaMalloc(&d_C, size_C) == cudaSuccess);
+    REQUIRE(cudaMalloc(&d_A, h_A.size() * sizeof(__nv_bfloat16)) == cudaSuccess);
+    REQUIRE(cudaMalloc(&d_B, h_B.size() * sizeof(__nv_bfloat16)) == cudaSuccess);
+    REQUIRE(cudaMalloc(&d_C, h_C.size() * sizeof(float)) == cudaSuccess);
 
-    REQUIRE(((uintptr_t)d_A % 16) == 0);
-    REQUIRE(((uintptr_t)d_B % 16) == 0);
-    REQUIRE(((uintptr_t)d_C % 16) == 0);
+    REQUIRE(cudaMemcpy(d_A, h_A.data(), h_A.size() * sizeof(__nv_bfloat16), cudaMemcpyHostToDevice) == cudaSuccess);
+    REQUIRE(cudaMemcpy(d_B, h_B.data(), h_B.size() * sizeof(__nv_bfloat16), cudaMemcpyHostToDevice) == cudaSuccess);
+    REQUIRE(cudaMemset(d_C, 0, h_C.size() * sizeof(float)) == cudaSuccess);
 
-    REQUIRE(cudaMemcpy(d_A, h_A, size_A, cudaMemcpyHostToDevice) == cudaSuccess);
-    REQUIRE(cudaMemcpy(d_B, h_B, size_B, cudaMemcpyHostToDevice) == cudaSuccess);
-    REQUIRE(cudaMemset(d_C, 0, size_C) == cudaSuccess);
+    printf("[HOST] Launching C++ CuTe GEMM kernel on Tensor Cores via Interface...\n");
 
-    cudaError_t launch_err = launch_mini_wmma_bf16(d_C, d_A, d_B);
-    std::cout << "[CUDA] Call finished with code: " << launch_err << std::endl;
+    launch_cute_blackwell_gemm(d_C, d_A, d_B);
+
+    cudaError_t launch_err = cudaGetLastError();
+    printf("[HOST] Launch status: %d (%s)\n", launch_err, cudaGetErrorString(launch_err));
     REQUIRE(launch_err == cudaSuccess);
 
     cudaError_t sync_err = cudaDeviceSynchronize();
-    std::cout << "[CUDA] Device sync status: " << sync_err << std::endl;
+    printf("[HOST] Sync status: %d (%s)\n", sync_err, cudaGetErrorString(sync_err));
     REQUIRE(sync_err == cudaSuccess);
 
-    REQUIRE(cudaMemcpy(h_C, d_C, size_C, cudaMemcpyDeviceToHost) == cudaSuccess);
+    REQUIRE(cudaMemcpy(h_C.data(), d_C, h_C.size() * sizeof(float), cudaMemcpyDeviceToHost) == cudaSuccess);
 
-    std::cout << "\n=== [TENSOR CORE HARDWARE MATRIX OUT] ===" << std::endl;
-    std::cout << "Expected cell value (1.0 * 2.0 * 16): 32" << std::endl;
-    std::cout << "Actual hardware value at index 0:     " << h_C[0] << std::endl;
-    std::cout << "=========================================\n" << std::endl;
+    printf("\n=== [VERIFICATION] ===\n");
+    printf("Expected cell value: 32.000000\n");
+    printf("Actual cell value:   %f\n", h_C[0]);
+    printf("=========================================\n\n");
 
-    REQUIRE(h_C[0] == 32.0f);
+    CHECK(h_C[0] == doctest::Approx(32.0f));
 
     cudaFree(d_A);
     cudaFree(d_B);
     cudaFree(d_C);
-    cudaFreeHost(h_A);
-    cudaFreeHost(h_B);
-    cudaFreeHost(h_C);
 }

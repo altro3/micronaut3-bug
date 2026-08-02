@@ -18,13 +18,10 @@ file(GLOB_RECURSE TEST_FILES CONFIGURE_DEPENDS
         "${CMAKE_CURRENT_SOURCE_DIR}/prefill_stage/test_*.cu"
 )
 
-set(CUDA_COMMON_INCLUDE_DIRS
+set(TESTS_SPECIFIC_INCLUDES
         "${CMAKE_CURRENT_SOURCE_DIR}/../include"
         "${CMAKE_CURRENT_SOURCE_DIR}/../src"
         "${flashinfer_SOURCE_DIR}/include"
-        "${LOCAL_CUTLASS_DIR}/include"
-        "${LOCAL_CUTLASS_DIR}/tools/util/include"
-        "${CUDAToolkit_INCLUDE_DIRS}"
 )
 
 foreach (test_file ${TEST_FILES})
@@ -32,41 +29,25 @@ foreach (test_file ${TEST_FILES})
 
     add_executable(${test_name} ${test_file} "${CMAKE_CURRENT_SOURCE_DIR}/test_main.cpp")
 
+    target_link_libraries(${test_name} PRIVATE inference_compile_options)
+
     if (MSVC)
-        target_compile_options(${test_name} PRIVATE
-                $<$<COMPILE_LANGUAGE:CXX>:/GS->
-                $<$<COMPILE_LANGUAGE:CUDA>:-gencode=arch=compute_120,code=sm_120>
-        )
-    else ()
-        target_compile_options(${test_name} PRIVATE
-                $<$<COMPILE_LANGUAGE:CUDA>:-gencode=arch=compute_120,code=sm_120>
-        )
+        target_compile_options(${test_name} PRIVATE $<$<COMPILE_LANGUAGE:CXX>:/GS->)
     endif ()
 
-    target_compile_options(${test_name} PRIVATE
-            $<$<COMPILE_LANGUAGE:CUDA>:--expt-relaxed-constexpr -Xptxas -v>
-    )
+    target_compile_options(${test_name} PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:--expt-relaxed-constexpr -Xptxas -v>)
 
-    target_include_directories(${test_name} PRIVATE
-            ${LOCAL_CUTLASS_DIR}/include
-            ${LOCAL_CUTLASS_DIR}/tools/util/include
-            ${CUDA_COMMON_INCLUDE_DIRS}
-    )
+    target_include_directories(${test_name} PRIVATE ${TESTS_SPECIFIC_INCLUDES})
 
     target_link_libraries(${test_name} PRIVATE
             doctest::doctest
             cuda_kernels
-            CUDA::cudart
-            CUDA::cublas
+            cublas
     )
 
     set_target_properties(${test_name} PROPERTIES
             CUDA_SEPARABLE_COMPILATION OFF
-            RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/tests"
-            CXX_STANDARD 20
-            CXX_STANDARD_REQUIRED ON
-            CUDA_STANDARD 20
-            CUDA_STANDARD_REQUIRED ON
+            RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
     )
 
     add_test(NAME ${test_name} COMMAND ${test_name} -s)

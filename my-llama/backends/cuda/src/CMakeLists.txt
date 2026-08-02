@@ -69,6 +69,32 @@ target_link_libraries(cuda_kernels PRIVATE
 #        cuda
 #)
 
+add_library(cuda_kernels SHARED
+        prefill_stage/mini_tensor_test.cu
+        prefill_stage/mini_tensor_test.cuh
+)
+
+target_link_libraries(cuda_kernels PRIVATE
+        inference_compile_options
+        cuda
+)
+
+target_include_directories(cuda_kernels PUBLIC
+        "${LOCAL_CUTLASS_DIR}/include"
+        "${LOCAL_CUTLASS_DIR}/tools/util/include"
+        "${CUDAToolkit_INCLUDE_DIRS}"
+        "${CUDAToolkit_INCLUDE_DIRS}/cccl"
+)
+
+target_compile_definitions(cuda_kernels PRIVATE EXPORT_KERNELS)
+
+set_target_properties(cuda_kernels PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
+        LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
+)
+
+#[[
+
 set(CUDA_BIN_DIR "${CUDAToolkit_BIN_DIR}")
 set(CUDA_INC_DIR "${CUDAToolkit_INCLUDE_DIRS}")
 
@@ -124,3 +150,4 @@ target_link_libraries(mini_tensor_test PRIVATE
         cudart_static
         cuda
 )
+]]
