@@ -139,14 +139,17 @@ foreach (source_file ${COMPILE_SOURCES})
     add_custom_command(
             OUTPUT "${OBJ_OUTPUT}"
             COMMAND "${CUDA_BIN_DIR}/nvcc.exe"
+            --expt-relaxed-constexpr
             -std=c++20
-            -O0
-            -gencode=arch=compute_120,code=sm_120
+            -O3
+            -arch=sm_120
+            -DCUTLASS_ARCH_MMA_SM120_SUPPORTED=1
+            #            -gencode=arch=compute_120,code=sm_120
             --use_fast_math
             -Xcompiler "/Zc:preprocessor"
             -Xcompiler "/MT"
             -Xptxas -v
-            -Xptxas -O0
+            -Xptxas -O1
             -I"${CMAKE_CURRENT_SOURCE_DIR}/../include"
             -I"${LOCAL_CUTLASS_DIR}/include"
             -I"${LOCAL_CUTLASS_DIR}/tools/util/include"

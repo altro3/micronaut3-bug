@@ -64,8 +64,8 @@ TEST_CASE("BlackwellNativeFp4GemmTest - Verification") {
     auto layout_SFA = Sm1xxBlkScaledConfig::tile_atom_to_shape_SFA(make_shape(M, N, K, 1));
     auto layout_SFB = Sm1xxBlkScaledConfig::tile_atom_to_shape_SFB(make_shape(M, N, K, 1));
 
-    size_t sfa_elements = cute::get<0>(size(layout_SFA)) * cute::get<1>(size(layout_SFA));
-    size_t sfb_elements = cute::get<0>(size(layout_SFB)) * cute::get<1>(size(layout_SFB));
+    size_t sfa_elements = size(layout_SFA);
+    size_t sfb_elements = size(layout_SFB);
 
     std::vector<uint8_t> h_A(M * K / 2, 0);
     std::vector<uint8_t> h_B(N * K / 2, 0);

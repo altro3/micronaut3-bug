@@ -1,7 +1,7 @@
 #pragma once
 #include <stdint.h>
 #include "core_api.h"
-#include "cutlass/cutlass.h"
+#include "cutlass/gemm/collective/collective_mma.hpp"
 #include "cutlass/gemm/device/gemm_universal_adapter.h"
 #include "cutlass/gemm/kernel/gemm_universal.hpp"
 #include "cutlass/gemm/collective/collective_builder.hpp"
@@ -15,7 +15,7 @@ template<typename T>
 struct KernelTraits;
 
 template<>
-struct KernelTraits<cutlass::bfloat16_t> {
+struct KernelTraits<bfloat16_t> {
     using MmaTileShape = Shape<_128, _128, _128>;
     using ClusterShape = Shape<_1, _1, _1>;
     using PerSmTileShape_MNK = Shape<_128, _128, _128>;
@@ -23,15 +23,15 @@ struct KernelTraits<cutlass::bfloat16_t> {
 
 template<typename T>
 struct Fp4GemmSm120 {
-    using ElementA = cutlass::float_e2m1_t;
+    using ElementA = float_e2m1_t;
     using LayoutATag = cutlass::layout::RowMajor;
     static constexpr int AlignmentA = 32;
 
-    using ElementB = cutlass::float_e2m1_t;
+    using ElementB = float_e2m1_t;
     using LayoutBTag = cutlass::layout::ColumnMajor;
     static constexpr int AlignmentB = 32;
 
-    using ElementScale = cutlass::float_ue4m3_t;
+    using ElementScale = float_ue4m3_t;
 
     using ElementD = T;
     using ElementC = T;
@@ -45,11 +45,11 @@ struct Fp4GemmSm120 {
     using ArchTag = cutlass::arch::Sm120;
     using OperatorClass = cutlass::arch::OpClassBlockScaledTensorOp;
 
-    using MmaTileShape = typename KernelTraits<T>::MmaTileShape;
-    using ClusterShape = typename KernelTraits<T>::ClusterShape;
-    using PerSmTileShape_MNK = typename KernelTraits<T>::PerSmTileShape_MNK;
+    using MmaTileShape = KernelTraits<T>::MmaTileShape;
+    using ClusterShape = KernelTraits<T>::ClusterShape;
+    using PerSmTileShape_MNK = KernelTraits<T>::PerSmTileShape_MNK;
 
-    using CollectiveEpilogue = typename cutlass::epilogue::collective::CollectiveBuilder<
+    using CollectiveEpilogue = cutlass::epilogue::collective::CollectiveBuilder<
         ArchTag, OperatorClass, PerSmTileShape_MNK, ClusterShape,
         cutlass::epilogue::collective::EpilogueTileAuto,
         ElementAccumulator, ElementAccumulator,
@@ -58,7 +58,7 @@ struct Fp4GemmSm120 {
         cutlass::epilogue::collective::EpilogueScheduleAuto
     >::CollectiveOp;
 
-    using CollectiveMainloop = typename cutlass::gemm::collective::CollectiveBuilder<
+    using CollectiveMainloop = cutlass::gemm::collective::CollectiveBuilder<
         ArchTag, OperatorClass,
         tuple<ElementA, ElementScale>, LayoutATag, AlignmentA,
         tuple<ElementB, ElementScale>, LayoutBTag, AlignmentB,
@@ -70,10 +70,10 @@ struct Fp4GemmSm120 {
     using GemmKernel = cutlass::gemm::kernel::GemmUniversal<Shape<int, int, int, int>, CollectiveMainloop, CollectiveEpilogue>;
     using Gemm = cutlass::gemm::device::GemmUniversalAdapter<GemmKernel>;
 
-    using StrideA = typename GemmKernel::StrideA;
-    using StrideB = typename GemmKernel::StrideB;
-    using StrideD = typename GemmKernel::StrideD;
-    using Sm1xxBlkScaledConfig = typename CollectiveMainloop::Sm1xxBlkScaledConfig;
+    using StrideA = GemmKernel::StrideA;
+    using StrideB = GemmKernel::StrideB;
+    using StrideD = GemmKernel::StrideD;
+    using Sm1xxBlkScaledConfig = CollectiveMainloop::Sm1xxBlkScaledConfig;
 };
 
 extern "C" KERNEL_API void launch_blackwell_fp4_native_gemm(

@@ -15,50 +15,43 @@ extern "C" void launch_blackwell_fp4_native_gemm(
     int32_t k_extent,
     void *stream_ptr
 ) {
-    using GemmOp = Fp4GemmSm120<cutlass::bfloat16_t>;
-    using ElementA = typename GemmOp::ElementA;
-    using ElementB = typename GemmOp::ElementB;
-    using ElementSFA = typename GemmOp::ElementScale;
-    using ElementSFB = typename GemmOp::ElementScale;
-    using ElementD = typename GemmOp::ElementD;
-    using StrideA = typename GemmOp::StrideA;
-    using StrideB = typename GemmOp::StrideB;
-    using StrideD = typename GemmOp::StrideD;
-    using Sm1xxBlkScaledConfig = typename GemmOp::Sm1xxBlkScaledConfig;
+    using GemmOp = Fp4GemmSm120<bfloat16_t>;
+    using GemmDeviceAdapter = GemmOp::Gemm;
+    using Sm1xxBlkScaledConfig = GemmOp::Sm1xxBlkScaledConfig;
+
+    GemmDeviceAdapter gemm;
 
     int m = m_extent;
     int n = n_extent;
     int k = k_extent;
     auto stream = static_cast<cudaStream_t>(stream_ptr);
 
-    if (m == 0 || n == 0 || k == 0) return;
-
-    auto stride_A = cutlass::make_cute_packed_stride(StrideA{}, make_shape(m, k, 1));
-    auto stride_B = cutlass::make_cute_packed_stride(StrideB{}, make_shape(n, k, 1));
-    auto stride_D = cutlass::make_cute_packed_stride(StrideD{}, make_shape(m, n, 1));
+    auto stride_A = cutlass::make_cute_packed_stride(GemmOp::StrideA{}, make_shape(m, k, 1));
+    auto stride_B = cutlass::make_cute_packed_stride(GemmOp::StrideB{}, make_shape(n, k, 1));
+    auto stride_D = cutlass::make_cute_packed_stride(GemmOp::StrideD{}, make_shape(m, n, 1));
 
     auto layout_SFA = Sm1xxBlkScaledConfig::tile_atom_to_shape_SFA(make_shape(m, n, k, 1));
     auto layout_SFB = Sm1xxBlkScaledConfig::tile_atom_to_shape_SFB(make_shape(m, n, k, 1));
 
-#if defined(_MSC_VER)
-#define ALIGN_32 __declspec(align(32))
-#else
-#define ALIGN_32 alignas(32)
-#endif
-
-    ALIGN_32 typename GemmOp::Gemm::Arguments arguments{
-        cutlass::gemm::GemmUniversalMode::kGemm,
-        {m, n, k, 1},
-        {
-            static_cast<ElementA const *>(input_a), stride_A,
-            static_cast<ElementB const *>(weights_b), stride_B,
-            static_cast<ElementSFA const *>(scales_a), layout_SFA,
-            static_cast<ElementSFB const *>(scales_b), layout_SFB
+    GemmOp::Gemm::Arguments arguments{
+        .mode = cutlass::gemm::GemmUniversalMode::kGemm,
+        .problem_shape = {m, n, k, 1},
+        .mainloop = {
+            .ptr_A = static_cast<GemmOp::ElementA const *>(input_a),
+            .dA = stride_A,
+            .ptr_B = static_cast<GemmOp::ElementB const *>(weights_b),
+            .dB = stride_B,
+            .ptr_SFA = static_cast<GemmOp::ElementScale const *>(scales_a),
+            .layout_SFA = layout_SFA,
+            .ptr_SFB = static_cast<GemmOp::ElementScale const *>(scales_b),
+            .layout_SFB = layout_SFB
         },
-        {
-            {},
-            static_cast<ElementD const *>(nullptr), stride_D,
-            static_cast<ElementD *>(output_d), stride_D
+        .epilogue = {
+            .thread = {},
+            .ptr_C = static_cast<bfloat16_t const *>(nullptr),
+            .dC = stride_D,
+            .ptr_D = static_cast<bfloat16_t *>(output_d),
+            .dD = stride_D
         }
     };
 
@@ -70,8 +63,6 @@ extern "C" void launch_blackwell_fp4_native_gemm(
     arguments.hw_info.sm_count = actual_sm_count;
     arguments.hw_info.max_active_clusters = 1;
     arguments.hw_info.cluster_shape = dim3(1, 1, 1);
-
-    GemmOp::Gemm gemm;
 
     cutlass::Status status = gemm.can_implement(arguments);
     if (status != cutlass::Status::kSuccess) {
