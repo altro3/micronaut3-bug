@@ -107,7 +107,7 @@ set(COMPILE_SOURCES
 
         "prefill_stage/dequantize_fusion_mma_gguf_q4_k.cu"
         "prefill_stage/dequantize_fusion_mma_gguf_q4_k_launcher.cu"
-        #        "prefill_stage/dequantize_fusion_mma_gguf_q4_k_blackwell.cu"
+        "prefill_stage/dequantize_fusion_mma_gguf_q4_k_blackwell.cu"
         "prefill_stage/prefill_stage_dispatcher.cu"
         "prefill_stage/mini_tensor_test.cu"
 )
@@ -118,7 +118,7 @@ set(IDE_SOURCES
         "input_stage/varlen_embeddings.cuh"
 
         "prefill_stage/dequantize_fusion_mma_gguf_q4_k.cuh"
-        #        "prefill_stage/dequantize_fusion_mma_gguf_q4_k_blackwell.cuh"
+        "prefill_stage/dequantize_fusion_mma_gguf_q4_k_blackwell.cuh"
         "prefill_stage/mini_tensor_test.cuh"
 )
 
@@ -140,10 +140,13 @@ foreach (source_file ${COMPILE_SOURCES})
             OUTPUT "${OBJ_OUTPUT}"
             COMMAND "${CUDA_BIN_DIR}/nvcc.exe"
             -std=c++20
-            -O3
-            -arch=sm_120
+            -O0
+            -gencode=arch=compute_120,code=sm_120
+            --use_fast_math
             -Xcompiler "/Zc:preprocessor"
             -Xcompiler "/MT"
+            -Xptxas -v
+            -Xptxas -O0
             -I"${CMAKE_CURRENT_SOURCE_DIR}/../include"
             -I"${LOCAL_CUTLASS_DIR}/include"
             -I"${LOCAL_CUTLASS_DIR}/tools/util/include"
@@ -154,7 +157,7 @@ foreach (source_file ${COMPILE_SOURCES})
             -c "${ABS_SOURCE}"
             -o "${OBJ_OUTPUT}"
             DEPENDS "${ABS_SOURCE}"
-            COMMENT "[MY_LLAMA] Инкрементальная компиляция куска: ${file_name}.cu"
+            COMMENT "[MY_LLAMA] Incremental compiling ${file_name}.cu"
     )
 
     list(APPEND OBJECT_FILES "${OBJ_OUTPUT}")
@@ -163,14 +166,15 @@ endforeach ()
 add_custom_command(
         OUTPUT "${DLL_OUTPUT}" "${LIB_OUTPUT}"
         COMMAND "${CUDA_BIN_DIR}/nvcc.exe"
-        -arch=sm_120
+        -gencode=arch=compute_120,code=sm_120
+        --shared
         -Xlinker "/NODEFAULTLIB:cudart.lib"
         -Xlinker "/NODEFAULTLIB:msvcrt.lib"
-        --shared
+        -Xlinker "/OPT:REF"
         ${OBJECT_FILES}
         -o "${DLL_OUTPUT}"
         DEPENDS ${OBJECT_FILES}
-        COMMENT "[MY_LLAMA] Финальная склейка DLL ядер инференса..."
+        COMMENT "[MY_LLAMA] Final build to single DLL..."
 )
 
 set_source_files_properties(${IDE_SOURCES} PROPERTIES OBJECT_DEPENDS "${IDE_SOURCES}")

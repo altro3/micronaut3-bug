@@ -8,9 +8,9 @@
 #include "cutlass/bfloat16.h"
 #include "cutlass/float8.h"
 
-using ElementSFA = cutlass::float_ue4m3_t;
-using ElementSFB = cutlass::float_ue4m3_t;
-using ElementD = cutlass::bfloat16_t;
+using ElementSFA = float_ue4m3_t;
+using ElementSFB = float_ue4m3_t;
+using ElementD = bfloat16_t;
 
 TEST_CASE("BlackwellNativeFp4GemmTest - Verification") {
     int device = 0;
@@ -52,24 +52,30 @@ TEST_CASE("BlackwellNativeFp4GemmTest - Verification") {
         std::cout << "  Unified Addressing (UVA):           " << (prop.unifiedAddressing ? "ENABLED" : "DISABLED") << std::endl;
         std::cout << "  ECC Protection Status:              " << (prop.ECCEnabled ? "ENABLED" : "DISABLED") << std::endl;
         std::cout << "========================================================\n" << std::endl;
-    } else {
-        std::cerr << "[HARDWARE ERROR] Failed to fetch device properties!" << std::endl;
     }
 
     constexpr int32_t M = 1024;
     constexpr int32_t N = 4096;
     constexpr int32_t K = 4096;
 
+    using GemmOp = Fp4GemmSm120<bfloat16_t>;
+    using Sm1xxBlkScaledConfig = GemmOp::Sm1xxBlkScaledConfig;
+
+    auto layout_SFA = Sm1xxBlkScaledConfig::tile_atom_to_shape_SFA(make_shape(M, N, K, 1));
+    auto layout_SFB = Sm1xxBlkScaledConfig::tile_atom_to_shape_SFB(make_shape(M, N, K, 1));
+
+    size_t sfa_elements = cute::get<0>(size(layout_SFA)) * cute::get<1>(size(layout_SFA));
+    size_t sfb_elements = cute::get<0>(size(layout_SFB)) * cute::get<1>(size(layout_SFB));
+
     std::vector<uint8_t> h_A(M * K / 2, 0);
     std::vector<uint8_t> h_B(N * K / 2, 0);
 
-    std::vector<ElementSFA> h_SFA(M * K / 16, ElementSFA(1.0f));
-    std::vector<ElementSFB> h_SFB(N * K / 16, ElementSFB(1.0f));
-    std::vector<ElementD> h_D(M * N, ElementD(0.0f));
+    std::vector h_SFA(sfa_elements, ElementSFA(1.0f));
+    std::vector h_SFB(sfb_elements, ElementSFB(1.0f));
+    std::vector h_D(M * N, ElementD(0.0f));
 
     std::ranges::fill(h_A, 0x33);
     std::ranges::fill(h_B, 0x33);
-
     std::ranges::fill(h_SFA, ElementSFA(1.0f));
     std::ranges::fill(h_SFB, ElementSFB(1.0f));
 

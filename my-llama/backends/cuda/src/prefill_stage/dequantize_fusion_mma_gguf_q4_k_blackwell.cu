@@ -1,79 +1,8 @@
+#include "dequantize_fusion_mma_gguf_q4_k_blackwell.cuh"
 #include <iostream>
 #include <cuda_runtime.h>
 #include "cutlass/cutlass.h"
-#include "cutlass/gemm/device/gemm_universal_adapter.h"
-#include "cutlass/gemm/kernel/gemm_universal.hpp"
-#include "cutlass/gemm/collective/collective_builder.hpp"
-#include "cutlass/epilogue/collective/collective_builder.hpp"
 #include "cutlass/util/packed_stride.hpp"
-#include "cutlass/bfloat16.h"
-#include "cutlass/float8.h"
-
-using namespace cute;
-
-template<typename T>
-struct KernelTraits;
-
-template<>
-struct KernelTraits<bfloat16_t> {
-    using MmaTileShape = Shape<_128, _128, _128>;
-    using ClusterShape = Shape<_1, _1, _1>;
-    using PerSmTileShape_MNK = Shape<_128, _128, _128>;
-};
-
-template<typename T>
-struct Fp4GemmSm120 {
-    using ElementA = float_e2m1_t;
-    using LayoutATag = cutlass::layout::RowMajor;
-    static constexpr int AlignmentA = 32;
-
-    using ElementB = float_e2m1_t;
-    using LayoutBTag = cutlass::layout::ColumnMajor;
-    static constexpr int AlignmentB = 32;
-
-    using ElementScale = float_ue4m3_t;
-
-    using ElementD = T;
-    using ElementC = T;
-    using LayoutCTag = cutlass::layout::RowMajor;
-    using LayoutDTag = cutlass::layout::RowMajor;
-    static constexpr int AlignmentD = 128 / cutlass::sizeof_bits<ElementD>::value;
-    static constexpr int AlignmentC = 128 / cutlass::sizeof_bits<ElementC>::value;
-    using ElementAccumulator = float;
-
-    using ArchTag = cutlass::arch::Sm120;
-    using OperatorClass = cutlass::arch::OpClassBlockScaledTensorOp;
-
-    using MmaTileShape = KernelTraits<T>::MmaTileShape;
-    using ClusterShape = KernelTraits<T>::ClusterShape;
-    using PerSmTileShape_MNK = KernelTraits<T>::PerSmTileShape_MNK;
-
-    using CollectiveEpilogue = cutlass::epilogue::collective::CollectiveBuilder<
-        ArchTag, OperatorClass, PerSmTileShape_MNK, ClusterShape,
-        cutlass::epilogue::collective::EpilogueTileAuto,
-        ElementAccumulator, ElementAccumulator,
-        ElementC, LayoutCTag, AlignmentC,
-        ElementD, LayoutDTag, AlignmentD,
-        cutlass::epilogue::collective::EpilogueScheduleAuto
-    >::CollectiveOp;
-
-    using CollectiveMainloop = cutlass::gemm::collective::CollectiveBuilder<
-        ArchTag, OperatorClass,
-        tuple<ElementA, ElementScale>, LayoutATag, AlignmentA,
-        tuple<ElementB, ElementScale>, LayoutBTag, AlignmentB,
-        ElementAccumulator, MmaTileShape, ClusterShape,
-        cutlass::gemm::collective::StageCountAuto,
-        cutlass::gemm::collective::KernelScheduleAuto
-    >::CollectiveOp;
-
-    using GemmKernel = cutlass::gemm::kernel::GemmUniversal<Shape<int, int, int, int>, CollectiveMainloop, CollectiveEpilogue>;
-    using Gemm = cutlass::gemm::device::GemmUniversalAdapter<GemmKernel>;
-
-    using StrideA = Gemm::GemmKernel::StrideA;
-    using StrideB = Gemm::GemmKernel::StrideB;
-    using StrideD = Gemm::GemmKernel::StrideD;
-    using Sm1xxBlkScaledConfig = Gemm::GemmKernel::CollectiveMainloop::Sm1xxBlkScaledConfig;
-};
 
 extern "C" void launch_blackwell_fp4_native_gemm(
     void *output_d,
@@ -86,16 +15,16 @@ extern "C" void launch_blackwell_fp4_native_gemm(
     int32_t k_extent,
     void *stream_ptr
 ) {
-    using GemmOp = Fp4GemmSm120<bfloat16_t>;
-    using ElementA = GemmOp::ElementA;
-    using ElementB = GemmOp::ElementB;
-    using ElementSFA = GemmOp::ElementScale;
-    using ElementSFB = GemmOp::ElementScale;
-    using ElementD = GemmOp::Gemm::ElementD;
-    using StrideA = GemmOp::StrideA;
-    using StrideB = GemmOp::StrideB;
-    using StrideD = GemmOp::StrideD;
-    using Sm1xxBlkScaledConfig = GemmOp::Sm1xxBlkScaledConfig;
+    using GemmOp = Fp4GemmSm120<cutlass::bfloat16_t>;
+    using ElementA = typename GemmOp::ElementA;
+    using ElementB = typename GemmOp::ElementB;
+    using ElementSFA = typename GemmOp::ElementScale;
+    using ElementSFB = typename GemmOp::ElementScale;
+    using ElementD = typename GemmOp::ElementD;
+    using StrideA = typename GemmOp::StrideA;
+    using StrideB = typename GemmOp::StrideB;
+    using StrideD = typename GemmOp::StrideD;
+    using Sm1xxBlkScaledConfig = typename GemmOp::Sm1xxBlkScaledConfig;
 
     int m = m_extent;
     int n = n_extent;
@@ -117,7 +46,7 @@ extern "C" void launch_blackwell_fp4_native_gemm(
 #define ALIGN_32 alignas(32)
 #endif
 
-    ALIGN_32 GemmOp::Gemm::Arguments arguments{
+    ALIGN_32 typename GemmOp::Gemm::Arguments arguments{
         cutlass::gemm::GemmUniversalMode::kGemm,
         {m, n, k, 1},
         {
@@ -133,7 +62,12 @@ extern "C" void launch_blackwell_fp4_native_gemm(
         }
     };
 
-    arguments.hw_info.sm_count = 82;
+    int current_device = 0;
+    cudaGetDevice(&current_device);
+    int actual_sm_count = 0;
+    cudaDeviceGetAttribute(&actual_sm_count, cudaDevAttrMultiProcessorCount, current_device);
+
+    arguments.hw_info.sm_count = actual_sm_count;
     arguments.hw_info.max_active_clusters = 1;
     arguments.hw_info.cluster_shape = dim3(1, 1, 1);
 
@@ -141,7 +75,8 @@ extern "C" void launch_blackwell_fp4_native_gemm(
 
     cutlass::Status status = gemm.can_implement(arguments);
     if (status != cutlass::Status::kSuccess) {
-        std::cerr << "[ENGINE ERROR] can_implement failed: " << cutlass::cutlassGetStatusString(status) << std::endl;
+        std::cerr << "[ENGINE ERROR] can_implement failed: " << cutlass::cutlassGetStatusString(status)
+                << " (Detected SMs: " << actual_sm_count << ")" << std::endl;
         return;
     }
 
@@ -151,7 +86,7 @@ extern "C" void launch_blackwell_fp4_native_gemm(
         if (cudaMalloc(&workspace, workspace_size) != cudaSuccess) return;
     }
 
-    status = gemm.initialize(arguments, workspace);
+    status = gemm.initialize(arguments, workspace, stream);
     if (status != cutlass::Status::kSuccess) {
         std::cerr << "[ENGINE ERROR] Initialize failed: " << cutlass::cutlassGetStatusString(status) << std::endl;
         if (workspace) cudaFree(workspace);
