@@ -98,28 +98,29 @@ set(CUDA_BIN_DIR "${CUDAToolkit_BIN_DIR}")
 set(CUDA_INC_DIR "${CUDAToolkit_INCLUDE_DIRS}")
 
 set(COMPILE_SOURCES
-        "input_stage/fused_multimodal_projection.cu"
-        "input_stage/fused_multimodal_projection_launcher.cu"
-        "input_stage/fused_rmsnorm_forward.cu"
-        "input_stage/fused_rmsnorm_forward_launcher.cu"
-        "input_stage/varlen_embeddings.cu"
-        "input_stage/varlen_embeddings_launcher.cu"
+        #        "input_stage/fused_multimodal_projection.cu"
+        #        "input_stage/fused_multimodal_projection_launcher.cu"
+        #        "input_stage/fused_rmsnorm_forward.cu"
+        #        "input_stage/fused_rmsnorm_forward_launcher.cu"
+        #        "input_stage/varlen_embeddings.cu"
+        #        "input_stage/varlen_embeddings_launcher.cu"
 
-        "prefill_stage/dequantize_fusion_mma_gguf_q4_k.cu"
-        "prefill_stage/dequantize_fusion_mma_gguf_q4_k_launcher.cu"
+        #        "prefill_stage/dequantize_fusion_mma_gguf_q4_k.cu"
+        #        "prefill_stage/dequantize_fusion_mma_gguf_q4_k_launcher.cu"
         "prefill_stage/dequantize_fusion_mma_gguf_q4_k_blackwell.cu"
-        "prefill_stage/prefill_stage_dispatcher.cu"
-        "prefill_stage/mini_tensor_test.cu"
+        "prefill_stage/dequantize_fusion_mma_gguf_q4_k_blackwell2.cu"
+        #        "prefill_stage/prefill_stage_dispatcher.cu"
+        #        "prefill_stage/mini_tensor_test.cu"
 )
 set(IDE_SOURCES
         ${COMPILE_SOURCES}
-        "input_stage/fused_multimodal_projection.cuh"
-        "input_stage/fused_rmsnorm_forward.cuh"
-        "input_stage/varlen_embeddings.cuh"
-
-        "prefill_stage/dequantize_fusion_mma_gguf_q4_k.cuh"
+        #        "input_stage/fused_multimodal_projection.cuh"
+        #        "input_stage/fused_rmsnorm_forward.cuh"
+        #        "input_stage/varlen_embeddings.cuh"
+        #
+        #        "prefill_stage/dequantize_fusion_mma_gguf_q4_k.cuh"
         "prefill_stage/dequantize_fusion_mma_gguf_q4_k_blackwell.cuh"
-        "prefill_stage/mini_tensor_test.cuh"
+        #        "prefill_stage/mini_tensor_test.cuh"
 )
 
 set(DLL_OUTPUT "${CMAKE_BINARY_DIR}/bin/cuda_kernels.dll")
@@ -142,9 +143,9 @@ foreach (source_file ${COMPILE_SOURCES})
             --expt-relaxed-constexpr
             -std=c++20
             -O3
-            -arch=sm_120
+            -arch=sm_120a
             -DCUTLASS_ARCH_MMA_SM120_SUPPORTED=1
-            #            -gencode=arch=compute_120,code=sm_120
+            -gencode=arch=compute_120a,code=sm_120a
             --use_fast_math
             -Xcompiler "/Zc:preprocessor"
             -Xcompiler "/MT"
@@ -169,7 +170,7 @@ endforeach ()
 add_custom_command(
         OUTPUT "${DLL_OUTPUT}" "${LIB_OUTPUT}"
         COMMAND "${CUDA_BIN_DIR}/nvcc.exe"
-        -gencode=arch=compute_120,code=sm_120
+        -gencode=arch=compute_120a,code=sm_120a
         --shared
         -Xlinker "/NODEFAULTLIB:cudart.lib"
         -Xlinker "/NODEFAULTLIB:msvcrt.lib"

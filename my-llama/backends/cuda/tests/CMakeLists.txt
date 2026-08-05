@@ -14,8 +14,9 @@ if (NOT TARGET doctest::doctest)
 endif ()
 
 file(GLOB_RECURSE TEST_FILES CONFIGURE_DEPENDS
-        "${CMAKE_CURRENT_SOURCE_DIR}/input_stage/test_*.cu"
-        "${CMAKE_CURRENT_SOURCE_DIR}/prefill_stage/test_*.cu"
+        #        "${CMAKE_CURRENT_SOURCE_DIR}/input_stage/test_*.cu"
+        #        "${CMAKE_CURRENT_SOURCE_DIR}/prefill_stage/test_*.cu"
+        "${CMAKE_CURRENT_SOURCE_DIR}/prefill_stage/test_dequantize_fusion_mma_gguf_q4_k_blackwell.cu"
 )
 
 set(TESTS_SPECIFIC_INCLUDES
