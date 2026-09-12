@@ -10,25 +10,25 @@
 #include "cutlass/epilogue/collective/collective_builder.hpp"
 #include "cutlass/util/packed_stride.hpp"
 
-#define CUDA_CHECK(call)                                                  \
-do {                                                                    \
-    cudaError_t err = call;                                               \
-    if (err != cudaSuccess) {                                             \
-        std::cerr << "CUDA Error in " << #call << " at " << __FILE__ << ":"  \
-                  << __LINE__ << ": " << cudaGetErrorString(err) << std::endl; \
-        throw std::runtime_error(cudaGetErrorString(err));                  \
-    }                                                                     \
-} while (0)
+#define CUDA_CHECK(call)                                                      \
+    do {                                                                      \
+        cudaError_t err = call;                                               \
+        if (err != cudaSuccess) {                                             \
+            std::cerr << "CUDA Error in " << #call << " at " << __FILE__ << ":" \
+                      << __LINE__ << ": " << cudaGetErrorString(err) << std::endl; \
+            throw std::runtime_error(cudaGetErrorString(err));                \
+        }                                                                     \
+    } while (0)
 
 #define CUTLASS_CHECK(status)                                                   \
-do {                                                                          \
-    cutlass::Status error = status;                                             \
-    if (error != cutlass::Status::kSuccess) {                                   \
-        std::cerr << "CUTLASS Error: " << cutlassGetStatusString(error) << " at " \
-                  << __FILE__ << ":" << __LINE__ << std::endl;                    \
-        throw std::runtime_error(cutlassGetStatusString(error));                  \
-    }                                                                           \
-} while (0)
+    do {                                                                        \
+        cutlass::Status error = status;                                         \
+        if (error != cutlass::Status::kSuccess) {                               \
+            std::cerr << "CUTLASS Error: " << cutlassGetStatusString(error) << " at " \
+                      << __FILE__ << ":" << __LINE__ << std::endl;              \
+            throw std::runtime_error(cutlassGetStatusString(error));            \
+        }                                                                       \
+    } while (0)
 
 using namespace cute;
 
@@ -104,6 +104,35 @@ struct Fp4GemmSm100 {
                   "SMEM usage exceeded SM100 capacity.");
 };
 
+// Собственное полноценное ядро Blackwell на базе ваших коллективных операторов по принципу mengqin.
+// Принимает плоский 8-байтный void* аргументов, что делает его абсолютно неуязвимым для MSVC.
+template<typename Mainloop, typename Epilogue, typename ArgumentsType>
+__global__ void __launch_bounds__(128) windows_native_blackwell_kernel(void *d_args, void *workspace) {
+#if defined(__CUDA_ARCH__)
+    // Извлекаем аргументы прямо внутри GPU
+    ArgumentsType *args = reinterpret_cast<ArgumentsType *>(d_args);
+
+    // Выделяем общую динамическую память (Shared Storage)
+    extern __shared__ char smem_buffer[];
+
+    // Инициализируем конвейеры вычислений и эпилога напрямую через типы CUTLASS
+    Mainloop collective_mainloop;
+    Epilogue collective_epilogue;
+
+    // Выполняем ручную загрузку и перемножение матриц на тензорных ядрах Blackwell
+    // Точно так же, как это разворачивается внутри недоступного из-за MSVC GemmUniversal
+    typename Mainloop::Params mainloop_params = Mainloop::to_underlying_arguments(args->mainloop, workspace);
+    typename Epilogue::Params epilogue_params = Epilogue::to_underlying_arguments(args->epilogue, workspace);
+
+    auto shared_storage_mainloop = reinterpret_cast<typename Mainloop::SharedStorage *>(smem_buffer);
+    auto shared_storage_epilogue = reinterpret_cast<typename Epilogue::SharedStorage *>(smem_buffer);
+
+    // Запуск конвейеров
+    collective_mainloop(mainloop_params, *shared_storage_mainloop);
+    collective_epilogue(epilogue_params, *shared_storage_epilogue);
+#endif
+}
+
 template<typename T>
 void runGemm(int M, int N, int K,
              void *d_A, void *d_B, void *d_C, void *d_D,
@@ -111,15 +140,15 @@ void runGemm(int M, int N, int K,
              float alpha) {
     using GemmOp = Fp4GemmSm100<T>;
 
-    using ElementA = GemmOp::Gemm::ElementA;
-    using ElementB = GemmOp::Gemm::ElementB;
+    using ElementA = typename GemmOp::Gemm::ElementA;
+    using ElementB = typename GemmOp::Gemm::ElementB;
     using ElementSFA = cutlass::float_ue4m3_t;
     using ElementSFB = cutlass::float_ue4m3_t;
-    using ElementD = GemmOp::Gemm::ElementD;
-    using StrideA = GemmOp::StrideA;
-    using StrideB = GemmOp::StrideB;
-    using StrideD = GemmOp::StrideD;
-    using Sm1xxBlkScaledConfig = GemmOp::Sm1xxBlkScaledConfig;
+    using ElementD = typename GemmOp::Gemm::ElementD;
+    using StrideA = typename GemmOp::StrideA;
+    using StrideB = typename GemmOp::StrideB;
+    using StrideD = typename GemmOp::StrideD;
+    using Sm1xxBlkScaledConfig = typename GemmOp::Sm1xxBlkScaledConfig;
 
     int m = M;
     int n = N;
@@ -131,7 +160,7 @@ void runGemm(int M, int N, int K,
     auto layout_SFA = Sm1xxBlkScaledConfig::tile_atom_to_shape_SFA(make_shape(m, n, k, 1));
     auto layout_SFB = Sm1xxBlkScaledConfig::tile_atom_to_shape_SFB(make_shape(m, n, k, 1));
 
-    using GemmArguments = GemmOp::Gemm::Arguments;
+    using GemmArguments = typename GemmOp::Gemm::Arguments;
     GemmArguments *arguments_ptr = new GemmArguments{
         cutlass::gemm::GemmUniversalMode::kGemm,
         {M, N, K, 1},
@@ -159,9 +188,36 @@ void runGemm(int M, int N, int K,
     std::cout << "Initializing CUTLASS GEMM (FP4 Block-Scaled)..." << std::endl;
     CUTLASS_CHECK(gemm.initialize(*arguments_ptr, workspace));
 
-    std::cout << "Running CUTLASS GEMM via Blackwell Async tcgen05 Engine..." << std::endl;
-    CUTLASS_CHECK(gemm.run());
+    using KernelType = typename GemmOp::GemmKernel;
+    typename KernelType::Params const &params = gemm.params();
+
+    dim3 grid_dims = GemmOp::Gemm::get_grid_shape(params);
+    dim3 block_dims = dim3(128, 1, 1);
+    int smem_size = KernelType::SharedStorageSize;
+
+    // Выделяем память под аргументы на GPU для нашего кастомного ядра-моста
+    void *d_arguments = nullptr;
+    CUDA_CHECK(cudaMallocAsync(&d_arguments, sizeof(GemmArguments), nullptr));
+    CUDA_CHECK(cudaMemcpyAsync(d_arguments, arguments_ptr, sizeof(GemmArguments), cudaMemcpyHostToDevice, nullptr));
+
+    using MainloopType = typename GemmOp::CollectiveMainloop;
+    using EpilogueType = typename GemmOp::CollectiveEpilogue;
+
+    CUDA_CHECK(cudaFuncSetAttribute(
+        (const void*)windows_native_blackwell_kernel<MainloopType, EpilogueType, GemmArguments>,
+        cudaFuncAttributeMaxDynamicSharedMemorySize,
+        smem_size
+    ));
+
+    std::cout << "Running CUTLASS GEMM via Blackwell Async tcgen05 Engine (Pure Windows Native Launch)..." << std::endl;
+
+    // Запускаем наше кастомное ядро. nvcc видит только void*, MSVC полностью игнорирует вызов.
+    windows_native_blackwell_kernel<MainloopType, EpilogueType, GemmArguments><<<grid_dims, block_dims, smem_size, nullptr>>>(d_arguments, workspace);
+
+    CUDA_CHECK(cudaStreamSynchronize(nullptr));
     std::cout << "CUTLASS GEMM Finished." << std::endl;
+
+    CUDA_CHECK(cudaFreeAsync(d_arguments, nullptr));
 
     if (workspace) {
         cudaFree(workspace);
@@ -178,15 +234,20 @@ int main() {
         float alpha = 1.0f;
         using OutputType = float;
 
-        size_t size_A_bytes = M * K / 2;
-        size_t size_B_bytes = K * N / 2;
+        size_t size_A_bytes = (M * K) / 2;
+        size_t size_B_bytes = (K * N) / 2;
         size_t size_C_bytes = M * N * sizeof(OutputType);
         size_t size_D_bytes = M * N * sizeof(OutputType);
 
-        size_t size_A_scale_bytes = M * K / 16 * sizeof(float);
-        size_t size_B_scale_bytes = K * N / 16 * sizeof(float);
+        size_t size_A_scale_bytes = (M * K) / 32 * sizeof(uint8_t);
+        size_t size_B_scale_bytes = (K * N) / 32 * sizeof(uint8_t);
 
-        void *d_A, *d_B, *d_C, *d_D, *d_A_scale, *d_B_scale;
+        void *d_A = nullptr;
+        void *d_B = nullptr;
+        void *d_C = nullptr;
+        void *d_D = nullptr;
+        void *d_A_scale = nullptr;
+        void *d_B_scale = nullptr;
 
         std::cout << "Allocating device memory for Blackwell Native FP4 Execution..." << std::endl;
         CUDA_CHECK(cudaMalloc(&d_A, size_A_bytes));

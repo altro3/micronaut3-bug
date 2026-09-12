@@ -1,7 +1,7 @@
 import dev.aga.gradle.versioncatalogs.Generator.generate
 
 plugins {
-    id("dev.aga.gradle.version-catalog-generator") version "4.2.0"
+    id("dev.aga.gradle.version-catalog-generator") version "4.2.2"
 }
 
 dependencyResolutionManagement {

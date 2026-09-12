@@ -4,6 +4,19 @@
 #include "cutlass/cutlass.h"
 #include "cutlass/util/packed_stride.hpp"
 
+using GemmOp = Fp4GemmSm120<bfloat16_t>;
+using GemmDeviceAdapter = GemmOp::Gemm;
+using KernelType = GemmOp::GemmKernel;
+
+__global__ void __launch_bounds__(128) windows_alignment_bridge_kernel(void* d_params) {
+#if defined(__CUDA_ARCH__)
+    typename KernelType::Params* params_ptr =
+        reinterpret_cast<typename KernelType::Params*>(d_params);
+
+    KernelType::device_kernel(*params_ptr);
+#endif
+}
+
 extern "C" void launch_blackwell_fp4_native_gemm(
     void *output_d,
     const void *input_a,
@@ -15,8 +28,6 @@ extern "C" void launch_blackwell_fp4_native_gemm(
     int32_t k_extent,
     void *stream_ptr
 ) {
-    using GemmOp = Fp4GemmSm120<bfloat16_t>;
-    using GemmDeviceAdapter = GemmOp::Gemm;
     using Sm1xxBlkScaledConfig = GemmOp::Sm1xxBlkScaledConfig;
 
     GemmDeviceAdapter gemm;
@@ -67,7 +78,7 @@ extern "C" void launch_blackwell_fp4_native_gemm(
     cutlass::Status status = gemm.can_implement(arguments);
     if (status != cutlass::Status::kSuccess) {
         std::cerr << "[ENGINE ERROR] can_implement failed: " << cutlass::cutlassGetStatusString(status)
-                << " (Detected SMs: " << actual_sm_count << ")" << std::endl;
+                  << " (Detected SMs: " << actual_sm_count << ")" << std::endl;
         return;
     }
 
@@ -84,10 +95,37 @@ extern "C" void launch_blackwell_fp4_native_gemm(
         return;
     }
 
-    status = gemm.run(stream);
-    if (status != cutlass::Status::kSuccess) {
-        std::cerr << "[ENGINE ERROR] Run failed: " << cutlass::cutlassGetStatusString(status) << std::endl;
+    typename KernelType::Params const& params = gemm.params();
+    void* d_params = nullptr;
+
+    if (cudaMallocAsync(&d_params, sizeof(params), stream) != cudaSuccess) {
+        std::cerr << "[ENGINE ERROR] Failed to allocate device memory for kernel params." << std::endl;
+        if (workspace) cudaFree(workspace);
+        return;
     }
+
+    if (cudaMemcpyAsync(d_params, &params, sizeof(params), cudaMemcpyHostToDevice, stream) != cudaSuccess) {
+        std::cerr << "[ENGINE ERROR] Failed to copy kernel params to device." << std::endl;
+        cudaFreeAsync(d_params, stream);
+        if (workspace) cudaFree(workspace);
+        return;
+    }
+
+    dim3 grid_dims = GemmDeviceAdapter::get_grid_shape(params);
+    dim3 block_dims = dim3(128, 1, 1);
+    int smem_size = KernelType::SharedStorageSize;
+
+    if (smem_size >= 49152) {
+        cudaFuncSetAttribute(
+            (const void*)windows_alignment_bridge_kernel,
+            cudaFuncAttributeMaxDynamicSharedMemorySize,
+            smem_size
+        );
+    }
+
+    windows_alignment_bridge_kernel<<<grid_dims, block_dims, smem_size, stream>>>(d_params);
+
+    cudaFreeAsync(d_params, stream);
 
     if (workspace) {
         cudaFree(workspace);

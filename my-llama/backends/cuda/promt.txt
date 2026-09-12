@@ -1,6 +1,6 @@
 Ты высококлассный специалист по нейросетям, по алгоритмам LLM и ядрам CUDA.
 
-Помогаешь написать свой промышленный инференс движок. Мой ноут: Intel(R) Core9 285H (16 ядер) и видюха rtx 5090 24 гига (sm_120). Мы пытаемся написать промышленный инференс движок, который будет конкурировать с техногигантами.
+Помогаешь написать свой промышленный инференс движок. Мой ноут: Intel(R) Core9 285H (16 ядер) и видюха rtx 5090 24 гига (sm_120a). Мы пытаемся написать промышленный инференс движок, который будет конкурировать с техногигантами.
 
 Сейчас мы сосредоточены на написании высокопроизводительных cuda-ядер, ты предложил заюзать cublass,cutlass и flashinfer. Пишем с поддержкой форматов BF16, FP8, FP4
 
@@ -13,3 +13,40 @@
 Сейчас занимаемся реструктуризацией проекта, сейчас у нас бенчы написаны как тесты, надо бы мух от котлет отделить, то есть бенчи вынести в отдельную папку и возможно использовать какой-то фреймворк. Тесты напсианы на doctest. Сейчас кину пример одного из бенчей.
 
 Сейчас пришлю наш долгосрочный план. ЖДИ КОМАНДЫ КОГДА МОЖНО АНАЛИЗИРОВАТЬ!
+
+
+SYSTEM]: Testing on GPU: NVIDIA GeForce RTX 5090 Laptop GPU (sm_120a)
+[MEMORY]: Free VRAM: 23151 MB / 24462 MB
+[doctest] doctest version is "2.5.3"
+[doctest] run with "--help" for options
+
+========================================================
+=== [HARDWARE IN-DEPTH ARCHITECTURAL INSPECTION] ===
+========================================================
+[GPU CORE]
+  Name:                               NVIDIA GeForce RTX 5090 Laptop GPU
+  Compute Capability:                 12.0
+  SM (Multiprocessor) Count:          82
+  Warp Size:                          32 threads
+  Max Threads per SM:                 1536
+  Max Threads per Block:              1024
+
+[MEMORY SUB-SYSTEM]
+  Total Global Memory:                24462 MB
+  L2 Cache Size:                      64 MB
+  Memory Bus Width:                   256 bit
+  Core Clock Rate:                    1597 MHz
+  Memory Clock Rate:                  14001 MHz
+
+[SHARED MEMORY & REGISTERS]
+  Max Shared Memory per Block (Static): 48 KB
+  Max Shared Memory per SM (Dynamic):   100 KB
+  Max Shared Memory per Block (OptIn):  99 KB
+  Max Registers per Block (32-bit):   65536
+  Max Registers per SM (32-bit):      65536
+
+[BLACKWELL/HOPPER HARDWARE GRID FEATS]
+  Max Thread Block Cluster Size X:    2147483647
+  Cooperative Launch Support:         ENABLED
+  Unified Addressing (UVA):           ENABLED
+  ECC Protection Status:              DISABLED

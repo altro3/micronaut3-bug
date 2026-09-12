@@ -1,16 +1,16 @@
 [versions]
-spring = "4.1.0"
-spring-ai = "2.0.0"
-kotlin = "2.4.0"
+spring = "4.1.1"
+spring-ai = "2.0.1"
+kotlin = "2.4.10"
 coroutines = "1.11.0"
 kotlin-log = "8.0.4"
-protobuf = "4.35.1"
-otel-proto = "1.10.0-alpha"
+protobuf = "4.36.1"
+otel-proto = "1.11.0-alpha"
 wiremock = "3.13.2"
 disruptor = "4.0.0"
 
 jmh = "0.7.3"
-jib = "3.5.3"
+jib = "3.5.4"
 
 [libraries]
 kotlin-logging = { module = "io.github.oshai:kotlin-logging-jvm", version.ref = "kotlin-log" }
