@@ -18,6 +18,13 @@ dependencies {
     implementation(kora.koraframework.jsonCommon)
     implementation(kora.koraframework.loggingLogback)
     implementation(kora.koraframework.configHocon)
+    implementation(kora.koraframework.databaseJdbcPostgres)
+    implementation(kora.koraframework.cacheCaffeine)
+    implementation(kora.koraframework.resilientKora)
+    implementation(kora.koraframework.validationModule)
+    implementation(kora.koraframework.mapstructKspExtension)
+    implementation(kora.koraframework.micrometerModule)
+    implementation(kora.koraframework.databaseFlyway)
     implementation(libs.kotlin.logging)
 }
 
