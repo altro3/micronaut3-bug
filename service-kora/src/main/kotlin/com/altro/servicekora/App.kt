@@ -1,0 +1,19 @@
+package com.altro.servicekora
+
+import io.koraframework.application.graph.KoraApplication
+import io.koraframework.common.annotation.KoraApp
+import io.koraframework.config.hocon.HoconConfigModule
+import io.koraframework.http.server.undertow.UndertowPublicHttpServerModule
+import io.koraframework.json.common.JsonModule
+import io.koraframework.logging.logback.LogbackModule
+
+@KoraApp
+interface App :
+    HoconConfigModule,
+    JsonModule,
+    LogbackModule,
+    UndertowPublicHttpServerModule
+
+fun main() {
+    KoraApplication.run(AppGraph::graph)
+}
