@@ -7,9 +7,8 @@ plugins {
 dependencyResolutionManagement {
     repositories {
         mavenCentral()
-        maven {
-            url = uri("https://s01.oss.sonatype.org/content/repositories/snapshots/")
-        }
+        maven { url = uri("https://s01.oss.sonatype.org/content/repositories/snapshots/") }
+        maven { url = uri("https://central.sonatype.com/repository/maven-snapshots/") }
         mavenLocal()
     }
 
@@ -18,6 +17,7 @@ dependencyResolutionManagement {
         generate("kt") { fromToml("kotlin") }
         generate("coroutines") { fromToml("coroutines") }
         generate("springAi") { fromToml("spring-ai") }
+        generate("kora") { fromToml("kora") }
     }
 }
 
@@ -32,6 +32,7 @@ include(
     "mock-server",
     "myorchestrator-spring",
     "mymcp-server",
+    "service-kora",
     "service-vk",
     "service-yad",
 )

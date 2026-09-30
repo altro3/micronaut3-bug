@@ -8,7 +8,7 @@ plugins {
     alias(libs.plugins.kotlin.spring)
 }
 
-val jreImage = "bellsoft/liberica-openjre-alpine:25.0.3-x86_64"
+val jreImage = "bellsoft/liberica-openjre-alpine:25.0.4-x86_64"
 
 dependencies {
     implementation(springAi.spring.springAiStarterMcpServerWebmvc)
@@ -32,7 +32,7 @@ configurations.all {
 kotlin {
     jvmToolchain(25)
     compilerOptions {
-        freeCompilerArgs.addAll("-Xjsr305=strict", "-Xemit-jvm-type-annotations", "-Xannotation-default-target=param-property", "-jvm-default=enable")
+        freeCompilerArgs.addAll("-Xjsr305=strict", "-Xemit-jvm-type-annotations",  "-jvm-default=enable")
         javaParameters = true
     }
 }

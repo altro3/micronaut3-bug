@@ -1,13 +1,15 @@
 [versions]
 spring = "4.1.1"
 spring-ai = "2.0.1"
-kotlin = "2.4.10"
+kotlin = "2.4.20"
 coroutines = "1.11.0"
 kotlin-log = "8.0.4"
-protobuf = "4.36.1"
+protobuf = "4.36.2"
 otel-proto = "1.11.0-alpha"
 wiremock = "3.13.2"
 disruptor = "4.0.0"
+kora = "2.0.0-SNAPSHOT"
+ksp = "2.3.12"
 
 jmh = "0.7.3"
 jib = "3.5.4"
@@ -24,6 +26,7 @@ spring-boot-dependencies = { module = "org.springframework.boot:spring-boot-depe
 kotlin = { module = "org.jetbrains.kotlin:kotlin-bom", version.ref = "kotlin" }
 coroutines = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-bom", version.ref = "coroutines" }
 spring-ai = { module = "org.springframework.ai:spring-ai-bom", version.ref = "spring-ai" }
+kora = { module = "io.koraframework:kora-bom", version.ref = "kora" }
 
 [plugins]
 spring-boot = { id = "org.springframework.boot", version.ref = "spring" }
@@ -33,3 +36,4 @@ kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
 kotlin-spring = { id = "org.jetbrains.kotlin.plugin.spring", version.ref = "kotlin" }
 kotlin-kapt = { id = "org.jetbrains.kotlin.kapt", version.ref = "kotlin" }
 jmh = { id = "me.champeau.jmh", version.ref = "jmh" }
+ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
