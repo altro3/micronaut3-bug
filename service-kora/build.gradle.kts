@@ -6,7 +6,7 @@ plugins {
     alias(libs.plugins.jib)
     alias(libs.plugins.ksp)
     alias(libs.plugins.kotlin.jvm)
-//    alias(libs.plugins.kotlin.kapt)
+    alias(libs.plugins.shadow)
 }
 
 val jreImage = "bellsoft/liberica-openjre-alpine:25.0.4-x86_64"
@@ -14,6 +14,7 @@ val jreImage = "bellsoft/liberica-openjre-alpine:25.0.4-x86_64"
 dependencies {
     ksp(kora.koraframework.symbolProcessors)
 
+    implementation(libs.flyway)
     implementation(kora.koraframework.httpServerUndertow)
     implementation(kora.koraframework.jsonCommon)
     implementation(kora.koraframework.loggingLogback)
@@ -24,20 +25,29 @@ dependencies {
     implementation(kora.koraframework.openapiManagement)
     implementation(kora.koraframework.resilientKora)
     implementation(kora.koraframework.validationModule)
-    implementation(kora.koraframework.mapstructKspExtension)
+    implementation(kora.koraframework.konvertKspExtension)
     implementation(kora.koraframework.micrometerModule)
     implementation(libs.kotlin.logging)
 }
 
+val modernJvmOptimizations = listOf(
+    "-Xms128m",
+    "-Xmx256m",
+    "-XX:MaxMetaspaceSize=64m",
+    "-XX:+UseG1GC",
+    "-XX:+UseStringDeduplication",
+    "-XX:+UnlockExperimentalVMOptions",
+    "-XX:+UseCompactObjectHeaders",
+    "-XX:+EliminateAllocations",
+    "-XX:+UseNUMA",
+    "-Dfile.encoding=UTF-8",
+    "-Dconfig.override_with_env_vars=true"
+)
+
 application {
     applicationName = "application"
     mainClass = "com.altro.servicekora.AppKt"
-    applicationDefaultJvmArgs = listOf(
-        "-XX:+UseG1GC",
-        "-XX:+UseStringDeduplication",
-        "-Dfile.encoding=UTF-8",
-        "-Dconfig.override_with_env_vars=true",
-    )
+    applicationDefaultJvmArgs = modernJvmOptimizations
 }
 
 kotlin {
@@ -54,14 +64,7 @@ jib {
     from { image = jreImage }
     to { image = "localhost:5000/micronaut3-bug:latest" }
     container {
-        jvmFlags = listOf(
-            "-XX:+UseG1GC",
-            "-XX:+UseStringDeduplication",
-            "-XX:MaxRAMPercentage=75.0",
-            "-Dfile.encoding=UTF-8",
-            "-Dconfig.override_with_env_vars=true",
-//            "-Dspring.aot.enabled=true",
-        )
+        jvmFlags = listOf("-XX:MaxRAMPercentage=75.0") + modernJvmOptimizations
     }
 
     extraDirectories {
@@ -100,6 +103,16 @@ tasks.test {
     jvmArgs(
         "-XX:MaxMetaspaceSize=384m",
         "-XX:+UseParallelGC",
+        "-XX:+UnlockExperimentalVMOptions",
+        "-XX:+UseCompactObjectHeaders",
+        "-XX:+UseStringDeduplication",
         "-Dfile.encoding=UTF-8",
     )
+}
+
+tasks.shadowJar {
+    archiveBaseName.set("service-kora")
+    archiveClassifier.set("")
+    mergeServiceFiles()
+    duplicatesStrategy = DuplicatesStrategy.INCLUDE
 }

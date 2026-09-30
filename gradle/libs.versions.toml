@@ -10,9 +10,11 @@ wiremock = "3.13.2"
 disruptor = "4.0.0"
 kora = "2.0.0-SNAPSHOT"
 ksp = "2.3.12"
+flyway = "13.8.1"
 
 jmh = "0.7.3"
 jib = "3.5.4"
+shadow = "9.6.1"
 
 [libraries]
 kotlin-logging = { module = "io.github.oshai:kotlin-logging-jvm", version.ref = "kotlin-log" }
@@ -20,6 +22,7 @@ protobuf-java = { module = "com.google.protobuf:protobuf-java", version.ref = "p
 otel-proto = { module = "io.opentelemetry.proto:opentelemetry-proto", version.ref = "otel-proto" }
 wiremock = { module = "org.wiremock:wiremock-standalone", version.ref = "wiremock" }
 disruptor = { module = "com.lmax:disruptor", version.ref = "disruptor" }
+flyway = { module = "org.flywaydb:flyway-database-postgresql", version.ref = "flyway" }
 
 # BOMs
 spring-boot-dependencies = { module = "org.springframework.boot:spring-boot-dependencies", version.ref = "spring" }
@@ -37,3 +40,4 @@ kotlin-spring = { id = "org.jetbrains.kotlin.plugin.spring", version.ref = "kotl
 kotlin-kapt = { id = "org.jetbrains.kotlin.kapt", version.ref = "kotlin" }
 jmh = { id = "me.champeau.jmh", version.ref = "jmh" }
 ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
+shadow = { id = "com.gradleup.shadow", version.ref = "shadow" }
