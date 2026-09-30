@@ -1,6 +1,8 @@
 package com.altro.servicekora.service
 
 import com.altro.servicekora.model.UserEntity
-import io.koraframework.cache.Cache
+import io.koraframework.cache.annotation.Cache
+import io.koraframework.cache.caffeine.CaffeineCache
 
-interface UserCache : Cache<Long, UserEntity>
+@Cache("cache.users")
+interface UserCache : CaffeineCache<Long, UserEntity>

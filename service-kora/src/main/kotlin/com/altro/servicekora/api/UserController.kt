@@ -4,6 +4,7 @@ import com.altro.servicekora.api.dto.CreateUserRequest
 import com.altro.servicekora.api.dto.UserResponse
 import com.altro.servicekora.service.UserMapper
 import com.altro.servicekora.service.UserService
+import io.koraframework.common.annotation.Component
 import io.koraframework.http.common.HttpMethod
 import io.koraframework.http.common.annotation.HttpRoute
 import io.koraframework.http.common.annotation.Path
@@ -11,6 +12,7 @@ import io.koraframework.http.server.common.annotation.HttpController
 import io.koraframework.validation.common.Validator
 
 @HttpController
+@Component
 class UserController(
     private val userService: UserService,
     private val userMapper: UserMapper,
