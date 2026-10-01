@@ -6,14 +6,19 @@ plugins {
     alias(libs.plugins.jib)
     alias(libs.plugins.ksp)
     alias(libs.plugins.kotlin.jvm)
+    alias(libs.plugins.kotlin.kapt)
     alias(libs.plugins.shadow)
 }
 
 val jreImage = "bellsoft/liberica-openjre-alpine:25.0.4-x86_64"
 
 dependencies {
+    kapt(libs.fastjson.kotlin)
+    kapt(libs.fastjson.codegen)
+
     ksp(kora.koraframework.symbolProcessors)
 
+    implementation(libs.fastjson.kotlin)
     implementation(libs.flyway)
     implementation(kora.koraframework.httpServerUndertow)
     implementation(kora.koraframework.jsonCommon)
@@ -25,7 +30,6 @@ dependencies {
     implementation(kora.koraframework.openapiManagement)
     implementation(kora.koraframework.resilientKora)
     implementation(kora.koraframework.validationModule)
-    implementation(kora.koraframework.konvertKspExtension)
     implementation(kora.koraframework.micrometerModule)
     implementation(libs.kotlin.logging)
 }
@@ -116,3 +120,11 @@ tasks.shadowJar {
     mergeServiceFiles()
     duplicatesStrategy = DuplicatesStrategy.INCLUDE
 }
+
+tasks.distZip { enabled = false }
+tasks.distTar { enabled = false }
+tasks.startScripts { enabled = false }
+
+tasks.named("shadowDistZip") { enabled = false }
+tasks.named("shadowDistTar") { enabled = false }
+tasks.named("startShadowScripts") { enabled = false }

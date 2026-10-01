@@ -17,7 +17,7 @@ open class UserService(
     private val log = KotlinLogging.logger {}
 
     @Log
-    @Cacheable(UserCache::class)
+//    @Cacheable(UserCache::class)
     @Retryable(PostgresRetry::class)
     @Timed(value = "user.service.get", description = "Время получения пользователя")
     open fun getUser(id: Long): UserEntity? {
