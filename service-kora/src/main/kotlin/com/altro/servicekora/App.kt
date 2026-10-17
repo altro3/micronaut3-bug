@@ -1,5 +1,28 @@
 package com.altro.servicekora
 
+import io.koraframework.application.graph.KoraApplication
+import io.koraframework.common.annotation.KoraApp
+import io.koraframework.config.hocon.HoconConfigModule
+import io.koraframework.http.server.undertow.UndertowPublicHttpServerModule
+import io.koraframework.json.common.JsonModule
+import io.koraframework.logging.common.LoggingModule
+import io.koraframework.logging.logback.LogbackModule
+
+@KoraApp
+interface App :
+    HoconConfigModule,
+    JsonModule,
+    LoggingModule,
+    LogbackModule,
+    UndertowPublicHttpServerModule
+
+fun main() {
+    KoraApplication.run(AppGraph::graph)
+}
+
+/*
+package com.altro.servicekora
+
 import com.altro.servicekora.model.UserEntity
 import io.koraframework.application.graph.KoraApplication
 import io.koraframework.cache.caffeine.CaffeineCacheModule
@@ -52,3 +75,4 @@ interface App :
 fun main() {
     KoraApplication.run(AppGraph::graph)
 }
+*/

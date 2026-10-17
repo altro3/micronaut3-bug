@@ -16,18 +16,18 @@ dependencies {
 
     ksp(kora.koraframework.symbolProcessors)
 
-    implementation(libs.flyway)
+//    implementation(libs.flyway)
     implementation(kora.koraframework.httpServerUndertow)
+    implementation(kora.koraframework.configHocon)
     implementation(kora.koraframework.jsonCommon)
     implementation(kora.koraframework.loggingLogback)
-    implementation(kora.koraframework.configHocon)
-    implementation(kora.koraframework.databaseFlyway)
-    implementation(kora.koraframework.databaseJdbcPostgres)
-    implementation(kora.koraframework.cacheCaffeine)
-    implementation(kora.koraframework.openapiManagement)
-    implementation(kora.koraframework.resilientKora)
-    implementation(kora.koraframework.validationModule)
-    implementation(kora.koraframework.micrometerModule)
+//    implementation(kora.koraframework.databaseFlyway)
+//    implementation(kora.koraframework.databaseJdbcPostgres)
+//    implementation(kora.koraframework.cacheCaffeine)
+//    implementation(kora.koraframework.openapiManagement)
+//    implementation(kora.koraframework.resilientKora)
+//    implementation(kora.koraframework.validationModule)
+//    implementation(kora.koraframework.micrometerModule)
     implementation(libs.kotlin.logging)
 }
 

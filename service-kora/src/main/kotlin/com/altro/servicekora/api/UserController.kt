@@ -1,34 +1,20 @@
 package com.altro.servicekora.api
 
-import com.altro.servicekora.api.dto.CreateUserRequest
-import com.altro.servicekora.api.dto.UserResponse
-import com.altro.servicekora.api.dto.UserResponse.UserAddressResponse
-import com.altro.servicekora.api.dto.UserResponse.UserPermissionResponse
-import com.altro.servicekora.api.dto.UserResponse.UserProfileResponse
-import com.altro.servicekora.service.UserMapper
-import com.altro.servicekora.service.UserService
-import io.koraframework.common.annotation.Component
-import io.koraframework.common.annotation.Mapping
-import io.koraframework.http.common.HttpMethod
-import io.koraframework.http.common.annotation.HttpRoute
-import io.koraframework.http.common.annotation.Path
-import io.koraframework.http.common.annotation.Query
-import io.koraframework.http.server.common.annotation.HttpController
-import io.koraframework.json.common.annotation.Json
-import io.koraframework.validation.common.Validator
-import io.koraframework.validation.common.annotation.NotBlank
-import io.koraframework.validation.common.annotation.Size
-import io.koraframework.validation.common.annotation.Valid
-import io.koraframework.validation.common.annotation.Validate
-import java.math.BigDecimal
+import com.altro.servicekora.api.dto.*
+import com.altro.servicekora.api.dto.UserResponse.*
+import com.altro.servicekora.service.*
+import io.koraframework.common.annotation.*
+import io.koraframework.http.common.*
+import io.koraframework.http.common.annotation.*
+import io.koraframework.http.server.common.annotation.*
+import io.koraframework.json.common.annotation.*
+import java.math.*
 
 @HttpController
 @Component
-@Valid
 open class UserController(
     private val userService: UserService,
     private val userMapper: UserMapper,
-    private val createUserValidator: Validator<CreateUserRequest>,
 ) {
 
     @Json
@@ -41,12 +27,10 @@ open class UserController(
     @Json
     @HttpRoute(method = HttpMethod.POST, path = "/users")
     open fun createUser(@Json body: CreateUserRequest): UserResponse? {
-        createUserValidator.validateAndThrow(body)
         val entity = userService.createUser(body.name, body.email)
         return userMapper.toResponse(entity)
     }
 
-    @Validate
     @HttpRoute(method = HttpMethod.POST, path = "/users/search")
     @Json
     open fun searchUser(
