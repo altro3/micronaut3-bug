@@ -32,7 +32,6 @@ open class UserController(
 ) {
 
     @Json
-//    @Mapping(FastJsonUserCodec::class)
     @HttpRoute(method = HttpMethod.GET, path = "/users/{id}")
     open fun getUser(@Path id: Long): UserResponse? {
         val entity = userService.getUser(id) ?: throw RuntimeException("User not found")
@@ -40,7 +39,6 @@ open class UserController(
     }
 
     @Json
-//    @Mapping(FastJsonUserCodec::class)
     @HttpRoute(method = HttpMethod.POST, path = "/users")
     open fun createUser(@Json body: CreateUserRequest): UserResponse? {
         createUserValidator.validateAndThrow(body)
@@ -50,10 +48,9 @@ open class UserController(
 
     @Validate
     @HttpRoute(method = HttpMethod.POST, path = "/users/search")
-    // @Mapping(FastJsonUserListCodec::class)
     @Json
     open fun searchUser(
-        /*@Mapping(FastJsonUserCodec::class)*/ @Json body: CreateUserRequest,
+        @Json body: CreateUserRequest,
     ): List<UserResponse> {
 
         val createHeavyUser = { id: Long, name: String ->

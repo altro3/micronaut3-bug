@@ -1,15 +1,9 @@
 package com.altro.servicekora.api.dto
 
-import com.alibaba.fastjson2.annotation.JSONCompiled
-import io.koraframework.json.common.annotation.Json
-import io.koraframework.validation.common.annotation.NotBlank
-import io.koraframework.validation.common.annotation.NotEmpty
-import io.koraframework.validation.common.annotation.Pattern
-import io.koraframework.validation.common.annotation.Size
-import io.koraframework.validation.common.annotation.Valid
-import java.math.BigDecimal
+import io.koraframework.json.common.annotation.*
+import io.koraframework.validation.common.annotation.*
+import java.math.*
 
-@JSONCompiled
 @Json
 @Valid
 data class CreateUserRequest(
@@ -35,7 +29,6 @@ data class CreateUserRequest(
     val metadata: Map<String, String>?
 ) {
 
-    @JSONCompiled
     @Json
     @Valid
     data class UserProfile(
@@ -48,7 +41,6 @@ data class CreateUserRequest(
         val preferedLanguage: String
     )
 
-    @JSONCompiled
     @Json
     @Valid
     data class UserAddress(
@@ -62,7 +54,6 @@ data class CreateUserRequest(
         val isPrimary: Boolean
     )
 
-    @JSONCompiled
     @Json
     @Valid
     data class UserPermission(

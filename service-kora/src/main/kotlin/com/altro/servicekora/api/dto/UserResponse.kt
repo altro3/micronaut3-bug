@@ -1,10 +1,8 @@
 package com.altro.servicekora.api.dto
 
-import com.alibaba.fastjson2.annotation.JSONCompiled
-import io.koraframework.json.common.annotation.Json
-import java.math.BigDecimal
+import io.koraframework.json.common.annotation.*
+import java.math.*
 
-@JSONCompiled
 @Json
 data class UserResponse(
     val id: Long,
@@ -19,7 +17,6 @@ data class UserResponse(
     val metadata: Map<String, String>? = null,
 ) {
 
-    @JSONCompiled
     @Json
     data class UserProfileResponse(
         val firstName: String,
@@ -29,7 +26,6 @@ data class UserResponse(
         val preferedLanguage: String
     )
 
-    @JSONCompiled
     @Json
     data class UserAddressResponse(
         val country: String,
@@ -39,7 +35,6 @@ data class UserResponse(
         val isPrimary: Boolean
     )
 
-    @JSONCompiled
     @Json
     data class UserPermissionResponse(
         val role: String,

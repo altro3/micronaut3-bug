@@ -13,12 +13,9 @@ plugins {
 val jreImage = "bellsoft/liberica-openjre-alpine:25.0.4-x86_64"
 
 dependencies {
-    kapt(libs.fastjson.kotlin)
-    kapt(libs.fastjson.codegen)
 
     ksp(kora.koraframework.symbolProcessors)
 
-    implementation(libs.fastjson.kotlin)
     implementation(libs.flyway)
     implementation(kora.koraframework.httpServerUndertow)
     implementation(kora.koraframework.jsonCommon)
