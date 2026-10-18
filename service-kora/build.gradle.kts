@@ -16,7 +16,6 @@ dependencies {
 
     ksp(kora.koraframework.symbolProcessors)
 
-//    implementation(libs.flyway)
     implementation(kora.koraframework.httpServerUndertow)
     implementation(kora.koraframework.configHocon)
     implementation(kora.koraframework.jsonCommon)
@@ -28,6 +27,7 @@ dependencies {
 //    implementation(kora.koraframework.resilientKora)
 //    implementation(kora.koraframework.validationModule)
 //    implementation(kora.koraframework.micrometerModule)
+    implementation(libs.flyway)
     implementation(libs.kotlin.logging)
 }
 
@@ -112,7 +112,7 @@ tasks.test {
 }
 
 tasks.shadowJar {
-    archiveBaseName.set("service-kora")
+    archiveBaseName.set("service-kora-benchmark")
     archiveClassifier.set("")
     mergeServiceFiles()
     duplicatesStrategy = DuplicatesStrategy.INCLUDE
