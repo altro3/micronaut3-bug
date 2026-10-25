@@ -34,9 +34,10 @@ dependencies {
 }
 
 val modernJvmOptimizations = listOf(
-    "-Xms128m",
-    "-Xmx256m",
-    "-XX:MaxMetaspaceSize=64m",
+    "-Xms24m",
+    "-Xmx48m",
+    "-Xss256k",
+    "-XX:MaxMetaspaceSize=32m",
     "-XX:+UseG1GC",
     "-XX:+UseStringDeduplication",
     "-XX:+UnlockExperimentalVMOptions",
@@ -49,7 +50,7 @@ val modernJvmOptimizations = listOf(
 
 application {
     applicationName = "application"
-    mainClass = "io.koraframework.benchmark.AppKt"
+    mainClass = "io.koraframework.benchmark.kotlin.AppKt"
     applicationDefaultJvmArgs = modernJvmOptimizations
 }
 

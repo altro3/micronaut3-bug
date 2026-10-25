@@ -33,7 +33,10 @@ include(
     "myorchestrator-spring",
     "mymcp-server",
     "service-kora",
-    "service-kora-benchmark",
+    "service-kora-config-lib1",
+    "service-kora-config-lib2",
+    "service-kora-benchmark-kotlin",
+    "service-kora-benchmark-java",
     "service-vk",
     "service-yad",
 )
