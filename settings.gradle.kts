@@ -1,5 +1,13 @@
 import dev.aga.gradle.versioncatalogs.Generator.generate
 
+pluginManagement {
+    repositories {
+        gradlePluginPortal()
+        mavenCentral()
+        mavenLocal()
+    }
+}
+
 plugins {
     id("dev.aga.gradle.version-catalog-generator") version "4.2.2"
 }
