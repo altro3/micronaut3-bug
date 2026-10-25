@@ -12,13 +12,17 @@ dependencies {
     implementation(kora.koraframework.configCommon)
 }
 
-publishing {
-    publications {
-        create<MavenPublication>("mavenJava") {
-            from(components["java"])
+java {
+    withSourcesJar()
+}
 
-            // Имя артефакта берем равным названию твоего модуля
-            artifactId = "service-kora-config-lib1"
+afterEvaluate {
+    publishing {
+        publications {
+            create<MavenPublication>("mavenJava") {
+                artifactId = "service-kora-config-lib1"
+               from(components["java"])
+            }
         }
     }
 }
