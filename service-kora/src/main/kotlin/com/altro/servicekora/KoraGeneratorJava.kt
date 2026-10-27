@@ -12,12 +12,16 @@ fun main() {
     val includeRepos = false
     val includeServices = true
 
-    val totalNodes = 10
+    val configsPart = 0.10
+    val reposPart = 0.13
+    val controllersPart = 0.10
 
-    val configsCount = if (includeConfigs) maxOf(1, (totalNodes * 0.10).toInt()) else 0
-    val reposCount = if (includeRepos) maxOf(1, (totalNodes * 0.13).toInt()) else 0
-    val servicesCount = if (includeServices) maxOf(1, (totalNodes * 0.40).toInt()) else 0
-    val controllersCount = maxOf(1, totalNodes - configsCount - reposCount - servicesCount)
+    val totalNodes = 150
+
+    val configsCount = if (includeConfigs) maxOf(1, (totalNodes * configsPart).toInt()) else 0
+    val controllersCount = if (includeServices) maxOf(1, (totalNodes * controllersPart).toInt()) else 0
+    val reposCount = if (includeRepos) maxOf(1, (totalNodes * reposPart).toInt()) else 0
+    val servicesCount = maxOf(1, totalNodes - configsCount - reposCount - controllersCount)
 
     val basePackageDir = File("$TARGET_DIR/io/koraframework/benchmark/java")
     if (basePackageDir.exists()) basePackageDir.deleteRecursively()
