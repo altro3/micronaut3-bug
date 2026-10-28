@@ -9,7 +9,7 @@ fun main() {
     val RESOURCES_DIR = "./service-kora-benchmark-java/src/main/resources"
 
     val includeConfigs = true
-    val includeRepos = false
+    val includeRepos = true
     val includeMappers = true
     val includeServices = true
 
@@ -18,7 +18,7 @@ fun main() {
     val mappersPart = 0.12
     val controllersPart = 0.10
 
-    val totalNodes = 300
+    val totalNodes = 10
 
     val configsCount = if (includeConfigs) maxOf(1, (totalNodes * configsPart).toInt()) else 0
     val controllersCount = if (includeServices) maxOf(1, (totalNodes * controllersPart).toInt()) else 0
@@ -32,7 +32,7 @@ fun main() {
     val migrationDir = File("$RESOURCES_DIR/db/migration")
     if (migrationDir.exists()) migrationDir.deleteRecursively()
 
-    val paths = listOf("config", "api/dto", "repository", "service", "api")
+    val paths = listOf("config", "api/dto", "repository", "service", "api", "model")
     paths.forEach { File("$TARGET_DIR/io/koraframework/benchmark/java/$it").mkdirs() }
     migrationDir.mkdirs()
 
@@ -60,50 +60,139 @@ fun main() {
         val dtoFile = File("$TARGET_DIR/io/koraframework/benchmark/java/api/dto/OrderDto$i.java")
         dtoFile.writeText(
             """
-        package io.koraframework.benchmark.java.api.dto;
-        import io.koraframework.json.common.annotation.Json;
-        import java.math.BigDecimal;
-        
-        public final class OrderDto$i {
-            @Json public record CreateOrderRequest$i(Long userId, Long itemId, Integer quantity) {}
-            @Json public record OrderResponse$i(String id, Long userId, BigDecimal totalAmount, String status) {}
-        }
-        """.trimIndent()
+            package io.koraframework.benchmark.java.api.dto;
+            
+            import io.koraframework.json.common.annotation.Json;
+            import io.koraframework.validation.common.annotation.*;
+            import java.math.BigDecimal;
+            import java.util.List;
+            
+            public final class OrderDto$i {
+                
+                @Json 
+                public record ItemRequest$i(
+                    @NotEmpty
+                    @Pattern("^[A-Z]{3,10}$")
+                    String typeCode,
+                    
+                    @Min(1)
+                    Integer quantity
+                ) {}
+
+                @Json 
+                public record CreateOrderRequest$i(
+                    Long userId,
+                    
+                    @NotEmpty
+                    @Pattern("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,6}$")
+                    String userEmail,
+                    
+                    @NotEmpty
+                    @Size(min = 5, max = 15)
+                    String promoCode,
+                    
+                    @NotEmpty
+                    @Size(max = 50)
+                    List<@Valid ItemRequest$i> items,
+                    
+                    @Size(min = 1, max = 5)
+                    List<@NotEmpty String> tags
+                ) {}
+                
+                @Json 
+                public record OrderResponse$i(
+                    @NotEmpty
+                    @Size(min = 10, max = 50)
+                    String id, 
+                    
+                    Long userId, 
+                    
+                    BigDecimal totalAmount, 
+                    
+                    @NotEmpty
+                    String status
+                ) {}
+            }
+            """.trimIndent()
         )
     }
 
-    // 3. ГЕНЕРАЦИЯ РЕПОЗИТОРИЕВ
+    // 3. ГЕНЕРАЦИЯ СУЩНОСТЕЙ (MODEL) И РЕПОЗИТОРИЕВ
     val sqlBuilder = StringBuilder()
     if (includeRepos && reposCount > 0) {
         for (i in 0 until reposCount) {
-            val file = File("$TARGET_DIR/io/koraframework/benchmark/java/repository/OrderJdbcRepository$i.java")
-            file.writeText(
+            // 3.1 Генерируем Entity
+            val entityFile = File("$TARGET_DIR/io/koraframework/benchmark/java/model/OrderEntity$i.java")
+            entityFile.writeText(
                 """
-            package io.koraframework.benchmark.java.repository;
-            import io.koraframework.database.common.annotation.Query;
-            import io.koraframework.database.common.annotation.Repository;
-            import io.koraframework.database.jdbc.JdbcRepository;
-            
-            @Repository
-            public interface OrderJdbcRepository$i extends JdbcRepository {
-                @Query("SELECT id FROM orders_$i WHERE id = :id")
-                String findById(String id);
-                @Query("INSERT INTO orders_$i(id, user_id, total_amount, status) VALUES (:id, 1, :totalAmount, 'PAID')")
-                void save(String id, java.math.BigDecimal totalAmount);
-            }
-            """.trimIndent()
+                package io.koraframework.benchmark.java.model;
+                
+                import java.math.BigDecimal;
+                
+                public final class OrderEntity$i {
+                    private String id;
+                    private Long userId;
+                    private BigDecimal totalAmount;
+                    private String status;
+                    
+                    public OrderEntity$i() {}
+                    
+                    public OrderEntity$i(String id, Long userId, BigDecimal totalAmount, String status) {
+                        this.id = id;
+                        this.userId = userId;
+                        this.totalAmount = totalAmount;
+                        this.status = status;
+                    }
+                    
+                    public String getId() { return id; }
+                    public void setId(String id) { this.id = id; }
+                    
+                    public Long getUserId() { return userId; }
+                    public void setUserId(Long userId) { this.userId = userId; }
+                    
+                    public BigDecimal getTotalAmount() { return totalAmount; }
+                    public void setTotalAmount(BigDecimal totalAmount) { this.totalAmount = totalAmount; }
+                    
+                    public String getStatus() { return status; }
+                    public void setStatus(String status) { this.status = status; }
+                }
+                """.trimIndent()
             )
 
+            // 3.2 Генерируем Repository, работающий с этой Entity
+            val repoFile = File("$TARGET_DIR/io/koraframework/benchmark/java/repository/OrderJdbcRepository$i.java")
+            repoFile.writeText(
+                """
+                package io.koraframework.benchmark.java.repository;
+                
+                import io.koraframework.benchmark.java.model.OrderEntity$i;
+                import io.koraframework.database.common.annotation.Query;
+                import io.koraframework.database.common.annotation.Repository;
+                import io.koraframework.database.jdbc.JdbcRepository;
+                
+                @Repository
+                public interface OrderJdbcRepository$i extends JdbcRepository {
+                    
+                    @Query("SELECT id, user_id, total_amount, status FROM orders_$i WHERE id = :id")
+                    OrderEntity$i findById(String id);
+                    
+                    @Query("INSERT INTO orders_$i(id, user_id, total_amount, status) VALUES (:entity.id, :entity.userId, :entity.totalAmount, :entity.status)")
+                    void save(OrderEntity$i entity);
+                }
+                """.trimIndent()
+            )
+
+            // 3.3 SQL миграция
             sqlBuilder.append(
                 """
-            CREATE TABLE orders_$i (
-                id VARCHAR(50) PRIMARY KEY,
-                user_id BIGINT NOT NULL,
-                total_amount NUMERIC(19, 4) NOT NULL,
-                status VARCHAR(50) NOT NULL
-            );
-            INSERT INTO orders_$i (id, user_id, total_amount, status) VALUES ('ORD-INIT-$i', 1, 15000.75, 'PAID');
-            """.trimIndent()
+                CREATE TABLE orders_$i (
+                    id VARCHAR(50) PRIMARY KEY,
+                    user_id BIGINT NOT NULL,
+                    total_amount NUMERIC(19, 4) NOT NULL,
+                    status VARCHAR(50) NOT NULL
+                );
+                INSERT INTO orders_$i (id, user_id, total_amount, status) VALUES ('ORD-INIT-$i', 1, 15000.75, 'PAID');
+                """.trimIndent()
             ).append("\n\n")
         }
         val migrationFile = File(migrationDir, "V20261018131100__create_benchmark_orders_tables.sql")
@@ -119,24 +208,27 @@ fun main() {
         if (includeMappers && mappersCount > 0) {
             for (i in 0 until mappersCount) {
                 val mapperFile = File("$TARGET_DIR/io/koraframework/benchmark/java/service/OrderMapper$i.java")
-                mapperFile.writeText("""
+                mapperFile.writeText(
+                    """
                 package io.koraframework.benchmark.java.service;
                 
                 import io.koraframework.common.annotation.Component;
                 
                 @Component
                 public class OrderMapper$i {
-                    public String mapToDto(String entity) {
+                    // Принимает Object, чтобы работать с любой сгенерированной сущностью OrderEntityX
+                    public String mapToDto(Object entity) {
                         if (entity == null) return null;
-                        return "MAPPED_DTO_[" + entity + "]_BY_MAPPER_$i";
+                        return "MAPPED_DTO_[" + entity.toString() + "]_BY_MAPPER_$i";
                     }
-                    
+                
                     public String mapToEntity(String dto) {
                         if (dto == null) return null;
                         return "MAPPED_ENTITY_[" + dto + "]_BY_MAPPER_$i";
                     }
                 }
-                """.trimIndent())
+                """.trimIndent()
+                )
             }
         }
 
@@ -209,7 +301,7 @@ fun main() {
 
                 if (includeRepos && serviceReposIds.isNotEmpty()) {
                     serviceReposIds.forEachIndexed { idx, id ->
-                        appendLine("        String repoRes$idx = this.repository$id.findById(id);")
+                        appendLine("        io.koraframework.benchmark.java.model.OrderEntity$id repoRes$idx = this.repository$id.findById(id);")
                         appendLine("        if (repoRes$idx != null) return ${mapperPrefix}repoRes$idx${mapperSuffix};")
                     }
                 }
@@ -222,20 +314,32 @@ fun main() {
                 appendLine("        return ${mapperPrefix}\"DUMMY_ORDER_FROM_SERVICE_$i\"${mapperSuffix};")
             }
 
-            val file = File("$TARGET_DIR/io/koraframework/benchmark/java/service/OrderService$i.java")
-            file.writeText(buildString {
+            // Сборка и запись файла Сервиса
+            val serviceFile = File("$TARGET_DIR/io/koraframework/benchmark/java/service/OrderService$i.java")
+            serviceReposIds.forEach { id ->
+                imports.add("import io.koraframework.benchmark.java.model.OrderEntity$id;")
+            }
+
+            val importsStr = imports.sorted().joinToString("\n")
+            val fieldsStr = fields.joinToString("\n    ")
+            val paramsStr = constructorParams.joinToString(", ")
+            val assignmentsStr = constructorAssignments.joinToString("\n        ")
+
+            val firstRepoId = if (serviceReposIds.isNotEmpty()) serviceReposIds.first() else -1
+
+            serviceFile.writeText(buildString {
                 appendLine("package io.koraframework.benchmark.java.service;")
                 appendLine()
-                imports.sorted().forEach { appendLine(it) }
+                if (importsStr.isNotEmpty()) appendLine(importsStr)
                 appendLine("import io.koraframework.common.annotation.Component;")
                 appendLine("import java.util.concurrent.ThreadLocalRandom;")
                 appendLine()
                 appendLine("@Component")
                 appendLine("public class OrderService$i {")
-                fields.forEach { appendLine("    $it") }
+                if (fieldsStr.isNotEmpty()) appendLine("    $fieldsStr")
                 appendLine()
-                appendLine("    public OrderService$i(${constructorParams.joinToString(", ")}) {")
-                constructorAssignments.forEach { appendLine("        $it") }
+                appendLine("    public OrderService$i($paramsStr) {")
+                if (assignmentsStr.isNotEmpty()) appendLine("        $assignmentsStr")
                 appendLine("    }")
                 appendLine()
                 appendLine("    public String getOrder(String id) {")
@@ -247,8 +351,9 @@ fun main() {
 
                 if (mapperId != -1) {
                     appendLine("        String mappedId = this.mapper.mapToEntity(id);")
-                    if (includeRepos && serviceReposIds.isNotEmpty()) {
-                        appendLine("        this.repository${serviceReposIds.first()}.save(mappedId, java.math.BigDecimal.valueOf(quantity));")
+                    if (includeRepos && firstRepoId != -1) {
+                        appendLine("        OrderEntity$firstRepoId entity = new OrderEntity$firstRepoId(mappedId, 1L, java.math.BigDecimal.valueOf(quantity), \"PENDING\");")
+                        appendLine("        this.repository$firstRepoId.save(entity);")
                         appendLine("        return mappedId;")
                     } else if (childServiceFieldNames.isNotEmpty()) {
                         appendLine("        return this.${childServiceFieldNames.first()}.createOrder(quantity);")
@@ -256,8 +361,9 @@ fun main() {
                         appendLine("        return mappedId;")
                     }
                 } else {
-                    if (includeRepos && serviceReposIds.isNotEmpty()) {
-                        appendLine("        this.repository${serviceReposIds.first()}.save(id, java.math.BigDecimal.valueOf(quantity));")
+                    if (includeRepos && firstRepoId != -1) {
+                        appendLine("        OrderEntity$firstRepoId entity = new OrderEntity$firstRepoId(id, 1L, java.math.BigDecimal.valueOf(quantity), \"PENDING\");")
+                        appendLine("        this.repository$firstRepoId.save(entity);")
                         appendLine("        return id;")
                     } else if (childServiceFieldNames.isNotEmpty()) {
                         appendLine("        return this.${childServiceFieldNames.first()}.createOrder(quantity);")
@@ -271,7 +377,7 @@ fun main() {
         }
     }
 
-    // 5. ГЕНЕРАЦИЯ КОНТРОЛЛЕРОВ (СВЯЗЬ ТОЛЬКО С СЕРВИСАМИ СЛОЯ 0)
+    // 5. ГЕНЕРАЦИЯ КОНТРОЛЛЕРОВ С УЧЕТОМ НОВОЙ СТРУКТУРЫ DTO
     for (i in 0 until controllersCount) {
         val configId = if (includeConfigs && configsCount > 0) i % configsCount else -1
         val fields = mutableListOf<String>()
@@ -327,10 +433,11 @@ fun main() {
             appendLine("import io.koraframework.http.common.annotation.Path;")
             appendLine("import io.koraframework.http.server.common.annotation.HttpController;")
             appendLine("import io.koraframework.json.common.annotation.Json;")
+            appendLine("import io.koraframework.validation.common.annotation.Valid;")
             appendLine("import java.math.BigDecimal;")
             appendLine()
-            appendLine("@HttpController")
             appendLine("@Component")
+            appendLine("@HttpController")
             appendLine("public class OrderController$i {")
             appendLine()
             if (fields.isNotEmpty()) fields.forEach { appendLine("    $it") }
@@ -347,46 +454,56 @@ fun main() {
             appendLine()
             appendLine("    @Json")
             appendLine("    @HttpRoute(method = HttpMethod.POST, path = \"/orders/$i\")")
-            appendLine("    public OrderResponse$i checkout(@Json CreateOrderRequest$i body) {")
+            appendLine("    public OrderResponse$i checkout(@Json @Valid CreateOrderRequest$i body) {")
+            appendLine("        int totalQuantity = 0;")
+            appendLine("        if (body.items() != null) {")
+            appendLine("            totalQuantity = body.items().stream()")
+            appendLine("                .filter(item -> item != null && item.quantity() != null)")
+            appendLine("                .mapToInt(ItemRequest$i::quantity)")
+            appendLine("                .sum();")
+            appendLine("        }")
+            appendLine()
+
             if (includeServices && controllerServicesIds.isNotEmpty()) {
-                appendLine("        String entity = this.orderService${controllerServicesIds.first()}.createOrder(body.quantity());")
-                appendLine("        return new OrderResponse$i(entity, 42L, java.math.BigDecimal.TEN, \"GENERATED\");")
+                appendLine("        String entity = this.orderService${controllerServicesIds.first()}.createOrder(totalQuantity);")
+                appendLine("        return new OrderResponse$i(entity, body.userId(), java.math.BigDecimal.TEN, \"GENERATED\");")
             } else {
-                appendLine("        return new OrderResponse$i(\"GENERATED_DIRECTLY_\" + body.quantity(), 42L, java.math.BigDecimal.TEN, \"GENERATED\");")
+                appendLine("        return new OrderResponse$i(\"GENERATED_DIRECTLY_\" + totalQuantity, body.userId(), java.math.BigDecimal.TEN, \"GENERATED\");")
             }
             appendLine("    }")
             appendLine("}")
         })
     }
 
-    // 6. ГЕНЕРАЦИЯ APP.JAVA
     val appFile = File("$TARGET_DIR/io/koraframework/benchmark/java/App.java")
     val hasRepos = includeRepos && reposCount > 0
     appFile.writeText(
         """
-    package io.koraframework.benchmark.java;
-    import io.koraframework.application.graph.KoraApplication;
-    import io.koraframework.common.annotation.KoraApp;
-    import io.koraframework.config.hocon.HoconConfigModule;
-    import io.koraframework.json.common.JsonModule;
-    import io.koraframework.logging.common.LoggingModule;
-    import io.koraframework.logging.logback.LogbackModule;
-    import io.koraframework.http.server.undertow.UndertowPublicHttpServerModule;
-    ${if (hasRepos) "import io.koraframework.database.jdbc.JdbcDatabaseModule;" else ""}
-    ${if (hasRepos) "import io.koraframework.database.flyway.FlywayJdbcDatabaseModule;" else ""}
-    
-    @KoraApp
-    public interface App extends
+        package io.koraframework.benchmark.java;
+        import io.koraframework.application.graph.KoraApplication;
+        import io.koraframework.common.annotation.KoraApp;
+        import io.koraframework.config.hocon.HoconConfigModule;
+        import io.koraframework.json.common.JsonModule;
+        import io.koraframework.logging.common.LoggingModule;
+        import io.koraframework.logging.logback.LogbackModule;
+        import io.koraframework.http.server.undertow.UndertowPublicHttpServerModule;
+        import io.koraframework.validation.module.ValidationModule;
+        ${if (hasRepos) "import io.koraframework.database.jdbc.JdbcDatabaseModule;" else ""}
+        ${if (hasRepos) "import io.koraframework.database.flyway.FlywayJdbcDatabaseModule;" else ""}
+        
+        @KoraApp
+        public interface App extends
             HoconConfigModule,
             JsonModule,
             LoggingModule,
             LogbackModule,
+            ValidationModule,
             UndertowPublicHttpServerModule${if (hasRepos) ",\n            JdbcDatabaseModule,\n            FlywayJdbcDatabaseModule" else ""} {
-        static void main(String[] args) {
-            KoraApplication.run(AppGraph::graph);
+            static void main(String[] args) {
+                KoraApplication.run(AppGraph::graph);
+            }
         }
-    }
-    """.trimIndent()
+        """.trimIndent()
     )
 
     // 7. ГЕНЕРАЦИЯ APPLICATION.CONF
