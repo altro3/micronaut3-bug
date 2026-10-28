@@ -67,8 +67,10 @@ fun main() {
             import java.math.BigDecimal;
             import java.util.List;
             
+            @Valid
             public final class OrderDto$i {
                 
+                @Valid
                 @Json 
                 public record ItemRequest$i(
                     @NotEmpty
@@ -79,6 +81,7 @@ fun main() {
                     Integer quantity
                 ) {}
 
+                @Valid
                 @Json 
                 public record CreateOrderRequest$i(
                     Long userId,
@@ -99,6 +102,7 @@ fun main() {
                     List<@NotEmpty String> tags
                 ) {}
                 
+                @Valid
                 @Json 
                 public record OrderResponse$i(
                     @NotEmpty
@@ -127,8 +131,10 @@ fun main() {
                 """
                 package io.koraframework.benchmark.java.model;
                 
+                import io.koraframework.database.jdbc.annotation.*;
                 import java.math.BigDecimal;
                 
+                @EntityJdbc
                 public final class OrderEntity$i {
                     private String id;
                     private Long userId;
@@ -433,11 +439,10 @@ fun main() {
             appendLine("import io.koraframework.http.common.annotation.Path;")
             appendLine("import io.koraframework.http.server.common.annotation.HttpController;")
             appendLine("import io.koraframework.json.common.annotation.Json;")
-            appendLine("import io.koraframework.validation.common.annotation.Valid;")
             appendLine("import java.math.BigDecimal;")
             appendLine()
-            appendLine("@Component")
             appendLine("@HttpController")
+            appendLine("@Component")
             appendLine("public class OrderController$i {")
             appendLine()
             if (fields.isNotEmpty()) fields.forEach { appendLine("    $it") }
@@ -454,7 +459,7 @@ fun main() {
             appendLine()
             appendLine("    @Json")
             appendLine("    @HttpRoute(method = HttpMethod.POST, path = \"/orders/$i\")")
-            appendLine("    public OrderResponse$i checkout(@Json @Valid CreateOrderRequest$i body) {")
+            appendLine("    public OrderResponse$i checkout(@Json CreateOrderRequest$i body) {")
             appendLine("        int totalQuantity = 0;")
             appendLine("        if (body.items() != null) {")
             appendLine("            totalQuantity = body.items().stream()")
