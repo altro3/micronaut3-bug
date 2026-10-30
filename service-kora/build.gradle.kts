@@ -21,28 +21,37 @@ dependencies {
     implementation(kora.koraframework.jsonCommon)
     implementation(kora.koraframework.loggingLogback)
     implementation(kora.koraframework.databaseFlyway)
+    implementation(libs.flyway)
     implementation(kora.koraframework.databaseJdbcPostgres)
     implementation(kora.koraframework.cacheCaffeine)
     implementation(kora.koraframework.openapiManagement)
     implementation(kora.koraframework.resilientKora)
     implementation(kora.koraframework.validationModule)
     implementation(kora.koraframework.micrometerModule)
-    implementation(libs.flyway)
     implementation(libs.kotlin.logging)
 }
 
 val modernJvmOptimizations = listOf(
-    "-Xms128m",
+    "-Xms96m",
     "-Xmx256m",
+    "-Xss256k",
     "-XX:MaxMetaspaceSize=64m",
     "-XX:+UseG1GC",
+    "-XX:MaxGCPauseMillis=20",
+    "-XX:G1PeriodicGCInterval=2000",
+    "-XX:+G1PeriodicGCInvokesConcurrent",
     "-XX:+UseStringDeduplication",
     "-XX:+UnlockExperimentalVMOptions",
     "-XX:+UseCompactObjectHeaders",
     "-XX:+EliminateAllocations",
-    "-XX:+UseNUMA",
     "-Dfile.encoding=UTF-8",
-    "-Dconfig.override_with_env_vars=true"
+    "-Dconfig.override_with_env_vars=true",
+    "-Dcom.sun.management.jmxremote=false",
+    "-Dcom.sun.management.jmxremote.ssl=false",
+    "-Dcom.sun.management.jmxremote.port=0",
+    "-Dcom.sun.management.jmxremote.authenticate=false",
+    "-Djava.rmi.server.hostname=127.0.0.1",
+    "-XX:+DisableAttachMechanism"
 )
 
 application {

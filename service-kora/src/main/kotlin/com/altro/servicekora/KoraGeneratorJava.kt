@@ -18,7 +18,7 @@ fun main() {
     val mappersPart = 0.12
     val controllersPart = 0.10
 
-    val totalNodes = 10
+    val totalNodes = 150
 
     val configsCount = if (includeConfigs) maxOf(1, (totalNodes * configsPart).toInt()) else 0
     val controllersCount = if (includeServices) maxOf(1, (totalNodes * controllersPart).toInt()) else 0

@@ -10,7 +10,7 @@ wiremock = "3.13.2"
 disruptor = "4.0.0"
 kora = "2.0.0-1-SNAPSHOT"
 ksp = "2.3.12"
-flyway = "13.8.1"
+flyway = "13.11.1"
 fastjson = "2.0.65"
 
 jmh = "0.7.3"
