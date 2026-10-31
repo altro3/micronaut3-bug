@@ -32,13 +32,12 @@ dependencies {
 }
 
 val modernJvmOptimizations = listOf(
-    "-Xms96m",
-    "-Xmx256m",
+    "-Xms512m",
+    "-Xmx512m",
     "-Xss256k",
-    "-XX:MaxMetaspaceSize=64m",
+    "-XX:MaxMetaspaceSize=96m",
     "-XX:+UseG1GC",
-    "-XX:MaxGCPauseMillis=20",
-    "-XX:G1PeriodicGCInterval=2000",
+    "-XX:MaxGCPauseMillis=50",
     "-XX:+G1PeriodicGCInvokesConcurrent",
     "-XX:+UseStringDeduplication",
     "-XX:+UnlockExperimentalVMOptions",
@@ -50,8 +49,7 @@ val modernJvmOptimizations = listOf(
     "-Dcom.sun.management.jmxremote.ssl=false",
     "-Dcom.sun.management.jmxremote.port=0",
     "-Dcom.sun.management.jmxremote.authenticate=false",
-    "-Djava.rmi.server.hostname=127.0.0.1",
-    "-XX:+DisableAttachMechanism"
+    "-Djava.rmi.server.hostname=127.0.0.1"
 )
 
 application {
