@@ -2,11 +2,11 @@ import com.google.cloud.tools.jib.gradle.*
 import org.gradle.api.tasks.testing.logging.*
 import java.io.BufferedReader
 import java.io.InputStreamReader
-import kotlin.math.roundToInt
 
 plugins {
-    id("io.koraframework.config-aot") version("2.0.0-1-SNAPSHOT")
+    id("io.koraframework.config-aot") version ("2.0.0-1-SNAPSHOT")
     application
+    alias(libs.plugins.graal)
     alias(libs.plugins.jib)
     alias(libs.plugins.shadow)
 }
@@ -26,12 +26,18 @@ dependencies {
     implementation(kora.koraframework.validationModule)
     implementation(kora.koraframework.databaseJdbcPostgres)
     implementation(kora.koraframework.databaseFlyway)
-    implementation(libs.flyway)
+    implementation(libs.flyway) {
+        exclude(group = "org.flywaydb", module = "flyway-database-cockroachdb")
+    }
     implementation(kora.koraframework.httpServerUndertow)
 //    implementation(kora.koraframework.cacheCaffeine)
 //    implementation(kora.koraframework.openapiManagement)
 //    implementation(kora.koraframework.resilientKora)
 //    implementation(kora.koraframework.micrometerModule)
+}
+
+configurations.runtimeClasspath {
+    exclude(group = "org.jspecify", module = "jspecify")
 }
 
 val jvmOpts = listOf(
@@ -53,13 +59,54 @@ val jvmOpts = listOf(
     "-Dcom.sun.management.jmxremote.port=0",
     "-Dcom.sun.management.jmxremote.authenticate=false",
     "-Djava.rmi.server.hostname=127.0.0.1",
-//    "-XX:+DisableAttachMechanism"
 )
+val nativeRuntimeOpts = listOf(
+    "-Xms512m",
+    "-Xmx512m",
+    "-Xss256k",
+    "-Dfile.encoding=UTF-8",
+    "-Dconfig.override_with_env_vars=true"
+)
+
+graalvmNative {
+    binaries {
+        named("main") {
+            imageName.set("service-kora")
+
+            buildArgs.addAll(
+                "-O4",
+                "-Dfile.encoding=UTF-8"
+            )
+
+            environmentVariables.put(
+                "INCLUDE", listOf(
+                    "C:\\Program Files\\Microsoft Visual Studio\\18\\Community\\VC\\Tools\\MSVC\\14.51.36231\\include",
+                    "C:\\Program Files (x86)\\Windows Kits\\10\\Include\\10.0.26100.0\\ucrt",
+                    "C:\\Program Files (x86)\\Windows Kits\\10\\Include\\10.0.26100.0\\shared",
+                    "C:\\Program Files (x86)\\Windows Kits\\10\\Include\\10.0.26100.0\\um"
+                ).joinToString(";")
+            )
+
+            environmentVariables.put(
+                "LIB", listOf(
+                    "C:\\Program Files\\Microsoft Visual Studio\\18\\Community\\VC\\Tools\\MSVC\\14.51.36231\\lib\\x64",
+                    "C:\\Program Files (x86)\\Windows Kits\\10\\Lib\\10.0.26100.0\\ucrt\\x64",
+                    "C:\\Program Files (x86)\\Windows Kits\\10\\Lib\\10.0.26100.0\\um\\x64"
+                ).joinToString(";")
+            )
+        }
+    }
+}
 
 application {
     applicationName = "application"
     mainClass = "io.koraframework.benchmark.java.App"
     applicationDefaultJvmArgs = jvmOpts
+}
+
+tasks.register<Copy>("copyDependencies") {
+    from(configurations.runtimeClasspath)
+    into(layout.buildDirectory.dir("dependencies"))
 }
 
 jib {
@@ -136,20 +183,27 @@ tasks.named("startShadowScripts") { enabled = false }
 
 tasks.register("benchmark") {
     group = "verification"
-    description = "Runs cold start benchmark and saves raw data for analysis"
+    description = "Runs cold start benchmark for JIT (JAR) or GraalVM Native Image"
 
-    dependsOn("shadowJar")
+    val isNative = project.hasProperty("native")
+
+    if (isNative) {
+        dependsOn("nativeCompile")
+    } else {
+        dependsOn("shadowJar")
+    }
 
     doLast {
         val runs = 100
         val rawResults = mutableListOf<Int>()
-
-        val shouldGenerateCds = project.hasProperty("generateCds") && project.property("generateCds").toString().toBoolean()
-
+        val shouldGenerateCds = !isNative && project.hasProperty("generateCds") && project.property("generateCds").toString().toBoolean()
 
         val buildDirFile = project.layout.buildDirectory.asFile.get()
-        val libsDir = File(buildDirFile, "libs")
-        val jarName = "service-kora.jar"
+        val libsDir = if (isNative) File(buildDirFile, "native/nativeCompile") else File(buildDirFile, "libs")
+
+        val isWindows = System.getProperty("os.name").contains("win", ignoreCase = true)
+        val exeExtension = if (isWindows) ".exe" else ""
+        val executableName = if (isNative) "service-kora$exeExtension" else "service-kora.jar"
 
         if (shouldGenerateCds) {
             println("==================================================")
@@ -163,12 +217,14 @@ tasks.register("benchmark") {
 
             val command = mutableListOf("java")
             command.addAll(jvmOpts)
-            command.addAll(listOf(
-                "-XX:ArchiveClassesAtExit=service.jsa",
-                "-Dkora.exit.after.init=true",
-                "-jar",
-                jarName
-            ))
+            command.addAll(
+                listOf(
+                    "-XX:ArchiveClassesAtExit=service.jsa",
+                    "-Dkora.exit.after.init=true",
+                    "-jar",
+                    executableName
+                )
+            )
 
             val pb = ProcessBuilder(command)
             pb.directory(libsDir)
@@ -196,19 +252,26 @@ tasks.register("benchmark") {
         }
 
         println("==================================================")
-        println("STARTING BENCHMARK (COLLECTING ALL RAW DATA)")
+        println("STARTING ${if (isNative) "GRAALVM NATIVE" else "JVM JIT"} BENCHMARK ($runs RUNS)")
         println("==================================================")
 
         for (i in 1..runs) {
             print("Running iteration $i of $runs... ")
 
-            val command = mutableListOf("java")
-            command.addAll(jvmOpts)
-            if (shouldGenerateCds) {
-                command.add("-XX:SharedArchiveFile=service.jsa")
-            }
-            command.addAll(listOf("-jar", jarName))
+            val command = mutableListOf<String>()
 
+            if (isNative) {
+                val absoluteExePath = File(libsDir, executableName).absolutePath
+                command.add(absoluteExePath)
+                command.addAll(nativeRuntimeOpts)
+            } else {
+                command.add("java")
+                command.addAll(jvmOpts)
+                if (shouldGenerateCds) {
+                    command.add("-XX:SharedArchiveFile=service.jsa")
+                }
+                command.addAll(listOf("-jar", executableName))
+            }
             val pb = ProcessBuilder(command)
             pb.directory(libsDir)
             pb.redirectErrorStream(true)
@@ -252,10 +315,10 @@ tasks.register("benchmark") {
         println("==================================================")
 
         if (rawResults.isNotEmpty()) {
-            // 1. Сортируем тайминги по возрастанию
             val sortedResults = rawResults.sorted()
+            val reportName = if (isNative) "benchmark_native_results.csv" else "benchmark_raw_results.csv"
+            val csvFile = File(buildDirFile, reportName)
 
-            val csvFile = File(buildDirFile, "benchmark_raw_results.csv")
             csvFile.writeText("Iteration,StartupTimeMs\n")
             rawResults.forEachIndexed { index, time ->
                 csvFile.appendText("${index + 1},$time\n")
@@ -286,24 +349,40 @@ tasks.register("benchmark") {
             println("--------------------------------------------------")
 
             println("DISTRIBUTION HISTOGRAM (Baskets):")
-            var countUnder400 = 0
-            var count400to500 = 0
-            var count500to1000 = 0
-            var countOver1000 = 0
+            println("DISTRIBUTION HISTOGRAM (Baskets):")
+            var countUnder20 = 0
+            var count20to100 = 0
+            var count100to150 = 0
+            var count150to200 = 0
+            var count200to250 = 0
+            var count250to300 = 0
+            var count300to350 = 0
+            var count350to400 = 0
+            var countOver400 = 0
 
             rawResults.forEach { time ->
                 when {
-                    time < 400 -> countUnder400++
-                    time in 400..500 -> count400to500++
-                    time in 501..999 -> count500to1000++
-                    else -> countOver1000++
+                    time < 20 -> countUnder20++
+                    time in 20..99 -> count20to100++
+                    time in 100..149 -> count100to150++
+                    time in 150..199 -> count150to200++
+                    time in 200..249 -> count200to250++
+                    time in 250..299 -> count250to300++
+                    time in 300..349 -> count300to350++
+                    time in 350..400 -> count350to400++
+                    else -> countOver400++
                 }
             }
 
-            println("  < 400 ms   : $countUnder400 runs " + "*".repeat(minOf(30, (countUnder400 * 30 / runs))))
-            println("  400-500 ms : $count400to500 runs " + "*".repeat(minOf(30, (count400to500 * 30 / runs))))
-            println("  500-1000 ms: $count500to1000 runs " + "*".repeat(minOf(30, (count500to1000 * 30 / runs))))
-            println("  > 1000 ms  : $countOver1000 runs " + "*".repeat(minOf(30, (countOver1000 * 30 / runs))))
+            println("  < 20 ms    : $countUnder20 runs " + "*".repeat(minOf(30, (countUnder20 * 30 / runs))))
+            println("  20-100 ms  : $count20to100 runs " + "*".repeat(minOf(30, (count20to100 * 30 / runs))))
+            println("  100-150 ms : $count100to150 runs " + "*".repeat(minOf(30, (count100to150 * 30 / runs))))
+            println("  150-200 ms : $count150to200 runs " + "*".repeat(minOf(30, (count150to200 * 30 / runs))))
+            println("  200-250 ms : $count200to250 runs " + "*".repeat(minOf(30, (count200to250 * 30 / runs))))
+            println("  250-300 ms : $count250to300 runs " + "*".repeat(minOf(30, (count250to300 * 30 / runs))))
+            println("  300-350 ms : $count300to350 runs " + "*".repeat(minOf(30, (count300to350 * 30 / runs))))
+            println("  350-400 ms : $count350to400 runs " + "*".repeat(minOf(30, (count350to400 * 30 / runs))))
+            println("  > 400 ms   : $countOver400 runs " + "*".repeat(minOf(30, (countOver400 * 30 / runs))))
         } else {
             println("No data captured.")
         }
