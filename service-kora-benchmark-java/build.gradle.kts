@@ -59,14 +59,23 @@ val jvmOpts = listOf(
     "-Dcom.sun.management.jmxremote.port=0",
     "-Dcom.sun.management.jmxremote.authenticate=false",
     "-Djava.rmi.server.hostname=127.0.0.1",
+    "-XX:+DisableAttachMechanism",
 )
+
 val nativeRuntimeOpts = listOf(
-    "-Xms512m",
-    "-Xmx512m",
+    "-Xms64m",
+    "-Xmx128m",
     "-Xss256k",
     "-Dfile.encoding=UTF-8",
-    "-Dconfig.override_with_env_vars=true"
+    "-Dconfig.override_with_env_vars=true",
+
+    // только для старой версии!
+//    "-Dflyway.locations=filesystem:D:/Work/micronaut/micronaut3-bug/service-kora-benchmark-java/build/resources/main/db/migration"
 )
+
+tasks.named("nativeCompile") {
+    dependsOn(tasks.named("processResources"))
+}
 
 graalvmNative {
     binaries {
@@ -75,7 +84,10 @@ graalvmNative {
 
             buildArgs.addAll(
                 "-O4",
-                "-Dfile.encoding=UTF-8"
+                "-Dfile.encoding=UTF-8",
+
+                // только для старой версии!
+//                "--enable-url-protocols=https",
             )
 
             environmentVariables.put(

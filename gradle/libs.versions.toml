@@ -7,6 +7,7 @@ kotlin-log = "8.0.4"
 protobuf = "4.36.2"
 otel-proto = "1.11.0-alpha"
 wiremock = "3.13.2"
+graal = "1.1.18"
 disruptor = "4.0.0"
 kora = "2.0.0-1-SNAPSHOT"
 ksp = "2.3.12"
@@ -44,3 +45,4 @@ kotlin-kapt = { id = "org.jetbrains.kotlin.kapt", version.ref = "kotlin" }
 jmh = { id = "me.champeau.jmh", version.ref = "jmh" }
 ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
 shadow = { id = "com.gradleup.shadow", version.ref = "shadow" }
+graal = { id = "org.graalvm.buildtools.native", version.ref = "graal" }
