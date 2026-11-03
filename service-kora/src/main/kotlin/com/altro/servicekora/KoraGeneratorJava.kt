@@ -9,7 +9,7 @@ fun main() {
     val RESOURCES_DIR = "./service-kora-benchmark-java/src/main/resources"
 
     val includeConfigs = true
-    val includeRepos = true
+    val includeRepos = false
     val includeMappers = true
     val includeServices = true
 

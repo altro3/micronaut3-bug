@@ -4,7 +4,7 @@ import java.io.BufferedReader
 import java.io.InputStreamReader
 
 plugins {
-    id("io.koraframework.config-aot") version ("2.0.0-1-SNAPSHOT")
+    id("io.koraframework.kora-aot") version ("2.0.0-1-SNAPSHOT")
     application
     alias(libs.plugins.graal)
     alias(libs.plugins.jib)
@@ -19,22 +19,26 @@ dependencies {
 
     implementation("io.koraframework.config.test:service-kora-config-lib1:1.0.0-SNAPSHOT")
     implementation("io.koraframework.config.test:service-kora-config-lib2:1.0.0-SNAPSHOT")
-    implementation(kora.koraframework.configCommon)
-//    implementation(kora.koraframework.configHocon)
+    implementation(kora.koraframework.httpServerUndertow)
     implementation(kora.koraframework.loggingLogback)
     implementation(kora.koraframework.jsonCommon)
     implementation(kora.koraframework.validationModule)
-    implementation(kora.koraframework.databaseJdbcPostgres)
-    implementation(kora.koraframework.databaseFlyway)
-    implementation(libs.flyway) {
-        exclude(group = "org.flywaydb", module = "flyway-database-cockroachdb")
-    }
-    implementation(kora.koraframework.httpServerUndertow)
+    implementation(kora.koraframework.configCommon)
+//    implementation(kora.koraframework.configHocon)
+//    implementation(kora.koraframework.databaseJdbcPostgres)
+//    implementation(kora.koraframework.databaseFlyway)
+//    implementation(libs.flyway) {
+//        exclude(group = "org.flywaydb", module = "flyway-database-cockroachdb")
+//    }
 //    implementation(kora.koraframework.cacheCaffeine)
 //    implementation(kora.koraframework.openapiManagement)
 //    implementation(kora.koraframework.resilientKora)
 //    implementation(kora.koraframework.micrometerModule)
 }
+
+//tasks.koraAot {
+//    configEnabled = false
+//}
 
 configurations.runtimeClasspath {
     exclude(group = "org.jspecify", module = "jspecify")
