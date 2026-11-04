@@ -2,7 +2,7 @@ FROM container-registry.oracle.com/graalvm/native-image:25 AS builder
 
 WORKDIR /build
 
-RUN mkdir -p /roo t/.m2/repository
+RUN mkdir -p /root/.m2/repository
 COPY .m2-context/ /root/.m2/repository/
 
 COPY gradle/ /build/gradle/
@@ -17,14 +17,37 @@ RUN --mount=type=cache,target=/root/.gradle \
     ./gradlew --no-daemon :service-kora-benchmark-java:dependencies
 
 COPY service-kora-benchmark-java/src /build/service-kora-benchmark-java/src
-COPY service-kora-benchmark-java/default.iprof* /build/service-kora-benchmark-java/
 
-RUN --mount=type=cache,target=/root/.gradle \
-    ./gradlew --no-daemon :service-kora-benchmark-java:nativeCompile
-
-RUN curl -L -s https://github.com/codesenberg/bombardier/releases/download/v2.0.2/bombardier-linux-amd64 -O && \
+RUN curl -L -s "https://github.com/codesenberg/bombardier/releases/download/v2.0.2/bombardier-linux-amd64" -O && \
     mv bombardier-linux-amd64 /build/bombardier && \
     chmod +x /build/bombardier
+
+RUN --mount=type=cache,target=/root/.gradle \
+    ./gradlew --no-daemon :service-kora-benchmark-java:nativeCompile -PpgoMode=instrument
+
+FROM container-registry.oracle.com/graalvm/native-image:25 AS pgo-generator
+
+WORKDIR /pgo
+
+COPY --from=builder /build/service-kora-benchmark-java/build/native/nativeCompile/service-kora /pgo/service-kora
+COPY --from=builder /build/bombardier /usr/local/bin/bombardier
+
+RUN ./service-kora -Xmx512m -Dfile.encoding=UTF-8 & \
+    PID=$! && \
+    sleep 2 && \
+    echo '{"userId":1,"userEmail":"aaaaa@sssss.com","promoCode":"123456","items":[{"typeCode":"abcd","quantity":10}],"tags":["asas","fgfgf"]}' > body.json && \
+    bombardier -c 200 -n 1000000 -m POST -H "Content-Type: application/json" -f body.json http://127.0.0.1:8090/orders/1 && \
+    kill -SIGTERM $PID && \
+    wait $PID
+
+FROM container-registry.oracle.com/graalvm/native-image:25 AS final-builder
+
+WORKDIR /build
+COPY --from=builder /build /build
+COPY --from=pgo-generator /pgo/default.iprof /build/service-kora-benchmark-java/default.iprof
+
+RUN --mount=type=cache,target=/root/.gradle \
+    ./gradlew --no-daemon :service-kora-benchmark-java:nativeCompile -PpgoMode=optimize
 
 FROM oraclelinux:10-slim
 
@@ -32,10 +55,10 @@ RUN microdnf install -y curl bash && microdnf clean all
 
 WORKDIR /app
 
-COPY --from=builder /build/service-kora-benchmark-java/build/native/nativeCompile/service-kora /app/service-kora
+COPY --from=final-builder /build/service-kora-benchmark-java/build/native/nativeCompile/service-kora /app/service-kora
 COPY --from=builder /build/bombardier /usr/local/bin/bombardier
 
 EXPOSE 8090
 EXPOSE 8085
 
-ENTRYPOINT ["/app/service-kora", "-Xms32m", "-Xmx512m", "-Xss256k", "-XX:MaxDirectMemorySize=512m", "-XX:G1PeriodicGCInterval=3000", "-XX:G1PeriodicGCSystemLoadThreshold=0.0", "-Dfile.encoding=UTF-8"]
+ENTRYPOINT ["/app/service-kora", "-Xms32m", "-Xmx512m", "-XX:MaxDirectMemorySize=512m", "-XX:G1PeriodicGCInterval=3000", "-XX:G1PeriodicGCSystemLoadThreshold=0.0", "-Dfile.encoding=UTF-8", "-Dorg.xnio.channels.NioXnio.BufferPool.max-size=0"]

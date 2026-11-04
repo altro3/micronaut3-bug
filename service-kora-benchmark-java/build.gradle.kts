@@ -97,12 +97,32 @@ graalvmNative {
                 "-march=native",
                 "-H:+Inline",
                 "-H:+StaticExecutableWithDynamicLibC",
-//                "--pgo=${project.layout.projectDirectory.file("default.iprof").asFile.absolutePath}",
-//                "--pgo-instrument",
 
                 // только для старой версии!
 //                "--enable-url-protocols=https",
             )
+
+            if (project.hasProperty("pgoMode")) {
+                when (project.property("pgoMode").toString().lowercase()) {
+                    "instrument" -> {
+                        buildArgs.add("--pgo-instrument")
+                        logger.lifecycle("PGO: Instrumentation mode enabled (--pgo-instrument)")
+                    }
+                    "optimize" -> {
+                        val profileFile = project.layout.projectDirectory.file("default.iprof").asFile
+                        if (profileFile.exists()) {
+                            buildArgs.add("--pgo=${profileFile.absolutePath}")
+                            logger.lifecycle("PGO: Optimization mode enabled using profile: ${profileFile.absolutePath}")
+                        } else {
+                            throw GradleException("PGO Error: Profile file default.iprof not found for 'optimize' mode!")
+                        }
+                    }
+                    else -> logger.lifecycle("PGO: PGO disabled (unknown mode provided)")
+                }
+            } else {
+                logger.lifecycle("PGO: Building without PGO (pgoMode property not provided)")
+            }
+
 //            if (!isWindows) {
                 buildArgs.add("--gc=G1")
 //            }

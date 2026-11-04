@@ -42,7 +42,9 @@ WORKDIR /app
 COPY --from=builder /build/service-kora-benchmark-java/build/libs/service-kora.jar /app/service-kora.jar
 COPY --from=builder /build/service-kora-benchmark-java/build/libs/service.jsa /app/service.jsa
 
-ENV JVM_OPTS="-Xms32m -Xmx512m -Xss256k -XX:MaxMetaspaceSize=96m -XX:+UseG1GC -XX:G1PeriodicGCInterval=3000 -XX:G1PeriodicGCSystemLoadThreshold=0.0 -XX:MinHeapFreeRatio=10 -XX:MaxHeapFreeRatio=20 -XX:+G1PeriodicGCInvokesConcurrent -XX:+UseStringDeduplication -XX:+UnlockExperimentalVMOptions -XX:+UseCompactObjectHeaders -XX:+EliminateAllocations -Dfile.encoding=UTF-8 -Dconfig.override_with_env_vars=true -XX:SharedArchiveFile=service.jsa"
+ENV JVM_OPTS="-Xms32m -Xmx512m -Xss256k -XX:MaxMetaspaceSize=96m -XX:+UseG1GC -XX:G1PeriodicGCInterval=3000 -XX:G1PeriodicGCSystemLoadThreshold=0.0 -XX:MinHeapFreeRatio=10 -XX:MaxHeapFreeRatio=20 -XX:+G1PeriodicGCInvokesConcurrent -XX:+UseStringDeduplication -XX:+UnlockExperimentalVMOptions -XX:+UseCompactObjectHeaders -XX:+EliminateAllocations -Dfile.encoding=UTF-8 -Dconfig.override_with_env_vars=true -XX:SharedArchiveFile=service.jsa -Dundertow.buffer-pool.direct=false -Dio.undertow.bufio.max-size=0"
+
+ENV MALLOC_ARENA_MAX=2
 
 EXPOSE 8090
 EXPOSE 8085
