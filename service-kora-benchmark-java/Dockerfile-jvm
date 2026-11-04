@@ -26,10 +26,6 @@ RUN --mount=type=cache,target=/root/.gradle \
 
 WORKDIR /build/service-kora-benchmark-java/build/libs
 
-ENV JVM_OPTS="-Xms512m -Xmx512m -Xss256k -XX:MaxMetaspaceSize=96m -XX:+UseG1GC -XX:G1PeriodicGCInterval=30000 -XX:MinHeapFreeRatio=10 -XX:MaxHeapFreeRatio=20 -XX:+G1PeriodicGCInvokesConcurrent -XX:+UseStringDeduplication -XX:+UnlockExperimentalVMOptions -XX:+UseCompactObjectHeaders -XX:+EliminateAllocations -Dfile.encoding=UTF-8 -Dconfig.override_with_env_vars=true -Dcom.sun.management.jmxremote=false -Dcom.sun.management.jmxremote.ssl=false -Dcom.sun.management.jmxremote.port=0 -Dcom.sun.management.jmxremote.authenticate=false -Djava.rmi.server.hostname=127.0.0.1 -XX:+DisableAttachMechanism"
-
-RUN bash -c 'java $JVM_OPTS -XX:ArchiveClassesAtExit=service.jsa -Dkora.exit.after.init=true -jar service-kora.jar'
-
 FROM bellsoft/liberica-openjre-debian:25-cds
 
 RUN apt-get update && apt-get install -y --no-install-recommends curl wget && rm -rf /var/lib/apt/lists/*
@@ -40,9 +36,8 @@ RUN wget -q https://github.com/codesenberg/bombardier/releases/download/v2.0.2/b
 WORKDIR /app
 
 COPY --from=builder /build/service-kora-benchmark-java/build/libs/service-kora.jar /app/service-kora.jar
-COPY --from=builder /build/service-kora-benchmark-java/build/libs/service.jsa /app/service.jsa
 
-ENV JVM_OPTS="-Xms32m -Xmx512m -Xss256k -XX:MaxMetaspaceSize=96m -XX:+UseG1GC -XX:G1PeriodicGCInterval=3000 -XX:G1PeriodicGCSystemLoadThreshold=0.0 -XX:MinHeapFreeRatio=10 -XX:MaxHeapFreeRatio=20 -XX:+G1PeriodicGCInvokesConcurrent -XX:+UseStringDeduplication -XX:+UnlockExperimentalVMOptions -XX:+UseCompactObjectHeaders -XX:+EliminateAllocations -Dfile.encoding=UTF-8 -Dconfig.override_with_env_vars=true -XX:SharedArchiveFile=service.jsa -Dundertow.buffer-pool.direct=false -Dio.undertow.bufio.max-size=0"
+ENV JVM_OPTS="-Xms32m -Xmx512m -Xss256k -XX:MaxMetaspaceSize=96m -XX:+UseG1GC -XX:G1PeriodicGCInterval=3000 -XX:G1PeriodicGCSystemLoadThreshold=0.0 -XX:MinHeapFreeRatio=10 -XX:MaxHeapFreeRatio=20 -XX:+G1PeriodicGCInvokesConcurrent -XX:+UseStringDeduplication -XX:+UnlockExperimentalVMOptions -XX:+UseCompactObjectHeaders -XX:+EliminateAllocations -Dfile.encoding=UTF-8 -Dconfig.override_with_env_vars=true -Dundertow.buffer-pool.direct=false -Dio.undertow.bufio.max-size=0"
 
 ENV MALLOC_ARENA_MAX=2
 
