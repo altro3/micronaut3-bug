@@ -1,0 +1,66 @@
+FROM bellsoft/liberica-openjdk-alpine:25-cds AS builder
+
+RUN apk add --no-cache curl wget bash dos2unix
+
+RUN wget -q https://github.com/codesenberg/bombardier/releases/download/v2.0.2/bombardier-linux-amd64 -O /usr/local/bin/bombardier && \
+    chmod +x /usr/local/bin/bombardier
+
+WORKDIR /build
+
+RUN mkdir -p /root/.m2/repository
+COPY .m2-context/ /root/.m2/repository/
+
+COPY gradle/ /build/gradle/
+COPY gradlew /build/gradlew
+COPY settings.gradle.kts /build/settings.gradle.kts
+COPY build.gradle.kts /build/build.gradle.kts
+COPY service-kora-benchmark-java/build.gradle.kts /build/service-kora-benchmark-java/
+
+RUN apk add --no-cache curl wget bash dos2unix && \
+    dos2unix gradlew && \
+    chmod +x gradlew
+
+RUN --mount=type=cache,target=/root/.gradle \
+    ./gradlew --no-daemon :service-kora-benchmark-java:dependencies
+
+COPY service-kora-benchmark-java/src /build/service-kora-benchmark-java/src
+COPY service-kora-benchmark-java/default.iprof* /build/service-kora-benchmark-java/
+
+RUN --mount=type=cache,target=/root/.gradle \
+    ./gradlew --no-daemon :service-kora-benchmark-java:shadowJar
+
+ENV JVM_OPTS="-Xms512m -Xmx512m -Xss256k -XX:MaxMetaspaceSize=96m -XX:+UseG1GC -XX:G1PeriodicGCInterval=30000 -XX:MinHeapFreeRatio=10 -XX:MaxHeapFreeRatio=20 -XX:+G1PeriodicGCInvokesConcurrent -XX:+UseStringDeduplication -XX:+UnlockExperimentalVMOptions -XX:+UseCompactObjectHeaders -XX:+EliminateAllocations -Dfile.encoding=UTF-8 -Dconfig.override_with_env_vars=true -Dcom.sun.management.jmxremote=false -Dcom.sun.management.jmxremote.ssl=false -Dcom.sun.management.jmxremote.port=0 -Dcom.sun.management.jmxremote.authenticate=false -Djava.rmi.server.hostname=127.0.0.1 -XX:+DisableAttachMechanism"
+
+RUN bash -c ' \
+    echo "{\"userId\":1,\"userEmail\":\"aaaaa@sssss.com\",\"promoCode\":\"123456\",\"items\":[{\"typeCode\":\"abcd\",\"quantity\":10}],\"tags\":[\"asas\",\"fgfgf\"]}" > body.json && \
+    echo "==================================================" && \
+    echo "START: Launching Kora with ArchiveClassesAtExit..." && \
+    echo "==================================================" && \
+    java $JVM_OPTS -XX:ArchiveClassesAtExit=service.jsa -jar service-kora.jar & \
+    APP_PID=$!; \
+    \
+    echo "Waiting for Kora Framework initialization on port 8090..."; \
+    until curl -s http://127.0.0.1:8090/system/readiness > /dev/null || curl -s http://127.0.0.1:8090/ > /dev/null; do sleep 0.2; done; \
+    \
+    echo "Launching Bombardier for JIT compilation and CDS training (POST /orders/1)..." && \
+    bombardier -c 50 -n 15000 -m POST -H "Content-Type: application/json" -f body.json http://127.0.0.1:8090/orders/1 && \
+    \
+    echo "Warmup finished. Stopping application to dump CDS archive..." && \
+    kill -15 $APP_PID && \
+    wait $APP_PID || true && \
+    echo "CDS Archive generation complete."'
+
+
+FROM bellsoft/liberica-openjre-alpine:25-cds
+
+RUN apk add --no-cache curl
+WORKDIR /app
+
+COPY --from=warmer /usr/local/bin/bombardier /usr/local/bin/bombardier
+COPY --from=warmer /app/service-kora.jar /app/service-kora.jar
+COPY --from=warmer /app/service.jsa /app/service.jsa
+ENV JVM_OPTS="-Xms512m -Xmx512m -Xss256k -XX:MaxMetaspaceSize=96m -XX:+UseG1GC -XX:G1PeriodicGCInterval=30000 -XX:MinHeapFreeRatio=10 -XX:MaxHeapFreeRatio=20 -XX:+G1PeriodicGCInvokesConcurrent -XX:+UseStringDeduplication -XX:+UnlockExperimentalVMOptions -XX:+UseCompactObjectHeaders -XX:+EliminateAllocations -Dfile.encoding=UTF-8 -Dconfig.override_with_env_vars=true -XX:SharedArchiveFile=service.jsa"
+
+EXPOSE 8090
+EXPOSE 8085
+ENTRYPOINT ["sh", "-c", "java $JVM_OPTS -jar service-kora.jar"]

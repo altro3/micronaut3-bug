@@ -1,0 +1,34 @@
+FROM container-registry.oracle.com/graalvm/native-image:25 AS builder
+
+WORKDIR /build
+
+RUN mkdir -p /root/.m2/repository
+COPY .m2-context/ /root/.m2/repository/
+
+COPY gradle/ /build/gradle/
+COPY gradlew /build/gradlew
+COPY settings.gradle.kts /build/settings.gradle.kts
+COPY build.gradle.kts /build/build.gradle.kts
+COPY service-kora-benchmark-java/build.gradle.kts /build/service-kora-benchmark-java/
+
+RUN chmod +x gradlew
+
+RUN --mount=type=cache,target=/root/.gradle \
+    ./gradlew --no-daemon :service-kora-benchmark-java:dependencies
+
+COPY service-kora-benchmark-java/src /build/service-kora-benchmark-java/src
+COPY service-kora-benchmark-java/default.iprof* /build/service-kora-benchmark-java/
+
+RUN --mount=type=cache,target=/root/.gradle \
+    ./gradlew --no-daemon :service-kora-benchmark-java:nativeCompile
+
+FROM gcr.io/distroless/base-debian13:latest
+
+WORKDIR /app
+
+COPY --from=builder /build/service-kora-benchmark-java/build/native/nativeCompile/service-kora /app/service-kora
+
+EXPOSE 8090
+EXPOSE 8085
+
+ENTRYPOINT ["/app/service-kora", "-Xms512m", "-Xmx512m", "-Xss256k", "-XX:MaxDirectMemorySize=512m", "-Dfile.encoding=UTF-8"]

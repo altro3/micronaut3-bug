@@ -21,10 +21,10 @@ dependencyResolutionManagement {
     }
 
     versionCatalogs {
-        generate("spring") { fromToml("spring-boot-dependencies") }
+//        generate("spring") { fromToml("spring-boot-dependencies") }
+//        generate("springAi") { fromToml("spring-ai") }
         generate("kt") { fromToml("kotlin") }
         generate("coroutines") { fromToml("coroutines") }
-        generate("springAi") { fromToml("spring-ai") }
         generate("kora") { fromToml("kora") }
     }
 }
@@ -32,21 +32,21 @@ dependencyResolutionManagement {
 rootProject.name = "micronaut3-bug"
 
 include(
-    "mycommon",
-    "myflyway",
-    "myhttp",
-    "mytracelog",
-    "myutil",
-    "mock-server",
-    "myorchestrator-spring",
-    "mymcp-server",
-    "service-kora",
-    "service-kora-config-lib1",
-    "service-kora-config-lib2",
-    "service-kora-benchmark-kotlin",
+//    "mycommon",
+//    "myflyway",
+//    "myhttp",
+//    "mytracelog",
+//    "myutil",
+//    "mock-server",
+//    "myorchestrator-spring",
+//    "mymcp-server",
+//    "service-kora",
+//    "service-kora-config-lib1",
+//    "service-kora-config-lib2",
+//    "service-kora-benchmark-kotlin",
     "service-kora-benchmark-java",
-    "service-vk",
-    "service-yad",
+//    "service-vk",
+//    "service-yad",
 )
 
 enableFeaturePreview("TYPESAFE_PROJECT_ACCESSORS")

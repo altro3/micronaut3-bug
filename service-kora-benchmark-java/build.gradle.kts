@@ -40,6 +40,8 @@ dependencies {
 //    configEnabled = false
 //}
 
+val isWindows = System.getProperty("os.name").contains("win", ignoreCase = true)
+
 configurations.runtimeClasspath {
     exclude(group = "org.jspecify", module = "jspecify")
 }
@@ -50,7 +52,10 @@ val jvmOpts = listOf(
     "-Xss256k",
     "-XX:MaxMetaspaceSize=96m",
     "-XX:+UseG1GC",
-    "-XX:MaxGCPauseMillis=50",
+    "-XX:G1PeriodicGCInterval=30000",
+    "-XX:MinHeapFreeRatio=10",
+    "-XX:MaxHeapFreeRatio=20",
+//    "-XX:MaxGCPauseMillis=50",
     "-XX:+G1PeriodicGCInvokesConcurrent",
     "-XX:+UseStringDeduplication",
     "-XX:+UnlockExperimentalVMOptions",
@@ -89,10 +94,16 @@ graalvmNative {
             buildArgs.addAll(
                 "-O4",
                 "-Dfile.encoding=UTF-8",
+//                "--pgo=${project.layout.projectDirectory.file("default.iprof").asFile.absolutePath}",
+//                "--pgo-instrument",
 
                 // только для старой версии!
 //                "--enable-url-protocols=https",
             )
+            buildArgs.add("--static-nolibc")
+//            if (!isWindows) {
+                buildArgs.add("--gc=G1")
+//            }
 
             environmentVariables.put(
                 "INCLUDE", listOf(
@@ -217,7 +228,6 @@ tasks.register("benchmark") {
         val buildDirFile = project.layout.buildDirectory.asFile.get()
         val libsDir = if (isNative) File(buildDirFile, "native/nativeCompile") else File(buildDirFile, "libs")
 
-        val isWindows = System.getProperty("os.name").contains("win", ignoreCase = true)
         val exeExtension = if (isWindows) ".exe" else ""
         val executableName = if (isNative) "service-kora$exeExtension" else "service-kora.jar"
 
