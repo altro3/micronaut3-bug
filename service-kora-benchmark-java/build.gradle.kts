@@ -94,33 +94,35 @@ graalvmNative {
             buildArgs.addAll(
                 "-O4",
                 "-Dfile.encoding=UTF-8",
+                "-march=native",
+                "-H:+Inline",
+                "-H:+StaticExecutableWithDynamicLibC",
 //                "--pgo=${project.layout.projectDirectory.file("default.iprof").asFile.absolutePath}",
 //                "--pgo-instrument",
 
                 // только для старой версии!
 //                "--enable-url-protocols=https",
             )
-            buildArgs.add("--static-nolibc")
 //            if (!isWindows) {
                 buildArgs.add("--gc=G1")
 //            }
 
-            environmentVariables.put(
-                "INCLUDE", listOf(
-                    "C:\\Program Files\\Microsoft Visual Studio\\18\\Community\\VC\\Tools\\MSVC\\14.51.36231\\include",
-                    "C:\\Program Files (x86)\\Windows Kits\\10\\Include\\10.0.26100.0\\ucrt",
-                    "C:\\Program Files (x86)\\Windows Kits\\10\\Include\\10.0.26100.0\\shared",
-                    "C:\\Program Files (x86)\\Windows Kits\\10\\Include\\10.0.26100.0\\um"
-                ).joinToString(";")
-            )
-
-            environmentVariables.put(
-                "LIB", listOf(
-                    "C:\\Program Files\\Microsoft Visual Studio\\18\\Community\\VC\\Tools\\MSVC\\14.51.36231\\lib\\x64",
-                    "C:\\Program Files (x86)\\Windows Kits\\10\\Lib\\10.0.26100.0\\ucrt\\x64",
-                    "C:\\Program Files (x86)\\Windows Kits\\10\\Lib\\10.0.26100.0\\um\\x64"
-                ).joinToString(";")
-            )
+//            environmentVariables.put(
+//                "INCLUDE", listOf(
+//                    "C:\\Program Files\\Microsoft Visual Studio\\18\\Community\\VC\\Tools\\MSVC\\14.51.36231\\include",
+//                    "C:\\Program Files (x86)\\Windows Kits\\10\\Include\\10.0.26100.0\\ucrt",
+//                    "C:\\Program Files (x86)\\Windows Kits\\10\\Include\\10.0.26100.0\\shared",
+//                    "C:\\Program Files (x86)\\Windows Kits\\10\\Include\\10.0.26100.0\\um"
+//                ).joinToString(";")
+//            )
+//
+//            environmentVariables.put(
+//                "LIB", listOf(
+//                    "C:\\Program Files\\Microsoft Visual Studio\\18\\Community\\VC\\Tools\\MSVC\\14.51.36231\\lib\\x64",
+//                    "C:\\Program Files (x86)\\Windows Kits\\10\\Lib\\10.0.26100.0\\ucrt\\x64",
+//                    "C:\\Program Files (x86)\\Windows Kits\\10\\Lib\\10.0.26100.0\\um\\x64"
+//                ).joinToString(";")
+//            )
         }
     }
 }

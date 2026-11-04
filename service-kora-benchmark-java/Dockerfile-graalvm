@@ -2,7 +2,7 @@ FROM container-registry.oracle.com/graalvm/native-image:25 AS builder
 
 WORKDIR /build
 
-RUN mkdir -p /root/.m2/repository
+RUN mkdir -p /roo t/.m2/repository
 COPY .m2-context/ /root/.m2/repository/
 
 COPY gradle/ /build/gradle/
@@ -22,13 +22,20 @@ COPY service-kora-benchmark-java/default.iprof* /build/service-kora-benchmark-ja
 RUN --mount=type=cache,target=/root/.gradle \
     ./gradlew --no-daemon :service-kora-benchmark-java:nativeCompile
 
-FROM gcr.io/distroless/base-debian13:latest
+RUN curl -L -s https://github.com/codesenberg/bombardier/releases/download/v2.0.2/bombardier-linux-amd64 -O && \
+    mv bombardier-linux-amd64 /build/bombardier && \
+    chmod +x /build/bombardier
+
+FROM oraclelinux:10-slim
+
+RUN microdnf install -y curl bash && microdnf clean all
 
 WORKDIR /app
 
 COPY --from=builder /build/service-kora-benchmark-java/build/native/nativeCompile/service-kora /app/service-kora
+COPY --from=builder /build/bombardier /usr/local/bin/bombardier
 
 EXPOSE 8090
 EXPOSE 8085
 
-ENTRYPOINT ["/app/service-kora", "-Xms512m", "-Xmx512m", "-Xss256k", "-XX:MaxDirectMemorySize=512m", "-Dfile.encoding=UTF-8"]
+ENTRYPOINT ["/app/service-kora", "-Xms32m", "-Xmx512m", "-Xss256k", "-XX:MaxDirectMemorySize=512m", "-XX:G1PeriodicGCInterval=3000", "-XX:G1PeriodicGCSystemLoadThreshold=0.0", "-Dfile.encoding=UTF-8"]
