@@ -22,7 +22,8 @@ public interface App extends
     ValidationModule,
     UndertowPublicHttpServerModule {
     static void main(String[] args) throws Exception {
-        runBenchmark(codec, codec);
+        var graph = AppGraph.graph();
+        runBenchmark(graph);
 //        KoraApplication.run(AppGraph::graph);
     }
 }
