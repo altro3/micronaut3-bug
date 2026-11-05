@@ -1,19 +1,102 @@
 package io.koraframework.benchmark.java;
 
-import com.alibaba.fastjson2.*;
 import io.koraframework.application.graph.*;
-import io.koraframework.benchmark.java.api.dto.*;
 import io.koraframework.benchmark.java.api.dto.OrderDto1.*;
 import io.koraframework.json.common.*;
 
-import java.io.ByteArrayOutputStream;
 import java.math.*;
 import java.nio.charset.*;
 import java.util.*;
 
-import static java.lang.IO.println;
+import static java.lang.IO.*;
 
 public final class JsonInMemoryBenchmark {
+
+/*
+    public static void runBenchmarkFatJson2(ApplicationGraphDraw graphDraw) throws Exception {
+        var graph = graphDraw.init();
+        var codec = graph.get(AppGraph.Partition0.component159);
+        var readerCodec = (JsonReader<CreateOrderRequest1>) codec;
+        var writerCodec = (JsonWriter<CreateOrderRequest1>) codec;
+
+        println("=== STARTING IN-MEMORY FASTJSON2 CODEC BENCHMARK ===");
+
+        String rawJson = """
+            {
+              "userId": 110266614641525,
+              "userEmail": "user@koraframework.io",
+              "promoCode": "PROMO2026",
+              "items": [
+                {
+                  "typeCode": "GOODS",
+                  "quantity": 5
+                }
+              ],
+              "tags": ["benchmark", "fastjson2"]
+            }
+            """;
+        byte[] jsonBytes = rawJson.getBytes(StandardCharsets.UTF_8);
+
+        var testObject = new OrderResponse1(
+            "122212",
+            110266614641525L,
+            new BigDecimal("123.56"),
+            "FAILED"
+        );
+
+        int warmupIterations = 250_000;
+        int measurementIterations = 5_000_000;
+
+        println("Warming up JIT compiler for Fastjson2, please wait...");
+        for (int i = 0; i < warmupIterations; i++) {
+            readerCodec.read(jsonBytes);
+            try (var writer = JSONWriter.ofUTF8()) {
+                writerCodec.write(writer, testObject);
+            }
+        }
+
+        System.gc();
+        Thread.sleep(1000);
+        println("Warmup completed. Running Fastjson2 measurement loops...");
+
+        // READ PERFORMANCE
+        long startTime = 0;
+        long readTime = 0;
+        double readRps = 0;
+
+        for (int j = 0; j < 2; j++) {
+            startTime = System.nanoTime();
+            for (int i = 0; i < measurementIterations; i++) {
+                var result = readerCodec.read(jsonBytes);
+            }
+            readTime = System.nanoTime() - startTime;
+            readRps = measurementIterations / (readTime / 1_000_000_000.0);
+        }
+
+        // WRITE PERFORMANCE
+        long writeTime = 0;
+        double writeRps = 0;
+        // WRITE PERFORMANCE
+        for (int j = 0; j < 100; j++) {
+            startTime = System.nanoTime();
+            for (int i = 0; i < measurementIterations; i++) {
+                try (var writer = JSONWriter.ofUTF8()) {
+                    writerCodec.write(writer, testObject);
+                    byte[] output = writer.getBytes();
+                }
+            }
+            writeTime = System.nanoTime() - startTime;
+            writeRps = measurementIterations / (writeTime / 1_000_000_000.0);
+        }
+
+        println("\n=================== FASTJSON2 METRICS ===================");
+        System.out.println("\n=================== BENCHMARK EXECUTION METRICS ===================");
+        System.out.format(java.util.Locale.US, "Fastjson2 Read Throughput : %,.2f operations/sec (Duration: %.3f s)%n", readRps, readTime / 1_000_000_000.0);
+        System.out.format(java.util.Locale.US, "Fastjson2 Write Throughput: %,.2f operations/sec (Duration: %.3f s)%n", writeRps, writeTime / 1_000_000_000.0);
+        System.out.println("===================================================================\n");
+        println("=========================================================\n");
+    }
+*/
 
     public static void runBenchmark(ApplicationGraphDraw graphDraw) throws Exception {
         var graph = graphDraw.init();
@@ -66,7 +149,7 @@ public final class JsonInMemoryBenchmark {
         long readTime = 0;
         double readRps = 0;
 
-        for (int j = 0; j < 100; j++) {
+        for (int j = 0; j < 2; j++) {
             startTime = System.nanoTime();
             for (int i = 0; i < measurementIterations; i++) {
                 var result = readerCodec.read(jsonBytes);
@@ -78,7 +161,7 @@ public final class JsonInMemoryBenchmark {
         long writeTime = 0;
         double writeRps = 0;
         // WRITE PERFORMANCE
-        for (int j = 0; j < 100; j++) {
+        for (int j = 0; j < 2; j++) {
             startTime = System.nanoTime();
             for (int i = 0; i < measurementIterations; i++) {
                 byte[] output = writerCodec.toByteArray(testObject);
