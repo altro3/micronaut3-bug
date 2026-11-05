@@ -48,7 +48,7 @@ configurations.runtimeClasspath {
 
 val jvmOpts = listOf(
     "-Xms16m",
-    "-Xmx256m",
+    "-Xmx512m",
     "-Xss256k",
     "-XX:MaxMetaspaceSize=32m",
     "-XX:+UseG1GC",
