@@ -47,16 +47,15 @@ configurations.runtimeClasspath {
 }
 
 val jvmOpts = listOf(
-    "-Xms512m",
-    "-Xmx512m",
+    "-Xms16m",
+    "-Xmx256m",
     "-Xss256k",
-    "-XX:MaxMetaspaceSize=96m",
+    "-XX:MaxMetaspaceSize=32m",
     "-XX:+UseG1GC",
-    "-XX:G1PeriodicGCInterval=30000",
+    "-XX:+G1PeriodicGCInvokesConcurrent",
+    "-XX:G1PeriodicGCInterval=1000",
     "-XX:MinHeapFreeRatio=10",
     "-XX:MaxHeapFreeRatio=20",
-//    "-XX:MaxGCPauseMillis=50",
-    "-XX:+G1PeriodicGCInvokesConcurrent",
     "-XX:+UseStringDeduplication",
     "-XX:+UnlockExperimentalVMOptions",
     "-XX:+UseCompactObjectHeaders",

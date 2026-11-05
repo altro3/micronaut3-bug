@@ -1,11 +1,8 @@
-FROM bellsoft/liberica-openjdk-debian:25-cds AS builder
+FROM bellsoft/liberica-openjdk-debian:25 AS builder
 
 RUN apt-get update && apt-get install -y --no-install-recommends curl wget dos2unix && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /build
-
-RUN mkdir -p /root/.m2/repository
-COPY .m2-context/ /root/.m2/repository/
 
 COPY gradle/ /build/gradle/
 COPY gradlew /build/gradlew
@@ -16,17 +13,19 @@ COPY service-kora-benchmark-java/build.gradle.kts /build/service-kora-benchmark-
 RUN dos2unix gradlew && chmod +x gradlew
 
 RUN --mount=type=cache,target=/root/.gradle \
+    --mount=type=bind,source=.m2-context,target=/root/.m2/repository,ro \
     ./gradlew --no-daemon :service-kora-benchmark-java:dependencies
 
 COPY service-kora-benchmark-java/src /build/service-kora-benchmark-java/src
 COPY service-kora-benchmark-java/default.iprof* /build/service-kora-benchmark-java/
 
 RUN --mount=type=cache,target=/root/.gradle \
+    --mount=type=bind,source=.m2-context,target=/root/.m2/repository,ro \
     ./gradlew --no-daemon :service-kora-benchmark-java:shadowJar
 
 WORKDIR /build/service-kora-benchmark-java/build/libs
 
-FROM bellsoft/liberica-openjre-debian:25-cds
+FROM bellsoft/liberica-openjre-debian:25
 
 RUN apt-get update && apt-get install -y --no-install-recommends curl wget && rm -rf /var/lib/apt/lists/*
 
