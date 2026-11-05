@@ -15,10 +15,12 @@ val jreImage = "bellsoft/liberica-openjre-alpine:25.0.4-x86_64"
 
 dependencies {
 
+//    annotationProcessor("com.alibaba.fastjson2:fastjson2-codegen:2.0.66")
     annotationProcessor(kora.koraframework.annotationProcessors)
 
     implementation("io.koraframework.config.test:service-kora-config-lib1:1.0.0-SNAPSHOT")
     implementation("io.koraframework.config.test:service-kora-config-lib2:1.0.0-SNAPSHOT")
+    implementation("com.alibaba.fastjson2:fastjson2:2.0.66")
     implementation(kora.koraframework.httpServerUndertow)
     implementation(kora.koraframework.loggingLogback)
     implementation(kora.koraframework.jsonCommon)
@@ -44,6 +46,37 @@ val isWindows = System.getProperty("os.name").contains("win", ignoreCase = true)
 
 configurations.runtimeClasspath {
     exclude(group = "org.jspecify", module = "jspecify")
+}
+
+tasks.withType<JavaCompile>().configureEach {
+    // Включаем форк, чтобы компилятор запускался в отдельной JVM с правильными флагами
+    options.isFork = true
+
+    options.compilerArgs.addAll(listOf(
+        "-Xlint:unchecked",
+        "-Xlint:deprecation",
+        "--add-exports=jdk.compiler/com.sun.tools.javac.api=ALL-UNNAMED",
+        "--add-exports=jdk.compiler/com.sun.tools.javac.file=ALL-UNNAMED",
+        "--add-exports=jdk.compiler/com.sun.tools.javac.main=ALL-UNNAMED",
+        "--add-exports=jdk.compiler/com.sun.tools.javac.model=ALL-UNNAMED",
+        "--add-exports=jdk.compiler/com.sun.tools.javac.parser=ALL-UNNAMED",
+        "--add-exports=jdk.compiler/com.sun.tools.javac.processing=ALL-UNNAMED",
+        "--add-exports=jdk.compiler/com.sun.tools.javac.tree=ALL-UNNAMED",
+        "--add-exports=jdk.compiler/com.sun.tools.javac.util=ALL-UNNAMED"
+    ))
+
+    options.forkOptions.jvmArgs?.addAll(listOf(
+        "--add-exports=jdk.compiler/com.sun.tools.javac.api=ALL-UNNAMED",
+        "--add-exports=jdk.compiler/com.sun.tools.javac.file=ALL-UNNAMED",
+        "--add-exports=jdk.compiler/com.sun.tools.javac.main=ALL-UNNAMED",
+        "--add-exports=jdk.compiler/com.sun.tools.javac.model=ALL-UNNAMED",
+        "--add-exports=jdk.compiler/com.sun.tools.javac.parser=ALL-UNNAMED",
+        "--add-exports=jdk.compiler/com.sun.tools.javac.processing=ALL-UNNAMED",
+        "--add-exports=jdk.compiler/com.sun.tools.javac.tree=ALL-UNNAMED",
+        "--add-exports=jdk.compiler/com.sun.tools.javac.util=ALL-UNNAMED",
+        "--add-opens=jdk.compiler/com.sun.tools.javac.tree=ALL-UNNAMED",
+        "--add-opens=jdk.compiler/com.sun.tools.javac.processing=ALL-UNNAMED"
+    ))
 }
 
 val jvmOpts = listOf(
