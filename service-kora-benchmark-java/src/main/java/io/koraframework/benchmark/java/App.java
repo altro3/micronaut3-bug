@@ -10,7 +10,7 @@ import io.koraframework.logging.logback.LogbackModule;
 import io.koraframework.http.server.undertow.UndertowPublicHttpServerModule;
 import io.koraframework.validation.module.ValidationModule;
 
-import static io.koraframework.benchmark.java.JsonInMemoryBenchmark.runBenchmark;
+import static io.koraframework.benchmark.java.JsonInMemoryBenchmark.runBenchmarkFastJson2;
 
 @KoraApp
 public interface App extends
@@ -22,8 +22,7 @@ public interface App extends
     ValidationModule,
     UndertowPublicHttpServerModule {
     static void main(String[] args) throws Exception {
-        var graph = AppGraph.graph();
-        runBenchmark(graph);
-//        KoraApplication.run(AppGraph::graph);
+//        runBenchmarkFastJson2(AppGraph.graph());
+        KoraApplication.run(AppGraph::graph);
     }
 }
