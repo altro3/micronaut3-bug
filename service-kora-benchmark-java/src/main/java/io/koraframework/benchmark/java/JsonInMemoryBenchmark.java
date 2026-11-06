@@ -1,6 +1,6 @@
 package io.koraframework.benchmark.java;
 
-import com.alibaba.fastjson2.*;
+//import com.alibaba.fastjson2.*;
 import io.koraframework.application.graph.*;
 import io.koraframework.benchmark.java.api.dto.OrderDto1.*;
 import io.koraframework.json.common.*;
@@ -12,6 +12,7 @@ import static java.lang.IO.*;
 
 public final class JsonInMemoryBenchmark {
 
+/*
     public static void runBenchmarkFastJson2(ApplicationGraphDraw graphDraw) throws Exception {
         var graph = graphDraw.init();
         var codec1 = graph.get(AppGraph.Partition0.component159);
@@ -96,6 +97,7 @@ public final class JsonInMemoryBenchmark {
         println("===================================================================\n");
         println("=========================================================\n");
     }
+*/
 
 /*
     public static void runBenchmark(ApplicationGraphDraw graphDraw) throws Exception {

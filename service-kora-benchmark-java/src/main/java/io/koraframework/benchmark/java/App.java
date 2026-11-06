@@ -10,8 +10,6 @@ import io.koraframework.logging.logback.LogbackModule;
 import io.koraframework.http.server.undertow.UndertowPublicHttpServerModule;
 import io.koraframework.validation.module.ValidationModule;
 
-import static io.koraframework.benchmark.java.JsonInMemoryBenchmark.runBenchmarkFastJson2;
-
 @KoraApp
 public interface App extends
     AotModule,

@@ -23,7 +23,7 @@ dependencies {
     implementation("com.alibaba.fastjson2:fastjson2:2.0.66")
     implementation(kora.koraframework.httpServerUndertow)
     implementation(kora.koraframework.loggingLogback)
-    implementation(kora.koraframework.jsonCommon)
+    implementation(kora.koraframework.jacksonModule)
     implementation(kora.koraframework.validationModule)
     implementation(kora.koraframework.configCommon)
 //    implementation(kora.koraframework.configHocon)
@@ -251,7 +251,10 @@ tasks.shadowJar {
     archiveBaseName.set("service-kora")
     archiveClassifier.set("")
     mergeServiceFiles()
-    duplicatesStrategy = DuplicatesStrategy.INCLUDE
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    filesMatching("META-INF/services/**") {
+        duplicatesStrategy = DuplicatesStrategy.INCLUDE
+    }
 }
 
 tasks.distZip { enabled = false }
