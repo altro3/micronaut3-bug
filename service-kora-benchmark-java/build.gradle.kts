@@ -81,7 +81,7 @@ tasks.withType<JavaCompile>().configureEach {
 
 val jvmOpts = listOf(
     "-Xms16m",
-    "-Xmx512m",
+    "-Xmx128m",
     "-Xss256k",
     "-XX:MaxMetaspaceSize=32m",
     "-XX:+UseG1GC",
