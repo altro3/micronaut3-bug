@@ -21,11 +21,13 @@ dependencies {
     implementation("io.koraframework.config.test:service-kora-config-lib1:1.0.0-SNAPSHOT")
     implementation("io.koraframework.config.test:service-kora-config-lib2:1.0.0-SNAPSHOT")
     implementation("com.alibaba.fastjson2:fastjson2:2.0.66")
-    implementation(kora.koraframework.httpServerUndertow)
+//    implementation(kora.koraframework.httpServerUndertow)
+    implementation(kora.koraframework.httpServerNetty)
     implementation(kora.koraframework.loggingLogback)
     implementation(kora.koraframework.jacksonModule)
     implementation(kora.koraframework.validationModule)
     implementation(kora.koraframework.configCommon)
+    implementation(libs.netty.transport.epoll)
 //    implementation(kora.koraframework.configHocon)
 //    implementation(kora.koraframework.databaseJdbcPostgres)
 //    implementation(kora.koraframework.databaseFlyway)
@@ -62,7 +64,8 @@ tasks.withType<JavaCompile>().configureEach {
         "--add-exports=jdk.compiler/com.sun.tools.javac.parser=ALL-UNNAMED",
         "--add-exports=jdk.compiler/com.sun.tools.javac.processing=ALL-UNNAMED",
         "--add-exports=jdk.compiler/com.sun.tools.javac.tree=ALL-UNNAMED",
-        "--add-exports=jdk.compiler/com.sun.tools.javac.util=ALL-UNNAMED"
+        "--add-exports=jdk.compiler/com.sun.tools.javac.util=ALL-UNNAMED",
+
     ))
 
     options.forkOptions.jvmArgs?.addAll(listOf(
@@ -84,6 +87,7 @@ val jvmOpts = listOf(
     "-Xmx128m",
     "-Xss256k",
     "-XX:MaxMetaspaceSize=32m",
+//    "-XX:MaxDirectMemorySize=128m",
     "-XX:+UseG1GC",
     "-XX:+G1PeriodicGCInvokesConcurrent",
     "-XX:G1PeriodicGCInterval=3000",

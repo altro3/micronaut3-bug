@@ -13,6 +13,7 @@ kora = "2.0.0-1-SNAPSHOT"
 ksp = "2.3.12"
 flyway = "13.11.1"
 fastjson = "2.0.65"
+netty = "4.2.20.Final"
 
 jmh = "0.7.3"
 jib = "3.5.4"
@@ -27,6 +28,9 @@ disruptor = { module = "com.lmax:disruptor", version.ref = "disruptor" }
 flyway = { module = "org.flywaydb:flyway-database-postgresql", version.ref = "flyway" }
 fastjson-codegen = { module = "com.alibaba.fastjson2:fastjson2-codegen", version.ref = "fastjson" }
 fastjson-kotlin = { module = "com.alibaba.fastjson2:fastjson2-kotlin", version.ref = "fastjson" }
+netty-transport-kqueue = { module = "io.netty:netty-transport-native-kqueue", version.ref = "netty" }
+netty-transport-epoll = { module = "io.netty:netty-transport-native-epoll", version.ref = "netty" }
+netty-transport-uring = { module = "io.netty:netty-transport-native-io_uring", version.ref = "netty" }
 
 # BOMs
 spring-boot-dependencies = { module = "org.springframework.boot:spring-boot-dependencies", version.ref = "spring" }
