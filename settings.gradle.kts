@@ -26,6 +26,7 @@ dependencyResolutionManagement {
         generate("kt") { fromToml("kotlin") }
         generate("coroutines") { fromToml("coroutines") }
         generate("kora") { fromToml("kora") }
+        generate("mn") { fromToml("micronaut") }
     }
 }
 
@@ -44,6 +45,7 @@ include(
 //    "service-kora-config-lib1",
 //    "service-kora-config-lib2",
 //    "service-kora-benchmark-kotlin",
+    "service-mn",
     "service-kora-benchmark-java",
 //    "service-vk",
 //    "service-yad",

@@ -17,7 +17,6 @@ RUN --mount=type=cache,target=/root/.gradle \
     ./gradlew --no-daemon :service-kora-benchmark-java:dependencies
 
 COPY service-kora-benchmark-java/src /build/service-kora-benchmark-java/src
-COPY service-kora-benchmark-java/default.iprof* /build/service-kora-benchmark-java/
 
 RUN --mount=type=cache,target=/root/.gradle \
     --mount=type=bind,source=.m2-context,target=/root/.m2/repository,ro \

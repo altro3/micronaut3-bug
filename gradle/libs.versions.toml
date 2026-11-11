@@ -14,6 +14,8 @@ ksp = "2.3.12"
 flyway = "13.11.1"
 fastjson = "2.0.65"
 netty = "4.2.20.Final"
+micronaut = "5.2.5"
+micronaut-gradle = "5.0.2"
 
 jmh = "0.7.3"
 jib = "3.5.4"
@@ -38,6 +40,7 @@ kotlin = { module = "org.jetbrains.kotlin:kotlin-bom", version.ref = "kotlin" }
 coroutines = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-bom", version.ref = "coroutines" }
 spring-ai = { module = "org.springframework.ai:spring-ai-bom", version.ref = "spring-ai" }
 kora = { module = "io.koraframework:kora-bom", version.ref = "kora" }
+micronaut = { module = "io.micronaut.platform:micronaut-platform", version.ref = "micronaut" }
 
 [plugins]
 spring-boot = { id = "org.springframework.boot", version.ref = "spring" }
@@ -50,3 +53,4 @@ jmh = { id = "me.champeau.jmh", version.ref = "jmh" }
 ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
 shadow = { id = "com.gradleup.shadow", version.ref = "shadow" }
 graal = { id = "org.graalvm.buildtools.native", version.ref = "graal" }
+mn-application = { id = "io.micronaut.application", version.ref = "micronaut-gradle" }

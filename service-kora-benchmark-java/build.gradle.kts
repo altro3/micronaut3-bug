@@ -12,22 +12,25 @@ plugins {
 }
 
 val jreImage = "bellsoft/liberica-openjre-alpine:25.0.4-x86_64"
+val serviceName = "service-kora"
+val isWindows = System.getProperty("os.name").contains("win", ignoreCase = true)
 
 dependencies {
 
-//    annotationProcessor("com.alibaba.fastjson2:fastjson2-codegen:2.0.66")
     annotationProcessor(kora.koraframework.annotationProcessors)
 
     implementation("io.koraframework.config.test:service-kora-config-lib1:1.0.0-SNAPSHOT")
     implementation("io.koraframework.config.test:service-kora-config-lib2:1.0.0-SNAPSHOT")
     implementation("com.alibaba.fastjson2:fastjson2:2.0.66")
-//    implementation(kora.koraframework.httpServerUndertow)
     implementation(kora.koraframework.httpServerNetty)
     implementation(kora.koraframework.loggingLogback)
     implementation(kora.koraframework.jacksonModule)
     implementation(kora.koraframework.validationModule)
     implementation(kora.koraframework.configCommon)
-    implementation(libs.netty.transport.epoll)
+
+//    runtimeOnly("io.netty:netty-transport-native-epoll:4.2.20.Final:linux-x86_64")
+
+//    implementation(kora.koraframework.httpServerUndertow)
 //    implementation(kora.koraframework.configHocon)
 //    implementation(kora.koraframework.databaseJdbcPostgres)
 //    implementation(kora.koraframework.databaseFlyway)
@@ -44,14 +47,11 @@ dependencies {
 //    configEnabled = false
 //}
 
-val isWindows = System.getProperty("os.name").contains("win", ignoreCase = true)
-
 configurations.runtimeClasspath {
     exclude(group = "org.jspecify", module = "jspecify")
 }
 
 tasks.withType<JavaCompile>().configureEach {
-    // Включаем форк, чтобы компилятор запускался в отдельной JVM с правильными флагами
     options.isFork = true
 
     options.compilerArgs.addAll(listOf(
@@ -126,7 +126,7 @@ tasks.named("nativeCompile") {
 graalvmNative {
     binaries {
         named("main") {
-            imageName.set("service-kora")
+            imageName.set(serviceName)
 
             buildArgs.addAll(
                 "-O4",
@@ -253,7 +253,7 @@ tasks.test {
 val shadowFlywayDir = File(project.layout.buildDirectory.asFile.get(), "tmp/shadowServices")
 
 tasks.shadowJar {
-    archiveBaseName.set("service-kora")
+    archiveBaseName.set(serviceName)
     archiveClassifier.set("")
     mergeServiceFiles()
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
@@ -291,7 +291,7 @@ tasks.register("benchmark") {
         val libsDir = if (isNative) File(buildDirFile, "native/nativeCompile") else File(buildDirFile, "libs")
 
         val exeExtension = if (isWindows) ".exe" else ""
-        val executableName = if (isNative) "service-kora$exeExtension" else "service-kora.jar"
+        val executableName = if (isNative) "$serviceName$exeExtension" else "$serviceName.jar"
 
         if (shouldGenerateCds) {
             println("==================================================")

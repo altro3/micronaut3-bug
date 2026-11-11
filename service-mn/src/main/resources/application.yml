@@ -1,0 +1,39 @@
+system:
+  module0:
+    environment: prod
+    version: 2
+  module1:
+    environment: prod
+    version: 2
+  module2:
+    environment: prod
+    version: 2
+
+micronaut:
+  application:
+    name: openapi-micronaut
+  server:
+    port: 8090
+    context-path: "/"
+  router:
+    static-resources:
+      swagger:
+        paths: classpath:META-INF/swagger
+        mapping: /swagger/**
+      swagger-ui:
+        paths: classpath:META-INF/swagger/views/scalar
+        mapping: /scalar/**
+  http:
+    client:
+      read-timeout: 5000s
+    services:
+      local:
+        url: http://127.0.0.1:8080
+      test:
+        url: http://127.0.0.1:8080
+  serde:
+    jackson:
+      parser-features:
+        ALLOW_COMMENTS: false
+      read-features:
+        ALLOW_JAVA_COMMENTS: false
