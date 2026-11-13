@@ -32,11 +32,11 @@ dependencies {
 //    implementation(kora.koraframework.httpServerUndertow)
 //    implementation(kora.koraframework.configHocon)
 
-//    implementation(kora.koraframework.databaseJdbcPostgres)
-//    implementation(kora.koraframework.databaseFlyway)
-//    implementation(libs.flyway) {
-//        exclude(group = "org.flywaydb", module = "flyway-database-cockroachdb")
-//    }
+    implementation(kora.koraframework.databaseJdbcPostgres)
+    implementation(kora.koraframework.databaseFlyway)
+    implementation(libs.flyway) {
+        exclude(group = "org.flywaydb", module = "flyway-database-cockroachdb")
+    }
 //    implementation(kora.koraframework.cacheCaffeine)
 //    implementation(kora.koraframework.openapiManagement)
 //    implementation(kora.koraframework.resilientKora)

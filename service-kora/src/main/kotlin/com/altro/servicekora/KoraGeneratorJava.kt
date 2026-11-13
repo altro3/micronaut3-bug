@@ -9,7 +9,7 @@ fun main() {
     val RESOURCES_DIR = "./service-kora-benchmark-java/src/main/resources"
 
     val includeConfigs = true
-    val includeRepos = false
+    val includeRepos = true
     val includeMappers = true
     val includeServices = true
 
@@ -339,9 +339,11 @@ fun main() {
                 if (importsStr.isNotEmpty()) appendLine(importsStr)
                 appendLine("import io.koraframework.common.annotation.Component;")
                 appendLine("import java.util.concurrent.ThreadLocalRandom;")
+                appendLine("import java.util.concurrent.atomic.AtomicLong;")
                 appendLine()
                 appendLine("@Component")
                 appendLine("public class OrderService$i {")
+                appendLine("    private static final AtomicLong ID_SEQ = new AtomicLong(ThreadLocalRandom.current().nextLong(1_000_000_000_000L));")
                 if (fieldsStr.isNotEmpty()) appendLine("    $fieldsStr")
                 appendLine()
                 appendLine("    public OrderService$i($paramsStr) {")
@@ -353,7 +355,7 @@ fun main() {
                 appendLine("    }")
                 appendLine()
                 appendLine("    public String createOrder(int quantity) {")
-                appendLine("        String id = String.valueOf(ThreadLocalRandom.current().nextLong(1_000_000_000L));")
+                appendLine("        String id = String.valueOf(ID_SEQ.incrementAndGet());")
 
                 if (mapperId != -1) {
                     appendLine("        String mappedId = this.mapper.mapToEntity(id);")
