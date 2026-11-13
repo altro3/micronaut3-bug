@@ -45,7 +45,7 @@ include(
 //    "service-kora-config-lib1",
 //    "service-kora-config-lib2",
 //    "service-kora-benchmark-kotlin",
-    "service-mn",
+//    "service-mn",
     "service-kora-benchmark-java",
 //    "service-vk",
 //    "service-yad",

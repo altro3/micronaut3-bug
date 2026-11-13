@@ -21,17 +21,17 @@ dependencies {
 
     implementation("io.koraframework.config.test:service-kora-config-lib1:1.0.0-SNAPSHOT")
     implementation("io.koraframework.config.test:service-kora-config-lib2:1.0.0-SNAPSHOT")
-    implementation("com.alibaba.fastjson2:fastjson2:2.0.66")
-    implementation(kora.koraframework.httpServerNetty)
     implementation(kora.koraframework.loggingLogback)
     implementation(kora.koraframework.jacksonModule)
     implementation(kora.koraframework.validationModule)
     implementation(kora.koraframework.configCommon)
-
-//    runtimeOnly("io.netty:netty-transport-native-epoll:4.2.20.Final:linux-x86_64")
+    implementation("com.alibaba.fastjson2:fastjson2:2.0.66")
+    implementation(kora.koraframework.httpServerNetty)
+    runtimeOnly("io.netty:netty-transport-native-epoll:4.2.20.Final:linux-x86_64")
 
 //    implementation(kora.koraframework.httpServerUndertow)
 //    implementation(kora.koraframework.configHocon)
+
 //    implementation(kora.koraframework.databaseJdbcPostgres)
 //    implementation(kora.koraframework.databaseFlyway)
 //    implementation(libs.flyway) {
@@ -87,7 +87,7 @@ val jvmOpts = listOf(
     "-Xmx128m",
     "-Xss256k",
     "-XX:MaxMetaspaceSize=32m",
-//    "-XX:MaxDirectMemorySize=128m",
+    "-XX:MaxDirectMemorySize=128m",
     "-XX:+UseG1GC",
     "-XX:+G1PeriodicGCInvokesConcurrent",
     "-XX:G1PeriodicGCInterval=3000",

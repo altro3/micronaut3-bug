@@ -37,7 +37,7 @@ COPY --from=builder /build/service-kora-benchmark-java/build/libs/service-kora.j
 
 RUN echo '{"userId":1,"userEmail":"a@s.com","promoCode":"123456","items":[{"typeCode":"a","quantity":10}],"tags":["asas","f"]}' > body.json
 
-ENV JVM_OPTS="-Xms16m -Xmx128m -Xss256k -XX:MaxMetaspaceSize=96m -XX:+UseG1GC -XX:+G1PeriodicGCInvokesConcurrent -XX:G1PeriodicGCInterval=3000 -XX:MinHeapFreeRatio=20 -XX:MaxHeapFreeRatio=40 -XX:MaxGCPauseMillis=20 -XX:+UseStringDeduplication -XX:+UnlockExperimentalVMOptions -XX:+UseCompactObjectHeaders -XX:+EliminateAllocations -Dfile.encoding=UTF-8 -Dconfig.override_with_env_vars=true -Dundertow.buffer-pool.direct=false -Dio.undertow.bufio.max-size=0"
+ENV JVM_OPTS="-Xms16m -Xmx128m -Xss256k -XX:MaxMetaspaceSize=96m -XX:+UseG1GC -XX:+G1PeriodicGCInvokesConcurrent -XX:G1PeriodicGCInterval=3000 -XX:MinHeapFreeRatio=20 -XX:MaxHeapFreeRatio=40 -XX:MaxGCPauseMillis=20 -XX:+UseStringDeduplication -XX:+UnlockExperimentalVMOptions -XX:+UseCompactObjectHeaders -XX:+EliminateAllocations -Dfile.encoding=UTF-8 -Dconfig.override_with_env_vars=true --add-opens=java.base/java.lang=ALL-UNNAMED"
 
 ENV MALLOC_ARENA_MAX=2
 
