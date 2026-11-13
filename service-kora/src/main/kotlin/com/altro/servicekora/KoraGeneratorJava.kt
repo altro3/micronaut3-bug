@@ -225,7 +225,7 @@ fun main() {
                     // Принимает Object, чтобы работать с любой сгенерированной сущностью OrderEntityX
                     public String mapToDto(Object entity) {
                         if (entity == null) return null;
-                        return "MAPPED_DTO_[" + entity.toString() + "]_BY_MAPPER_$i";
+                        return "MAPPED_DTO_[" + entity + "]_BY_MAPPER_$i";
                     }
                 
                     public String mapToEntity(String dto) {
@@ -294,7 +294,7 @@ fun main() {
                     fields.add("private final OrderService$depId childService$depId;")
                     constructorParams.add("OrderService$depId childService$depId")
                     constructorAssignments.add("this.childService$depId = childService$depId;")
-                    childServicesCalls.add("this.childService$depId.getOrder(id)")
+                    childServicesCalls.add("childService$depId.getOrder(id)")
                     childServiceFieldNames.add("childService$depId")
                     imports.add("import io.koraframework.benchmark.java.service.OrderService$depId;")
                 }
@@ -302,12 +302,12 @@ fun main() {
 
             // Логика методов с безопасной проверкой наличия маппера
             val synchronousChain = buildString {
-                val mapperPrefix = if (mapperId != -1) "this.mapper.mapToDto(" else ""
+                val mapperPrefix = if (mapperId != -1) "mapper.mapToDto(" else ""
                 val mapperSuffix = if (mapperId != -1) ")" else ""
 
                 if (includeRepos && serviceReposIds.isNotEmpty()) {
                     serviceReposIds.forEachIndexed { idx, id ->
-                        appendLine("        io.koraframework.benchmark.java.model.OrderEntity$id repoRes$idx = this.repository$id.findById(id);")
+                        appendLine("        var repoRes$idx = repository$id.findById(id);")
                         appendLine("        if (repoRes$idx != null) return ${mapperPrefix}repoRes$idx${mapperSuffix};")
                     }
                 }
@@ -358,23 +358,23 @@ fun main() {
                 appendLine("        String id = String.valueOf(ID_SEQ.incrementAndGet());")
 
                 if (mapperId != -1) {
-                    appendLine("        String mappedId = this.mapper.mapToEntity(id);")
+                    appendLine("        String mappedId = mapper.mapToEntity(id);")
                     if (includeRepos && firstRepoId != -1) {
-                        appendLine("        OrderEntity$firstRepoId entity = new OrderEntity$firstRepoId(mappedId, 1L, java.math.BigDecimal.valueOf(quantity), \"PENDING\");")
-                        appendLine("        this.repository$firstRepoId.save(entity);")
+                        appendLine("        var entity = new OrderEntity$firstRepoId(mappedId, 1L, java.math.BigDecimal.valueOf(quantity), \"PENDING\");")
+                        appendLine("        repository$firstRepoId.save(entity);")
                         appendLine("        return mappedId;")
                     } else if (childServiceFieldNames.isNotEmpty()) {
-                        appendLine("        return this.${childServiceFieldNames.first()}.createOrder(quantity);")
+                        appendLine("        return ${childServiceFieldNames.first()}.createOrder(quantity);")
                     } else {
                         appendLine("        return mappedId;")
                     }
                 } else {
                     if (includeRepos && firstRepoId != -1) {
-                        appendLine("        OrderEntity$firstRepoId entity = new OrderEntity$firstRepoId(id, 1L, java.math.BigDecimal.valueOf(quantity), \"PENDING\");")
-                        appendLine("        this.repository$firstRepoId.save(entity);")
+                        appendLine("        var entity = new OrderEntity$firstRepoId(id, 1L, java.math.BigDecimal.valueOf(quantity), \"PENDING\");")
+                        appendLine("        repository$firstRepoId.save(entity);")
                         appendLine("        return id;")
                     } else if (childServiceFieldNames.isNotEmpty()) {
-                        appendLine("        return this.${childServiceFieldNames.first()}.createOrder(quantity);")
+                        appendLine("        return ${childServiceFieldNames.first()}.createOrder(quantity);")
                     } else {
                         appendLine("        return id;")
                     }
@@ -420,7 +420,7 @@ fun main() {
         val controllerChain = buildString {
             if (includeServices && controllerServicesIds.isNotEmpty()) {
                 controllerServicesIds.forEachIndexed { idx, id ->
-                    appendLine("        String sRes$idx = this.orderService$id.getOrder(id);")
+                    appendLine("        String sRes$idx = orderService$id.getOrder(id);")
                     appendLine("        if (sRes$idx != null) return new OrderResponse$i(sRes$idx, 42L, java.math.BigDecimal.TEN, \"GENERATED\");")
                 }
                 appendLine("        return null;")
@@ -472,7 +472,7 @@ fun main() {
             appendLine()
 
             if (includeServices && controllerServicesIds.isNotEmpty()) {
-                appendLine("        String entity = this.orderService${controllerServicesIds.first()}.createOrder(totalQuantity);")
+                appendLine("        String entity = orderService${controllerServicesIds.first()}.createOrder(totalQuantity);")
                 appendLine("        return new OrderResponse$i(entity, body.userId(), java.math.BigDecimal.TEN, \"GENERATED\");")
             } else {
                 appendLine("        return new OrderResponse$i(\"GENERATED_DIRECTLY_\" + totalQuantity, body.userId(), java.math.BigDecimal.TEN, \"GENERATED\");")
@@ -493,6 +493,8 @@ fun main() {
         import io.koraframework.json.common.JsonModule;
         import io.koraframework.logging.common.LoggingModule;
         import io.koraframework.logging.logback.LogbackModule;
+        //import io.koraframework.config.aot.generated.AotModule;
+        //import io.koraframework.http.server.netty.NettyPublicHttpServerModule;
         import io.koraframework.http.server.undertow.UndertowPublicHttpServerModule;
         import io.koraframework.validation.module.ValidationModule;
         ${if (hasRepos) "import io.koraframework.database.jdbc.JdbcDatabaseModule;" else ""}
@@ -500,12 +502,14 @@ fun main() {
         
         @KoraApp
         public interface App extends
+//            AotModule,
+//            NettyPublicHttpServerModule,
             HoconConfigModule,
+            UndertowPublicHttpServerModule,
             JsonModule,
             LoggingModule,
             LogbackModule,
-            ValidationModule,
-            UndertowPublicHttpServerModule${if (hasRepos) ",\n            JdbcDatabaseModule,\n            FlywayJdbcDatabaseModule" else ""} {
+            ValidationModule${if (hasRepos) ",\n            JdbcDatabaseModule,\n            FlywayJdbcDatabaseModule" else ""} {
             static void main(String[] args) {
                 KoraApplication.run(AppGraph::graph);
             }

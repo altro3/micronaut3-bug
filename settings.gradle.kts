@@ -41,7 +41,7 @@ include(
 //    "mock-server",
 //    "myorchestrator-spring",
 //    "mymcp-server",
-//    "service-kora",
+    "service-kora",
 //    "service-kora-config-lib1",
 //    "service-kora-config-lib2",
 //    "service-kora-benchmark-kotlin",

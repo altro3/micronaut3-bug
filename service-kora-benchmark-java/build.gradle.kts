@@ -4,7 +4,7 @@ import java.io.BufferedReader
 import java.io.InputStreamReader
 
 plugins {
-    id("io.koraframework.kora-aot") version ("2.0.0-1-SNAPSHOT")
+//    id("io.koraframework.kora-aot") version ("2.0.0-1-SNAPSHOT")
     application
     alias(libs.plugins.graal)
     alias(libs.plugins.jib)
@@ -25,12 +25,12 @@ dependencies {
     implementation(kora.koraframework.jacksonModule)
     implementation(kora.koraframework.validationModule)
     implementation(kora.koraframework.configCommon)
-    implementation("com.alibaba.fastjson2:fastjson2:2.0.66")
-    implementation(kora.koraframework.httpServerNetty)
-    runtimeOnly("io.netty:netty-transport-native-epoll:4.2.20.Final:linux-x86_64")
+//    implementation("com.alibaba.fastjson2:fastjson2:2.0.66")
+//    implementation(kora.koraframework.httpServerNetty)
+//    runtimeOnly("io.netty:netty-transport-native-epoll:4.2.20.Final:linux-x86_64")
 
-//    implementation(kora.koraframework.httpServerUndertow)
-//    implementation(kora.koraframework.configHocon)
+    implementation(kora.koraframework.httpServerUndertow)
+    implementation(kora.koraframework.configHocon)
 
     implementation(kora.koraframework.databaseJdbcPostgres)
     implementation(kora.koraframework.databaseFlyway)
@@ -86,7 +86,7 @@ val jvmOpts = listOf(
     "-Xms16m",
     "-Xmx128m",
     "-Xss256k",
-    "-XX:MaxMetaspaceSize=32m",
+    "-XX:MaxMetaspaceSize=96m",
     "-XX:MaxDirectMemorySize=128m",
     "-XX:+UseG1GC",
     "-XX:+G1PeriodicGCInvokesConcurrent",
