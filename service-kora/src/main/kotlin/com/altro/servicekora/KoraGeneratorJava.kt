@@ -9,7 +9,7 @@ fun main() {
     val RESOURCES_DIR = "./service-kora-benchmark-java/src/main/resources"
 
     val includeConfigs = true
-    val includeRepos = true
+    val includeRepos = false
     val includeMappers = true
     val includeServices = true
 
@@ -487,29 +487,31 @@ fun main() {
     appFile.writeText(
         """
         package io.koraframework.benchmark.java;
-        import io.koraframework.application.graph.KoraApplication;
-        import io.koraframework.common.annotation.KoraApp;
-        import io.koraframework.config.hocon.HoconConfigModule;
-        import io.koraframework.json.common.JsonModule;
-        import io.koraframework.logging.common.LoggingModule;
-        import io.koraframework.logging.logback.LogbackModule;
+
+        import io.koraframework.application.graph.*;
+        import io.koraframework.common.annotation.*;
+        import io.koraframework.config.hocon.*;
+        import io.koraframework.http.server.undertow.*;
+        import io.koraframework.json.common.*;
+        import io.koraframework.logging.common.*;
+        import io.koraframework.logging.logback.*;
+        import io.koraframework.validation.module.*;
         //import io.koraframework.config.aot.generated.AotModule;
         //import io.koraframework.http.server.netty.NettyPublicHttpServerModule;
-        import io.koraframework.http.server.undertow.UndertowPublicHttpServerModule;
-        import io.koraframework.validation.module.ValidationModule;
         ${if (hasRepos) "import io.koraframework.database.jdbc.JdbcDatabaseModule;" else ""}
         ${if (hasRepos) "import io.koraframework.database.flyway.FlywayJdbcDatabaseModule;" else ""}
         
         @KoraApp
         public interface App extends
-//            AotModule,
-//            NettyPublicHttpServerModule,
+        //    AotModule,
+        //    NettyPublicHttpServerModule,
             HoconConfigModule,
             UndertowPublicHttpServerModule,
+            ${if (hasRepos) "            FlywayJdbcDatabaseModule," else ""}
             JsonModule,
             LoggingModule,
             LogbackModule,
-            ValidationModule${if (hasRepos) ",\n            JdbcDatabaseModule,\n            FlywayJdbcDatabaseModule" else ""} {
+            ValidationModule${if (hasRepos) ",\n            JdbcDatabaseModule," else ""} {
             static void main(String[] args) {
                 KoraApplication.run(AppGraph::graph);
             }
@@ -549,6 +551,8 @@ fun main() {
               username = "service_kora"
               password = "1"
               poolName = "kora-pool"
+              maxPoolSize = 64
+              minIdle = 32
             }
             flyway.enabled = true
             """.trimIndent()
