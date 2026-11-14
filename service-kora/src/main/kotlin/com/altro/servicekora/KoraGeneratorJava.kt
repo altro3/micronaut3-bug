@@ -506,12 +506,11 @@ fun main() {
         //    AotModule,
         //    NettyPublicHttpServerModule,
             HoconConfigModule,
-            UndertowPublicHttpServerModule,
-            ${if (hasRepos) "            FlywayJdbcDatabaseModule," else ""}
+            UndertowPublicHttpServerModule,${if (hasRepos) "\n            FlywayJdbcDatabaseModule," else ""}
             JsonModule,
             LoggingModule,
             LogbackModule,
-            ValidationModule${if (hasRepos) ",\n            JdbcDatabaseModule," else ""} {
+            ValidationModule${if (hasRepos) ",\n            JdbcDatabaseModule" else ""} {
             static void main(String[] args) {
                 KoraApplication.run(AppGraph::graph);
             }
