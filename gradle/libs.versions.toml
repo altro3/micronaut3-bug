@@ -1,7 +1,7 @@
 [versions]
 spring = "4.1.1"
 spring-ai = "2.0.1"
-kotlin = "2.4.20"
+kotlin = "2.5.0-RC"
 coroutines = "1.11.0"
 kotlin-log = "8.0.4"
 protobuf = "4.36.2"

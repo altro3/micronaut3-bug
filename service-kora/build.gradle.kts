@@ -59,7 +59,6 @@ application {
 }
 
 kotlin {
-    jvmToolchain(25)
     compilerOptions {
         freeCompilerArgs.addAll("-Xjsr305=strict", "-Xemit-jvm-type-annotations", "-jvm-default=enable")
         javaParameters = true

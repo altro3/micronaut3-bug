@@ -15,6 +15,11 @@ val jreImage = "bellsoft/liberica-openjre-alpine:25.0.4-x86_64"
 val serviceName = "service-kora"
 val isWindows = System.getProperty("os.name").contains("win", ignoreCase = true)
 
+java {
+    sourceCompatibility = JavaVersion.VERSION_27
+    targetCompatibility = JavaVersion.VERSION_27
+}
+
 dependencies {
 
     annotationProcessor(kora.koraframework.annotationProcessors)
@@ -22,12 +27,12 @@ dependencies {
     implementation("io.koraframework.config.test:service-kora-config-lib1:1.0.0-SNAPSHOT")
     implementation("io.koraframework.config.test:service-kora-config-lib2:1.0.0-SNAPSHOT")
     implementation(kora.koraframework.loggingLogback)
-    implementation(kora.koraframework.jacksonModule)
+//    implementation(kora.koraframework.jacksonModule)
     implementation(kora.koraframework.validationModule)
     implementation(kora.koraframework.configCommon)
     implementation("com.alibaba.fastjson2:fastjson2:2.0.66")
     implementation(kora.koraframework.httpServerNetty)
-    runtimeOnly("io.netty:netty-transport-native-epoll:4.2.20.Final:linux-x86_64")
+//    runtimeOnly("io.netty:netty-transport-native-epoll:4.2.20.Final:linux-x86_64")
 
 //    implementation(kora.koraframework.httpServerUndertow)
 //    implementation(kora.koraframework.configHocon)
@@ -107,10 +112,10 @@ val jvmOpts = listOf(
     "-Djava.rmi.server.hostname=127.0.0.1",
     "-XX:+DisableAttachMechanism",
     "--add-opens=java.base/java.lang=ALL-UNNAMED",
+    "--add-modules",
+    "jdk.incubator.vector",
+    "-XX:ActiveProcessorCount=8",
 )
-
-"-XX:StartFlightRecording=duration=60s,filename=recording.jfr"
-"-XX:NativeMemoryTracking=detail"
 
 val nativeRuntimeOpts = listOf(
     "-Xms64m",
