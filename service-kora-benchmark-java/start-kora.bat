@@ -1,0 +1,30 @@
+@echo off
+title Kora Service (Cores 0-7)
+
+start "Kora" /b /affinity FF java ^
+  -Xms16m ^
+  -Xmx64m ^
+  -Xss256k ^
+  -XX:MaxMetaspaceSize=96m ^
+  -XX:ActiveProcessorCount=8 ^
+  -XX:+UseG1GC ^
+  -XX:+G1PeriodicGCInvokesConcurrent ^
+  -XX:G1PeriodicGCInterval=3000 ^
+  -XX:MinHeapFreeRatio=20 ^
+  -XX:MaxHeapFreeRatio=40 ^
+  -XX:MaxGCPauseMillis=20 ^
+  -XX:+UseStringDeduplication ^
+  -XX:+UnlockExperimentalVMOptions ^
+  -XX:+UseCompactObjectHeaders ^
+  -XX:+EliminateAllocations ^
+  -Dfile.encoding=UTF-8 ^
+  -Dconfig.override_with_env_vars=true ^
+  -Dcom.sun.management.jmxremote=false ^
+  -Dcom.sun.management.jmxremote.ssl=false ^
+  -Dcom.sun.management.jmxremote.port=0 ^
+  -Dcom.sun.management.jmxremote.authenticate=false ^
+  -Djava.rmi.server.hostname=127.0.0.1 ^
+  -XX:SharedArchiveFile=build/libs/service.jsa ^
+  --add-opens=java.base/java.lang=ALL-UNNAMED ^
+  --add-modules jdk.incubator.vector ^
+  -jar build/libs/service-kora.jar

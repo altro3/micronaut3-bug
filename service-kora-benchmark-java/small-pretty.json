@@ -1,0 +1,15 @@
+{
+  "userId": 1,
+  "userEmail": "a@s.com",
+  "promoCode": "123456",
+  "items": [
+    {
+      "typeCode": "ABCD",
+      "quantity": 10
+    }
+  ],
+  "tags": [
+    "asa",
+    "fgf"
+  ]
+}

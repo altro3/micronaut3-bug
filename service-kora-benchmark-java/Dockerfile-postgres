@@ -1,0 +1,13 @@
+FROM postgres:18.7-alpine
+
+ENV POSTGRES_USER=postgres \
+    POSTGRES_PASSWORD=postgres \
+    POSTGRES_DB=postgres
+
+CMD ["postgres", \
+     "-c", "max_connections=300", \
+     "-c", "shared_buffers=256MB", \
+     "-c", "fsync=off", \
+     "-c", "synchronous_commit=off", \
+     "-c", "full_page_writes=off", \
+     "-c", "log_statement=none"]
