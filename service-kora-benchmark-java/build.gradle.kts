@@ -27,9 +27,10 @@ dependencies {
     implementation("io.koraframework.config.test:service-kora-config-lib1:1.0.0-SNAPSHOT")
     implementation("io.koraframework.config.test:service-kora-config-lib2:1.0.0-SNAPSHOT")
     implementation(kora.koraframework.loggingLogback)
-//    implementation(kora.koraframework.jacksonModule)
     implementation(kora.koraframework.validationModule)
     implementation(kora.koraframework.configCommon)
+
+    compileOnly(libs.jackson.core)
     implementation("com.alibaba.fastjson2:fastjson2:2.0.66")
     implementation(kora.koraframework.httpServerNetty)
 //    runtimeOnly("io.netty:netty-transport-native-epoll:4.2.20.Final:linux-x86_64")
@@ -91,9 +92,6 @@ val jvmOpts = listOf(
     "-Xms16m",
     "-Xmx128m",
     "-Xss256k",
-    "-XX:MaxDirectMemorySize=48m",
-    "-XX:MaxMetaspaceSize=96m",
-    "-XX:MaxDirectMemorySize=128m",
     "-XX:+UseG1GC",
     "-XX:+G1PeriodicGCInvokesConcurrent",
     "-XX:G1PeriodicGCInterval=3000",
@@ -111,10 +109,6 @@ val jvmOpts = listOf(
     "-Dcom.sun.management.jmxremote.port=0",
     "-Dcom.sun.management.jmxremote.authenticate=false",
     "-Djava.rmi.server.hostname=127.0.0.1",
-    "-XX:+DisableAttachMechanism",
-    "-XX:-ShrinkHeapInSteps",
-    "-XX:G1ReservePercent=5",
-    "-Djdk.trackAllThreads=false",
     "--add-opens=java.base/java.lang=ALL-UNNAMED",
     "--add-modules",
     "jdk.incubator.vector",

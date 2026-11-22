@@ -16,12 +16,14 @@ fastjson = "2.0.65"
 netty = "4.2.20.Final"
 micronaut = "5.2.5"
 micronaut-gradle = "5.0.2"
+jackson = "3.2.3"
 
 jmh = "0.7.3"
 jib = "3.5.4"
 shadow = "9.6.1"
 
 [libraries]
+jackson-core = { module = "tools.jackson.core:jackson-core", version.ref = "jackson" }
 kotlin-logging = { module = "io.github.oshai:kotlin-logging-jvm", version.ref = "kotlin-log" }
 protobuf-java = { module = "com.google.protobuf:protobuf-java", version.ref = "protobuf" }
 otel-proto = { module = "io.opentelemetry.proto:opentelemetry-proto", version.ref = "otel-proto" }
