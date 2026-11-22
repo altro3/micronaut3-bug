@@ -3,7 +3,7 @@ title Kora Service (Cores 0-7)
 
 start "Kora" /b /affinity FF java ^
   -Xms16m ^
-  -Xmx64m ^
+  -Xmx192m ^
   -Xss256k ^
   -XX:MaxMetaspaceSize=96m ^
   -XX:ActiveProcessorCount=8 ^
@@ -24,7 +24,7 @@ start "Kora" /b /affinity FF java ^
   -Dcom.sun.management.jmxremote.port=0 ^
   -Dcom.sun.management.jmxremote.authenticate=false ^
   -Djava.rmi.server.hostname=127.0.0.1 ^
-  -XX:SharedArchiveFile=build/libs/service.jsa ^
+  -XX:SharedArchiveFile=service.jsa ^
   --add-opens=java.base/java.lang=ALL-UNNAMED ^
   --add-modules jdk.incubator.vector ^
-  -jar build/libs/service-kora.jar
+  -jar service-kora.jar
