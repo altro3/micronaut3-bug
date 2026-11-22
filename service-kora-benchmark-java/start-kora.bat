@@ -1,7 +1,7 @@
 @echo off
 title Kora Service (Cores 0-7)
 
-start "Kora" /b /affinity FF java ^
+start "Kora" /affinity FF java ^
   -Xms16m ^
   -Xmx192m ^
   -Xss256k ^
