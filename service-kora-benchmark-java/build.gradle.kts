@@ -89,14 +89,15 @@ tasks.withType<JavaCompile>().configureEach {
 }
 
 val jvmOpts = listOf(
-    "-Xms16m",
-    "-Xmx128m",
+    "-Xms8m",
+    "-Xmx192m",
+    "-XX:MaxDirectMemorySize=64m",
     "-Xss256k",
     "-XX:+UseG1GC",
     "-XX:+G1PeriodicGCInvokesConcurrent",
     "-XX:G1PeriodicGCInterval=3000",
-    "-XX:MinHeapFreeRatio=20",
-    "-XX:MaxHeapFreeRatio=40",
+    "-XX:MinHeapFreeRatio=10",
+    "-XX:MaxHeapFreeRatio=25",
     "-XX:MaxGCPauseMillis=20",
     "-XX:+UseStringDeduplication",
     "-XX:+UnlockExperimentalVMOptions",
@@ -109,6 +110,7 @@ val jvmOpts = listOf(
     "-Dcom.sun.management.jmxremote.port=0",
     "-Dcom.sun.management.jmxremote.authenticate=false",
     "-Djava.rmi.server.hostname=127.0.0.1",
+    "--enable-native-access=ALL-UNNAMED",
     "--add-opens=java.base/java.lang=ALL-UNNAMED",
     "--add-modules",
     "jdk.incubator.vector",
