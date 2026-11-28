@@ -1,0 +1,4766 @@
+{
+  "userId": 90001,
+  "batchId": "BATCH-EXTRABIG-001",
+  "currency": "RUB",
+  "submittedAt": "2026-11-28T06:00:00Z",
+  "shard01": {
+    "shardId": "SHARD-01",
+    "traceUuid": "8f14e45f-ceea-367a-9a36-dedd4bea2543",
+    "revisionLong": 7000000001,
+    "optionalRevision": 7000000001,
+    "partitionInt": 101,
+    "optionalPartition": 101,
+    "regionShort": 1,
+    "optionalRegion": 1,
+    "flagsByte": 1,
+    "optionalFlags": 1,
+    "ratioDouble": 0.99951,
+    "optionalRatio": 0.99951,
+    "scoreFloat": 99.5,
+    "optionalScore": 99.5,
+    "activeBool": true,
+    "optionalActive": true,
+    "gradeChar": "S",
+    "optionalGrade": "S",
+    "shardAmount": 154890.00,
+    "shardTotalHashes": 98765432109876543210987654321,
+    "createdAt": "2026-11-28T06:00:00Z",
+    "businessDate": "2026-11-28",
+    "cutoffTime": "18:00:00",
+    "systemDateTime": "2026-11-28T18:00:00",
+    "partnerOffsetTime": "2026-11-28T18:00:00+07:00",
+    "auditZonedTime": "2026-11-28T18:00:00+07:00[Asia/Novosibirsk]",
+    "ttlDuration": "PT30M",
+    "gracePeriod": "PT8760H",
+    "callbackUri": "https://enterprise-corp.ru",
+    "binaryPayload": [
+      98,
+      105,
+      110,
+      97,
+      114,
+      121,
+      45,
+      97,
+      117,
+      100,
+      105,
+      116,
+      45,
+      98,
+      108,
+      111,
+      98,
+      45,
+      99,
+      111,
+      110,
+      116,
+      101,
+      110,
+      116,
+      45,
+      102,
+      111,
+      114,
+      45,
+      115,
+      104,
+      97,
+      114,
+      100,
+      45,
+      49
+    ],
+    "allowedBuckets": [
+      1,
+      2,
+      4,
+      8,
+      16,
+      32
+    ],
+    "routingKeys": [
+      "rk.ingest.v2",
+      "rk.shard.1",
+      "rk.settlement.fast"
+    ],
+    "attributes": {
+      "env": "benchmark",
+      "shardIndex": "1",
+      "dc": "nsk-1"
+    },
+    "shardOwner": {
+      "fullName": "Dmitry Sokolov 1",
+      "email": "d.sokolov1@enterprise-corp.ru",
+      "phone": "+79135550101",
+      "loyaltyTier": "ENTERPRISE_VIP",
+      "loyaltyPoints": 250001,
+      "preferences": {
+        "tier": "S1",
+        "region": "SIBERIA"
+      }
+    },
+    "shardDestination": {
+      "countryCode": "RU",
+      "city": "Novosibirsk",
+      "street": "Inzhenernaya",
+      "building": "11",
+      "apartment": "Suite 1",
+      "postalCode": "630090",
+      "latitude": 54.8581,
+      "longitude": 83.1112,
+      "courierComment": "Datacenter loading dock #1"
+    },
+    "shardItems": [
+      {
+        "sku": "SKU-XB-1-100",
+        "productName": "High-Density Compute Blade Node Cluster Unit 1.0",
+        "manufacturer": "Enterprise Silicon Systems Corp",
+        "categoryPath": "Datacenter/Compute/Blades/Gen1",
+        "description": "Multi-socket high-throughput compute node with hardware telemetry, ECC memory scrubbing, and redundant NVMe fabrics.",
+        "quantity": 2,
+        "basePrice": 38722.50,
+        "discountAmount": 1200.00,
+        "taxRate": 0.20,
+        "taxAmount": 7504.50,
+        "lineTotal": 82549.50,
+        "weightKg": 4.85,
+        "attributes": [
+          {
+            "key": "tdp",
+            "value": "350",
+            "unit": "W",
+            "searchable": true
+          },
+          {
+            "key": "interconnect",
+            "value": "400GbE",
+            "unit": "bps",
+            "searchable": true
+          },
+          {
+            "key": "compliance",
+            "value": "SOC2-TYPE2-2026",
+            "unit": "standard",
+            "searchable": false
+          }
+        ],
+        "allocations": [
+          {
+            "warehouseCode": "WH-NSK-01",
+            "region": "SIBERIA",
+            "reservedQty": 4,
+            "estimatedDeliveryHours": 6
+          },
+          {
+            "warehouseCode": "WH-SPB-03",
+            "region": "NORTHWEST",
+            "reservedQty": 2,
+            "estimatedDeliveryHours": 24
+          }
+        ],
+        "tags": [
+          "DATACENTER",
+          "HIGH_DENSITY",
+          "VERIFIED"
+        ]
+      },
+      {
+        "sku": "SKU-XB-1-101",
+        "productName": "High-Density Compute Blade Node Cluster Unit 1.1",
+        "manufacturer": "Enterprise Silicon Systems Corp",
+        "categoryPath": "Datacenter/Compute/Blades/Gen2",
+        "description": "Multi-socket high-throughput compute node with hardware telemetry, ECC memory scrubbing, and redundant NVMe fabrics.",
+        "quantity": 3,
+        "basePrice": 38722.50,
+        "discountAmount": 1200.00,
+        "taxRate": 0.20,
+        "taxAmount": 7504.50,
+        "lineTotal": 82549.50,
+        "weightKg": 4.85,
+        "attributes": [
+          {
+            "key": "tdp",
+            "value": "350",
+            "unit": "W",
+            "searchable": true
+          },
+          {
+            "key": "interconnect",
+            "value": "400GbE",
+            "unit": "bps",
+            "searchable": true
+          },
+          {
+            "key": "compliance",
+            "value": "SOC2-TYPE2-2026",
+            "unit": "standard",
+            "searchable": false
+          }
+        ],
+        "allocations": [
+          {
+            "warehouseCode": "WH-NSK-01",
+            "region": "SIBERIA",
+            "reservedQty": 4,
+            "estimatedDeliveryHours": 6
+          },
+          {
+            "warehouseCode": "WH-SPB-03",
+            "region": "NORTHWEST",
+            "reservedQty": 2,
+            "estimatedDeliveryHours": 24
+          }
+        ],
+        "tags": [
+          "DATACENTER",
+          "HIGH_DENSITY",
+          "VERIFIED"
+        ]
+      },
+      {
+        "sku": "SKU-XB-1-102",
+        "productName": "High-Density Compute Blade Node Cluster Unit 1.2",
+        "manufacturer": "Enterprise Silicon Systems Corp",
+        "categoryPath": "Datacenter/Compute/Blades/Gen3",
+        "description": "Multi-socket high-throughput compute node with hardware telemetry, ECC memory scrubbing, and redundant NVMe fabrics.",
+        "quantity": 4,
+        "basePrice": 38722.50,
+        "discountAmount": 1200.00,
+        "taxRate": 0.20,
+        "taxAmount": 7504.50,
+        "lineTotal": 82549.50,
+        "weightKg": 4.85,
+        "attributes": [
+          {
+            "key": "tdp",
+            "value": "350",
+            "unit": "W",
+            "searchable": true
+          },
+          {
+            "key": "interconnect",
+            "value": "400GbE",
+            "unit": "bps",
+            "searchable": true
+          },
+          {
+            "key": "compliance",
+            "value": "SOC2-TYPE2-2026",
+            "unit": "standard",
+            "searchable": false
+          }
+        ],
+        "allocations": [
+          {
+            "warehouseCode": "WH-NSK-01",
+            "region": "SIBERIA",
+            "reservedQty": 4,
+            "estimatedDeliveryHours": 6
+          },
+          {
+            "warehouseCode": "WH-SPB-03",
+            "region": "NORTHWEST",
+            "reservedQty": 2,
+            "estimatedDeliveryHours": 24
+          }
+        ],
+        "tags": [
+          "DATACENTER",
+          "HIGH_DENSITY",
+          "VERIFIED"
+        ]
+      },
+      {
+        "sku": "SKU-XB-1-103",
+        "productName": "High-Density Compute Blade Node Cluster Unit 1.3",
+        "manufacturer": "Enterprise Silicon Systems Corp",
+        "categoryPath": "Datacenter/Compute/Blades/Gen4",
+        "description": "Multi-socket high-throughput compute node with hardware telemetry, ECC memory scrubbing, and redundant NVMe fabrics.",
+        "quantity": 5,
+        "basePrice": 38722.50,
+        "discountAmount": 1200.00,
+        "taxRate": 0.20,
+        "taxAmount": 7504.50,
+        "lineTotal": 82549.50,
+        "weightKg": 4.85,
+        "attributes": [
+          {
+            "key": "tdp",
+            "value": "350",
+            "unit": "W",
+            "searchable": true
+          },
+          {
+            "key": "interconnect",
+            "value": "400GbE",
+            "unit": "bps",
+            "searchable": true
+          },
+          {
+            "key": "compliance",
+            "value": "SOC2-TYPE2-2026",
+            "unit": "standard",
+            "searchable": false
+          }
+        ],
+        "allocations": [
+          {
+            "warehouseCode": "WH-NSK-01",
+            "region": "SIBERIA",
+            "reservedQty": 4,
+            "estimatedDeliveryHours": 6
+          },
+          {
+            "warehouseCode": "WH-SPB-03",
+            "region": "NORTHWEST",
+            "reservedQty": 2,
+            "estimatedDeliveryHours": 24
+          }
+        ],
+        "tags": [
+          "DATACENTER",
+          "HIGH_DENSITY",
+          "VERIFIED"
+        ]
+      }
+    ],
+    "compliance": {
+      "regulationCode": "REG-2026-XBIG-1",
+      "description": "Automated cross-border telemetry and financial settlement compliance verification payload block.",
+      "packets": [
+        {
+          "packetId": "a1b2c3d4-e5f6-3789-8012-3456789abcde",
+          "sequenceNumber": 100001,
+          "sensorGroupId": 11,
+          "protocolVersion": 2,
+          "priorityFlag": "A",
+          "encrypted": true,
+          "verified": true,
+          "signatureBytes": [
+            115,
+            105,
+            103,
+            45,
+            112,
+            97,
+            121,
+            108,
+            111,
+            97,
+            100,
+            45,
+            115,
+            104,
+            97,
+            114,
+            100,
+            45,
+            49,
+            45,
+            97,
+            108,
+            112,
+            104,
+            97
+          ],
+          "endpointUri": "https://koraframework.io",
+          "processingDuration": "PT0.146S",
+          "retentionPeriod": "PT8760H",
+          "accountingDate": "2026-11-28",
+          "windowStartTime": "12:30:01",
+          "localTimestamp": "2026-11-28T12:30:01",
+          "offsetTimestamp": "2026-11-28T12:30:01+07:00",
+          "zonedTimestamp": "2026-11-28T12:30:01+07:00[Asia/Novosibirsk]",
+          "rawCounter": 123456789012345678901234567891,
+          "calibratedValue": 99.987654,
+          "capabilityFlags": [
+            "AVX512",
+            "ZGC",
+            "IO_URING",
+            "ZERO_COPY"
+          ],
+          "sensorReadings": {
+            "temp_c": 43.5,
+            "voltage_v": 12.04,
+            "fan_rpm": 4800.0
+          },
+          "location": {
+            "lat": 54.8481,
+            "lon": 83.1066,
+            "altitudeMeters": 165.5,
+            "accuracyCm": 15,
+            "capturedAt": "2026-11-28T06:00:00Z",
+            "zoneCode": "RU-NSK-Z1"
+          }
+        },
+        {
+          "packetId": "b2c3d4e5-f6a7-3890-9123-456789abcdef",
+          "sequenceNumber": 200001,
+          "sensorGroupId": 21,
+          "protocolVersion": 2,
+          "priorityFlag": "B",
+          "encrypted": false,
+          "verified": false,
+          "signatureBytes": [
+            115,
+            105,
+            103,
+            45,
+            112,
+            97,
+            121,
+            108,
+            111,
+            97,
+            100,
+            45,
+            115,
+            104,
+            97,
+            114,
+            100,
+            45,
+            49,
+            45,
+            98,
+            101,
+            116,
+            97
+          ],
+          "endpointUri": "https://koraframework.io",
+          "processingDuration": "PT0.089S",
+          "retentionPeriod": "PT12960H",
+          "accountingDate": "2026-11-28",
+          "windowStartTime": "13:15:01",
+          "localTimestamp": "2026-11-28T13:15:01",
+          "offsetTimestamp": "2026-11-28T13:15:01Z",
+          "zonedTimestamp": "2026-11-28T13:15:01Z[UTC]",
+          "rawCounter": 987654321098765432109876543211,
+          "calibratedValue": 100.000125,
+          "capabilityFlags": [
+            "TLS13",
+            "FASTJSON2",
+            "COMPACT_HEADERS"
+          ],
+          "sensorReadings": {
+            "temp_c": 40.1,
+            "voltage_v": 11.98,
+            "fan_rpm": 4200.0
+          },
+          "location": {
+            "lat": 55.0312,
+            "lon": 82.9214,
+            "altitudeMeters": 150.0,
+            "accuracyCm": 10,
+            "capturedAt": "2026-11-28T06:00:00Z",
+            "zoneCode": "RU-NSK-C1"
+          }
+        }
+      ],
+      "ruleMatrix": {
+        "allowedRegions": [
+          "RU",
+          "KZ",
+          "BY",
+          "AM"
+        ],
+        "requiredChecks": [
+          "AML",
+          "KYC",
+          "SANCTIONS",
+          "HASH_INTEGRITY"
+        ],
+        "fallbackRoutes": [
+          "route-primary",
+          "route-secondary"
+        ]
+      }
+    }
+  },
+  "shard02": {
+    "shardId": "SHARD-01",
+    "traceUuid": "8f14e45f-ceea-367a-9a36-dedd4bea2543",
+    "revisionLong": 7000000001,
+    "optionalRevision": 7000000001,
+    "partitionInt": 101,
+    "optionalPartition": 101,
+    "regionShort": 1,
+    "optionalRegion": 1,
+    "flagsByte": 1,
+    "optionalFlags": 1,
+    "ratioDouble": 0.99951,
+    "optionalRatio": 0.99951,
+    "scoreFloat": 99.5,
+    "optionalScore": 99.5,
+    "activeBool": true,
+    "optionalActive": true,
+    "gradeChar": "S",
+    "optionalGrade": "S",
+    "shardAmount": 154890.00,
+    "shardTotalHashes": 98765432109876543210987654321,
+    "createdAt": "2026-11-28T06:00:00Z",
+    "businessDate": "2026-11-28",
+    "cutoffTime": "18:00:00",
+    "systemDateTime": "2026-11-28T18:00:00",
+    "partnerOffsetTime": "2026-11-28T18:00:00+07:00",
+    "auditZonedTime": "2026-11-28T18:00:00+07:00[Asia/Novosibirsk]",
+    "ttlDuration": "PT30M",
+    "gracePeriod": "PT8760H",
+    "callbackUri": "https://enterprise-corp.ru",
+    "binaryPayload": [
+      98,
+      105,
+      110,
+      97,
+      114,
+      121,
+      45,
+      97,
+      117,
+      100,
+      105,
+      116,
+      45,
+      98,
+      108,
+      111,
+      98,
+      45,
+      99,
+      111,
+      110,
+      116,
+      101,
+      110,
+      116,
+      45,
+      102,
+      111,
+      114,
+      45,
+      115,
+      104,
+      97,
+      114,
+      100,
+      45,
+      49
+    ],
+    "allowedBuckets": [
+      1,
+      2,
+      4,
+      8,
+      16,
+      32
+    ],
+    "routingKeys": [
+      "rk.ingest.v2",
+      "rk.shard.1",
+      "rk.settlement.fast"
+    ],
+    "attributes": {
+      "env": "benchmark",
+      "shardIndex": "1",
+      "dc": "nsk-1"
+    },
+    "shardOwner": {
+      "fullName": "Dmitry Sokolov 1",
+      "email": "d.sokolov1@enterprise-corp.ru",
+      "phone": "+79135550101",
+      "loyaltyTier": "ENTERPRISE_VIP",
+      "loyaltyPoints": 250001,
+      "preferences": {
+        "tier": "S1",
+        "region": "SIBERIA"
+      }
+    },
+    "shardDestination": {
+      "countryCode": "RU",
+      "city": "Novosibirsk",
+      "street": "Inzhenernaya",
+      "building": "11",
+      "apartment": "Suite 1",
+      "postalCode": "630090",
+      "latitude": 54.8581,
+      "longitude": 83.1112,
+      "courierComment": "Datacenter loading dock #1"
+    },
+    "shardItems": [
+      {
+        "sku": "SKU-XB-1-100",
+        "productName": "High-Density Compute Blade Node Cluster Unit 1.0",
+        "manufacturer": "Enterprise Silicon Systems Corp",
+        "categoryPath": "Datacenter/Compute/Blades/Gen1",
+        "description": "Multi-socket high-throughput compute node with hardware telemetry, ECC memory scrubbing, and redundant NVMe fabrics.",
+        "quantity": 2,
+        "basePrice": 38722.50,
+        "discountAmount": 1200.00,
+        "taxRate": 0.20,
+        "taxAmount": 7504.50,
+        "lineTotal": 82549.50,
+        "weightKg": 4.85,
+        "attributes": [
+          {
+            "key": "tdp",
+            "value": "350",
+            "unit": "W",
+            "searchable": true
+          },
+          {
+            "key": "interconnect",
+            "value": "400GbE",
+            "unit": "bps",
+            "searchable": true
+          },
+          {
+            "key": "compliance",
+            "value": "SOC2-TYPE2-2026",
+            "unit": "standard",
+            "searchable": false
+          }
+        ],
+        "allocations": [
+          {
+            "warehouseCode": "WH-NSK-01",
+            "region": "SIBERIA",
+            "reservedQty": 4,
+            "estimatedDeliveryHours": 6
+          },
+          {
+            "warehouseCode": "WH-SPB-03",
+            "region": "NORTHWEST",
+            "reservedQty": 2,
+            "estimatedDeliveryHours": 24
+          }
+        ],
+        "tags": [
+          "DATACENTER",
+          "HIGH_DENSITY",
+          "VERIFIED"
+        ]
+      },
+      {
+        "sku": "SKU-XB-1-101",
+        "productName": "High-Density Compute Blade Node Cluster Unit 1.1",
+        "manufacturer": "Enterprise Silicon Systems Corp",
+        "categoryPath": "Datacenter/Compute/Blades/Gen2",
+        "description": "Multi-socket high-throughput compute node with hardware telemetry, ECC memory scrubbing, and redundant NVMe fabrics.",
+        "quantity": 3,
+        "basePrice": 38722.50,
+        "discountAmount": 1200.00,
+        "taxRate": 0.20,
+        "taxAmount": 7504.50,
+        "lineTotal": 82549.50,
+        "weightKg": 4.85,
+        "attributes": [
+          {
+            "key": "tdp",
+            "value": "350",
+            "unit": "W",
+            "searchable": true
+          },
+          {
+            "key": "interconnect",
+            "value": "400GbE",
+            "unit": "bps",
+            "searchable": true
+          },
+          {
+            "key": "compliance",
+            "value": "SOC2-TYPE2-2026",
+            "unit": "standard",
+            "searchable": false
+          }
+        ],
+        "allocations": [
+          {
+            "warehouseCode": "WH-NSK-01",
+            "region": "SIBERIA",
+            "reservedQty": 4,
+            "estimatedDeliveryHours": 6
+          },
+          {
+            "warehouseCode": "WH-SPB-03",
+            "region": "NORTHWEST",
+            "reservedQty": 2,
+            "estimatedDeliveryHours": 24
+          }
+        ],
+        "tags": [
+          "DATACENTER",
+          "HIGH_DENSITY",
+          "VERIFIED"
+        ]
+      },
+      {
+        "sku": "SKU-XB-1-102",
+        "productName": "High-Density Compute Blade Node Cluster Unit 1.2",
+        "manufacturer": "Enterprise Silicon Systems Corp",
+        "categoryPath": "Datacenter/Compute/Blades/Gen3",
+        "description": "Multi-socket high-throughput compute node with hardware telemetry, ECC memory scrubbing, and redundant NVMe fabrics.",
+        "quantity": 4,
+        "basePrice": 38722.50,
+        "discountAmount": 1200.00,
+        "taxRate": 0.20,
+        "taxAmount": 7504.50,
+        "lineTotal": 82549.50,
+        "weightKg": 4.85,
+        "attributes": [
+          {
+            "key": "tdp",
+            "value": "350",
+            "unit": "W",
+            "searchable": true
+          },
+          {
+            "key": "interconnect",
+            "value": "400GbE",
+            "unit": "bps",
+            "searchable": true
+          },
+          {
+            "key": "compliance",
+            "value": "SOC2-TYPE2-2026",
+            "unit": "standard",
+            "searchable": false
+          }
+        ],
+        "allocations": [
+          {
+            "warehouseCode": "WH-NSK-01",
+            "region": "SIBERIA",
+            "reservedQty": 4,
+            "estimatedDeliveryHours": 6
+          },
+          {
+            "warehouseCode": "WH-SPB-03",
+            "region": "NORTHWEST",
+            "reservedQty": 2,
+            "estimatedDeliveryHours": 24
+          }
+        ],
+        "tags": [
+          "DATACENTER",
+          "HIGH_DENSITY",
+          "VERIFIED"
+        ]
+      },
+      {
+        "sku": "SKU-XB-1-103",
+        "productName": "High-Density Compute Blade Node Cluster Unit 1.3",
+        "manufacturer": "Enterprise Silicon Systems Corp",
+        "categoryPath": "Datacenter/Compute/Blades/Gen4",
+        "description": "Multi-socket high-throughput compute node with hardware telemetry, ECC memory scrubbing, and redundant NVMe fabrics.",
+        "quantity": 5,
+        "basePrice": 38722.50,
+        "discountAmount": 1200.00,
+        "taxRate": 0.20,
+        "taxAmount": 7504.50,
+        "lineTotal": 82549.50,
+        "weightKg": 4.85,
+        "attributes": [
+          {
+            "key": "tdp",
+            "value": "350",
+            "unit": "W",
+            "searchable": true
+          },
+          {
+            "key": "interconnect",
+            "value": "400GbE",
+            "unit": "bps",
+            "searchable": true
+          },
+          {
+            "key": "compliance",
+            "value": "SOC2-TYPE2-2026",
+            "unit": "standard",
+            "searchable": false
+          }
+        ],
+        "allocations": [
+          {
+            "warehouseCode": "WH-NSK-01",
+            "region": "SIBERIA",
+            "reservedQty": 4,
+            "estimatedDeliveryHours": 6
+          },
+          {
+            "warehouseCode": "WH-SPB-03",
+            "region": "NORTHWEST",
+            "reservedQty": 2,
+            "estimatedDeliveryHours": 24
+          }
+        ],
+        "tags": [
+          "DATACENTER",
+          "HIGH_DENSITY",
+          "VERIFIED"
+        ]
+      }
+    ],
+    "compliance": {
+      "regulationCode": "REG-2026-XBIG-1",
+      "description": "Automated cross-border telemetry and financial settlement compliance verification payload block.",
+      "packets": [
+        {
+          "packetId": "a1b2c3d4-e5f6-3789-8012-3456789abcde",
+          "sequenceNumber": 100001,
+          "sensorGroupId": 11,
+          "protocolVersion": 2,
+          "priorityFlag": "A",
+          "encrypted": true,
+          "verified": true,
+          "signatureBytes": [
+            115,
+            105,
+            103,
+            45,
+            112,
+            97,
+            121,
+            108,
+            111,
+            97,
+            100,
+            45,
+            115,
+            104,
+            97,
+            114,
+            100,
+            45,
+            49,
+            45,
+            97,
+            108,
+            112,
+            104,
+            97
+          ],
+          "endpointUri": "https://koraframework.io",
+          "processingDuration": "PT0.146S",
+          "retentionPeriod": "PT8760H",
+          "accountingDate": "2026-11-28",
+          "windowStartTime": "12:30:01",
+          "localTimestamp": "2026-11-28T12:30:01",
+          "offsetTimestamp": "2026-11-28T12:30:01+07:00",
+          "zonedTimestamp": "2026-11-28T12:30:01+07:00[Asia/Novosibirsk]",
+          "rawCounter": 123456789012345678901234567891,
+          "calibratedValue": 99.987654,
+          "capabilityFlags": [
+            "AVX512",
+            "ZGC",
+            "IO_URING",
+            "ZERO_COPY"
+          ],
+          "sensorReadings": {
+            "temp_c": 43.5,
+            "voltage_v": 12.04,
+            "fan_rpm": 4800.0
+          },
+          "location": {
+            "lat": 54.8481,
+            "lon": 83.1066,
+            "altitudeMeters": 165.5,
+            "accuracyCm": 15,
+            "capturedAt": "2026-11-28T06:00:00Z",
+            "zoneCode": "RU-NSK-Z1"
+          }
+        },
+        {
+          "packetId": "b2c3d4e5-f6a7-3890-9123-456789abcdef",
+          "sequenceNumber": 200001,
+          "sensorGroupId": 21,
+          "protocolVersion": 2,
+          "priorityFlag": "B",
+          "encrypted": false,
+          "verified": false,
+          "signatureBytes": [
+            115,
+            105,
+            103,
+            45,
+            112,
+            97,
+            121,
+            108,
+            111,
+            97,
+            100,
+            45,
+            115,
+            104,
+            97,
+            114,
+            100,
+            45,
+            49,
+            45,
+            98,
+            101,
+            116,
+            97
+          ],
+          "endpointUri": "https://koraframework.io",
+          "processingDuration": "PT0.089S",
+          "retentionPeriod": "PT12960H",
+          "accountingDate": "2026-11-28",
+          "windowStartTime": "13:15:01",
+          "localTimestamp": "2026-11-28T13:15:01",
+          "offsetTimestamp": "2026-11-28T13:15:01Z",
+          "zonedTimestamp": "2026-11-28T13:15:01Z[UTC]",
+          "rawCounter": 987654321098765432109876543211,
+          "calibratedValue": 100.000125,
+          "capabilityFlags": [
+            "TLS13",
+            "FASTJSON2",
+            "COMPACT_HEADERS"
+          ],
+          "sensorReadings": {
+            "temp_c": 40.1,
+            "voltage_v": 11.98,
+            "fan_rpm": 4200.0
+          },
+          "location": {
+            "lat": 55.0312,
+            "lon": 82.9214,
+            "altitudeMeters": 150.0,
+            "accuracyCm": 10,
+            "capturedAt": "2026-11-28T06:00:00Z",
+            "zoneCode": "RU-NSK-C1"
+          }
+        }
+      ],
+      "ruleMatrix": {
+        "allowedRegions": [
+          "RU",
+          "KZ",
+          "BY",
+          "AM"
+        ],
+        "requiredChecks": [
+          "AML",
+          "KYC",
+          "SANCTIONS",
+          "HASH_INTEGRITY"
+        ],
+        "fallbackRoutes": [
+          "route-primary",
+          "route-secondary"
+        ]
+      }
+    }
+  },
+  "shard03": {
+    "shardId": "SHARD-01",
+    "traceUuid": "8f14e45f-ceea-367a-9a36-dedd4bea2543",
+    "revisionLong": 7000000001,
+    "optionalRevision": 7000000001,
+    "partitionInt": 101,
+    "optionalPartition": 101,
+    "regionShort": 1,
+    "optionalRegion": 1,
+    "flagsByte": 1,
+    "optionalFlags": 1,
+    "ratioDouble": 0.99951,
+    "optionalRatio": 0.99951,
+    "scoreFloat": 99.5,
+    "optionalScore": 99.5,
+    "activeBool": true,
+    "optionalActive": true,
+    "gradeChar": "S",
+    "optionalGrade": "S",
+    "shardAmount": 154890.00,
+    "shardTotalHashes": 98765432109876543210987654321,
+    "createdAt": "2026-11-28T06:00:00Z",
+    "businessDate": "2026-11-28",
+    "cutoffTime": "18:00:00",
+    "systemDateTime": "2026-11-28T18:00:00",
+    "partnerOffsetTime": "2026-11-28T18:00:00+07:00",
+    "auditZonedTime": "2026-11-28T18:00:00+07:00[Asia/Novosibirsk]",
+    "ttlDuration": "PT30M",
+    "gracePeriod": "PT8760H",
+    "callbackUri": "https://enterprise-corp.ru",
+    "binaryPayload": [
+      98,
+      105,
+      110,
+      97,
+      114,
+      121,
+      45,
+      97,
+      117,
+      100,
+      105,
+      116,
+      45,
+      98,
+      108,
+      111,
+      98,
+      45,
+      99,
+      111,
+      110,
+      116,
+      101,
+      110,
+      116,
+      45,
+      102,
+      111,
+      114,
+      45,
+      115,
+      104,
+      97,
+      114,
+      100,
+      45,
+      49
+    ],
+    "allowedBuckets": [
+      1,
+      2,
+      4,
+      8,
+      16,
+      32
+    ],
+    "routingKeys": [
+      "rk.ingest.v2",
+      "rk.shard.1",
+      "rk.settlement.fast"
+    ],
+    "attributes": {
+      "env": "benchmark",
+      "shardIndex": "1",
+      "dc": "nsk-1"
+    },
+    "shardOwner": {
+      "fullName": "Dmitry Sokolov 1",
+      "email": "d.sokolov1@enterprise-corp.ru",
+      "phone": "+79135550101",
+      "loyaltyTier": "ENTERPRISE_VIP",
+      "loyaltyPoints": 250001,
+      "preferences": {
+        "tier": "S1",
+        "region": "SIBERIA"
+      }
+    },
+    "shardDestination": {
+      "countryCode": "RU",
+      "city": "Novosibirsk",
+      "street": "Inzhenernaya",
+      "building": "11",
+      "apartment": "Suite 1",
+      "postalCode": "630090",
+      "latitude": 54.8581,
+      "longitude": 83.1112,
+      "courierComment": "Datacenter loading dock #1"
+    },
+    "shardItems": [
+      {
+        "sku": "SKU-XB-1-100",
+        "productName": "High-Density Compute Blade Node Cluster Unit 1.0",
+        "manufacturer": "Enterprise Silicon Systems Corp",
+        "categoryPath": "Datacenter/Compute/Blades/Gen1",
+        "description": "Multi-socket high-throughput compute node with hardware telemetry, ECC memory scrubbing, and redundant NVMe fabrics.",
+        "quantity": 2,
+        "basePrice": 38722.50,
+        "discountAmount": 1200.00,
+        "taxRate": 0.20,
+        "taxAmount": 7504.50,
+        "lineTotal": 82549.50,
+        "weightKg": 4.85,
+        "attributes": [
+          {
+            "key": "tdp",
+            "value": "350",
+            "unit": "W",
+            "searchable": true
+          },
+          {
+            "key": "interconnect",
+            "value": "400GbE",
+            "unit": "bps",
+            "searchable": true
+          },
+          {
+            "key": "compliance",
+            "value": "SOC2-TYPE2-2026",
+            "unit": "standard",
+            "searchable": false
+          }
+        ],
+        "allocations": [
+          {
+            "warehouseCode": "WH-NSK-01",
+            "region": "SIBERIA",
+            "reservedQty": 4,
+            "estimatedDeliveryHours": 6
+          },
+          {
+            "warehouseCode": "WH-SPB-03",
+            "region": "NORTHWEST",
+            "reservedQty": 2,
+            "estimatedDeliveryHours": 24
+          }
+        ],
+        "tags": [
+          "DATACENTER",
+          "HIGH_DENSITY",
+          "VERIFIED"
+        ]
+      },
+      {
+        "sku": "SKU-XB-1-101",
+        "productName": "High-Density Compute Blade Node Cluster Unit 1.1",
+        "manufacturer": "Enterprise Silicon Systems Corp",
+        "categoryPath": "Datacenter/Compute/Blades/Gen2",
+        "description": "Multi-socket high-throughput compute node with hardware telemetry, ECC memory scrubbing, and redundant NVMe fabrics.",
+        "quantity": 3,
+        "basePrice": 38722.50,
+        "discountAmount": 1200.00,
+        "taxRate": 0.20,
+        "taxAmount": 7504.50,
+        "lineTotal": 82549.50,
+        "weightKg": 4.85,
+        "attributes": [
+          {
+            "key": "tdp",
+            "value": "350",
+            "unit": "W",
+            "searchable": true
+          },
+          {
+            "key": "interconnect",
+            "value": "400GbE",
+            "unit": "bps",
+            "searchable": true
+          },
+          {
+            "key": "compliance",
+            "value": "SOC2-TYPE2-2026",
+            "unit": "standard",
+            "searchable": false
+          }
+        ],
+        "allocations": [
+          {
+            "warehouseCode": "WH-NSK-01",
+            "region": "SIBERIA",
+            "reservedQty": 4,
+            "estimatedDeliveryHours": 6
+          },
+          {
+            "warehouseCode": "WH-SPB-03",
+            "region": "NORTHWEST",
+            "reservedQty": 2,
+            "estimatedDeliveryHours": 24
+          }
+        ],
+        "tags": [
+          "DATACENTER",
+          "HIGH_DENSITY",
+          "VERIFIED"
+        ]
+      },
+      {
+        "sku": "SKU-XB-1-102",
+        "productName": "High-Density Compute Blade Node Cluster Unit 1.2",
+        "manufacturer": "Enterprise Silicon Systems Corp",
+        "categoryPath": "Datacenter/Compute/Blades/Gen3",
+        "description": "Multi-socket high-throughput compute node with hardware telemetry, ECC memory scrubbing, and redundant NVMe fabrics.",
+        "quantity": 4,
+        "basePrice": 38722.50,
+        "discountAmount": 1200.00,
+        "taxRate": 0.20,
+        "taxAmount": 7504.50,
+        "lineTotal": 82549.50,
+        "weightKg": 4.85,
+        "attributes": [
+          {
+            "key": "tdp",
+            "value": "350",
+            "unit": "W",
+            "searchable": true
+          },
+          {
+            "key": "interconnect",
+            "value": "400GbE",
+            "unit": "bps",
+            "searchable": true
+          },
+          {
+            "key": "compliance",
+            "value": "SOC2-TYPE2-2026",
+            "unit": "standard",
+            "searchable": false
+          }
+        ],
+        "allocations": [
+          {
+            "warehouseCode": "WH-NSK-01",
+            "region": "SIBERIA",
+            "reservedQty": 4,
+            "estimatedDeliveryHours": 6
+          },
+          {
+            "warehouseCode": "WH-SPB-03",
+            "region": "NORTHWEST",
+            "reservedQty": 2,
+            "estimatedDeliveryHours": 24
+          }
+        ],
+        "tags": [
+          "DATACENTER",
+          "HIGH_DENSITY",
+          "VERIFIED"
+        ]
+      },
+      {
+        "sku": "SKU-XB-1-103",
+        "productName": "High-Density Compute Blade Node Cluster Unit 1.3",
+        "manufacturer": "Enterprise Silicon Systems Corp",
+        "categoryPath": "Datacenter/Compute/Blades/Gen4",
+        "description": "Multi-socket high-throughput compute node with hardware telemetry, ECC memory scrubbing, and redundant NVMe fabrics.",
+        "quantity": 5,
+        "basePrice": 38722.50,
+        "discountAmount": 1200.00,
+        "taxRate": 0.20,
+        "taxAmount": 7504.50,
+        "lineTotal": 82549.50,
+        "weightKg": 4.85,
+        "attributes": [
+          {
+            "key": "tdp",
+            "value": "350",
+            "unit": "W",
+            "searchable": true
+          },
+          {
+            "key": "interconnect",
+            "value": "400GbE",
+            "unit": "bps",
+            "searchable": true
+          },
+          {
+            "key": "compliance",
+            "value": "SOC2-TYPE2-2026",
+            "unit": "standard",
+            "searchable": false
+          }
+        ],
+        "allocations": [
+          {
+            "warehouseCode": "WH-NSK-01",
+            "region": "SIBERIA",
+            "reservedQty": 4,
+            "estimatedDeliveryHours": 6
+          },
+          {
+            "warehouseCode": "WH-SPB-03",
+            "region": "NORTHWEST",
+            "reservedQty": 2,
+            "estimatedDeliveryHours": 24
+          }
+        ],
+        "tags": [
+          "DATACENTER",
+          "HIGH_DENSITY",
+          "VERIFIED"
+        ]
+      }
+    ],
+    "compliance": {
+      "regulationCode": "REG-2026-XBIG-1",
+      "description": "Automated cross-border telemetry and financial settlement compliance verification payload block.",
+      "packets": [
+        {
+          "packetId": "a1b2c3d4-e5f6-3789-8012-3456789abcde",
+          "sequenceNumber": 100001,
+          "sensorGroupId": 11,
+          "protocolVersion": 2,
+          "priorityFlag": "A",
+          "encrypted": true,
+          "verified": true,
+          "signatureBytes": [
+            115,
+            105,
+            103,
+            45,
+            112,
+            97,
+            121,
+            108,
+            111,
+            97,
+            100,
+            45,
+            115,
+            104,
+            97,
+            114,
+            100,
+            45,
+            49,
+            45,
+            97,
+            108,
+            112,
+            104,
+            97
+          ],
+          "endpointUri": "https://koraframework.io",
+          "processingDuration": "PT0.146S",
+          "retentionPeriod": "PT8760H",
+          "accountingDate": "2026-11-28",
+          "windowStartTime": "12:30:01",
+          "localTimestamp": "2026-11-28T12:30:01",
+          "offsetTimestamp": "2026-11-28T12:30:01+07:00",
+          "zonedTimestamp": "2026-11-28T12:30:01+07:00[Asia/Novosibirsk]",
+          "rawCounter": 123456789012345678901234567891,
+          "calibratedValue": 99.987654,
+          "capabilityFlags": [
+            "AVX512",
+            "ZGC",
+            "IO_URING",
+            "ZERO_COPY"
+          ],
+          "sensorReadings": {
+            "temp_c": 43.5,
+            "voltage_v": 12.04,
+            "fan_rpm": 4800.0
+          },
+          "location": {
+            "lat": 54.8481,
+            "lon": 83.1066,
+            "altitudeMeters": 165.5,
+            "accuracyCm": 15,
+            "capturedAt": "2026-11-28T06:00:00Z",
+            "zoneCode": "RU-NSK-Z1"
+          }
+        },
+        {
+          "packetId": "b2c3d4e5-f6a7-3890-9123-456789abcdef",
+          "sequenceNumber": 200001,
+          "sensorGroupId": 21,
+          "protocolVersion": 2,
+          "priorityFlag": "B",
+          "encrypted": false,
+          "verified": false,
+          "signatureBytes": [
+            115,
+            105,
+            103,
+            45,
+            112,
+            97,
+            121,
+            108,
+            111,
+            97,
+            100,
+            45,
+            115,
+            104,
+            97,
+            114,
+            100,
+            45,
+            49,
+            45,
+            98,
+            101,
+            116,
+            97
+          ],
+          "endpointUri": "https://koraframework.io",
+          "processingDuration": "PT0.089S",
+          "retentionPeriod": "PT12960H",
+          "accountingDate": "2026-11-28",
+          "windowStartTime": "13:15:01",
+          "localTimestamp": "2026-11-28T13:15:01",
+          "offsetTimestamp": "2026-11-28T13:15:01Z",
+          "zonedTimestamp": "2026-11-28T13:15:01Z[UTC]",
+          "rawCounter": 987654321098765432109876543211,
+          "calibratedValue": 100.000125,
+          "capabilityFlags": [
+            "TLS13",
+            "FASTJSON2",
+            "COMPACT_HEADERS"
+          ],
+          "sensorReadings": {
+            "temp_c": 40.1,
+            "voltage_v": 11.98,
+            "fan_rpm": 4200.0
+          },
+          "location": {
+            "lat": 55.0312,
+            "lon": 82.9214,
+            "altitudeMeters": 150.0,
+            "accuracyCm": 10,
+            "capturedAt": "2026-11-28T06:00:00Z",
+            "zoneCode": "RU-NSK-C1"
+          }
+        }
+      ],
+      "ruleMatrix": {
+        "allowedRegions": [
+          "RU",
+          "KZ",
+          "BY",
+          "AM"
+        ],
+        "requiredChecks": [
+          "AML",
+          "KYC",
+          "SANCTIONS",
+          "HASH_INTEGRITY"
+        ],
+        "fallbackRoutes": [
+          "route-primary",
+          "route-secondary"
+        ]
+      }
+    }
+  },
+  "shard04": {
+    "shardId": "SHARD-01",
+    "traceUuid": "8f14e45f-ceea-367a-9a36-dedd4bea2543",
+    "revisionLong": 7000000001,
+    "optionalRevision": 7000000001,
+    "partitionInt": 101,
+    "optionalPartition": 101,
+    "regionShort": 1,
+    "optionalRegion": 1,
+    "flagsByte": 1,
+    "optionalFlags": 1,
+    "ratioDouble": 0.99951,
+    "optionalRatio": 0.99951,
+    "scoreFloat": 99.5,
+    "optionalScore": 99.5,
+    "activeBool": true,
+    "optionalActive": true,
+    "gradeChar": "S",
+    "optionalGrade": "S",
+    "shardAmount": 154890.00,
+    "shardTotalHashes": 98765432109876543210987654321,
+    "createdAt": "2026-11-28T06:00:00Z",
+    "businessDate": "2026-11-28",
+    "cutoffTime": "18:00:00",
+    "systemDateTime": "2026-11-28T18:00:00",
+    "partnerOffsetTime": "2026-11-28T18:00:00+07:00",
+    "auditZonedTime": "2026-11-28T18:00:00+07:00[Asia/Novosibirsk]",
+    "ttlDuration": "PT30M",
+    "gracePeriod": "PT8760H",
+    "callbackUri": "https://enterprise-corp.ru",
+    "binaryPayload": [
+      98,
+      105,
+      110,
+      97,
+      114,
+      121,
+      45,
+      97,
+      117,
+      100,
+      105,
+      116,
+      45,
+      98,
+      108,
+      111,
+      98,
+      45,
+      99,
+      111,
+      110,
+      116,
+      101,
+      110,
+      116,
+      45,
+      102,
+      111,
+      114,
+      45,
+      115,
+      104,
+      97,
+      114,
+      100,
+      45,
+      49
+    ],
+    "allowedBuckets": [
+      1,
+      2,
+      4,
+      8,
+      16,
+      32
+    ],
+    "routingKeys": [
+      "rk.ingest.v2",
+      "rk.shard.1",
+      "rk.settlement.fast"
+    ],
+    "attributes": {
+      "env": "benchmark",
+      "shardIndex": "1",
+      "dc": "nsk-1"
+    },
+    "shardOwner": {
+      "fullName": "Dmitry Sokolov 1",
+      "email": "d.sokolov1@enterprise-corp.ru",
+      "phone": "+79135550101",
+      "loyaltyTier": "ENTERPRISE_VIP",
+      "loyaltyPoints": 250001,
+      "preferences": {
+        "tier": "S1",
+        "region": "SIBERIA"
+      }
+    },
+    "shardDestination": {
+      "countryCode": "RU",
+      "city": "Novosibirsk",
+      "street": "Inzhenernaya",
+      "building": "11",
+      "apartment": "Suite 1",
+      "postalCode": "630090",
+      "latitude": 54.8581,
+      "longitude": 83.1112,
+      "courierComment": "Datacenter loading dock #1"
+    },
+    "shardItems": [
+      {
+        "sku": "SKU-XB-1-100",
+        "productName": "High-Density Compute Blade Node Cluster Unit 1.0",
+        "manufacturer": "Enterprise Silicon Systems Corp",
+        "categoryPath": "Datacenter/Compute/Blades/Gen1",
+        "description": "Multi-socket high-throughput compute node with hardware telemetry, ECC memory scrubbing, and redundant NVMe fabrics.",
+        "quantity": 2,
+        "basePrice": 38722.50,
+        "discountAmount": 1200.00,
+        "taxRate": 0.20,
+        "taxAmount": 7504.50,
+        "lineTotal": 82549.50,
+        "weightKg": 4.85,
+        "attributes": [
+          {
+            "key": "tdp",
+            "value": "350",
+            "unit": "W",
+            "searchable": true
+          },
+          {
+            "key": "interconnect",
+            "value": "400GbE",
+            "unit": "bps",
+            "searchable": true
+          },
+          {
+            "key": "compliance",
+            "value": "SOC2-TYPE2-2026",
+            "unit": "standard",
+            "searchable": false
+          }
+        ],
+        "allocations": [
+          {
+            "warehouseCode": "WH-NSK-01",
+            "region": "SIBERIA",
+            "reservedQty": 4,
+            "estimatedDeliveryHours": 6
+          },
+          {
+            "warehouseCode": "WH-SPB-03",
+            "region": "NORTHWEST",
+            "reservedQty": 2,
+            "estimatedDeliveryHours": 24
+          }
+        ],
+        "tags": [
+          "DATACENTER",
+          "HIGH_DENSITY",
+          "VERIFIED"
+        ]
+      },
+      {
+        "sku": "SKU-XB-1-101",
+        "productName": "High-Density Compute Blade Node Cluster Unit 1.1",
+        "manufacturer": "Enterprise Silicon Systems Corp",
+        "categoryPath": "Datacenter/Compute/Blades/Gen2",
+        "description": "Multi-socket high-throughput compute node with hardware telemetry, ECC memory scrubbing, and redundant NVMe fabrics.",
+        "quantity": 3,
+        "basePrice": 38722.50,
+        "discountAmount": 1200.00,
+        "taxRate": 0.20,
+        "taxAmount": 7504.50,
+        "lineTotal": 82549.50,
+        "weightKg": 4.85,
+        "attributes": [
+          {
+            "key": "tdp",
+            "value": "350",
+            "unit": "W",
+            "searchable": true
+          },
+          {
+            "key": "interconnect",
+            "value": "400GbE",
+            "unit": "bps",
+            "searchable": true
+          },
+          {
+            "key": "compliance",
+            "value": "SOC2-TYPE2-2026",
+            "unit": "standard",
+            "searchable": false
+          }
+        ],
+        "allocations": [
+          {
+            "warehouseCode": "WH-NSK-01",
+            "region": "SIBERIA",
+            "reservedQty": 4,
+            "estimatedDeliveryHours": 6
+          },
+          {
+            "warehouseCode": "WH-SPB-03",
+            "region": "NORTHWEST",
+            "reservedQty": 2,
+            "estimatedDeliveryHours": 24
+          }
+        ],
+        "tags": [
+          "DATACENTER",
+          "HIGH_DENSITY",
+          "VERIFIED"
+        ]
+      },
+      {
+        "sku": "SKU-XB-1-102",
+        "productName": "High-Density Compute Blade Node Cluster Unit 1.2",
+        "manufacturer": "Enterprise Silicon Systems Corp",
+        "categoryPath": "Datacenter/Compute/Blades/Gen3",
+        "description": "Multi-socket high-throughput compute node with hardware telemetry, ECC memory scrubbing, and redundant NVMe fabrics.",
+        "quantity": 4,
+        "basePrice": 38722.50,
+        "discountAmount": 1200.00,
+        "taxRate": 0.20,
+        "taxAmount": 7504.50,
+        "lineTotal": 82549.50,
+        "weightKg": 4.85,
+        "attributes": [
+          {
+            "key": "tdp",
+            "value": "350",
+            "unit": "W",
+            "searchable": true
+          },
+          {
+            "key": "interconnect",
+            "value": "400GbE",
+            "unit": "bps",
+            "searchable": true
+          },
+          {
+            "key": "compliance",
+            "value": "SOC2-TYPE2-2026",
+            "unit": "standard",
+            "searchable": false
+          }
+        ],
+        "allocations": [
+          {
+            "warehouseCode": "WH-NSK-01",
+            "region": "SIBERIA",
+            "reservedQty": 4,
+            "estimatedDeliveryHours": 6
+          },
+          {
+            "warehouseCode": "WH-SPB-03",
+            "region": "NORTHWEST",
+            "reservedQty": 2,
+            "estimatedDeliveryHours": 24
+          }
+        ],
+        "tags": [
+          "DATACENTER",
+          "HIGH_DENSITY",
+          "VERIFIED"
+        ]
+      },
+      {
+        "sku": "SKU-XB-1-103",
+        "productName": "High-Density Compute Blade Node Cluster Unit 1.3",
+        "manufacturer": "Enterprise Silicon Systems Corp",
+        "categoryPath": "Datacenter/Compute/Blades/Gen4",
+        "description": "Multi-socket high-throughput compute node with hardware telemetry, ECC memory scrubbing, and redundant NVMe fabrics.",
+        "quantity": 5,
+        "basePrice": 38722.50,
+        "discountAmount": 1200.00,
+        "taxRate": 0.20,
+        "taxAmount": 7504.50,
+        "lineTotal": 82549.50,
+        "weightKg": 4.85,
+        "attributes": [
+          {
+            "key": "tdp",
+            "value": "350",
+            "unit": "W",
+            "searchable": true
+          },
+          {
+            "key": "interconnect",
+            "value": "400GbE",
+            "unit": "bps",
+            "searchable": true
+          },
+          {
+            "key": "compliance",
+            "value": "SOC2-TYPE2-2026",
+            "unit": "standard",
+            "searchable": false
+          }
+        ],
+        "allocations": [
+          {
+            "warehouseCode": "WH-NSK-01",
+            "region": "SIBERIA",
+            "reservedQty": 4,
+            "estimatedDeliveryHours": 6
+          },
+          {
+            "warehouseCode": "WH-SPB-03",
+            "region": "NORTHWEST",
+            "reservedQty": 2,
+            "estimatedDeliveryHours": 24
+          }
+        ],
+        "tags": [
+          "DATACENTER",
+          "HIGH_DENSITY",
+          "VERIFIED"
+        ]
+      }
+    ],
+    "compliance": {
+      "regulationCode": "REG-2026-XBIG-1",
+      "description": "Automated cross-border telemetry and financial settlement compliance verification payload block.",
+      "packets": [
+        {
+          "packetId": "a1b2c3d4-e5f6-3789-8012-3456789abcde",
+          "sequenceNumber": 100001,
+          "sensorGroupId": 11,
+          "protocolVersion": 2,
+          "priorityFlag": "A",
+          "encrypted": true,
+          "verified": true,
+          "signatureBytes": [
+            115,
+            105,
+            103,
+            45,
+            112,
+            97,
+            121,
+            108,
+            111,
+            97,
+            100,
+            45,
+            115,
+            104,
+            97,
+            114,
+            100,
+            45,
+            49,
+            45,
+            97,
+            108,
+            112,
+            104,
+            97
+          ],
+          "endpointUri": "https://koraframework.io",
+          "processingDuration": "PT0.146S",
+          "retentionPeriod": "PT8760H",
+          "accountingDate": "2026-11-28",
+          "windowStartTime": "12:30:01",
+          "localTimestamp": "2026-11-28T12:30:01",
+          "offsetTimestamp": "2026-11-28T12:30:01+07:00",
+          "zonedTimestamp": "2026-11-28T12:30:01+07:00[Asia/Novosibirsk]",
+          "rawCounter": 123456789012345678901234567891,
+          "calibratedValue": 99.987654,
+          "capabilityFlags": [
+            "AVX512",
+            "ZGC",
+            "IO_URING",
+            "ZERO_COPY"
+          ],
+          "sensorReadings": {
+            "temp_c": 43.5,
+            "voltage_v": 12.04,
+            "fan_rpm": 4800.0
+          },
+          "location": {
+            "lat": 54.8481,
+            "lon": 83.1066,
+            "altitudeMeters": 165.5,
+            "accuracyCm": 15,
+            "capturedAt": "2026-11-28T06:00:00Z",
+            "zoneCode": "RU-NSK-Z1"
+          }
+        },
+        {
+          "packetId": "b2c3d4e5-f6a7-3890-9123-456789abcdef",
+          "sequenceNumber": 200001,
+          "sensorGroupId": 21,
+          "protocolVersion": 2,
+          "priorityFlag": "B",
+          "encrypted": false,
+          "verified": false,
+          "signatureBytes": [
+            115,
+            105,
+            103,
+            45,
+            112,
+            97,
+            121,
+            108,
+            111,
+            97,
+            100,
+            45,
+            115,
+            104,
+            97,
+            114,
+            100,
+            45,
+            49,
+            45,
+            98,
+            101,
+            116,
+            97
+          ],
+          "endpointUri": "https://koraframework.io",
+          "processingDuration": "PT0.089S",
+          "retentionPeriod": "PT12960H",
+          "accountingDate": "2026-11-28",
+          "windowStartTime": "13:15:01",
+          "localTimestamp": "2026-11-28T13:15:01",
+          "offsetTimestamp": "2026-11-28T13:15:01Z",
+          "zonedTimestamp": "2026-11-28T13:15:01Z[UTC]",
+          "rawCounter": 987654321098765432109876543211,
+          "calibratedValue": 100.000125,
+          "capabilityFlags": [
+            "TLS13",
+            "FASTJSON2",
+            "COMPACT_HEADERS"
+          ],
+          "sensorReadings": {
+            "temp_c": 40.1,
+            "voltage_v": 11.98,
+            "fan_rpm": 4200.0
+          },
+          "location": {
+            "lat": 55.0312,
+            "lon": 82.9214,
+            "altitudeMeters": 150.0,
+            "accuracyCm": 10,
+            "capturedAt": "2026-11-28T06:00:00Z",
+            "zoneCode": "RU-NSK-C1"
+          }
+        }
+      ],
+      "ruleMatrix": {
+        "allowedRegions": [
+          "RU",
+          "KZ",
+          "BY",
+          "AM"
+        ],
+        "requiredChecks": [
+          "AML",
+          "KYC",
+          "SANCTIONS",
+          "HASH_INTEGRITY"
+        ],
+        "fallbackRoutes": [
+          "route-primary",
+          "route-secondary"
+        ]
+      }
+    }
+  },
+  "shard05": {
+    "shardId": "SHARD-01",
+    "traceUuid": "8f14e45f-ceea-367a-9a36-dedd4bea2543",
+    "revisionLong": 7000000001,
+    "optionalRevision": 7000000001,
+    "partitionInt": 101,
+    "optionalPartition": 101,
+    "regionShort": 1,
+    "optionalRegion": 1,
+    "flagsByte": 1,
+    "optionalFlags": 1,
+    "ratioDouble": 0.99951,
+    "optionalRatio": 0.99951,
+    "scoreFloat": 99.5,
+    "optionalScore": 99.5,
+    "activeBool": true,
+    "optionalActive": true,
+    "gradeChar": "S",
+    "optionalGrade": "S",
+    "shardAmount": 154890.00,
+    "shardTotalHashes": 98765432109876543210987654321,
+    "createdAt": "2026-11-28T06:00:00Z",
+    "businessDate": "2026-11-28",
+    "cutoffTime": "18:00:00",
+    "systemDateTime": "2026-11-28T18:00:00",
+    "partnerOffsetTime": "2026-11-28T18:00:00+07:00",
+    "auditZonedTime": "2026-11-28T18:00:00+07:00[Asia/Novosibirsk]",
+    "ttlDuration": "PT30M",
+    "gracePeriod": "PT8760H",
+    "callbackUri": "https://enterprise-corp.ru",
+    "binaryPayload": [
+      98,
+      105,
+      110,
+      97,
+      114,
+      121,
+      45,
+      97,
+      117,
+      100,
+      105,
+      116,
+      45,
+      98,
+      108,
+      111,
+      98,
+      45,
+      99,
+      111,
+      110,
+      116,
+      101,
+      110,
+      116,
+      45,
+      102,
+      111,
+      114,
+      45,
+      115,
+      104,
+      97,
+      114,
+      100,
+      45,
+      49
+    ],
+    "allowedBuckets": [
+      1,
+      2,
+      4,
+      8,
+      16,
+      32
+    ],
+    "routingKeys": [
+      "rk.ingest.v2",
+      "rk.shard.1",
+      "rk.settlement.fast"
+    ],
+    "attributes": {
+      "env": "benchmark",
+      "shardIndex": "1",
+      "dc": "nsk-1"
+    },
+    "shardOwner": {
+      "fullName": "Dmitry Sokolov 1",
+      "email": "d.sokolov1@enterprise-corp.ru",
+      "phone": "+79135550101",
+      "loyaltyTier": "ENTERPRISE_VIP",
+      "loyaltyPoints": 250001,
+      "preferences": {
+        "tier": "S1",
+        "region": "SIBERIA"
+      }
+    },
+    "shardDestination": {
+      "countryCode": "RU",
+      "city": "Novosibirsk",
+      "street": "Inzhenernaya",
+      "building": "11",
+      "apartment": "Suite 1",
+      "postalCode": "630090",
+      "latitude": 54.8581,
+      "longitude": 83.1112,
+      "courierComment": "Datacenter loading dock #1"
+    },
+    "shardItems": [
+      {
+        "sku": "SKU-XB-1-100",
+        "productName": "High-Density Compute Blade Node Cluster Unit 1.0",
+        "manufacturer": "Enterprise Silicon Systems Corp",
+        "categoryPath": "Datacenter/Compute/Blades/Gen1",
+        "description": "Multi-socket high-throughput compute node with hardware telemetry, ECC memory scrubbing, and redundant NVMe fabrics.",
+        "quantity": 2,
+        "basePrice": 38722.50,
+        "discountAmount": 1200.00,
+        "taxRate": 0.20,
+        "taxAmount": 7504.50,
+        "lineTotal": 82549.50,
+        "weightKg": 4.85,
+        "attributes": [
+          {
+            "key": "tdp",
+            "value": "350",
+            "unit": "W",
+            "searchable": true
+          },
+          {
+            "key": "interconnect",
+            "value": "400GbE",
+            "unit": "bps",
+            "searchable": true
+          },
+          {
+            "key": "compliance",
+            "value": "SOC2-TYPE2-2026",
+            "unit": "standard",
+            "searchable": false
+          }
+        ],
+        "allocations": [
+          {
+            "warehouseCode": "WH-NSK-01",
+            "region": "SIBERIA",
+            "reservedQty": 4,
+            "estimatedDeliveryHours": 6
+          },
+          {
+            "warehouseCode": "WH-SPB-03",
+            "region": "NORTHWEST",
+            "reservedQty": 2,
+            "estimatedDeliveryHours": 24
+          }
+        ],
+        "tags": [
+          "DATACENTER",
+          "HIGH_DENSITY",
+          "VERIFIED"
+        ]
+      },
+      {
+        "sku": "SKU-XB-1-101",
+        "productName": "High-Density Compute Blade Node Cluster Unit 1.1",
+        "manufacturer": "Enterprise Silicon Systems Corp",
+        "categoryPath": "Datacenter/Compute/Blades/Gen2",
+        "description": "Multi-socket high-throughput compute node with hardware telemetry, ECC memory scrubbing, and redundant NVMe fabrics.",
+        "quantity": 3,
+        "basePrice": 38722.50,
+        "discountAmount": 1200.00,
+        "taxRate": 0.20,
+        "taxAmount": 7504.50,
+        "lineTotal": 82549.50,
+        "weightKg": 4.85,
+        "attributes": [
+          {
+            "key": "tdp",
+            "value": "350",
+            "unit": "W",
+            "searchable": true
+          },
+          {
+            "key": "interconnect",
+            "value": "400GbE",
+            "unit": "bps",
+            "searchable": true
+          },
+          {
+            "key": "compliance",
+            "value": "SOC2-TYPE2-2026",
+            "unit": "standard",
+            "searchable": false
+          }
+        ],
+        "allocations": [
+          {
+            "warehouseCode": "WH-NSK-01",
+            "region": "SIBERIA",
+            "reservedQty": 4,
+            "estimatedDeliveryHours": 6
+          },
+          {
+            "warehouseCode": "WH-SPB-03",
+            "region": "NORTHWEST",
+            "reservedQty": 2,
+            "estimatedDeliveryHours": 24
+          }
+        ],
+        "tags": [
+          "DATACENTER",
+          "HIGH_DENSITY",
+          "VERIFIED"
+        ]
+      },
+      {
+        "sku": "SKU-XB-1-102",
+        "productName": "High-Density Compute Blade Node Cluster Unit 1.2",
+        "manufacturer": "Enterprise Silicon Systems Corp",
+        "categoryPath": "Datacenter/Compute/Blades/Gen3",
+        "description": "Multi-socket high-throughput compute node with hardware telemetry, ECC memory scrubbing, and redundant NVMe fabrics.",
+        "quantity": 4,
+        "basePrice": 38722.50,
+        "discountAmount": 1200.00,
+        "taxRate": 0.20,
+        "taxAmount": 7504.50,
+        "lineTotal": 82549.50,
+        "weightKg": 4.85,
+        "attributes": [
+          {
+            "key": "tdp",
+            "value": "350",
+            "unit": "W",
+            "searchable": true
+          },
+          {
+            "key": "interconnect",
+            "value": "400GbE",
+            "unit": "bps",
+            "searchable": true
+          },
+          {
+            "key": "compliance",
+            "value": "SOC2-TYPE2-2026",
+            "unit": "standard",
+            "searchable": false
+          }
+        ],
+        "allocations": [
+          {
+            "warehouseCode": "WH-NSK-01",
+            "region": "SIBERIA",
+            "reservedQty": 4,
+            "estimatedDeliveryHours": 6
+          },
+          {
+            "warehouseCode": "WH-SPB-03",
+            "region": "NORTHWEST",
+            "reservedQty": 2,
+            "estimatedDeliveryHours": 24
+          }
+        ],
+        "tags": [
+          "DATACENTER",
+          "HIGH_DENSITY",
+          "VERIFIED"
+        ]
+      },
+      {
+        "sku": "SKU-XB-1-103",
+        "productName": "High-Density Compute Blade Node Cluster Unit 1.3",
+        "manufacturer": "Enterprise Silicon Systems Corp",
+        "categoryPath": "Datacenter/Compute/Blades/Gen4",
+        "description": "Multi-socket high-throughput compute node with hardware telemetry, ECC memory scrubbing, and redundant NVMe fabrics.",
+        "quantity": 5,
+        "basePrice": 38722.50,
+        "discountAmount": 1200.00,
+        "taxRate": 0.20,
+        "taxAmount": 7504.50,
+        "lineTotal": 82549.50,
+        "weightKg": 4.85,
+        "attributes": [
+          {
+            "key": "tdp",
+            "value": "350",
+            "unit": "W",
+            "searchable": true
+          },
+          {
+            "key": "interconnect",
+            "value": "400GbE",
+            "unit": "bps",
+            "searchable": true
+          },
+          {
+            "key": "compliance",
+            "value": "SOC2-TYPE2-2026",
+            "unit": "standard",
+            "searchable": false
+          }
+        ],
+        "allocations": [
+          {
+            "warehouseCode": "WH-NSK-01",
+            "region": "SIBERIA",
+            "reservedQty": 4,
+            "estimatedDeliveryHours": 6
+          },
+          {
+            "warehouseCode": "WH-SPB-03",
+            "region": "NORTHWEST",
+            "reservedQty": 2,
+            "estimatedDeliveryHours": 24
+          }
+        ],
+        "tags": [
+          "DATACENTER",
+          "HIGH_DENSITY",
+          "VERIFIED"
+        ]
+      }
+    ],
+    "compliance": {
+      "regulationCode": "REG-2026-XBIG-1",
+      "description": "Automated cross-border telemetry and financial settlement compliance verification payload block.",
+      "packets": [
+        {
+          "packetId": "a1b2c3d4-e5f6-3789-8012-3456789abcde",
+          "sequenceNumber": 100001,
+          "sensorGroupId": 11,
+          "protocolVersion": 2,
+          "priorityFlag": "A",
+          "encrypted": true,
+          "verified": true,
+          "signatureBytes": [
+            115,
+            105,
+            103,
+            45,
+            112,
+            97,
+            121,
+            108,
+            111,
+            97,
+            100,
+            45,
+            115,
+            104,
+            97,
+            114,
+            100,
+            45,
+            49,
+            45,
+            97,
+            108,
+            112,
+            104,
+            97
+          ],
+          "endpointUri": "https://koraframework.io",
+          "processingDuration": "PT0.146S",
+          "retentionPeriod": "PT8760H",
+          "accountingDate": "2026-11-28",
+          "windowStartTime": "12:30:01",
+          "localTimestamp": "2026-11-28T12:30:01",
+          "offsetTimestamp": "2026-11-28T12:30:01+07:00",
+          "zonedTimestamp": "2026-11-28T12:30:01+07:00[Asia/Novosibirsk]",
+          "rawCounter": 123456789012345678901234567891,
+          "calibratedValue": 99.987654,
+          "capabilityFlags": [
+            "AVX512",
+            "ZGC",
+            "IO_URING",
+            "ZERO_COPY"
+          ],
+          "sensorReadings": {
+            "temp_c": 43.5,
+            "voltage_v": 12.04,
+            "fan_rpm": 4800.0
+          },
+          "location": {
+            "lat": 54.8481,
+            "lon": 83.1066,
+            "altitudeMeters": 165.5,
+            "accuracyCm": 15,
+            "capturedAt": "2026-11-28T06:00:00Z",
+            "zoneCode": "RU-NSK-Z1"
+          }
+        },
+        {
+          "packetId": "b2c3d4e5-f6a7-3890-9123-456789abcdef",
+          "sequenceNumber": 200001,
+          "sensorGroupId": 21,
+          "protocolVersion": 2,
+          "priorityFlag": "B",
+          "encrypted": false,
+          "verified": false,
+          "signatureBytes": [
+            115,
+            105,
+            103,
+            45,
+            112,
+            97,
+            121,
+            108,
+            111,
+            97,
+            100,
+            45,
+            115,
+            104,
+            97,
+            114,
+            100,
+            45,
+            49,
+            45,
+            98,
+            101,
+            116,
+            97
+          ],
+          "endpointUri": "https://koraframework.io",
+          "processingDuration": "PT0.089S",
+          "retentionPeriod": "PT12960H",
+          "accountingDate": "2026-11-28",
+          "windowStartTime": "13:15:01",
+          "localTimestamp": "2026-11-28T13:15:01",
+          "offsetTimestamp": "2026-11-28T13:15:01Z",
+          "zonedTimestamp": "2026-11-28T13:15:01Z[UTC]",
+          "rawCounter": 987654321098765432109876543211,
+          "calibratedValue": 100.000125,
+          "capabilityFlags": [
+            "TLS13",
+            "FASTJSON2",
+            "COMPACT_HEADERS"
+          ],
+          "sensorReadings": {
+            "temp_c": 40.1,
+            "voltage_v": 11.98,
+            "fan_rpm": 4200.0
+          },
+          "location": {
+            "lat": 55.0312,
+            "lon": 82.9214,
+            "altitudeMeters": 150.0,
+            "accuracyCm": 10,
+            "capturedAt": "2026-11-28T06:00:00Z",
+            "zoneCode": "RU-NSK-C1"
+          }
+        }
+      ],
+      "ruleMatrix": {
+        "allowedRegions": [
+          "RU",
+          "KZ",
+          "BY",
+          "AM"
+        ],
+        "requiredChecks": [
+          "AML",
+          "KYC",
+          "SANCTIONS",
+          "HASH_INTEGRITY"
+        ],
+        "fallbackRoutes": [
+          "route-primary",
+          "route-secondary"
+        ]
+      }
+    }
+  },
+  "shard06": {
+    "shardId": "SHARD-01",
+    "traceUuid": "8f14e45f-ceea-367a-9a36-dedd4bea2543",
+    "revisionLong": 7000000001,
+    "optionalRevision": 7000000001,
+    "partitionInt": 101,
+    "optionalPartition": 101,
+    "regionShort": 1,
+    "optionalRegion": 1,
+    "flagsByte": 1,
+    "optionalFlags": 1,
+    "ratioDouble": 0.99951,
+    "optionalRatio": 0.99951,
+    "scoreFloat": 99.5,
+    "optionalScore": 99.5,
+    "activeBool": true,
+    "optionalActive": true,
+    "gradeChar": "S",
+    "optionalGrade": "S",
+    "shardAmount": 154890.00,
+    "shardTotalHashes": 98765432109876543210987654321,
+    "createdAt": "2026-11-28T06:00:00Z",
+    "businessDate": "2026-11-28",
+    "cutoffTime": "18:00:00",
+    "systemDateTime": "2026-11-28T18:00:00",
+    "partnerOffsetTime": "2026-11-28T18:00:00+07:00",
+    "auditZonedTime": "2026-11-28T18:00:00+07:00[Asia/Novosibirsk]",
+    "ttlDuration": "PT30M",
+    "gracePeriod": "PT8760H",
+    "callbackUri": "https://enterprise-corp.ru",
+    "binaryPayload": [
+      98,
+      105,
+      110,
+      97,
+      114,
+      121,
+      45,
+      97,
+      117,
+      100,
+      105,
+      116,
+      45,
+      98,
+      108,
+      111,
+      98,
+      45,
+      99,
+      111,
+      110,
+      116,
+      101,
+      110,
+      116,
+      45,
+      102,
+      111,
+      114,
+      45,
+      115,
+      104,
+      97,
+      114,
+      100,
+      45,
+      49
+    ],
+    "allowedBuckets": [
+      1,
+      2,
+      4,
+      8,
+      16,
+      32
+    ],
+    "routingKeys": [
+      "rk.ingest.v2",
+      "rk.shard.1",
+      "rk.settlement.fast"
+    ],
+    "attributes": {
+      "env": "benchmark",
+      "shardIndex": "1",
+      "dc": "nsk-1"
+    },
+    "shardOwner": {
+      "fullName": "Dmitry Sokolov 1",
+      "email": "d.sokolov1@enterprise-corp.ru",
+      "phone": "+79135550101",
+      "loyaltyTier": "ENTERPRISE_VIP",
+      "loyaltyPoints": 250001,
+      "preferences": {
+        "tier": "S1",
+        "region": "SIBERIA"
+      }
+    },
+    "shardDestination": {
+      "countryCode": "RU",
+      "city": "Novosibirsk",
+      "street": "Inzhenernaya",
+      "building": "11",
+      "apartment": "Suite 1",
+      "postalCode": "630090",
+      "latitude": 54.8581,
+      "longitude": 83.1112,
+      "courierComment": "Datacenter loading dock #1"
+    },
+    "shardItems": [
+      {
+        "sku": "SKU-XB-1-100",
+        "productName": "High-Density Compute Blade Node Cluster Unit 1.0",
+        "manufacturer": "Enterprise Silicon Systems Corp",
+        "categoryPath": "Datacenter/Compute/Blades/Gen1",
+        "description": "Multi-socket high-throughput compute node with hardware telemetry, ECC memory scrubbing, and redundant NVMe fabrics.",
+        "quantity": 2,
+        "basePrice": 38722.50,
+        "discountAmount": 1200.00,
+        "taxRate": 0.20,
+        "taxAmount": 7504.50,
+        "lineTotal": 82549.50,
+        "weightKg": 4.85,
+        "attributes": [
+          {
+            "key": "tdp",
+            "value": "350",
+            "unit": "W",
+            "searchable": true
+          },
+          {
+            "key": "interconnect",
+            "value": "400GbE",
+            "unit": "bps",
+            "searchable": true
+          },
+          {
+            "key": "compliance",
+            "value": "SOC2-TYPE2-2026",
+            "unit": "standard",
+            "searchable": false
+          }
+        ],
+        "allocations": [
+          {
+            "warehouseCode": "WH-NSK-01",
+            "region": "SIBERIA",
+            "reservedQty": 4,
+            "estimatedDeliveryHours": 6
+          },
+          {
+            "warehouseCode": "WH-SPB-03",
+            "region": "NORTHWEST",
+            "reservedQty": 2,
+            "estimatedDeliveryHours": 24
+          }
+        ],
+        "tags": [
+          "DATACENTER",
+          "HIGH_DENSITY",
+          "VERIFIED"
+        ]
+      },
+      {
+        "sku": "SKU-XB-1-101",
+        "productName": "High-Density Compute Blade Node Cluster Unit 1.1",
+        "manufacturer": "Enterprise Silicon Systems Corp",
+        "categoryPath": "Datacenter/Compute/Blades/Gen2",
+        "description": "Multi-socket high-throughput compute node with hardware telemetry, ECC memory scrubbing, and redundant NVMe fabrics.",
+        "quantity": 3,
+        "basePrice": 38722.50,
+        "discountAmount": 1200.00,
+        "taxRate": 0.20,
+        "taxAmount": 7504.50,
+        "lineTotal": 82549.50,
+        "weightKg": 4.85,
+        "attributes": [
+          {
+            "key": "tdp",
+            "value": "350",
+            "unit": "W",
+            "searchable": true
+          },
+          {
+            "key": "interconnect",
+            "value": "400GbE",
+            "unit": "bps",
+            "searchable": true
+          },
+          {
+            "key": "compliance",
+            "value": "SOC2-TYPE2-2026",
+            "unit": "standard",
+            "searchable": false
+          }
+        ],
+        "allocations": [
+          {
+            "warehouseCode": "WH-NSK-01",
+            "region": "SIBERIA",
+            "reservedQty": 4,
+            "estimatedDeliveryHours": 6
+          },
+          {
+            "warehouseCode": "WH-SPB-03",
+            "region": "NORTHWEST",
+            "reservedQty": 2,
+            "estimatedDeliveryHours": 24
+          }
+        ],
+        "tags": [
+          "DATACENTER",
+          "HIGH_DENSITY",
+          "VERIFIED"
+        ]
+      },
+      {
+        "sku": "SKU-XB-1-102",
+        "productName": "High-Density Compute Blade Node Cluster Unit 1.2",
+        "manufacturer": "Enterprise Silicon Systems Corp",
+        "categoryPath": "Datacenter/Compute/Blades/Gen3",
+        "description": "Multi-socket high-throughput compute node with hardware telemetry, ECC memory scrubbing, and redundant NVMe fabrics.",
+        "quantity": 4,
+        "basePrice": 38722.50,
+        "discountAmount": 1200.00,
+        "taxRate": 0.20,
+        "taxAmount": 7504.50,
+        "lineTotal": 82549.50,
+        "weightKg": 4.85,
+        "attributes": [
+          {
+            "key": "tdp",
+            "value": "350",
+            "unit": "W",
+            "searchable": true
+          },
+          {
+            "key": "interconnect",
+            "value": "400GbE",
+            "unit": "bps",
+            "searchable": true
+          },
+          {
+            "key": "compliance",
+            "value": "SOC2-TYPE2-2026",
+            "unit": "standard",
+            "searchable": false
+          }
+        ],
+        "allocations": [
+          {
+            "warehouseCode": "WH-NSK-01",
+            "region": "SIBERIA",
+            "reservedQty": 4,
+            "estimatedDeliveryHours": 6
+          },
+          {
+            "warehouseCode": "WH-SPB-03",
+            "region": "NORTHWEST",
+            "reservedQty": 2,
+            "estimatedDeliveryHours": 24
+          }
+        ],
+        "tags": [
+          "DATACENTER",
+          "HIGH_DENSITY",
+          "VERIFIED"
+        ]
+      },
+      {
+        "sku": "SKU-XB-1-103",
+        "productName": "High-Density Compute Blade Node Cluster Unit 1.3",
+        "manufacturer": "Enterprise Silicon Systems Corp",
+        "categoryPath": "Datacenter/Compute/Blades/Gen4",
+        "description": "Multi-socket high-throughput compute node with hardware telemetry, ECC memory scrubbing, and redundant NVMe fabrics.",
+        "quantity": 5,
+        "basePrice": 38722.50,
+        "discountAmount": 1200.00,
+        "taxRate": 0.20,
+        "taxAmount": 7504.50,
+        "lineTotal": 82549.50,
+        "weightKg": 4.85,
+        "attributes": [
+          {
+            "key": "tdp",
+            "value": "350",
+            "unit": "W",
+            "searchable": true
+          },
+          {
+            "key": "interconnect",
+            "value": "400GbE",
+            "unit": "bps",
+            "searchable": true
+          },
+          {
+            "key": "compliance",
+            "value": "SOC2-TYPE2-2026",
+            "unit": "standard",
+            "searchable": false
+          }
+        ],
+        "allocations": [
+          {
+            "warehouseCode": "WH-NSK-01",
+            "region": "SIBERIA",
+            "reservedQty": 4,
+            "estimatedDeliveryHours": 6
+          },
+          {
+            "warehouseCode": "WH-SPB-03",
+            "region": "NORTHWEST",
+            "reservedQty": 2,
+            "estimatedDeliveryHours": 24
+          }
+        ],
+        "tags": [
+          "DATACENTER",
+          "HIGH_DENSITY",
+          "VERIFIED"
+        ]
+      }
+    ],
+    "compliance": {
+      "regulationCode": "REG-2026-XBIG-1",
+      "description": "Automated cross-border telemetry and financial settlement compliance verification payload block.",
+      "packets": [
+        {
+          "packetId": "a1b2c3d4-e5f6-3789-8012-3456789abcde",
+          "sequenceNumber": 100001,
+          "sensorGroupId": 11,
+          "protocolVersion": 2,
+          "priorityFlag": "A",
+          "encrypted": true,
+          "verified": true,
+          "signatureBytes": [
+            115,
+            105,
+            103,
+            45,
+            112,
+            97,
+            121,
+            108,
+            111,
+            97,
+            100,
+            45,
+            115,
+            104,
+            97,
+            114,
+            100,
+            45,
+            49,
+            45,
+            97,
+            108,
+            112,
+            104,
+            97
+          ],
+          "endpointUri": "https://koraframework.io",
+          "processingDuration": "PT0.146S",
+          "retentionPeriod": "PT8760H",
+          "accountingDate": "2026-11-28",
+          "windowStartTime": "12:30:01",
+          "localTimestamp": "2026-11-28T12:30:01",
+          "offsetTimestamp": "2026-11-28T12:30:01+07:00",
+          "zonedTimestamp": "2026-11-28T12:30:01+07:00[Asia/Novosibirsk]",
+          "rawCounter": 123456789012345678901234567891,
+          "calibratedValue": 99.987654,
+          "capabilityFlags": [
+            "AVX512",
+            "ZGC",
+            "IO_URING",
+            "ZERO_COPY"
+          ],
+          "sensorReadings": {
+            "temp_c": 43.5,
+            "voltage_v": 12.04,
+            "fan_rpm": 4800.0
+          },
+          "location": {
+            "lat": 54.8481,
+            "lon": 83.1066,
+            "altitudeMeters": 165.5,
+            "accuracyCm": 15,
+            "capturedAt": "2026-11-28T06:00:00Z",
+            "zoneCode": "RU-NSK-Z1"
+          }
+        },
+        {
+          "packetId": "b2c3d4e5-f6a7-3890-9123-456789abcdef",
+          "sequenceNumber": 200001,
+          "sensorGroupId": 21,
+          "protocolVersion": 2,
+          "priorityFlag": "B",
+          "encrypted": false,
+          "verified": false,
+          "signatureBytes": [
+            115,
+            105,
+            103,
+            45,
+            112,
+            97,
+            121,
+            108,
+            111,
+            97,
+            100,
+            45,
+            115,
+            104,
+            97,
+            114,
+            100,
+            45,
+            49,
+            45,
+            98,
+            101,
+            116,
+            97
+          ],
+          "endpointUri": "https://koraframework.io",
+          "processingDuration": "PT0.089S",
+          "retentionPeriod": "PT12960H",
+          "accountingDate": "2026-11-28",
+          "windowStartTime": "13:15:01",
+          "localTimestamp": "2026-11-28T13:15:01",
+          "offsetTimestamp": "2026-11-28T13:15:01Z",
+          "zonedTimestamp": "2026-11-28T13:15:01Z[UTC]",
+          "rawCounter": 987654321098765432109876543211,
+          "calibratedValue": 100.000125,
+          "capabilityFlags": [
+            "TLS13",
+            "FASTJSON2",
+            "COMPACT_HEADERS"
+          ],
+          "sensorReadings": {
+            "temp_c": 40.1,
+            "voltage_v": 11.98,
+            "fan_rpm": 4200.0
+          },
+          "location": {
+            "lat": 55.0312,
+            "lon": 82.9214,
+            "altitudeMeters": 150.0,
+            "accuracyCm": 10,
+            "capturedAt": "2026-11-28T06:00:00Z",
+            "zoneCode": "RU-NSK-C1"
+          }
+        }
+      ],
+      "ruleMatrix": {
+        "allowedRegions": [
+          "RU",
+          "KZ",
+          "BY",
+          "AM"
+        ],
+        "requiredChecks": [
+          "AML",
+          "KYC",
+          "SANCTIONS",
+          "HASH_INTEGRITY"
+        ],
+        "fallbackRoutes": [
+          "route-primary",
+          "route-secondary"
+        ]
+      }
+    }
+  },
+  "shard07": {
+    "shardId": "SHARD-01",
+    "traceUuid": "8f14e45f-ceea-367a-9a36-dedd4bea2543",
+    "revisionLong": 7000000001,
+    "optionalRevision": 7000000001,
+    "partitionInt": 101,
+    "optionalPartition": 101,
+    "regionShort": 1,
+    "optionalRegion": 1,
+    "flagsByte": 1,
+    "optionalFlags": 1,
+    "ratioDouble": 0.99951,
+    "optionalRatio": 0.99951,
+    "scoreFloat": 99.5,
+    "optionalScore": 99.5,
+    "activeBool": true,
+    "optionalActive": true,
+    "gradeChar": "S",
+    "optionalGrade": "S",
+    "shardAmount": 154890.00,
+    "shardTotalHashes": 98765432109876543210987654321,
+    "createdAt": "2026-11-28T06:00:00Z",
+    "businessDate": "2026-11-28",
+    "cutoffTime": "18:00:00",
+    "systemDateTime": "2026-11-28T18:00:00",
+    "partnerOffsetTime": "2026-11-28T18:00:00+07:00",
+    "auditZonedTime": "2026-11-28T18:00:00+07:00[Asia/Novosibirsk]",
+    "ttlDuration": "PT30M",
+    "gracePeriod": "PT8760H",
+    "callbackUri": "https://enterprise-corp.ru",
+    "binaryPayload": [
+      98,
+      105,
+      110,
+      97,
+      114,
+      121,
+      45,
+      97,
+      117,
+      100,
+      105,
+      116,
+      45,
+      98,
+      108,
+      111,
+      98,
+      45,
+      99,
+      111,
+      110,
+      116,
+      101,
+      110,
+      116,
+      45,
+      102,
+      111,
+      114,
+      45,
+      115,
+      104,
+      97,
+      114,
+      100,
+      45,
+      49
+    ],
+    "allowedBuckets": [
+      1,
+      2,
+      4,
+      8,
+      16,
+      32
+    ],
+    "routingKeys": [
+      "rk.ingest.v2",
+      "rk.shard.1",
+      "rk.settlement.fast"
+    ],
+    "attributes": {
+      "env": "benchmark",
+      "shardIndex": "1",
+      "dc": "nsk-1"
+    },
+    "shardOwner": {
+      "fullName": "Dmitry Sokolov 1",
+      "email": "d.sokolov1@enterprise-corp.ru",
+      "phone": "+79135550101",
+      "loyaltyTier": "ENTERPRISE_VIP",
+      "loyaltyPoints": 250001,
+      "preferences": {
+        "tier": "S1",
+        "region": "SIBERIA"
+      }
+    },
+    "shardDestination": {
+      "countryCode": "RU",
+      "city": "Novosibirsk",
+      "street": "Inzhenernaya",
+      "building": "11",
+      "apartment": "Suite 1",
+      "postalCode": "630090",
+      "latitude": 54.8581,
+      "longitude": 83.1112,
+      "courierComment": "Datacenter loading dock #1"
+    },
+    "shardItems": [
+      {
+        "sku": "SKU-XB-1-100",
+        "productName": "High-Density Compute Blade Node Cluster Unit 1.0",
+        "manufacturer": "Enterprise Silicon Systems Corp",
+        "categoryPath": "Datacenter/Compute/Blades/Gen1",
+        "description": "Multi-socket high-throughput compute node with hardware telemetry, ECC memory scrubbing, and redundant NVMe fabrics.",
+        "quantity": 2,
+        "basePrice": 38722.50,
+        "discountAmount": 1200.00,
+        "taxRate": 0.20,
+        "taxAmount": 7504.50,
+        "lineTotal": 82549.50,
+        "weightKg": 4.85,
+        "attributes": [
+          {
+            "key": "tdp",
+            "value": "350",
+            "unit": "W",
+            "searchable": true
+          },
+          {
+            "key": "interconnect",
+            "value": "400GbE",
+            "unit": "bps",
+            "searchable": true
+          },
+          {
+            "key": "compliance",
+            "value": "SOC2-TYPE2-2026",
+            "unit": "standard",
+            "searchable": false
+          }
+        ],
+        "allocations": [
+          {
+            "warehouseCode": "WH-NSK-01",
+            "region": "SIBERIA",
+            "reservedQty": 4,
+            "estimatedDeliveryHours": 6
+          },
+          {
+            "warehouseCode": "WH-SPB-03",
+            "region": "NORTHWEST",
+            "reservedQty": 2,
+            "estimatedDeliveryHours": 24
+          }
+        ],
+        "tags": [
+          "DATACENTER",
+          "HIGH_DENSITY",
+          "VERIFIED"
+        ]
+      },
+      {
+        "sku": "SKU-XB-1-101",
+        "productName": "High-Density Compute Blade Node Cluster Unit 1.1",
+        "manufacturer": "Enterprise Silicon Systems Corp",
+        "categoryPath": "Datacenter/Compute/Blades/Gen2",
+        "description": "Multi-socket high-throughput compute node with hardware telemetry, ECC memory scrubbing, and redundant NVMe fabrics.",
+        "quantity": 3,
+        "basePrice": 38722.50,
+        "discountAmount": 1200.00,
+        "taxRate": 0.20,
+        "taxAmount": 7504.50,
+        "lineTotal": 82549.50,
+        "weightKg": 4.85,
+        "attributes": [
+          {
+            "key": "tdp",
+            "value": "350",
+            "unit": "W",
+            "searchable": true
+          },
+          {
+            "key": "interconnect",
+            "value": "400GbE",
+            "unit": "bps",
+            "searchable": true
+          },
+          {
+            "key": "compliance",
+            "value": "SOC2-TYPE2-2026",
+            "unit": "standard",
+            "searchable": false
+          }
+        ],
+        "allocations": [
+          {
+            "warehouseCode": "WH-NSK-01",
+            "region": "SIBERIA",
+            "reservedQty": 4,
+            "estimatedDeliveryHours": 6
+          },
+          {
+            "warehouseCode": "WH-SPB-03",
+            "region": "NORTHWEST",
+            "reservedQty": 2,
+            "estimatedDeliveryHours": 24
+          }
+        ],
+        "tags": [
+          "DATACENTER",
+          "HIGH_DENSITY",
+          "VERIFIED"
+        ]
+      },
+      {
+        "sku": "SKU-XB-1-102",
+        "productName": "High-Density Compute Blade Node Cluster Unit 1.2",
+        "manufacturer": "Enterprise Silicon Systems Corp",
+        "categoryPath": "Datacenter/Compute/Blades/Gen3",
+        "description": "Multi-socket high-throughput compute node with hardware telemetry, ECC memory scrubbing, and redundant NVMe fabrics.",
+        "quantity": 4,
+        "basePrice": 38722.50,
+        "discountAmount": 1200.00,
+        "taxRate": 0.20,
+        "taxAmount": 7504.50,
+        "lineTotal": 82549.50,
+        "weightKg": 4.85,
+        "attributes": [
+          {
+            "key": "tdp",
+            "value": "350",
+            "unit": "W",
+            "searchable": true
+          },
+          {
+            "key": "interconnect",
+            "value": "400GbE",
+            "unit": "bps",
+            "searchable": true
+          },
+          {
+            "key": "compliance",
+            "value": "SOC2-TYPE2-2026",
+            "unit": "standard",
+            "searchable": false
+          }
+        ],
+        "allocations": [
+          {
+            "warehouseCode": "WH-NSK-01",
+            "region": "SIBERIA",
+            "reservedQty": 4,
+            "estimatedDeliveryHours": 6
+          },
+          {
+            "warehouseCode": "WH-SPB-03",
+            "region": "NORTHWEST",
+            "reservedQty": 2,
+            "estimatedDeliveryHours": 24
+          }
+        ],
+        "tags": [
+          "DATACENTER",
+          "HIGH_DENSITY",
+          "VERIFIED"
+        ]
+      },
+      {
+        "sku": "SKU-XB-1-103",
+        "productName": "High-Density Compute Blade Node Cluster Unit 1.3",
+        "manufacturer": "Enterprise Silicon Systems Corp",
+        "categoryPath": "Datacenter/Compute/Blades/Gen4",
+        "description": "Multi-socket high-throughput compute node with hardware telemetry, ECC memory scrubbing, and redundant NVMe fabrics.",
+        "quantity": 5,
+        "basePrice": 38722.50,
+        "discountAmount": 1200.00,
+        "taxRate": 0.20,
+        "taxAmount": 7504.50,
+        "lineTotal": 82549.50,
+        "weightKg": 4.85,
+        "attributes": [
+          {
+            "key": "tdp",
+            "value": "350",
+            "unit": "W",
+            "searchable": true
+          },
+          {
+            "key": "interconnect",
+            "value": "400GbE",
+            "unit": "bps",
+            "searchable": true
+          },
+          {
+            "key": "compliance",
+            "value": "SOC2-TYPE2-2026",
+            "unit": "standard",
+            "searchable": false
+          }
+        ],
+        "allocations": [
+          {
+            "warehouseCode": "WH-NSK-01",
+            "region": "SIBERIA",
+            "reservedQty": 4,
+            "estimatedDeliveryHours": 6
+          },
+          {
+            "warehouseCode": "WH-SPB-03",
+            "region": "NORTHWEST",
+            "reservedQty": 2,
+            "estimatedDeliveryHours": 24
+          }
+        ],
+        "tags": [
+          "DATACENTER",
+          "HIGH_DENSITY",
+          "VERIFIED"
+        ]
+      }
+    ],
+    "compliance": {
+      "regulationCode": "REG-2026-XBIG-1",
+      "description": "Automated cross-border telemetry and financial settlement compliance verification payload block.",
+      "packets": [
+        {
+          "packetId": "a1b2c3d4-e5f6-3789-8012-3456789abcde",
+          "sequenceNumber": 100001,
+          "sensorGroupId": 11,
+          "protocolVersion": 2,
+          "priorityFlag": "A",
+          "encrypted": true,
+          "verified": true,
+          "signatureBytes": [
+            115,
+            105,
+            103,
+            45,
+            112,
+            97,
+            121,
+            108,
+            111,
+            97,
+            100,
+            45,
+            115,
+            104,
+            97,
+            114,
+            100,
+            45,
+            49,
+            45,
+            97,
+            108,
+            112,
+            104,
+            97
+          ],
+          "endpointUri": "https://koraframework.io",
+          "processingDuration": "PT0.146S",
+          "retentionPeriod": "PT8760H",
+          "accountingDate": "2026-11-28",
+          "windowStartTime": "12:30:01",
+          "localTimestamp": "2026-11-28T12:30:01",
+          "offsetTimestamp": "2026-11-28T12:30:01+07:00",
+          "zonedTimestamp": "2026-11-28T12:30:01+07:00[Asia/Novosibirsk]",
+          "rawCounter": 123456789012345678901234567891,
+          "calibratedValue": 99.987654,
+          "capabilityFlags": [
+            "AVX512",
+            "ZGC",
+            "IO_URING",
+            "ZERO_COPY"
+          ],
+          "sensorReadings": {
+            "temp_c": 43.5,
+            "voltage_v": 12.04,
+            "fan_rpm": 4800.0
+          },
+          "location": {
+            "lat": 54.8481,
+            "lon": 83.1066,
+            "altitudeMeters": 165.5,
+            "accuracyCm": 15,
+            "capturedAt": "2026-11-28T06:00:00Z",
+            "zoneCode": "RU-NSK-Z1"
+          }
+        },
+        {
+          "packetId": "b2c3d4e5-f6a7-3890-9123-456789abcdef",
+          "sequenceNumber": 200001,
+          "sensorGroupId": 21,
+          "protocolVersion": 2,
+          "priorityFlag": "B",
+          "encrypted": false,
+          "verified": false,
+          "signatureBytes": [
+            115,
+            105,
+            103,
+            45,
+            112,
+            97,
+            121,
+            108,
+            111,
+            97,
+            100,
+            45,
+            115,
+            104,
+            97,
+            114,
+            100,
+            45,
+            49,
+            45,
+            98,
+            101,
+            116,
+            97
+          ],
+          "endpointUri": "https://koraframework.io",
+          "processingDuration": "PT0.089S",
+          "retentionPeriod": "PT12960H",
+          "accountingDate": "2026-11-28",
+          "windowStartTime": "13:15:01",
+          "localTimestamp": "2026-11-28T13:15:01",
+          "offsetTimestamp": "2026-11-28T13:15:01Z",
+          "zonedTimestamp": "2026-11-28T13:15:01Z[UTC]",
+          "rawCounter": 987654321098765432109876543211,
+          "calibratedValue": 100.000125,
+          "capabilityFlags": [
+            "TLS13",
+            "FASTJSON2",
+            "COMPACT_HEADERS"
+          ],
+          "sensorReadings": {
+            "temp_c": 40.1,
+            "voltage_v": 11.98,
+            "fan_rpm": 4200.0
+          },
+          "location": {
+            "lat": 55.0312,
+            "lon": 82.9214,
+            "altitudeMeters": 150.0,
+            "accuracyCm": 10,
+            "capturedAt": "2026-11-28T06:00:00Z",
+            "zoneCode": "RU-NSK-C1"
+          }
+        }
+      ],
+      "ruleMatrix": {
+        "allowedRegions": [
+          "RU",
+          "KZ",
+          "BY",
+          "AM"
+        ],
+        "requiredChecks": [
+          "AML",
+          "KYC",
+          "SANCTIONS",
+          "HASH_INTEGRITY"
+        ],
+        "fallbackRoutes": [
+          "route-primary",
+          "route-secondary"
+        ]
+      }
+    }
+  },
+  "shard08": {
+    "shardId": "SHARD-01",
+    "traceUuid": "8f14e45f-ceea-367a-9a36-dedd4bea2543",
+    "revisionLong": 7000000001,
+    "optionalRevision": 7000000001,
+    "partitionInt": 101,
+    "optionalPartition": 101,
+    "regionShort": 1,
+    "optionalRegion": 1,
+    "flagsByte": 1,
+    "optionalFlags": 1,
+    "ratioDouble": 0.99951,
+    "optionalRatio": 0.99951,
+    "scoreFloat": 99.5,
+    "optionalScore": 99.5,
+    "activeBool": true,
+    "optionalActive": true,
+    "gradeChar": "S",
+    "optionalGrade": "S",
+    "shardAmount": 154890.00,
+    "shardTotalHashes": 98765432109876543210987654321,
+    "createdAt": "2026-11-28T06:00:00Z",
+    "businessDate": "2026-11-28",
+    "cutoffTime": "18:00:00",
+    "systemDateTime": "2026-11-28T18:00:00",
+    "partnerOffsetTime": "2026-11-28T18:00:00+07:00",
+    "auditZonedTime": "2026-11-28T18:00:00+07:00[Asia/Novosibirsk]",
+    "ttlDuration": "PT30M",
+    "gracePeriod": "PT8760H",
+    "callbackUri": "https://enterprise-corp.ru",
+    "binaryPayload": [
+      98,
+      105,
+      110,
+      97,
+      114,
+      121,
+      45,
+      97,
+      117,
+      100,
+      105,
+      116,
+      45,
+      98,
+      108,
+      111,
+      98,
+      45,
+      99,
+      111,
+      110,
+      116,
+      101,
+      110,
+      116,
+      45,
+      102,
+      111,
+      114,
+      45,
+      115,
+      104,
+      97,
+      114,
+      100,
+      45,
+      49
+    ],
+    "allowedBuckets": [
+      1,
+      2,
+      4,
+      8,
+      16,
+      32
+    ],
+    "routingKeys": [
+      "rk.ingest.v2",
+      "rk.shard.1",
+      "rk.settlement.fast"
+    ],
+    "attributes": {
+      "env": "benchmark",
+      "shardIndex": "1",
+      "dc": "nsk-1"
+    },
+    "shardOwner": {
+      "fullName": "Dmitry Sokolov 1",
+      "email": "d.sokolov1@enterprise-corp.ru",
+      "phone": "+79135550101",
+      "loyaltyTier": "ENTERPRISE_VIP",
+      "loyaltyPoints": 250001,
+      "preferences": {
+        "tier": "S1",
+        "region": "SIBERIA"
+      }
+    },
+    "shardDestination": {
+      "countryCode": "RU",
+      "city": "Novosibirsk",
+      "street": "Inzhenernaya",
+      "building": "11",
+      "apartment": "Suite 1",
+      "postalCode": "630090",
+      "latitude": 54.8581,
+      "longitude": 83.1112,
+      "courierComment": "Datacenter loading dock #1"
+    },
+    "shardItems": [
+      {
+        "sku": "SKU-XB-1-100",
+        "productName": "High-Density Compute Blade Node Cluster Unit 1.0",
+        "manufacturer": "Enterprise Silicon Systems Corp",
+        "categoryPath": "Datacenter/Compute/Blades/Gen1",
+        "description": "Multi-socket high-throughput compute node with hardware telemetry, ECC memory scrubbing, and redundant NVMe fabrics.",
+        "quantity": 2,
+        "basePrice": 38722.50,
+        "discountAmount": 1200.00,
+        "taxRate": 0.20,
+        "taxAmount": 7504.50,
+        "lineTotal": 82549.50,
+        "weightKg": 4.85,
+        "attributes": [
+          {
+            "key": "tdp",
+            "value": "350",
+            "unit": "W",
+            "searchable": true
+          },
+          {
+            "key": "interconnect",
+            "value": "400GbE",
+            "unit": "bps",
+            "searchable": true
+          },
+          {
+            "key": "compliance",
+            "value": "SOC2-TYPE2-2026",
+            "unit": "standard",
+            "searchable": false
+          }
+        ],
+        "allocations": [
+          {
+            "warehouseCode": "WH-NSK-01",
+            "region": "SIBERIA",
+            "reservedQty": 4,
+            "estimatedDeliveryHours": 6
+          },
+          {
+            "warehouseCode": "WH-SPB-03",
+            "region": "NORTHWEST",
+            "reservedQty": 2,
+            "estimatedDeliveryHours": 24
+          }
+        ],
+        "tags": [
+          "DATACENTER",
+          "HIGH_DENSITY",
+          "VERIFIED"
+        ]
+      },
+      {
+        "sku": "SKU-XB-1-101",
+        "productName": "High-Density Compute Blade Node Cluster Unit 1.1",
+        "manufacturer": "Enterprise Silicon Systems Corp",
+        "categoryPath": "Datacenter/Compute/Blades/Gen2",
+        "description": "Multi-socket high-throughput compute node with hardware telemetry, ECC memory scrubbing, and redundant NVMe fabrics.",
+        "quantity": 3,
+        "basePrice": 38722.50,
+        "discountAmount": 1200.00,
+        "taxRate": 0.20,
+        "taxAmount": 7504.50,
+        "lineTotal": 82549.50,
+        "weightKg": 4.85,
+        "attributes": [
+          {
+            "key": "tdp",
+            "value": "350",
+            "unit": "W",
+            "searchable": true
+          },
+          {
+            "key": "interconnect",
+            "value": "400GbE",
+            "unit": "bps",
+            "searchable": true
+          },
+          {
+            "key": "compliance",
+            "value": "SOC2-TYPE2-2026",
+            "unit": "standard",
+            "searchable": false
+          }
+        ],
+        "allocations": [
+          {
+            "warehouseCode": "WH-NSK-01",
+            "region": "SIBERIA",
+            "reservedQty": 4,
+            "estimatedDeliveryHours": 6
+          },
+          {
+            "warehouseCode": "WH-SPB-03",
+            "region": "NORTHWEST",
+            "reservedQty": 2,
+            "estimatedDeliveryHours": 24
+          }
+        ],
+        "tags": [
+          "DATACENTER",
+          "HIGH_DENSITY",
+          "VERIFIED"
+        ]
+      },
+      {
+        "sku": "SKU-XB-1-102",
+        "productName": "High-Density Compute Blade Node Cluster Unit 1.2",
+        "manufacturer": "Enterprise Silicon Systems Corp",
+        "categoryPath": "Datacenter/Compute/Blades/Gen3",
+        "description": "Multi-socket high-throughput compute node with hardware telemetry, ECC memory scrubbing, and redundant NVMe fabrics.",
+        "quantity": 4,
+        "basePrice": 38722.50,
+        "discountAmount": 1200.00,
+        "taxRate": 0.20,
+        "taxAmount": 7504.50,
+        "lineTotal": 82549.50,
+        "weightKg": 4.85,
+        "attributes": [
+          {
+            "key": "tdp",
+            "value": "350",
+            "unit": "W",
+            "searchable": true
+          },
+          {
+            "key": "interconnect",
+            "value": "400GbE",
+            "unit": "bps",
+            "searchable": true
+          },
+          {
+            "key": "compliance",
+            "value": "SOC2-TYPE2-2026",
+            "unit": "standard",
+            "searchable": false
+          }
+        ],
+        "allocations": [
+          {
+            "warehouseCode": "WH-NSK-01",
+            "region": "SIBERIA",
+            "reservedQty": 4,
+            "estimatedDeliveryHours": 6
+          },
+          {
+            "warehouseCode": "WH-SPB-03",
+            "region": "NORTHWEST",
+            "reservedQty": 2,
+            "estimatedDeliveryHours": 24
+          }
+        ],
+        "tags": [
+          "DATACENTER",
+          "HIGH_DENSITY",
+          "VERIFIED"
+        ]
+      },
+      {
+        "sku": "SKU-XB-1-103",
+        "productName": "High-Density Compute Blade Node Cluster Unit 1.3",
+        "manufacturer": "Enterprise Silicon Systems Corp",
+        "categoryPath": "Datacenter/Compute/Blades/Gen4",
+        "description": "Multi-socket high-throughput compute node with hardware telemetry, ECC memory scrubbing, and redundant NVMe fabrics.",
+        "quantity": 5,
+        "basePrice": 38722.50,
+        "discountAmount": 1200.00,
+        "taxRate": 0.20,
+        "taxAmount": 7504.50,
+        "lineTotal": 82549.50,
+        "weightKg": 4.85,
+        "attributes": [
+          {
+            "key": "tdp",
+            "value": "350",
+            "unit": "W",
+            "searchable": true
+          },
+          {
+            "key": "interconnect",
+            "value": "400GbE",
+            "unit": "bps",
+            "searchable": true
+          },
+          {
+            "key": "compliance",
+            "value": "SOC2-TYPE2-2026",
+            "unit": "standard",
+            "searchable": false
+          }
+        ],
+        "allocations": [
+          {
+            "warehouseCode": "WH-NSK-01",
+            "region": "SIBERIA",
+            "reservedQty": 4,
+            "estimatedDeliveryHours": 6
+          },
+          {
+            "warehouseCode": "WH-SPB-03",
+            "region": "NORTHWEST",
+            "reservedQty": 2,
+            "estimatedDeliveryHours": 24
+          }
+        ],
+        "tags": [
+          "DATACENTER",
+          "HIGH_DENSITY",
+          "VERIFIED"
+        ]
+      }
+    ],
+    "compliance": {
+      "regulationCode": "REG-2026-XBIG-1",
+      "description": "Automated cross-border telemetry and financial settlement compliance verification payload block.",
+      "packets": [
+        {
+          "packetId": "a1b2c3d4-e5f6-3789-8012-3456789abcde",
+          "sequenceNumber": 100001,
+          "sensorGroupId": 11,
+          "protocolVersion": 2,
+          "priorityFlag": "A",
+          "encrypted": true,
+          "verified": true,
+          "signatureBytes": [
+            115,
+            105,
+            103,
+            45,
+            112,
+            97,
+            121,
+            108,
+            111,
+            97,
+            100,
+            45,
+            115,
+            104,
+            97,
+            114,
+            100,
+            45,
+            49,
+            45,
+            97,
+            108,
+            112,
+            104,
+            97
+          ],
+          "endpointUri": "https://koraframework.io",
+          "processingDuration": "PT0.146S",
+          "retentionPeriod": "PT8760H",
+          "accountingDate": "2026-11-28",
+          "windowStartTime": "12:30:01",
+          "localTimestamp": "2026-11-28T12:30:01",
+          "offsetTimestamp": "2026-11-28T12:30:01+07:00",
+          "zonedTimestamp": "2026-11-28T12:30:01+07:00[Asia/Novosibirsk]",
+          "rawCounter": 123456789012345678901234567891,
+          "calibratedValue": 99.987654,
+          "capabilityFlags": [
+            "AVX512",
+            "ZGC",
+            "IO_URING",
+            "ZERO_COPY"
+          ],
+          "sensorReadings": {
+            "temp_c": 43.5,
+            "voltage_v": 12.04,
+            "fan_rpm": 4800.0
+          },
+          "location": {
+            "lat": 54.8481,
+            "lon": 83.1066,
+            "altitudeMeters": 165.5,
+            "accuracyCm": 15,
+            "capturedAt": "2026-11-28T06:00:00Z",
+            "zoneCode": "RU-NSK-Z1"
+          }
+        },
+        {
+          "packetId": "b2c3d4e5-f6a7-3890-9123-456789abcdef",
+          "sequenceNumber": 200001,
+          "sensorGroupId": 21,
+          "protocolVersion": 2,
+          "priorityFlag": "B",
+          "encrypted": false,
+          "verified": false,
+          "signatureBytes": [
+            115,
+            105,
+            103,
+            45,
+            112,
+            97,
+            121,
+            108,
+            111,
+            97,
+            100,
+            45,
+            115,
+            104,
+            97,
+            114,
+            100,
+            45,
+            49,
+            45,
+            98,
+            101,
+            116,
+            97
+          ],
+          "endpointUri": "https://koraframework.io",
+          "processingDuration": "PT0.089S",
+          "retentionPeriod": "PT12960H",
+          "accountingDate": "2026-11-28",
+          "windowStartTime": "13:15:01",
+          "localTimestamp": "2026-11-28T13:15:01",
+          "offsetTimestamp": "2026-11-28T13:15:01Z",
+          "zonedTimestamp": "2026-11-28T13:15:01Z[UTC]",
+          "rawCounter": 987654321098765432109876543211,
+          "calibratedValue": 100.000125,
+          "capabilityFlags": [
+            "TLS13",
+            "FASTJSON2",
+            "COMPACT_HEADERS"
+          ],
+          "sensorReadings": {
+            "temp_c": 40.1,
+            "voltage_v": 11.98,
+            "fan_rpm": 4200.0
+          },
+          "location": {
+            "lat": 55.0312,
+            "lon": 82.9214,
+            "altitudeMeters": 150.0,
+            "accuracyCm": 10,
+            "capturedAt": "2026-11-28T06:00:00Z",
+            "zoneCode": "RU-NSK-C1"
+          }
+        }
+      ],
+      "ruleMatrix": {
+        "allowedRegions": [
+          "RU",
+          "KZ",
+          "BY",
+          "AM"
+        ],
+        "requiredChecks": [
+          "AML",
+          "KYC",
+          "SANCTIONS",
+          "HASH_INTEGRITY"
+        ],
+        "fallbackRoutes": [
+          "route-primary",
+          "route-secondary"
+        ]
+      }
+    }
+  },
+  "shard09": {
+    "shardId": "SHARD-01",
+    "traceUuid": "8f14e45f-ceea-367a-9a36-dedd4bea2543",
+    "revisionLong": 7000000001,
+    "optionalRevision": 7000000001,
+    "partitionInt": 101,
+    "optionalPartition": 101,
+    "regionShort": 1,
+    "optionalRegion": 1,
+    "flagsByte": 1,
+    "optionalFlags": 1,
+    "ratioDouble": 0.99951,
+    "optionalRatio": 0.99951,
+    "scoreFloat": 99.5,
+    "optionalScore": 99.5,
+    "activeBool": true,
+    "optionalActive": true,
+    "gradeChar": "S",
+    "optionalGrade": "S",
+    "shardAmount": 154890.00,
+    "shardTotalHashes": 98765432109876543210987654321,
+    "createdAt": "2026-11-28T06:00:00Z",
+    "businessDate": "2026-11-28",
+    "cutoffTime": "18:00:00",
+    "systemDateTime": "2026-11-28T18:00:00",
+    "partnerOffsetTime": "2026-11-28T18:00:00+07:00",
+    "auditZonedTime": "2026-11-28T18:00:00+07:00[Asia/Novosibirsk]",
+    "ttlDuration": "PT30M",
+    "gracePeriod": "PT8760H",
+    "callbackUri": "https://enterprise-corp.ru",
+    "binaryPayload": [
+      98,
+      105,
+      110,
+      97,
+      114,
+      121,
+      45,
+      97,
+      117,
+      100,
+      105,
+      116,
+      45,
+      98,
+      108,
+      111,
+      98,
+      45,
+      99,
+      111,
+      110,
+      116,
+      101,
+      110,
+      116,
+      45,
+      102,
+      111,
+      114,
+      45,
+      115,
+      104,
+      97,
+      114,
+      100,
+      45,
+      49
+    ],
+    "allowedBuckets": [
+      1,
+      2,
+      4,
+      8,
+      16,
+      32
+    ],
+    "routingKeys": [
+      "rk.ingest.v2",
+      "rk.shard.1",
+      "rk.settlement.fast"
+    ],
+    "attributes": {
+      "env": "benchmark",
+      "shardIndex": "1",
+      "dc": "nsk-1"
+    },
+    "shardOwner": {
+      "fullName": "Dmitry Sokolov 1",
+      "email": "d.sokolov1@enterprise-corp.ru",
+      "phone": "+79135550101",
+      "loyaltyTier": "ENTERPRISE_VIP",
+      "loyaltyPoints": 250001,
+      "preferences": {
+        "tier": "S1",
+        "region": "SIBERIA"
+      }
+    },
+    "shardDestination": {
+      "countryCode": "RU",
+      "city": "Novosibirsk",
+      "street": "Inzhenernaya",
+      "building": "11",
+      "apartment": "Suite 1",
+      "postalCode": "630090",
+      "latitude": 54.8581,
+      "longitude": 83.1112,
+      "courierComment": "Datacenter loading dock #1"
+    },
+    "shardItems": [
+      {
+        "sku": "SKU-XB-1-100",
+        "productName": "High-Density Compute Blade Node Cluster Unit 1.0",
+        "manufacturer": "Enterprise Silicon Systems Corp",
+        "categoryPath": "Datacenter/Compute/Blades/Gen1",
+        "description": "Multi-socket high-throughput compute node with hardware telemetry, ECC memory scrubbing, and redundant NVMe fabrics.",
+        "quantity": 2,
+        "basePrice": 38722.50,
+        "discountAmount": 1200.00,
+        "taxRate": 0.20,
+        "taxAmount": 7504.50,
+        "lineTotal": 82549.50,
+        "weightKg": 4.85,
+        "attributes": [
+          {
+            "key": "tdp",
+            "value": "350",
+            "unit": "W",
+            "searchable": true
+          },
+          {
+            "key": "interconnect",
+            "value": "400GbE",
+            "unit": "bps",
+            "searchable": true
+          },
+          {
+            "key": "compliance",
+            "value": "SOC2-TYPE2-2026",
+            "unit": "standard",
+            "searchable": false
+          }
+        ],
+        "allocations": [
+          {
+            "warehouseCode": "WH-NSK-01",
+            "region": "SIBERIA",
+            "reservedQty": 4,
+            "estimatedDeliveryHours": 6
+          },
+          {
+            "warehouseCode": "WH-SPB-03",
+            "region": "NORTHWEST",
+            "reservedQty": 2,
+            "estimatedDeliveryHours": 24
+          }
+        ],
+        "tags": [
+          "DATACENTER",
+          "HIGH_DENSITY",
+          "VERIFIED"
+        ]
+      },
+      {
+        "sku": "SKU-XB-1-101",
+        "productName": "High-Density Compute Blade Node Cluster Unit 1.1",
+        "manufacturer": "Enterprise Silicon Systems Corp",
+        "categoryPath": "Datacenter/Compute/Blades/Gen2",
+        "description": "Multi-socket high-throughput compute node with hardware telemetry, ECC memory scrubbing, and redundant NVMe fabrics.",
+        "quantity": 3,
+        "basePrice": 38722.50,
+        "discountAmount": 1200.00,
+        "taxRate": 0.20,
+        "taxAmount": 7504.50,
+        "lineTotal": 82549.50,
+        "weightKg": 4.85,
+        "attributes": [
+          {
+            "key": "tdp",
+            "value": "350",
+            "unit": "W",
+            "searchable": true
+          },
+          {
+            "key": "interconnect",
+            "value": "400GbE",
+            "unit": "bps",
+            "searchable": true
+          },
+          {
+            "key": "compliance",
+            "value": "SOC2-TYPE2-2026",
+            "unit": "standard",
+            "searchable": false
+          }
+        ],
+        "allocations": [
+          {
+            "warehouseCode": "WH-NSK-01",
+            "region": "SIBERIA",
+            "reservedQty": 4,
+            "estimatedDeliveryHours": 6
+          },
+          {
+            "warehouseCode": "WH-SPB-03",
+            "region": "NORTHWEST",
+            "reservedQty": 2,
+            "estimatedDeliveryHours": 24
+          }
+        ],
+        "tags": [
+          "DATACENTER",
+          "HIGH_DENSITY",
+          "VERIFIED"
+        ]
+      },
+      {
+        "sku": "SKU-XB-1-102",
+        "productName": "High-Density Compute Blade Node Cluster Unit 1.2",
+        "manufacturer": "Enterprise Silicon Systems Corp",
+        "categoryPath": "Datacenter/Compute/Blades/Gen3",
+        "description": "Multi-socket high-throughput compute node with hardware telemetry, ECC memory scrubbing, and redundant NVMe fabrics.",
+        "quantity": 4,
+        "basePrice": 38722.50,
+        "discountAmount": 1200.00,
+        "taxRate": 0.20,
+        "taxAmount": 7504.50,
+        "lineTotal": 82549.50,
+        "weightKg": 4.85,
+        "attributes": [
+          {
+            "key": "tdp",
+            "value": "350",
+            "unit": "W",
+            "searchable": true
+          },
+          {
+            "key": "interconnect",
+            "value": "400GbE",
+            "unit": "bps",
+            "searchable": true
+          },
+          {
+            "key": "compliance",
+            "value": "SOC2-TYPE2-2026",
+            "unit": "standard",
+            "searchable": false
+          }
+        ],
+        "allocations": [
+          {
+            "warehouseCode": "WH-NSK-01",
+            "region": "SIBERIA",
+            "reservedQty": 4,
+            "estimatedDeliveryHours": 6
+          },
+          {
+            "warehouseCode": "WH-SPB-03",
+            "region": "NORTHWEST",
+            "reservedQty": 2,
+            "estimatedDeliveryHours": 24
+          }
+        ],
+        "tags": [
+          "DATACENTER",
+          "HIGH_DENSITY",
+          "VERIFIED"
+        ]
+      },
+      {
+        "sku": "SKU-XB-1-103",
+        "productName": "High-Density Compute Blade Node Cluster Unit 1.3",
+        "manufacturer": "Enterprise Silicon Systems Corp",
+        "categoryPath": "Datacenter/Compute/Blades/Gen4",
+        "description": "Multi-socket high-throughput compute node with hardware telemetry, ECC memory scrubbing, and redundant NVMe fabrics.",
+        "quantity": 5,
+        "basePrice": 38722.50,
+        "discountAmount": 1200.00,
+        "taxRate": 0.20,
+        "taxAmount": 7504.50,
+        "lineTotal": 82549.50,
+        "weightKg": 4.85,
+        "attributes": [
+          {
+            "key": "tdp",
+            "value": "350",
+            "unit": "W",
+            "searchable": true
+          },
+          {
+            "key": "interconnect",
+            "value": "400GbE",
+            "unit": "bps",
+            "searchable": true
+          },
+          {
+            "key": "compliance",
+            "value": "SOC2-TYPE2-2026",
+            "unit": "standard",
+            "searchable": false
+          }
+        ],
+        "allocations": [
+          {
+            "warehouseCode": "WH-NSK-01",
+            "region": "SIBERIA",
+            "reservedQty": 4,
+            "estimatedDeliveryHours": 6
+          },
+          {
+            "warehouseCode": "WH-SPB-03",
+            "region": "NORTHWEST",
+            "reservedQty": 2,
+            "estimatedDeliveryHours": 24
+          }
+        ],
+        "tags": [
+          "DATACENTER",
+          "HIGH_DENSITY",
+          "VERIFIED"
+        ]
+      }
+    ],
+    "compliance": {
+      "regulationCode": "REG-2026-XBIG-1",
+      "description": "Automated cross-border telemetry and financial settlement compliance verification payload block.",
+      "packets": [
+        {
+          "packetId": "a1b2c3d4-e5f6-3789-8012-3456789abcde",
+          "sequenceNumber": 100001,
+          "sensorGroupId": 11,
+          "protocolVersion": 2,
+          "priorityFlag": "A",
+          "encrypted": true,
+          "verified": true,
+          "signatureBytes": [
+            115,
+            105,
+            103,
+            45,
+            112,
+            97,
+            121,
+            108,
+            111,
+            97,
+            100,
+            45,
+            115,
+            104,
+            97,
+            114,
+            100,
+            45,
+            49,
+            45,
+            97,
+            108,
+            112,
+            104,
+            97
+          ],
+          "endpointUri": "https://koraframework.io",
+          "processingDuration": "PT0.146S",
+          "retentionPeriod": "PT8760H",
+          "accountingDate": "2026-11-28",
+          "windowStartTime": "12:30:01",
+          "localTimestamp": "2026-11-28T12:30:01",
+          "offsetTimestamp": "2026-11-28T12:30:01+07:00",
+          "zonedTimestamp": "2026-11-28T12:30:01+07:00[Asia/Novosibirsk]",
+          "rawCounter": 123456789012345678901234567891,
+          "calibratedValue": 99.987654,
+          "capabilityFlags": [
+            "AVX512",
+            "ZGC",
+            "IO_URING",
+            "ZERO_COPY"
+          ],
+          "sensorReadings": {
+            "temp_c": 43.5,
+            "voltage_v": 12.04,
+            "fan_rpm": 4800.0
+          },
+          "location": {
+            "lat": 54.8481,
+            "lon": 83.1066,
+            "altitudeMeters": 165.5,
+            "accuracyCm": 15,
+            "capturedAt": "2026-11-28T06:00:00Z",
+            "zoneCode": "RU-NSK-Z1"
+          }
+        },
+        {
+          "packetId": "b2c3d4e5-f6a7-3890-9123-456789abcdef",
+          "sequenceNumber": 200001,
+          "sensorGroupId": 21,
+          "protocolVersion": 2,
+          "priorityFlag": "B",
+          "encrypted": false,
+          "verified": false,
+          "signatureBytes": [
+            115,
+            105,
+            103,
+            45,
+            112,
+            97,
+            121,
+            108,
+            111,
+            97,
+            100,
+            45,
+            115,
+            104,
+            97,
+            114,
+            100,
+            45,
+            49,
+            45,
+            98,
+            101,
+            116,
+            97
+          ],
+          "endpointUri": "https://koraframework.io",
+          "processingDuration": "PT0.089S",
+          "retentionPeriod": "PT12960H",
+          "accountingDate": "2026-11-28",
+          "windowStartTime": "13:15:01",
+          "localTimestamp": "2026-11-28T13:15:01",
+          "offsetTimestamp": "2026-11-28T13:15:01Z",
+          "zonedTimestamp": "2026-11-28T13:15:01Z[UTC]",
+          "rawCounter": 987654321098765432109876543211,
+          "calibratedValue": 100.000125,
+          "capabilityFlags": [
+            "TLS13",
+            "FASTJSON2",
+            "COMPACT_HEADERS"
+          ],
+          "sensorReadings": {
+            "temp_c": 40.1,
+            "voltage_v": 11.98,
+            "fan_rpm": 4200.0
+          },
+          "location": {
+            "lat": 55.0312,
+            "lon": 82.9214,
+            "altitudeMeters": 150.0,
+            "accuracyCm": 10,
+            "capturedAt": "2026-11-28T06:00:00Z",
+            "zoneCode": "RU-NSK-C1"
+          }
+        }
+      ],
+      "ruleMatrix": {
+        "allowedRegions": [
+          "RU",
+          "KZ",
+          "BY",
+          "AM"
+        ],
+        "requiredChecks": [
+          "AML",
+          "KYC",
+          "SANCTIONS",
+          "HASH_INTEGRITY"
+        ],
+        "fallbackRoutes": [
+          "route-primary",
+          "route-secondary"
+        ]
+      }
+    }
+  },
+  "shard10": {
+    "shardId": "SHARD-01",
+    "traceUuid": "8f14e45f-ceea-367a-9a36-dedd4bea2543",
+    "revisionLong": 7000000001,
+    "optionalRevision": 7000000001,
+    "partitionInt": 101,
+    "optionalPartition": 101,
+    "regionShort": 1,
+    "optionalRegion": 1,
+    "flagsByte": 1,
+    "optionalFlags": 1,
+    "ratioDouble": 0.99951,
+    "optionalRatio": 0.99951,
+    "scoreFloat": 99.5,
+    "optionalScore": 99.5,
+    "activeBool": true,
+    "optionalActive": true,
+    "gradeChar": "S",
+    "optionalGrade": "S",
+    "shardAmount": 154890.00,
+    "shardTotalHashes": 98765432109876543210987654321,
+    "createdAt": "2026-11-28T06:00:00Z",
+    "businessDate": "2026-11-28",
+    "cutoffTime": "18:00:00",
+    "systemDateTime": "2026-11-28T18:00:00",
+    "partnerOffsetTime": "2026-11-28T18:00:00+07:00",
+    "auditZonedTime": "2026-11-28T18:00:00+07:00[Asia/Novosibirsk]",
+    "ttlDuration": "PT30M",
+    "gracePeriod": "PT8760H",
+    "callbackUri": "https://enterprise-corp.ru",
+    "binaryPayload": [
+      98,
+      105,
+      110,
+      97,
+      114,
+      121,
+      45,
+      97,
+      117,
+      100,
+      105,
+      116,
+      45,
+      98,
+      108,
+      111,
+      98,
+      45,
+      99,
+      111,
+      110,
+      116,
+      101,
+      110,
+      116,
+      45,
+      102,
+      111,
+      114,
+      45,
+      115,
+      104,
+      97,
+      114,
+      100,
+      45,
+      49
+    ],
+    "allowedBuckets": [
+      1,
+      2,
+      4,
+      8,
+      16,
+      32
+    ],
+    "routingKeys": [
+      "rk.ingest.v2",
+      "rk.shard.1",
+      "rk.settlement.fast"
+    ],
+    "attributes": {
+      "env": "benchmark",
+      "shardIndex": "1",
+      "dc": "nsk-1"
+    },
+    "shardOwner": {
+      "fullName": "Dmitry Sokolov 1",
+      "email": "d.sokolov1@enterprise-corp.ru",
+      "phone": "+79135550101",
+      "loyaltyTier": "ENTERPRISE_VIP",
+      "loyaltyPoints": 250001,
+      "preferences": {
+        "tier": "S1",
+        "region": "SIBERIA"
+      }
+    },
+    "shardDestination": {
+      "countryCode": "RU",
+      "city": "Novosibirsk",
+      "street": "Inzhenernaya",
+      "building": "11",
+      "apartment": "Suite 1",
+      "postalCode": "630090",
+      "latitude": 54.8581,
+      "longitude": 83.1112,
+      "courierComment": "Datacenter loading dock #1"
+    },
+    "shardItems": [
+      {
+        "sku": "SKU-XB-1-100",
+        "productName": "High-Density Compute Blade Node Cluster Unit 1.0",
+        "manufacturer": "Enterprise Silicon Systems Corp",
+        "categoryPath": "Datacenter/Compute/Blades/Gen1",
+        "description": "Multi-socket high-throughput compute node with hardware telemetry, ECC memory scrubbing, and redundant NVMe fabrics.",
+        "quantity": 2,
+        "basePrice": 38722.50,
+        "discountAmount": 1200.00,
+        "taxRate": 0.20,
+        "taxAmount": 7504.50,
+        "lineTotal": 82549.50,
+        "weightKg": 4.85,
+        "attributes": [
+          {
+            "key": "tdp",
+            "value": "350",
+            "unit": "W",
+            "searchable": true
+          },
+          {
+            "key": "interconnect",
+            "value": "400GbE",
+            "unit": "bps",
+            "searchable": true
+          },
+          {
+            "key": "compliance",
+            "value": "SOC2-TYPE2-2026",
+            "unit": "standard",
+            "searchable": false
+          }
+        ],
+        "allocations": [
+          {
+            "warehouseCode": "WH-NSK-01",
+            "region": "SIBERIA",
+            "reservedQty": 4,
+            "estimatedDeliveryHours": 6
+          },
+          {
+            "warehouseCode": "WH-SPB-03",
+            "region": "NORTHWEST",
+            "reservedQty": 2,
+            "estimatedDeliveryHours": 24
+          }
+        ],
+        "tags": [
+          "DATACENTER",
+          "HIGH_DENSITY",
+          "VERIFIED"
+        ]
+      },
+      {
+        "sku": "SKU-XB-1-101",
+        "productName": "High-Density Compute Blade Node Cluster Unit 1.1",
+        "manufacturer": "Enterprise Silicon Systems Corp",
+        "categoryPath": "Datacenter/Compute/Blades/Gen2",
+        "description": "Multi-socket high-throughput compute node with hardware telemetry, ECC memory scrubbing, and redundant NVMe fabrics.",
+        "quantity": 3,
+        "basePrice": 38722.50,
+        "discountAmount": 1200.00,
+        "taxRate": 0.20,
+        "taxAmount": 7504.50,
+        "lineTotal": 82549.50,
+        "weightKg": 4.85,
+        "attributes": [
+          {
+            "key": "tdp",
+            "value": "350",
+            "unit": "W",
+            "searchable": true
+          },
+          {
+            "key": "interconnect",
+            "value": "400GbE",
+            "unit": "bps",
+            "searchable": true
+          },
+          {
+            "key": "compliance",
+            "value": "SOC2-TYPE2-2026",
+            "unit": "standard",
+            "searchable": false
+          }
+        ],
+        "allocations": [
+          {
+            "warehouseCode": "WH-NSK-01",
+            "region": "SIBERIA",
+            "reservedQty": 4,
+            "estimatedDeliveryHours": 6
+          },
+          {
+            "warehouseCode": "WH-SPB-03",
+            "region": "NORTHWEST",
+            "reservedQty": 2,
+            "estimatedDeliveryHours": 24
+          }
+        ],
+        "tags": [
+          "DATACENTER",
+          "HIGH_DENSITY",
+          "VERIFIED"
+        ]
+      },
+      {
+        "sku": "SKU-XB-1-102",
+        "productName": "High-Density Compute Blade Node Cluster Unit 1.2",
+        "manufacturer": "Enterprise Silicon Systems Corp",
+        "categoryPath": "Datacenter/Compute/Blades/Gen3",
+        "description": "Multi-socket high-throughput compute node with hardware telemetry, ECC memory scrubbing, and redundant NVMe fabrics.",
+        "quantity": 4,
+        "basePrice": 38722.50,
+        "discountAmount": 1200.00,
+        "taxRate": 0.20,
+        "taxAmount": 7504.50,
+        "lineTotal": 82549.50,
+        "weightKg": 4.85,
+        "attributes": [
+          {
+            "key": "tdp",
+            "value": "350",
+            "unit": "W",
+            "searchable": true
+          },
+          {
+            "key": "interconnect",
+            "value": "400GbE",
+            "unit": "bps",
+            "searchable": true
+          },
+          {
+            "key": "compliance",
+            "value": "SOC2-TYPE2-2026",
+            "unit": "standard",
+            "searchable": false
+          }
+        ],
+        "allocations": [
+          {
+            "warehouseCode": "WH-NSK-01",
+            "region": "SIBERIA",
+            "reservedQty": 4,
+            "estimatedDeliveryHours": 6
+          },
+          {
+            "warehouseCode": "WH-SPB-03",
+            "region": "NORTHWEST",
+            "reservedQty": 2,
+            "estimatedDeliveryHours": 24
+          }
+        ],
+        "tags": [
+          "DATACENTER",
+          "HIGH_DENSITY",
+          "VERIFIED"
+        ]
+      },
+      {
+        "sku": "SKU-XB-1-103",
+        "productName": "High-Density Compute Blade Node Cluster Unit 1.3",
+        "manufacturer": "Enterprise Silicon Systems Corp",
+        "categoryPath": "Datacenter/Compute/Blades/Gen4",
+        "description": "Multi-socket high-throughput compute node with hardware telemetry, ECC memory scrubbing, and redundant NVMe fabrics.",
+        "quantity": 5,
+        "basePrice": 38722.50,
+        "discountAmount": 1200.00,
+        "taxRate": 0.20,
+        "taxAmount": 7504.50,
+        "lineTotal": 82549.50,
+        "weightKg": 4.85,
+        "attributes": [
+          {
+            "key": "tdp",
+            "value": "350",
+            "unit": "W",
+            "searchable": true
+          },
+          {
+            "key": "interconnect",
+            "value": "400GbE",
+            "unit": "bps",
+            "searchable": true
+          },
+          {
+            "key": "compliance",
+            "value": "SOC2-TYPE2-2026",
+            "unit": "standard",
+            "searchable": false
+          }
+        ],
+        "allocations": [
+          {
+            "warehouseCode": "WH-NSK-01",
+            "region": "SIBERIA",
+            "reservedQty": 4,
+            "estimatedDeliveryHours": 6
+          },
+          {
+            "warehouseCode": "WH-SPB-03",
+            "region": "NORTHWEST",
+            "reservedQty": 2,
+            "estimatedDeliveryHours": 24
+          }
+        ],
+        "tags": [
+          "DATACENTER",
+          "HIGH_DENSITY",
+          "VERIFIED"
+        ]
+      }
+    ],
+    "compliance": {
+      "regulationCode": "REG-2026-XBIG-1",
+      "description": "Automated cross-border telemetry and financial settlement compliance verification payload block.",
+      "packets": [
+        {
+          "packetId": "a1b2c3d4-e5f6-3789-8012-3456789abcde",
+          "sequenceNumber": 100001,
+          "sensorGroupId": 11,
+          "protocolVersion": 2,
+          "priorityFlag": "A",
+          "encrypted": true,
+          "verified": true,
+          "signatureBytes": [
+            115,
+            105,
+            103,
+            45,
+            112,
+            97,
+            121,
+            108,
+            111,
+            97,
+            100,
+            45,
+            115,
+            104,
+            97,
+            114,
+            100,
+            45,
+            49,
+            45,
+            97,
+            108,
+            112,
+            104,
+            97
+          ],
+          "endpointUri": "https://koraframework.io",
+          "processingDuration": "PT0.146S",
+          "retentionPeriod": "PT8760H",
+          "accountingDate": "2026-11-28",
+          "windowStartTime": "12:30:01",
+          "localTimestamp": "2026-11-28T12:30:01",
+          "offsetTimestamp": "2026-11-28T12:30:01+07:00",
+          "zonedTimestamp": "2026-11-28T12:30:01+07:00[Asia/Novosibirsk]",
+          "rawCounter": 123456789012345678901234567891,
+          "calibratedValue": 99.987654,
+          "capabilityFlags": [
+            "AVX512",
+            "ZGC",
+            "IO_URING",
+            "ZERO_COPY"
+          ],
+          "sensorReadings": {
+            "temp_c": 43.5,
+            "voltage_v": 12.04,
+            "fan_rpm": 4800.0
+          },
+          "location": {
+            "lat": 54.8481,
+            "lon": 83.1066,
+            "altitudeMeters": 165.5,
+            "accuracyCm": 15,
+            "capturedAt": "2026-11-28T06:00:00Z",
+            "zoneCode": "RU-NSK-Z1"
+          }
+        },
+        {
+          "packetId": "b2c3d4e5-f6a7-3890-9123-456789abcdef",
+          "sequenceNumber": 200001,
+          "sensorGroupId": 21,
+          "protocolVersion": 2,
+          "priorityFlag": "B",
+          "encrypted": false,
+          "verified": false,
+          "signatureBytes": [
+            115,
+            105,
+            103,
+            45,
+            112,
+            97,
+            121,
+            108,
+            111,
+            97,
+            100,
+            45,
+            115,
+            104,
+            97,
+            114,
+            100,
+            45,
+            49,
+            45,
+            98,
+            101,
+            116,
+            97
+          ],
+          "endpointUri": "https://koraframework.io",
+          "processingDuration": "PT0.089S",
+          "retentionPeriod": "PT12960H",
+          "accountingDate": "2026-11-28",
+          "windowStartTime": "13:15:01",
+          "localTimestamp": "2026-11-28T13:15:01",
+          "offsetTimestamp": "2026-11-28T13:15:01Z",
+          "zonedTimestamp": "2026-11-28T13:15:01Z[UTC]",
+          "rawCounter": 987654321098765432109876543211,
+          "calibratedValue": 100.000125,
+          "capabilityFlags": [
+            "TLS13",
+            "FASTJSON2",
+            "COMPACT_HEADERS"
+          ],
+          "sensorReadings": {
+            "temp_c": 40.1,
+            "voltage_v": 11.98,
+            "fan_rpm": 4200.0
+          },
+          "location": {
+            "lat": 55.0312,
+            "lon": 82.9214,
+            "altitudeMeters": 150.0,
+            "accuracyCm": 10,
+            "capturedAt": "2026-11-28T06:00:00Z",
+            "zoneCode": "RU-NSK-C1"
+          }
+        }
+      ],
+      "ruleMatrix": {
+        "allowedRegions": [
+          "RU",
+          "KZ",
+          "BY",
+          "AM"
+        ],
+        "requiredChecks": [
+          "AML",
+          "KYC",
+          "SANCTIONS",
+          "HASH_INTEGRITY"
+        ],
+        "fallbackRoutes": [
+          "route-primary",
+          "route-secondary"
+        ]
+      }
+    }
+  }
+}

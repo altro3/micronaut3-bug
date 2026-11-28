@@ -1,0 +1,241 @@
+итак, старая версия:
+1. PS D:\Work\micronaut\micronaut3-bug\service-kora-benchmark-java> .\bench-small.bat
+Bombarding http://127.0.0.1:8090/bench/small for 1m0s using 128 connection(s)
+[================================================================================================================] 1m0s
+Done!
+Statistics        Avg      Stdev        Max
+  Reqs/sec    544175.74   26596.41  599479.70
+  Latency      234.50us    67.55us    36.52ms
+  Latency Distribution
+     50%     0.00us
+     75%   520.00us
+     90%   598.00us
+     95%   669.00us
+     99%     1.50ms
+  HTTP codes:
+    1xx - 0, 2xx - 32650996, 3xx - 0, 4xx - 0, 5xx - 0
+    others - 0
+  Throughput:   219.01MB/s
+Память при старте: 62, при нагрузке: ~ 160, откат до: 78
+
+2. PS D:\Work\micronaut\micronaut3-bug\service-kora-benchmark-java> .\bench-medium.bat
+Bombarding http://127.0.0.1:8090/bench/medium for 1m0s using 128 connection(s)
+[================================================================================================================] 1m0s
+Done!
+Statistics        Avg      Stdev        Max
+  Reqs/sec    345516.28   14562.91  363073.53
+  Latency      369.68us   159.29us    74.10ms
+  Latency Distribution
+     50%   510.00us
+     75%   521.00us
+     90%   601.00us
+     95%     1.07ms
+     99%     2.34ms
+  HTTP codes:
+    1xx - 0, 2xx - 20729758, 3xx - 0, 4xx - 0, 5xx - 0
+    others - 0
+  Throughput:     1.09GB/s
+
+Память при старте: 62, при нагрузке: ~ 200, откат до: 82
+
+3. PS D:\Work\micronaut\micronaut3-bug\service-kora-benchmark-java> .\bench-large.bat
+Bombarding http://127.0.0.1:8090/bench/large for 1m0s using 128 connection(s)
+[================================================================================================================] 1m0s
+Done!
+Statistics        Avg      Stdev        Max
+  Reqs/sec     97621.92    5067.92  107174.74
+  Latency        1.31ms   686.44us    87.46ms
+  Latency Distribution
+     50%     1.03ms
+     75%     1.56ms
+     90%     2.44ms
+     95%     3.19ms
+     99%     8.80ms
+  HTTP codes:
+    1xx - 0, 2xx - 5856811, 3xx - 0, 4xx - 0, 5xx - 0
+    others - 0
+  Throughput:     2.30GB/s
+Память при старте: 62, при нагрузке: ~ 270, откат до: 88
+
+А теперь новая версия:
+
+1. PS D:\Work\micronaut\micronaut3-bug\service-kora-benchmark-java> .\bench-small.bat
+Bombarding http://127.0.0.1:8090/bench/small for 1m0s using 128 connection(s)
+[================================================================================================================] 1m0s
+Done!
+Statistics        Avg      Stdev        Max
+  Reqs/sec    706676.45   32905.40  811112.25
+  Latency      179.74us   119.01us    88.20ms
+  Latency Distribution
+     50%     0.00us
+     75%     0.00us
+     90%     1.00ms
+     95%     1.00ms
+     99%     1.00ms
+  HTTP codes:
+    1xx - 0, 2xx - 42492020, 3xx - 0, 4xx - 0, 5xx - 0
+    others - 0
+  Throughput:   284.34MB/ss
+Память при старте: 65, при нагрузке: ~ 140, откат до: 78
+
+2. PS D:\Work\micronaut\micronaut3-bug\service-kora-benchmark-java> .\bench-medium.bat
+Bombarding http://127.0.0.1:8090/bench/medium for 1m0s using 128 connection(s)
+[================================================================================================================] 1m0s
+Done!
+Statistics        Avg      Stdev        Max
+  Reqs/sec    542313.83   27714.67  575582.61
+  Latency      235.23us    50.25us    83.04ms
+  Latency Distribution
+     50%     0.00us
+     75%   527.00us
+     90%   658.00us
+     95%   780.00us
+     99%     1.07ms
+  HTTP codes:
+    1xx - 0, 2xx - 32539735, 3xx - 0, 4xx - 0, 5xx - 0
+    others - 0
+  Throughput:     1.71GB/s
+
+Память при старте: 65, при нагрузке: ~ 190, откат до: 86
+
+3. PS D:\Work\micronaut\micronaut3-bug\service-kora-benchmark-java> .\bench-large.bat
+Bombarding http://127.0.0.1:8090/bench/large for 1m0s using 128 connection(s)
+[================================================================================================================] 1m0s
+Done!
+Statistics        Avg      Stdev        Max
+  Reqs/sec    156391.56    7937.47  165131.74
+  Latency      817.19us   104.59us    46.52ms
+  Latency Distribution
+     50%   588.00us
+     75%     1.04ms
+     90%     1.12ms
+     95%     1.57ms
+     99%     2.14ms
+  HTTP codes:
+    1xx - 0, 2xx - 9382978, 3xx - 0, 4xx - 0, 5xx - 0
+    others - 0
+  Throughput:     3.68GB/s
+
+Память при старте: 65, при нагрузке: ~270, откат до: 88
+
+
+ZGC:
+
+Старый:
+1.PS D:\Work\micronaut\micronaut3-bug\service-kora-benchmark-java> .\bench-small.bat
+Bombarding http://127.0.0.1:8090/bench/small for 1m0s using 128 connection(s)
+[================================================================================================================] 1m0s
+Done!
+Statistics        Avg      Stdev        Max
+  Reqs/sec    477330.00   45410.26  577268.91
+  Latency      267.49us   161.89us   131.25ms
+  Latency Distribution
+     50%     0.00us
+     75%   519.00us
+     90%   607.00us
+     95%     1.00ms
+     99%     1.64ms
+  HTTP codes:
+    1xx - 0, 2xx - 28638292, 3xx - 0, 4xx - 0, 5xx - 0
+    others - 0
+  Throughput:   192.09MB/s
+Память при старте: 52, при нагрузке: ~ 70, откат до: 65
+
+2. PS D:\Work\micronaut\micronaut3-bug\service-kora-benchmark-java> .\bench-medium.bat
+Bombarding http://127.0.0.1:8090/bench/medium for 1m0s using 128 connection(s)
+[================================================================================================================] 1m0s
+Done!
+Statistics        Avg      Stdev        Max
+  Reqs/sec    301392.59   30177.05  362443.38
+  Latency      423.93us   260.62us   108.68ms
+  Latency Distribution
+     50%   510.00us
+     75%   525.00us
+     90%     1.03ms
+     95%     1.51ms
+     99%     3.14ms
+  HTTP codes:
+    1xx - 0, 2xx - 18083213, 3xx - 0, 4xx - 0, 5xx - 0
+    others - 0
+  Throughput:     0.95GB/s
+
+Память при старте: 54, при нагрузке: ~ 72, откат до: 68
+
+3. PS D:\Work\micronaut\micronaut3-bug\service-kora-benchmark-java> .\bench-large.bat
+Bombarding http://127.0.0.1:8090/bench/large for 1m0s using 128 connection(s)
+[================================================================================================================] 1m0s
+Done!
+Statistics        Avg      Stdev        Max
+  Reqs/sec     79934.63    7315.86  104281.29
+  Latency        1.60ms   802.90us    50.93ms
+  Latency Distribution
+     50%     1.03ms
+     75%     1.67ms
+     90%     3.74ms
+     95%     5.83ms
+     99%    11.32ms
+  HTTP codes:
+    1xx - 0, 2xx - 4796023, 3xx - 0, 4xx - 0, 5xx - 0
+    others - 0
+  Throughput:     1.88GB/s
+
+Память при старте: 54, при нагрузке: ~ 80, откат до: 78
+
+новый:
+
+1.PS D:\Work\micronaut\micronaut3-bug\service-kora-benchmark-java> .\bench-small.bat
+Bombarding http://127.0.0.1:8090/bench/small for 1m0s using 128 connection(s)
+[================================================================================================================] 1m0s
+Done!
+Statistics        Avg      Stdev        Max
+  Reqs/sec    706676.45   32905.40  811112.25
+  Latency      179.74us   119.01us    88.20ms
+  Latency Distribution
+     50%     0.00us
+     75%     0.00us
+     90%     1.00ms
+     95%     1.00ms
+     99%     1.00ms
+  HTTP codes:
+    1xx - 0, 2xx - 42492020, 3xx - 0, 4xx - 0, 5xx - 0
+    others - 0
+  Throughput:   284.34MB/ss
+Память при старте: 56, при нагрузке: ~ 74, откат до: 74
+
+2. PS D:\Work\micronaut\micronaut3-bug\service-kora-benchmark-java> .\bench-medium.bat
+Bombarding http://127.0.0.1:8090/bench/medium for 1m0s using 128 connection(s)
+[================================================================================================================] 1m0s
+Done!
+Statistics        Avg      Stdev        Max
+  Reqs/sec    507373.01   20678.27  549546.42
+  Latency      251.58us    30.79us    20.03ms
+  Latency Distribution
+     50%     0.00us
+     75%   512.00us
+     90%     1.00ms
+     95%     1.00ms
+     99%     1.50ms
+  HTTP codes:
+    1xx - 0, 2xx - 30444153, 3xx - 0, 4xx - 0, 5xx - 0
+    others - 0
+  Throughput:     1.60GB/s
+Память при старте: 56, при нагрузке: ~ 74, откат до: 74
+
+3. PS D:\Work\micronaut\micronaut3-bug\service-kora-benchmark-java> .\bench-large.bat
+Bombarding http://127.0.0.1:8090/bench/large for 1m0s using 128 connection(s)
+[================================================================================================================] 1m0s
+Done!
+Statistics        Avg      Stdev        Max
+  Reqs/sec    135691.04    9583.04  157102.49
+  Latency        0.94ms   122.28us    34.14ms
+  Latency Distribution
+     50%     1.03ms
+     75%     1.05ms
+     90%     1.18ms
+     95%     1.79ms
+     99%     3.96ms
+  HTTP codes:
+    1xx - 0, 2xx - 8141453, 3xx - 0, 4xx - 0, 5xx - 0
+    others - 0
+  Throughput:     3.19GB/s
+Память при старте: 56, при нагрузке: ~ 80, откат до: 78
