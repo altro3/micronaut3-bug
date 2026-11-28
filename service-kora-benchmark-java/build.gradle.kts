@@ -31,12 +31,12 @@ dependencies {
     implementation(kora.koraframework.configCommon)
 
     compileOnly(libs.jackson.core)
-    implementation("com.alibaba.fastjson2:fastjson2:2.0.66")
-    implementation(kora.koraframework.httpServerNetty)
-//    runtimeOnly("io.netty:netty-transport-native-epoll:4.2.20.Final:linux-x86_64")
+//    implementation("com.alibaba.fastjson2:fastjson2:2.0.66")
+//    implementation(kora.koraframework.httpServerNetty)
+//    runtimeOnly("io.netty:netty-transport-native-epoll:4.2.21.Final:linux-x86_64")
 
-//    implementation(kora.koraframework.httpServerUndertow)
-//    implementation(kora.koraframework.configHocon)
+    implementation(kora.koraframework.httpServerUndertow)
+    implementation(kora.koraframework.configHocon)
 
 //    implementation(kora.koraframework.databaseJdbcPostgres)
 //    implementation(kora.koraframework.databaseFlyway)
@@ -93,16 +93,10 @@ val jvmOpts = listOf(
     "-Xmx192m",
     "-XX:MaxDirectMemorySize=64m",
     "-Xss256k",
-    "-XX:+UseG1GC",
-    "-XX:+G1PeriodicGCInvokesConcurrent",
-    "-XX:G1PeriodicGCInterval=3000",
-    "-XX:MinHeapFreeRatio=10",
-    "-XX:MaxHeapFreeRatio=25",
-    "-XX:MaxGCPauseMillis=20",
-    "-XX:+UseStringDeduplication",
+    "-XX:+UseZGC",
+    "-XX:ZUncommitDelay=3",
     "-XX:+UnlockExperimentalVMOptions",
     "-XX:+UseCompactObjectHeaders",
-    "-XX:+EliminateAllocations",
     "-Dfile.encoding=UTF-8",
     "-Dconfig.override_with_env_vars=true",
     "-Dcom.sun.management.jmxremote=false",

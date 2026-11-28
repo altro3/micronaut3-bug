@@ -553,28 +553,35 @@ fun main() {
 
 private fun generateIsolatedBenchmarks(targetDir: String) {
     // 1. DTO ДЛЯ SMALL (~100 байт), MEDIUM (~1.5-2 КБ), LARGE (~15-25 КБ)
+    // 1. DTO ДЛЯ SMALL (~100 байт), MEDIUM (~1.5-2 КБ), LARGE (~15-25 КБ), EXTRABIG (~70 КБ)
     val benchDtoFile = File("$targetDir/io/koraframework/benchmark/java/bench/dto/BenchmarkDtos.java")
     benchDtoFile.writeText(
         """
         package io.koraframework.benchmark.java.bench.dto;
 
         import io.koraframework.json.common.annotation.Json;
+        import io.koraframework.json.common.annotation.JsonReader;
+        import io.koraframework.json.common.annotation.JsonWriter;
         import io.koraframework.validation.common.annotation.*;
         import java.math.BigDecimal;
+        import java.math.BigInteger;
+        import java.time.*;
         import java.util.List;
         import java.util.Map;
+        import java.util.Set;
+        import java.util.UUID;
 
         @Valid
         public final class BenchmarkDtos {
 
             // ==================== 1. SMALL (~100 bytes) ====================
-            @Valid @Json
+            @Valid @JsonReader
             public record SmallItemRequest(
                 @NotEmpty @Pattern("^[A-Z]{3,10}$") String typeCode,
                 @Min(1) Integer quantity
             ) {}
 
-            @Valid @Json
+            @Valid @JsonReader
             public record SmallOrderRequest(
                 Long userId,
                 @NotEmpty @Pattern("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,6}$") String userEmail,
@@ -583,7 +590,7 @@ private fun generateIsolatedBenchmarks(targetDir: String) {
                 @Size(min = 1, max = 5) List<@NotEmpty String> tags
             ) {}
 
-            @Valid @Json
+            @Valid @JsonWriter
             public record SmallOrderResponse(
                 @NotEmpty @Size(min = 10, max = 50) String id,
                 Long userId,
@@ -627,7 +634,7 @@ private fun generateIsolatedBenchmarks(targetDir: String) {
                 List<String> appliedPromos
             ) {}
 
-            @Valid @Json
+            @Valid @JsonReader
             public record MediumOrderRequest(
                 Long userId,
                 @NotEmpty String clientRequestId,
@@ -641,7 +648,7 @@ private fun generateIsolatedBenchmarks(targetDir: String) {
                 Map<String, String> metadata
             ) {}
 
-            @Valid @Json
+            @Valid @JsonWriter
             public record MediumOrderResponse(
                 @NotEmpty String orderId,
                 Long userId,
@@ -703,7 +710,7 @@ private fun generateIsolatedBenchmarks(targetDir: String) {
                 String details
             ) {}
 
-            @Valid @Json
+            @Valid @JsonReader
             public record LargeOrderRequest(
                 Long userId,
                 @NotEmpty String correlationId,
@@ -720,7 +727,7 @@ private fun generateIsolatedBenchmarks(targetDir: String) {
                 Map<String, String> analyticsContext
             ) {}
 
-            @Valid @Json
+            @Valid @JsonWriter
             public record LargeOrderResponse(
                 @NotEmpty String orderId,
                 @NotEmpty String correlationId,
@@ -740,6 +747,131 @@ private fun generateIsolatedBenchmarks(targetDir: String) {
                 List<@Valid AuditEvent> auditEvents,
                 Map<String, String> summaryMetrics
             ) {}
+
+            // ==================== 4. EXTRABIG (~70 KB, 10 shards x ~7 KB) ====================
+            @Valid @Json
+            public record GeoCoordinateNode(
+                double lat,
+                double lon,
+                Float altitudeMeters,
+                int accuracyCm,
+                Instant capturedAt,
+                String zoneCode
+            ) {}
+
+            @Valid @Json
+            public record TelemetryPacket(
+                UUID packetId,
+                long sequenceNumber,
+                short sensorGroupId,
+                int protocolVersion,
+                String priorityFlag,
+                boolean encrypted,
+                Boolean verified,
+                List<Integer> signatureBytes,
+                String endpointUri,
+                Duration processingDuration,
+                Duration retentionPeriod,
+                LocalDate accountingDate,
+                LocalTime windowStartTime,
+                LocalDateTime localTimestamp,
+                OffsetDateTime offsetTimestamp,
+                ZonedDateTime zonedTimestamp,
+                BigInteger rawCounter,
+                BigDecimal calibratedValue,
+                Set<String> capabilityFlags,
+                Map<String, Double> sensorReadings,
+                @Valid GeoCoordinateNode location
+            ) {}
+
+            @Valid @Json
+            public record NestedComplianceBlock(
+                @NotEmpty String regulationCode,
+                @NotEmpty String description,
+                List<@Valid TelemetryPacket> packets,
+                Map<String, List<String>> ruleMatrix
+            ) {}
+
+            @Valid @Json
+            public record ExtraBigShardPayload(
+                @NotEmpty String shardId,
+                UUID traceUuid,
+                long revisionLong,
+                Long optionalRevision,
+                int partitionInt,
+                Integer optionalPartition,
+                short regionShort,
+                Short optionalRegion,
+                int flagsByte,
+                Integer optionalFlags,
+                double ratioDouble,
+                Double optionalRatio,
+                float scoreFloat,
+                Float optionalScore,
+                boolean activeBool,
+                Boolean optionalActive,
+                String gradeChar,
+                String optionalGrade,
+                BigDecimal shardAmount,
+                BigInteger shardTotalHashes,
+                Instant createdAt,
+                LocalDate businessDate,
+                LocalTime cutoffTime,
+                LocalDateTime systemDateTime,
+                OffsetDateTime partnerOffsetTime,
+                ZonedDateTime auditZonedTime,
+                Duration ttlDuration,
+                Duration gracePeriod,
+                String callbackUri,
+                List<Integer> binaryPayload,
+                Set<Integer> allowedBuckets,
+                List<String> routingKeys,
+                Map<String, String> attributes,
+                @Valid CustomerProfile shardOwner,
+                @Valid DeliveryAddress shardDestination,
+                List<@Valid LargeOrderItem> shardItems,
+                @Valid NestedComplianceBlock compliance
+                ) {}
+
+                @Valid @JsonReader
+                public record ExtraBigOrderRequest(
+                    Long userId,
+                    @NotEmpty String batchId,
+                    @NotEmpty String currency,
+                    Instant submittedAt,
+                    @Valid ExtraBigShardPayload shard01,
+                    @Valid ExtraBigShardPayload shard02,
+                    @Valid ExtraBigShardPayload shard03,
+                    @Valid ExtraBigShardPayload shard04,
+                    @Valid ExtraBigShardPayload shard05,
+                    @Valid ExtraBigShardPayload shard06,
+                    @Valid ExtraBigShardPayload shard07,
+                    @Valid ExtraBigShardPayload shard08,
+                    @Valid ExtraBigShardPayload shard09,
+                    @Valid ExtraBigShardPayload shard10
+                ) {}
+
+                @Valid @JsonWriter
+                public record ExtraBigOrderResponse(
+                    @NotEmpty String batchOrderId,
+                    @NotEmpty String batchId,
+                    Long userId,
+                    @NotEmpty String status,
+                    Instant processedAt,
+                    BigDecimal grandTotalAmount,
+                    BigInteger grandTotalHashes,
+                    int totalShardsProcessed,
+                    @Valid ExtraBigShardPayload shard01,
+                    @Valid ExtraBigShardPayload shard02,
+                    @Valid ExtraBigShardPayload shard03,
+                    @Valid ExtraBigShardPayload shard04,
+                    @Valid ExtraBigShardPayload shard05,
+                    @Valid ExtraBigShardPayload shard06,
+                    @Valid ExtraBigShardPayload shard07,
+                    @Valid ExtraBigShardPayload shard08,
+                    @Valid ExtraBigShardPayload shard09,
+                    @Valid ExtraBigShardPayload shard10
+                ) {}
         }
         """.trimIndent()
     )
@@ -758,6 +890,13 @@ private fun generateIsolatedBenchmarks(targetDir: String) {
         import java.util.Map;
         import java.util.concurrent.ThreadLocalRandom;
         import java.util.concurrent.atomic.AtomicLong;
+        import java.math.BigInteger;
+        import java.nio.charset.StandardCharsets;
+        import java.net.URI;
+        import java.net.URL;
+        import java.time.*;
+        import java.util.Set;
+        import java.util.UUID;
 
         @Component
         public class IsolatedBenchmarkService {
@@ -941,6 +1080,215 @@ private fun generateIsolatedBenchmarks(targetDir: String) {
                     Map.of("tenant", req.tenantId(), "channel", req.channel(), "units", String.valueOf(totalUnits))
                 );
             }
+            
+            
+            // --- EXTRABIG (~70 KB) ---
+            public ExtraBigOrderResponse getExtraBigOrder(String id) {
+                Instant now = Instant.parse("2026-11-28T06:00:00Z");
+                var s01 = buildSampleShard(1, now);
+                var s02 = buildSampleShard(2, now);
+                var s03 = buildSampleShard(3, now);
+                var s04 = buildSampleShard(4, now);
+                var s05 = buildSampleShard(5, now);
+                var s06 = buildSampleShard(6, now);
+                var s07 = buildSampleShard(7, now);
+                var s08 = buildSampleShard(8, now);
+                var s09 = buildSampleShard(9, now);
+                var s10 = buildSampleShard(10, now);
+
+                return new ExtraBigOrderResponse(
+                    "ORD-XBIG-" + id,
+                    "BATCH-" + id,
+                    90001L,
+                    "COMPLETED",
+                    now,
+                    new BigDecimal("1548900.00"),
+                    new BigInteger("987654321098765432109876543210"),
+                    10,
+                    s01, s02, s03, s04, s05, s06, s07, s08, s09, s10
+                );
+            }
+
+            public ExtraBigOrderResponse processExtraBigOrder(ExtraBigOrderRequest req) {
+                BigDecimal grandTotal = BigDecimal.ZERO;
+                BigInteger grandHashes = BigInteger.ZERO;
+                int shardsCount = 0;
+
+                ExtraBigShardPayload[] shards = {
+                    req.shard01(), req.shard02(), req.shard03(), req.shard04(), req.shard05(),
+                    req.shard06(), req.shard07(), req.shard08(), req.shard09(), req.shard10()
+                };
+
+                for (var shard : shards) {
+                    if (shard != null) {
+                        shardsCount++;
+                        if (shard.shardAmount() != null) {
+                            grandTotal = grandTotal.add(shard.shardAmount());
+                        }
+                        if (shard.shardTotalHashes() != null) {
+                            grandHashes = grandHashes.add(shard.shardTotalHashes());
+                        }
+                    }
+                }
+
+                long seq = ID_SEQ.incrementAndGet();
+                return new ExtraBigOrderResponse(
+                    "ORD-XB-" + seq,
+                    req.batchId(),
+                    req.userId(),
+                    "PROCESSED",
+                    req.submittedAt() != null ? req.submittedAt() : Instant.now(),
+                    grandTotal,
+                    grandHashes,
+                    shardsCount,
+                    req.shard01(), req.shard02(), req.shard03(), req.shard04(), req.shard05(),
+                    req.shard06(), req.shard07(), req.shard08(), req.shard09(), req.shard10()
+                );
+            }
+
+            private ExtraBigShardPayload buildSampleShard(int idx, Instant now) {
+                var items = new ArrayList<LargeOrderItem>(4);
+                for (int i = 0; i < 4; i++) {
+                    items.add(new LargeOrderItem(
+                        "SKU-XB-" + idx + "-" + (100 + i),
+                        "High-Density Compute Blade Node Cluster Unit " + idx + "." + i,
+                        "Enterprise Silicon Systems Corp",
+                        "Datacenter/Compute/Blades/Gen" + (i + 1),
+                        "Multi-socket high-throughput compute node with hardware telemetry, ECC memory scrubbing, and redundant NVMe fabrics.",
+                        2 + i,
+                        new BigDecimal("38722.50"),
+                        new BigDecimal("1200.00"),
+                        new BigDecimal("0.20"),
+                        new BigDecimal("7504.50"),
+                        new BigDecimal("82549.50"),
+                        4.85,
+                        List.of(
+                            new ItemAttribute("tdp", "350", "W", true),
+                            new ItemAttribute("interconnect", "400GbE", "bps", true),
+                            new ItemAttribute("compliance", "SOC2-TYPE2-2026", null, false)
+                        ),
+                        List.of(
+                            new WarehouseAllocation("WH-NSK-01", "SIBERIA", 4, 6),
+                            new WarehouseAllocation("WH-SPB-03", "NORTHWEST", 2, 24)
+                        ),
+                        List.of("DATACENTER", "HIGH_DENSITY", "VERIFIED")
+                    ));
+                }
+            
+                var packets = List.of(
+                    new TelemetryPacket(
+                        UUID.nameUUIDFromBytes(("pkt-a-" + idx).getBytes(StandardCharsets.UTF_8)),
+                        100000L + idx,
+                        (short) (10 + idx),
+                        2,
+                        "A",
+                        true,
+                        Boolean.TRUE,
+                        ("sig-payload-shard-" + idx + "-alpha").chars().boxed().toList(),
+                        url("https://koraframework.io" + idx),
+                        Duration.ofMillis(145 + idx),
+                        Duration.ofDays(365),
+                        LocalDate.of(2026, 11, 28),
+                        LocalTime.of(12, 30, idx),
+                        LocalDateTime.of(2026, 11, 28, 12, 30, idx),
+                        OffsetDateTime.of(2026, 11, 28, 12, 30, idx, 0, ZoneOffset.ofHours(7)),
+                        ZonedDateTime.of(2026, 11, 28, 12, 30, idx, 0, ZoneId.of("Asia/Novosibirsk")),
+                        new BigInteger("12345678901234567890123456789" + idx),
+                        new BigDecimal("99.987654"),
+                        Set.of("AVX512", "ZGC", "IO_URING", "ZERO_COPY"),
+                        Map.of("temp_c", 42.5 + idx, "voltage_v", 12.04, "fan_rpm", 4800.0),
+                        new GeoCoordinateNode(54.8471 + idx * 0.001, 83.1056 + idx * 0.001, 165.5f, 15, now, "RU-NSK-Z" + idx)
+                    ),
+                    new TelemetryPacket(
+                        UUID.nameUUIDFromBytes(("pkt-b-" + idx).getBytes(StandardCharsets.UTF_8)),
+                        200000L + idx,
+                        (short) (20 + idx),
+                        2,
+                        "B",
+                        false,
+                        Boolean.FALSE,
+                        ("sig-payload-shard-" + idx + "-beta").chars().boxed().toList(),
+                        url("https://koraframework.io" + idx),
+                        Duration.ofMillis(88 + idx),
+                        Duration.ofDays(18),
+                        LocalDate.of(2026, 11, 28),
+                        LocalTime.of(13, 15, idx),
+                        LocalDateTime.of(2026, 11, 28, 13, 15, idx),
+                        OffsetDateTime.of(2026, 11, 28, 13, 15, idx, 0, ZoneOffset.UTC),
+                        ZonedDateTime.of(2026, 11, 28, 13, 15, idx, 0, ZoneId.of("UTC")),
+                        new BigInteger("98765432109876543210987654321" + idx),
+                        new BigDecimal("100.000125"),
+                        Set.of("TLS13", "FASTJSON2", "COMPACT_HEADERS"),
+                        Map.of("temp_c", 39.1 + idx, "voltage_v", 11.98, "fan_rpm", 4200.0),
+                        new GeoCoordinateNode(55.0302 + idx * 0.001, 82.9204 + idx * 0.001, 150.0f, 10, now, "RU-NSK-C" + idx)
+                    )
+                );
+            
+                var compliance = new NestedComplianceBlock(
+                    "REG-2026-XBIG-" + idx,
+                    "Automated cross-border telemetry and financial settlement compliance verification payload block.",
+                    packets,
+                    Map.of(
+                        "allowedRegions", List.of("RU", "KZ", "BY", "AM"),
+                        "requiredChecks", List.of("AML", "KYC", "SANCTIONS", "HASH_INTEGRITY"),
+                        "fallbackRoutes", List.of("route-primary", "route-secondary")
+                    )
+                );
+            
+                return new ExtraBigShardPayload(
+                    "SHARD-0" + idx,
+                    UUID.nameUUIDFromBytes(("shard-trace-" + idx).getBytes(StandardCharsets.UTF_8)),
+                    7000000000L + idx,
+                    7000000000L + idx,
+                    100 + idx,
+                    100 + idx,
+                    (short) idx,
+                    (short) idx,
+                    idx & 0x7F,
+                    idx & 0x7F,
+                    0.9995 + idx * 0.00001,
+                    0.9995 + idx * 0.00001,
+                    98.5f + idx,
+                    98.5f + idx,
+                    true,
+                    Boolean.TRUE,
+                    "S",
+                    "S",
+                    new BigDecimal("154890.00"),
+                    new BigInteger("98765432109876543210987654321"),
+                    now,
+                    LocalDate.of(2026, 11, 28),
+                    LocalTime.of(18, 0, 0),
+                    LocalDateTime.of(2026, 11, 28, 18, 0, 0),
+                    OffsetDateTime.of(2026, 11, 28, 18, 0, 0, 0, ZoneOffset.ofHours(7)),
+                    ZonedDateTime.of(2026, 11, 28, 18, 0, 0, 0, ZoneId.of("Asia/Novosibirsk")),
+                    Duration.ofMinutes(30),
+                    Duration.ofMinutes(1),
+                    url("https://enterprise-corp.ru" + idx),
+                    ("binary-audit-blob-content-for-shard-" + idx).chars().boxed().toList(),
+                    Set.of(1, 2, 4, 8, 16, 32),
+                    List.of("rk.ingest.v2", "rk.shard." + idx, "rk.settlement.fast"),
+                    Map.of("env", "benchmark", "shardIndex", String.valueOf(idx), "dc", "nsk-1"),
+                    new CustomerProfile(
+                        "Dmitry Sokolov " + idx, "d.sokolov" + idx + "@enterprise-corp.ru", "+7913555010" + idx,
+                        "ENTERPRISE_VIP", 250000 + idx, Map.of("tier", "S1", "region", "SIBERIA")
+                    ),
+                    new DeliveryAddress(
+                        "RU", "Novosibirsk", "Inzhenernaya", String.valueOf(10 + idx), "Suite " + idx,
+                        "630090", 54.8581, 83.1112, "Datacenter loading dock #" + idx
+                    ),
+                    items,
+                    compliance
+                );
+            }
+            
+            private static String url(String raw) {
+                try {
+                    return URI.create(raw).toURL().toString();
+                } catch (Exception e) {
+                    throw new IllegalArgumentException(e);
+                }
+            }
         }
         """.trimIndent()
     )
@@ -1007,7 +1355,22 @@ private fun generateIsolatedBenchmarks(targetDir: String) {
             public LargeOrderResponse postLarge(@Json LargeOrderRequest body) {
                 return service.processLargeOrder(body);
             }
+
+            // 4. EXTRABIG (~70 KB)
+            @Json
+            @HttpRoute(method = HttpMethod.GET, path = "/bench/extrabig/{id}")
+            public ExtraBigOrderResponse getExtraBig(@Path String id) {
+                return service.getExtraBigOrder(id);
+            }
+
+            @Json
+            @HttpRoute(method = HttpMethod.POST, path = "/bench/extrabig")
+            public ExtraBigOrderResponse postExtraBig(@Json ExtraBigOrderRequest body) {
+                return service.processExtraBigOrder(body);
+            }
         }
         """.trimIndent()
     )
 }
+
+// byte, char, Period, URI, URL, int[]
